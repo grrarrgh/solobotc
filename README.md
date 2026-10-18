@@ -1,55 +1,48 @@
 # Solo Clocktower MVP
 
-A dependency-free browser prototype for the supplied Trouble Brewing JSON. It is an unofficial fan implementation: use original UI/artwork and do not redistribute proprietary art or rulebook text.
+A dependency-free, browser-based solo simulation for the supplied Trouble Brewing JSON script.
 
 ## Run
 
 ```bash
+cd solo-clocktower-mvp
 python3 -m http.server 8000
-# open http://localhost:8000
 ```
 
-Do not double-click `index.html`: `fetch()` needs an HTTP origin. To add a script, put its JSON in `scripts/` and add its filename to `scripts/index.json`. Browser pages cannot silently enumerate a server or local folder. Unknown role IDs fail fast because only Trouble Brewing handlers exist.
+Open `http://localhost:8000`. Do not use `file://`, because the browser must fetch the script manifest and JSON.
 
-## Test
+## Validate
+
+Node.js is needed only for validation:
 
 ```bash
+npm run check
 npm test
 ```
 
+No `npm install` step is required.
+
+## Script workflow
+
+Add JSON files under `scripts/`, then add each filename to `scripts/index.json`. The current rules engine rejects unsupported character IDs rather than simulating them incorrectly.
+
+## Solo-mode rules
+
+- The human is assigned a good character and is never targeted by the Demon or Poisoner.
+- NPC night choices are seeded and automatic. Human information is shown in the private Storyteller log.
+- One human-selected nomination resolves per day. The threshold is half the living count, rounded up.
+- Evil never votes for an evil nominee. Dead players have one tracked ghost vote. A functioning living Butler needs their master to attempt the same vote.
+- Dead NPCs remain conversational targets. They repeat stored memories but receive no new normal night information. Ravenkeeper death information is stored after the trigger.
+- Virgin activation ends the day but the solo safeguard does not execute the human.
+- Human plot armour makes a human Soldier/Ravenkeeper less useful than in the tabletop game.
+- Full hidden roles and structured audit events appear only after the game ends.
+
 ## Architecture
 
-```mermaid
-flowchart LR
- A[scripts/index.json] --> B[script parser]
- B --> C[setup generator]
- C --> D[GameState]
- D --> E[phase engine]
- E --> F[Storyteller info]
- E --> G[role handlers]
- E --> H[NPCStrategy interface]
- E --> I[nominations / voting]
- D --> J[UI renderer]
-```
+- `setup.js`: script validation, legal type counts, Baron, Drunk, bluffs, red herring.
+- `storyteller.js`: registration, information generation, death-trigger information.
+- `strategies.js`: replaceable NPC decisions and bluffing.
+- `engine.js`: phases, deaths, voting, succession, wins, audit events.
+- `app.js`: browser rendering and controls.
 
-- `data.js`: canonical roster metadata and seat-count table.
-- `setup.js`: parsing, legal role counts, Baron/Drunk, non-Demon good human, bluffs.
-- `storyteller.js`: registrations and derived information; Storyteller choices are seeded and cached.
-- `strategies.js`: replaceable NPC talk/vote/target policy.
-- `engine.js`: nights, deaths, succession, nominations, votes, wins.
-- `app.js`: browser adapter only.
-
-## Deliberate solo rules
-
-1. The human is always good and cannot be the Imp. The Demon, Mayor redirects and Poisoner never target the human. The UI has no NPC nominations, so the human reaches final three.
-2. If the human Townsfolk nominates an NPC Virgin, the Virgin is confirmed and the day ends, but plot armour cancels the human's canonical death.
-3. One human nomination is resolved per day; this omits competing nominations and ties. Majority is `ceil(living/2)`.
-4. Evil NPCs never vote for an evil nominee. Good votes use a configurable probabilistic heuristic. These are requested solo rules, not canonical strategy.
-5. Poison affects NPCs; it never selects the human. The actual Drunk is implemented: that player sees an unused Townsfolk and receives plausible but unreliable output.
-6. Recluse/Spy registrations and Mayor redirection are seeded Storyteller choices. Replaying a seed reproduces the setup and choices.
-7. Evil claims use out-of-play good bluffs at every seat count for playability, although canonical first-night evil information differs in 5–6-player games.
-8. Dead NPC ghost votes are included once, but the MVP does not model free-form NPC nominations, multiple nominations, or public discussion.
-
-## Extension points
-
-Replace `SimpleNpcStrategy` with a class exposing `ask`, `vote`, `choosePoison`, `chooseMonk`, `chooseButler`, `chooseDemonTarget`, and `chooseRaven`. A smarter implementation can receive an immutable public projection plus private knowledge, and maintain per-NPC beliefs, claims, trust, contradictions and plans. Move poison/drunk distortion behind an `InformationPolicy` if adding richer Storyteller controls.
+This is an unofficial fan project. It uses original code and concise implementation descriptions; it includes no official art.

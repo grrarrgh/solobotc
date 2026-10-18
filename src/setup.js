@@ -1,26 +1,37 @@
-import {ROLES,SETUP,alignment,title} from './data.js';
-import {pick,sample,shuffle,rngFrom} from './util.js';
+import {ROLES,SETUP_COUNTS,GOOD_TEAMS,alignmentOf,roleName} from "./data.js";
+import {rngFrom,pick,sample,shuffle} from "./util.js";
 export function parseScript(raw){
- const meta=raw.find(x=>typeof x==='object'&&x.id==='_meta')||{name:'Unnamed script'};
- const ids=raw.filter(x=>!(typeof x==='object'&&x.id==='_meta')).map(x=>typeof x==='string'?x:x.id);
- const unknown=ids.filter(id=>!ROLES[id]); if(unknown.length) throw Error(`Unsupported character IDs: ${unknown.join(', ')}`);
- return {meta,ids};
+  if(!Array.isArray(raw))throw new Error("Script must be a JSON array.");
+  const meta=raw.find(x=>x&&typeof x==="object"&&x.id==="_meta")??{id:"_meta",name:"Unnamed"};
+  const roleIds=raw.filter(x=>typeof x==="string");
+  const unknown=roleIds.filter(id=>!ROLES[id]);
+  if(unknown.length)throw new Error(`Unsupported roles: ${unknown.join(", ")}`);
+  return {meta,roleIds};
 }
-export function createGame(script,seats,{seed=Date.now()}={}){
- if(!SETUP[seats]) throw Error('Trouble Brewing supports 5–15 non-Traveller seats in this MVP.');
- const r=rngFrom(seed), pool=t=>script.ids.filter(id=>ROLES[id].team===t);
- let [tf,out,min]=SETUP[seats]; const demons=sample(pool('demon'),1,r); const minions=sample(pool('minion'),min,r);
- if(minions.includes('baron')){tf-=2;out+=2}
- const outsiders=sample(pool('outsider'),out,r), townsfolk=sample(pool('townsfolk'),tf,r);
- if([demons.length,minions.length,outsiders.length,townsfolk.length].join()!=[1,min,out,tf].join()) throw Error('Script lacks enough roles for this seat count.');
- let roles=shuffle([...townsfolk,...outsiders,...minions,...demons],r);
- const goodAt=roles.map((x,i)=>alignment(x)==='good'?i:-1).filter(i=>i>=0); const h=pick(goodAt,r); [roles[0],roles[h]]=[roles[h],roles[0]];
- const inPlay=new Set(roles), unusedTF=pool('townsfolk').filter(x=>!inPlay.has(x));
- const players=roles.map((role,i)=>({id:i,seat:i+1,name:i?'NPC '+i:'You',role,originalRole:role,shownRole:role==='drunk'?pick(unusedTF,r):role,alignment:alignment(role),alive:true,ghostVote:true,claim:null,memories:[],used:{},master:null,poisoned:false,knownClaim:false}));
- const unusedGood=script.ids.filter(id=>alignment(id)==='good'&&!inPlay.has(id));
- const bluffs=sample(unusedGood,Math.min(3,unusedGood.length),r);
- for(const p of players){p.claim=p.alignment==='good'?p.shownRole:(bluffs[p.id%Math.max(1,bluffs.length)]||pick(unusedGood,r)||'chef')}
- const good=players.filter(p=>p.alignment==='good');
- return {script,seats,seed,rng:r,players,humanId:0,bluffs,redHerring:pick(good,r).id,storyChoices:{},day:0,night:0,phase:'night',winner:null,reason:'',executedToday:null,protected:null,publicLog:[],privateLog:[],config:{goodVoteBase:.52,evilVoteForGood:.78,mayorRedirect:.65,impSelfKill:.10}};
+const byTeam=(script,team)=>script.roleIds.filter(id=>ROLES[id].team===team);
+export function createGameState(raw,seatCount,seed=Date.now()){
+  const script=parseScript(raw),base=SETUP_COUNTS[seatCount];
+  if(!base)throw new Error("Seat count must be 5–15.");
+  const rng=rngFrom(seed);let [tf,outs,mins]=base;
+  const minions=sample(byTeam(script,"minion"),mins,rng);
+  if(minions.includes("baron")){tf-=2;outs+=2;}
+  const roles=shuffle([...sample(byTeam(script,"townsfolk"),tf,rng),...sample(byTeam(script,"outsider"),outs,rng),...minions,...sample(byTeam(script,"demon"),1,rng)],rng);
+  if(roles.length!==seatCount)throw new Error("Script cannot satisfy this setup.");
+  const goodIndexes=roles.map((r,i)=>GOOD_TEAMS.has(ROLES[r].team)?i:-1).filter(i=>i>=0);
+  const hi=pick(goodIndexes,rng);[roles[0],roles[hi]]=[roles[hi],roles[0]];
+  const inPlay=new Set(roles),unusedTF=shuffle(byTeam(script,"townsfolk").filter(id=>!inPlay.has(id)),rng);
+  const players=roles.map((role,i)=>{const shownRole=role==="drunk"?(unusedTF.shift()??"washerwoman"):role;return{
+    id:`p${i+1}`,seat:i+1,name:i?`Player ${i+1}`:"You",isHuman:i===0,
+    startingRole:role,role,shownRole,team:ROLES[role].team,alignment:alignmentOf(role),alive:true,ghostVote:true,
+    poisoned:false,protected:false,masterId:null,claimRole:shownRole,bluffRole:null,claimStatement:null,
+    memories:[],interactions:[],onceUsed:{},causeOfDeath:null
+  };});
+  const unusedGood=script.roleIds.filter(id=>GOOD_TEAMS.has(ROLES[id].team)&&!inPlay.has(id));
+  const bluffs=sample(unusedGood,3,rng);
+  players.filter(p=>p.alignment==="evil").forEach((p,i)=>{p.bluffRole=bluffs[i%Math.max(1,bluffs.length)]??"chef";p.claimRole=p.bluffRole;});
+  const redHerring=pick(players.filter(p=>p.alignment==="good"&&p.role!=="fortuneteller"),rng)?.id??null;
+  const state={version:"2.0.0",seed:String(seed),script,seatCount,rng,players,humanId:players[0].id,phase:"night",day:0,night:1,winner:null,winReason:null,publicLog:[],privateLog:[],auditEvents:[],nextAuditId:1,poisonedId:null,protectedId:null,redHerring,lastExecution:null,executedToday:null,lastVoteResult:null,virginUsed:false,slayerUsed:false};
+  for(const p of players)state.auditEvents.push({id:state.nextAuditId++,group:"Setup",type:"setup_player",summary:`Seat ${p.seat} was ${roleName(p.role)}; shown ${roleName(p.shownRole)}; claim ${roleName(p.claimRole)}.`,data:{playerId:p.id,role:p.role,shownRole:p.shownRole,alignment:p.alignment,claimRole:p.claimRole,bluffRole:p.bluffRole}});
+  state.auditEvents.push({id:state.nextAuditId++,group:"Setup",type:"setup_complete",summary:`Created ${seatCount} seats with seed ${seed}${minions.includes("baron")?"; Baron changed the type counts":""}.`,data:{baron:minions.includes("baron"),redHerring}});
+  return state;
 }
-export function publicPlayer(p){return {id:p.id,seat:p.seat,name:p.name,alive:p.alive,claim:p.knownClaim?title(p.claim):'Unknown'}}
