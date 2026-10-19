@@ -2,13 +2,76 @@ import {roleName,ROLES} from "./data.js";
 import {createGameState} from "./setup.js";
 import {GameEngine} from "./engine.js";
 import {getTalkStatus} from "./talk-limit.js";
-const $=id=>document.getElementById(id),esc=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));let scripts=[],state,engine;
-async function load(){try{const names=await fetch("./scripts/index.json").then(r=>{if(!r.ok)throw Error("Cannot load script manifest");return r.json();});scripts=await Promise.all(names.map(async filename=>({filename,raw:await fetch(`./scripts/${filename}`).then(r=>r.json())})));$("script").innerHTML=scripts.map((s,i)=>`<option value="${i}">${esc(s.raw.find(x=>x?.id==="_meta")?.name??s.filename)}</option>`).join("");}catch(e){$("error").textContent=`${e.message}. Use an HTTP server, not file://.`;}}
-function start(){try{state=createGameState(scripts[Number($("script").value)].raw,Number($("seats").value),$("seed").value||Date.now());engine=new GameEngine(state);engine.start();$("setup").hidden=true;$("game").hidden=false;render();}catch(e){$("error").textContent=e.message;}}
-function renderTargets(){const old=$("target").value,$n=state.players.filter(p=>!p.isHuman);$("target").innerHTML=$n.map(p=>`<option value="${p.id}">Seat ${p.seat}: ${esc(p.name)} — ${p.alive?"alive":"dead"}</option>`).join("");if($n.some(p=>p.id===old))$("target").value=old;}
-function renderCircle(){const selected=$("target").value;$("circle").innerHTML=state.players.map((p,i)=>`<button class="seat ${p.isHuman?"human":""} ${p.alive?"":"dead"} ${p.id===selected?"selected":""}" style="--a:${i/state.players.length*360}deg" data-id="${p.id}" ${p.isHuman?"disabled":""}><strong>${p.seat}</strong><span>${esc(p.name)}</span><small>${p.alive?"alive":"DEAD"}</small></button>`).join("");$("circle").querySelectorAll("[data-id]:not(:disabled)").forEach(b=>b.onclick=()=>{$("target").value=b.dataset.id;render();});}
-function renderVotes(){const v=state.lastVoteResult;$("votes").hidden=!v;if(!v)return;const n=engine.player(v.nomineeId);$("vote-summary").textContent=`Seat ${n?.seat}: ${v.count} counted, ${v.threshold} required — ${v.virginTriggered?"Virgin triggered":v.executed?"executed":"not executed"}.`;$("vote-rows").innerHTML=v.records.map(r=>`<tr><td>${r.seat}: ${esc(r.name)}</td><td>${r.alive?"Alive":"Dead"}</td><td>${r.alive?"—":r.ghostVoteAvailable?"Available":"Spent"}</td><td>${r.attempted?"Yes":"No"}</td><td>${r.butlerRestricted?"Yes":"No"}</td><td class="${r.counted?"yes":"no"}">${r.counted?"VOTED":"NO"}</td><td>${r.ghostVoteConsumed?"Yes":"No"}</td><td>${esc(r.reason)}</td></tr>`).join("");}
-function renderReveal(){const r=engine.getReveal();$("reveal").hidden=!r;if(!r)return;$("result").innerHTML=`<strong>${r.winner.toUpperCase()} wins.</strong> ${esc(r.reason)}`;$("characters").innerHTML=r.players.map(p=>`<article class="card"><b>Seat ${p.seat}: ${esc(p.name)}</b><br>True: ${esc(roleName(p.startingRole))}${p.finalRole!==p.startingRole?`<br>Final: ${esc(roleName(p.finalRole))}`:""}${p.shownRole!==p.startingRole?`<br>Shown: ${esc(roleName(p.shownRole))}`:""}<br>Alignment: ${p.alignment}<br>Claim: ${esc(roleName(p.claimRole))}${p.bluffRole?`<br>Bluff: ${esc(roleName(p.bluffRole))}`:""}<br>${p.alive?"Alive":`Dead (${esc(p.causeOfDeath)})`}<br>Ghost vote: ${p.ghostVoteRemaining?"remaining":"spent"}<br>Memories: ${p.memories.length?esc(p.memories.map(m=>m.text).join(" | ")):"none"}<br>Conversations: ${p.interactions.filter(x=>x.type==="conversation").length}</article>`).join("");let current="";$("audit").innerHTML=r.events.map(e=>{const head=e.group!==current?(current=e.group,`<h3>${esc(e.group)}</h3>`):"";return `${head}<div class="event"><b>${esc(e.type.replaceAll("_"," "))}</b><span>${esc(e.summary)}</span></div>`;}).join("");}
-function render(){const h=engine.human();$("role").innerHTML=`<b>${esc(roleName(h.shownRole))}</b><p>${esc(ROLES[h.shownRole]?.summary)}</p>${h.role==="drunk"?"<p>You believe this is your role.</p>":""}`;$("status").innerHTML=state.winner?`<b>${state.winner.toUpperCase()} wins</b><p>${esc(state.winReason)}</p>`:`<b>${state.phase==="day"?`Day ${state.day}`:`Night ${state.night}`}</b><p>${engine.alive().length} alive</p>`;renderTargets();const target=engine.player($("target").value),talk=getTalkStatus(state,target?.id);$("talk-status").textContent=`Conversations today: ${talk.used}/${talk.limit}. ${talk.remaining} remaining.${talk.alreadyTalkedToTarget?" You already spoke to this player today.":""}`;renderCircle();renderVotes();$("private").innerHTML=state.privateLog.map(x=>`<li>${esc(x)}</li>`).join("");$("public").innerHTML=state.publicLog.map(x=>`<li>${esc(x)}</li>`).join("");$("actions").hidden=!!state.winner;$("ask").disabled=!target||state.phase!=="day"||talk.remaining===0||talk.alreadyTalkedToTarget;$("nominate").disabled=!target?.alive||!!state.winner;$("slay").hidden=!(h.shownRole==="slayer"&&!state.slayerUsed);renderReveal();}
-$("start").onclick=start;$("target").onchange=render;$("ask").onclick=()=>{try{$("answer").textContent=engine.askNpc($("target").value);render();}catch(e){$("answer").textContent=e.message;}};$("nominate").onclick=()=>{try{engine.nominate($("target").value);render();}catch(e){$("answer").textContent=e.message;}};$("slay").onclick=()=>{try{engine.useSlayer($("target").value);render();}catch(e){$("answer").textContent=e.message;}};$("pass").onclick=()=>{try{engine.endDayNoExecution();render();}catch(e){$("answer").textContent=e.message;}};
-$("seats").innerHTML=Array.from({length:11},(_,i)=>`<option>${i+5}</option>`).join("");$("seats").value="10";load();
+
+const $=id=>document.getElementById(id);
+const esc=value=>String(value??"").replace(/[&<>"']/g,char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
+let scripts=[],state=null,engine=null;
+
+async function loadScripts(){
+  try{
+    const names=await fetch("./scripts/index.json").then(response=>{if(!response.ok)throw Error("Cannot load script manifest");return response.json();});
+    scripts=await Promise.all(names.map(async filename=>({filename,raw:await fetch(`./scripts/${filename}`).then(response=>{if(!response.ok)throw Error(`Cannot load ${filename}`);return response.json();})})));
+    $("script").innerHTML=scripts.map((script,index)=>`<option value="${index}">${esc(script.raw.find(item=>item?.id==="_meta")?.name??script.filename)}</option>`).join("");
+  }catch(error){$("error").textContent=`${error.message}. Use an HTTP server, not file://.`;}
+}
+
+function start(){
+  try{
+    const selected=scripts[Number($("script").value)];
+    if(!selected)throw Error("No script selected.");
+    state=createGameState(selected.raw,Number($("seats").value),$("seed").value||Date.now());
+    engine=new GameEngine(state);engine.start();$("setup").hidden=true;$("game").hidden=false;render();
+  }catch(error){$("error").textContent=error.message;}
+}
+
+function renderTargets(){
+  const old=$("target").value,npcs=state.players.filter(player=>!player.isHuman);
+  $("target").innerHTML=npcs.map(player=>`<option value="${player.id}">Seat ${player.seat}: ${esc(player.name)} — ${player.alive?"alive":"dead"}</option>`).join("");
+  if(npcs.some(player=>player.id===old))$("target").value=old;
+}
+
+function latestVoterIds(){
+  return new Set((state.lastVoteResult?.records??[]).filter(record=>record.counted).map(record=>record.playerId));
+}
+
+function renderCircle(){
+  const selected=$("target").value,voters=latestVoterIds();
+  $("circle").innerHTML=state.players.map((player,index)=>{
+    const hand=voters.has(player.id)?'<span class="vote-hand" aria-label="Voted">✋</span>':"";
+    return `<button class="seat ${player.isHuman?"human":""} ${player.alive?"":"dead"} ${player.id===selected?"selected":""}" style="--a:${index/state.players.length*360}deg" data-id="${player.id}" ${player.isHuman?"disabled":""}>${hand}<strong>${player.seat}</strong><span>${esc(player.name)}</span><small>${player.alive?"alive":"DEAD"}</small></button>`;
+  }).join("");
+  $("circle").querySelectorAll("[data-id]:not(:disabled)").forEach(button=>button.onclick=()=>{$("target").value=button.dataset.id;render();});
+}
+
+function renderReveal(){
+  const reveal=engine.getReveal();$("reveal").hidden=!reveal;if(!reveal)return;
+  $("result").innerHTML=`<strong>${reveal.winner.toUpperCase()} wins.</strong> ${esc(reveal.reason)}`;
+  $("characters").innerHTML=reveal.players.map(player=>`<article class="card"><b>Seat ${player.seat}: ${esc(player.name)}</b><br>True: ${esc(roleName(player.startingRole))}${player.finalRole!==player.startingRole?`<br>Final: ${esc(roleName(player.finalRole))}`:""}${player.shownRole!==player.startingRole?`<br>Shown: ${esc(roleName(player.shownRole))}`:""}<br>Alignment: ${player.alignment}<br>Claim: ${esc(roleName(player.claimRole))}${player.bluffRole?`<br>Bluff: ${esc(roleName(player.bluffRole))}`:""}<br>${player.alive?"Alive":`Dead (${esc(player.causeOfDeath)})`}<br>Ghost vote: ${player.ghostVoteRemaining?"remaining":"spent"}<br>Memories: ${player.memories.length?esc(player.memories.map(memory=>memory.text).join(" | ")):"none"}<br>Conversations: ${player.interactions.filter(item=>item.type==="conversation").length}</article>`).join("");
+  let current="";
+  $("audit").innerHTML=reveal.events.map(event=>{const heading=event.group!==current?(current=event.group,`<h3>${esc(event.group)}</h3>`):"";return `${heading}<div class="event"><b>${esc(event.type.replaceAll("_"," "))}</b><span>${esc(event.summary)}</span></div>`;}).join("");
+}
+
+function render(){
+  const human=engine.human();
+  $("role").innerHTML=`<b>${esc(roleName(human.shownRole))}</b><p>${esc(ROLES[human.shownRole]?.summary)}</p>${human.role==="drunk"?"<p>You believe this is your role.</p>":""}`;
+  $("status").innerHTML=state.winner?`<b>${state.winner.toUpperCase()} wins</b><p>${esc(state.winReason)}</p>`:`<b>${state.phase==="day"?`Day ${state.day}`:`Night ${state.night}`}</b><p>${engine.alive().length} alive</p>`;
+  renderTargets();
+  const target=engine.player($("target").value),talk=getTalkStatus(state,target?.id);
+  $("talk-status").textContent=`Conversations today: ${talk.used}/${talk.limit}. ${talk.remaining} remaining.${talk.alreadyTalkedToTarget?" You already spoke to this player today.":""}`;
+  renderCircle();
+  $("private").innerHTML=state.privateLog.map(item=>`<li>${esc(item)}</li>`).join("");
+  $("public").innerHTML=state.publicLog.map(item=>`<li>${esc(item)}</li>`).join("");
+  $("actions").hidden=Boolean(state.winner);
+  $("ask").disabled=!target||state.phase!=="day"||talk.remaining===0||talk.alreadyTalkedToTarget;
+  $("nominate").disabled=!target?.alive||Boolean(state.winner);
+  $("slay").hidden=!(human.shownRole==="slayer"&&!state.slayerUsed);
+  renderReveal();
+}
+
+$("start").onclick=start;
+$("target").onchange=render;
+$("ask").onclick=()=>{try{$("answer").textContent=engine.askNpc($("target").value);render();}catch(error){$("answer").textContent=error.message;}};
+$("nominate").onclick=()=>{try{engine.nominate($("target").value);render();}catch(error){$("answer").textContent=error.message;}};
+$("slay").onclick=()=>{try{engine.useSlayer($("target").value);render();}catch(error){$("answer").textContent=error.message;}};
+$("pass").onclick=()=>{try{engine.endDayNoExecution();render();}catch(error){$("answer").textContent=error.message;}};
+$("seats").innerHTML=Array.from({length:11},(_,index)=>`<option>${index+5}</option>`).join("");$("seats").value="10";loadScripts();

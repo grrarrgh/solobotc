@@ -8,7 +8,7 @@ export const ROLES = {
   undertaker:{name:"Undertaker",team:"townsfolk",summary:"Learns the role of yesterday's execution victim."},
   monk:{name:"Monk",team:"townsfolk",summary:"Protects another player from the Demon each night after the first."},
   ravenkeeper:{name:"Ravenkeeper",team:"townsfolk",summary:"If killed by the Demon, learns one player's role."},
-  virgin:{name:"Virgin",team:"townsfolk",summary:"Solo mode spares the human when this triggers."},
+  virgin:{name:"Virgin",team:"townsfolk",summary:"The first Townsfolk nominator is usually executed."},
   slayer:{name:"Slayer",team:"townsfolk",summary:"Once per game chooses a possible Demon."},
   soldier:{name:"Soldier",team:"townsfolk",summary:"Safe from the Demon while functioning."},
   mayor:{name:"Mayor",team:"townsfolk",summary:"May redirect a kill; can win at final three without execution."},
@@ -24,5 +24,6 @@ export const ROLES = {
 };
 export const SETUP_COUNTS={5:[3,0,1,1],6:[3,1,1,1],7:[5,0,1,1],8:[5,1,1,1],9:[5,2,1,1],10:[7,0,2,1],11:[7,1,2,1],12:[7,2,2,1],13:[9,0,3,1],14:[9,1,3,1],15:[9,2,3,1]};
 export const GOOD_TEAMS=new Set(["townsfolk","outsider"]);
+export const HUMAN_FORBIDDEN_ROLES=new Set(["ravenkeeper","virgin","soldier"]);
 export const roleName=id=>ROLES[id]?.name??id??"Unknown";
 export const alignmentOf=id=>GOOD_TEAMS.has(ROLES[id]?.team)?"good":"evil";
