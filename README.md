@@ -2,30 +2,6 @@
 
 A dependency-free, browser-based solo simulation for the supplied Trouble Brewing JSON script.
 
-## Run
-
-```bash
-cd solo-clocktower-mvp
-python3 -m http.server 8000
-```
-
-Open `http://localhost:8000`. Do not use `file://`, because the browser must fetch the script manifest and JSON.
-
-## Validate
-
-Node.js is needed only for validation:
-
-```bash
-npm run check
-npm test
-```
-
-No `npm install` step is required.
-
-## Script workflow
-
-Add JSON files under `scripts/`, then add each filename to `scripts/index.json`. The current rules engine rejects unsupported character IDs rather than simulating them incorrectly.
-
 ## Solo-mode rules
 
 - The human is assigned a good character and is never targeted by the Demon or Poisoner.
