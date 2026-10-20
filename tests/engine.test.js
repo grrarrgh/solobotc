@@ -580,3 +580,269 @@ test("an evil Ravenkeeper bluffer killed at night names a wrong character", () =
   assert.ok(baron.memories[0].text.startsWith(`${chef.label} is `));
   assert.notEqual(baron.memories[0].text, `${chef.label} is Chef.`);
 });
+
+// ── Everyone Can Play ────────────────────────────────────────
+
+const ecp = JSON.parse(
+  fs.readFileSync(
+    new URL("../scripts/Everyone Can Play_1_0_2.json", import.meta.url),
+  ),
+);
+
+// Night 2 of the base 5-player game. The Demon doesn't attack unless a test
+// overrides strat.demon afterwards.
+function nightTwo(seed, strat = new SimpleStrategy()) {
+  const s = base(seed);
+
+  s.phase = "night";
+  s.night = 2;
+  s.day = 1;
+  strat.demon = () => null;
+
+  return { s, strat, e: new Engine(s, strat) };
+}
+
+test("Everyone Can Play loads ({ id } entries) and starts", () => {
+  const s = createState(ecp, 10, "ecp");
+
+  assert.equal(s.script.meta.name, "Everyone Can Play");
+  assert.equal(s.script.ids.length, 24);
+
+  new Engine(s).start();
+
+  assert.equal(s.phase, "day");
+});
+
+test("the human is never dealt the Gambler, Fool or Moonchild", () => {
+  for (let seed = 0; seed < 300; seed++) {
+    const human = createState(ecp, 10, seed).players[0];
+
+    assert.ok(!FORBIDDEN_HUMAN.has(human.role));
+    assert.ok(!FORBIDDEN_HUMAN.has(human.shown));
+  }
+});
+
+test("the Clockmaker learns the Demon's distance to its nearest Minion", () => {
+  const s = base("clockmaker");
+  const cm = s.players[1];
+
+  role(cm, "clockmaker", "good");
+
+  s.phase = "night";
+  s.night = 1;
+  s.day = 0;
+
+  new Engine(s).start();
+
+  // Baron (seat 4) sits next to the Imp (seat 5).
+  assert.equal(cm.memories[0].text, "Clockmaker number: 1.");
+});
+
+test("the Grandmother learns her grandchild, and dies if the Demon kills them", () => {
+  const s = base("grandmother");
+  const gm = s.players[1];
+
+  role(gm, "grandmother", "good");
+
+  s.phase = "night";
+  s.night = 1;
+  s.day = 0;
+
+  const e = new Engine(s);
+
+  e.start();
+
+  const child = s.players.find((x) => x.id === gm.grandchild);
+
+  assert.equal(child.alignment, "good");
+  assert.equal(
+    gm.memories[0].text,
+    `Grandmother: your grandchild is ${child.label}, the ${name(child.role)}.`,
+  );
+
+  // The Demon never attacks the human, so link her to the Butler instead.
+  const butler = s.players[2];
+
+  gm.grandchild = butler.id;
+  e.strat.demon = () => butler;
+  e.endDay();
+
+  assert.equal(butler.alive, false);
+  assert.equal(gm.alive, false);
+  assert.equal(gm.death, "grandmother");
+});
+
+test("a Gambler who guesses wrong dies; a right guess is safe", () => {
+  const strat = new SimpleStrategy();
+  const { s, e } = nightTwo("gambler", strat);
+  const wrong = s.players[1];
+  const right = s.players[2];
+
+  role(wrong, "gambler", "good");
+  role(right, "gambler", "good");
+
+  strat.gamble = (_, g) => ({
+    target: s.players[4],
+    role: g === wrong ? "chef" : "imp",
+  });
+
+  e.night();
+
+  assert.equal(wrong.alive, false);
+  assert.equal(right.alive, true);
+  assert.equal(
+    wrong.memories[0].text,
+    `Gambler: guessed ${s.players[4].label} is the Chef.`,
+  );
+});
+
+test("the Fool survives their first death but not their second", () => {
+  const strat = new SimpleStrategy();
+  const { s, e } = nightTwo("fool", strat);
+  const fool = s.players[1];
+
+  role(fool, "fool", "good");
+  strat.demon = () => fool;
+
+  e.night();
+
+  assert.equal(fool.alive, true);
+  assert.equal(fool.foolUsed, true);
+
+  e.endDay();
+
+  assert.equal(fool.alive, false);
+});
+
+test("the Assassin's once-per-game kill ignores the Fool", () => {
+  const strat = new SimpleStrategy();
+  const { s, e } = nightTwo("assassin", strat);
+  const fool = s.players[1];
+  const assassin = s.players[3];
+
+  role(fool, "fool", "good");
+  role(assassin, "assassin", "evil");
+  strat.assassin = () => fool;
+
+  e.night();
+
+  assert.equal(fool.alive, false);
+  assert.equal(fool.death, "assassin");
+  assert.equal(assassin.assassinUsed, true);
+});
+
+test("an executed Moonchild curses a good player, who dies that night", () => {
+  const s = base("moonchild");
+  const moonchild = s.players[2];
+  const chef = s.players[1];
+
+  role(moonchild, "moonchild", "good");
+
+  const strat = new SimpleStrategy();
+
+  strat.vote = () => true;
+  strat.demon = () => null;
+  strat.moonchild = () => chef;
+
+  const e = new Engine(s, strat);
+
+  e.nominate(moonchild.id);
+
+  assert.equal(moonchild.alive, false);
+  assert.ok(
+    s.publicLog.includes(
+      `${moonchild.label} claims Moonchild and chooses ${chef.label}.`,
+    ),
+  );
+  assert.equal(chef.alive, false);
+  assert.equal(chef.death, "moonchild");
+  assert.equal(s.day, 2);
+});
+
+test("the Devil's Advocate's pick survives execution the next day", () => {
+  const s = base("advocate");
+  const da = s.players[3];
+  const imp = s.players[4];
+
+  role(da, "devilsadvocate", "evil");
+
+  s.phase = "night";
+  s.night = 1;
+  s.day = 0;
+
+  const strat = new SimpleStrategy();
+
+  strat.advocate = () => imp;
+  strat.vote = () => true;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  e.start();
+
+  const result = e.nominate(imp.id);
+
+  assert.equal(result.executed, true);
+  assert.equal(imp.alive, true);
+  assert.equal(s.winner, null);
+  assert.equal(s.day, 2);
+});
+
+test("the Devil's Advocate never picks the same player two nights running", () => {
+  const s = base("advocate-repeat");
+  const da = s.players[3];
+  const strat = new SimpleStrategy();
+
+  role(da, "devilsadvocate", "evil");
+
+  for (const last of s.players) {
+    for (let i = 0; i < 20; i++) {
+      assert.notEqual(strat.advocate(s, da, last.id).id, last.id);
+    }
+  }
+});
+
+test("the human Artist asks one true yes/no question per game", () => {
+  const s = base("artist");
+  const human = s.players[0];
+  const imp = s.players[4];
+
+  role(human, "artist", "good");
+
+  const e = new Engine(s);
+  const answer = e.artist(imp.id, "demon");
+
+  assert.equal(answer, `Artist: asked if ${imp.label} is the Demon: YES.`);
+  assert.ok(s.privateLog.includes(`Day 1: ${answer}`));
+  assert.throws(() => e.artist(imp.id, "evil"), /Artist unavailable/);
+});
+
+test("NPC Artists ask at dawn; evil Artist bluffers lie about the answer", () => {
+  const s = base("npc-artist");
+  const artist = s.players[1];
+  const baron = s.players[3];
+  const imp = s.players[4];
+
+  role(artist, "artist", "good");
+  baron.claim = "artist";
+
+  s.phase = "night";
+  s.night = 1;
+  s.day = 0;
+
+  const strat = new SimpleStrategy();
+  strat.artist = () => ({ target: imp, question: "demon" });
+
+  const e = new Engine(s, strat);
+
+  e.start();
+
+  const yes = `Artist: asked if ${imp.label} is the Demon: YES.`;
+
+  assert.equal(artist.memories[0].text, yes);
+  assert.ok(e.ask(artist.id).includes(`Day 1: ${yes}`));
+  assert.equal(
+    baron.memories[0].text,
+    `Artist: asked if ${imp.label} is the Demon: NO.`,
+  );
+});

@@ -12,6 +12,8 @@ test("feature controls are present", () => {
   assert.match(html, /id="random-seed"/);
   assert.match(html, /id="count-info"/);
   assert.match(html, /id="reset"/);
+  assert.match(html, /id="artist-question"/);
+  assert.match(html, /id="artist-ask"/);
 });
 
 test("role counts and log reversal are wired", () => {

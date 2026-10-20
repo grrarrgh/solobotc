@@ -47,7 +47,9 @@ export class SimpleStrategy {
   // Good NPCs share what they learned; evil NPCs share their bluffed info.
   ask(s, p) {
     const details = p.memories.length
-      ? p.memories.map((x) => `Night ${x.night}: ${x.text}`).join(" ")
+      ? p.memories
+          .map((x) => `${x.day ? `Day ${x.day}` : `Night ${x.night}`}: ${x.text}`)
+          .join(" ")
       : "I have no stored information.";
 
     const suspicion = this.suspicion(s, p);
@@ -117,6 +119,58 @@ export class SimpleStrategy {
       p,
       s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
     );
+  }
+
+  // A Gambler guesses another living player is the character they claim.
+  gamble(s, p) {
+    const target = pick(
+      s.players.filter((x) => x.alive && x.id !== p.id),
+      s.r,
+    );
+
+    return target ? { target, role: target.claim } : null;
+  }
+
+  // An Artist asks whether someone they suspect is the Demon.
+  artist(s, p) {
+    const target = this.suspect(
+      s,
+      p,
+      s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
+    );
+
+    return target ? { target, question: "demon" } : null;
+  }
+
+  // A dying Moonchild curses a living NPC they suspect.
+  moonchild(s, p) {
+    return this.suspect(
+      s,
+      p,
+      s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
+    );
+  }
+
+  // Each night there's a 30% chance the Assassin spends their kill on a
+  // living good NPC.
+  assassin(s) {
+    if (s.r() >= 0.3) {
+      return null;
+    }
+
+    return pick(
+      s.players.filter((x) => x.alive && !x.human && x.alignment === "good"),
+      s.r,
+    );
+  }
+
+  // The Devil's Advocate shields an evil teammate from execution if possible,
+  // never the same player two nights running.
+  advocate(s, p, lastId) {
+    const pool = s.players.filter((x) => x.alive && x.id !== lastId);
+    const evil = pool.filter((x) => x.alignment === "evil");
+
+    return pick(evil.length ? evil : pool, s.r);
   }
 
   // Night info an evil NPC reports for their bluff (true only for the Spy).

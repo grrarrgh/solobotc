@@ -1,4 +1,4 @@
-import { name, COUNTS } from "./data.js";
+import { name, COUNTS, ARTIST_QUESTIONS } from "./data.js";
 import { createState } from "./setup.js";
 import { Engine } from "./engine.js";
 
@@ -29,7 +29,9 @@ async function load() {
     scripts = await Promise.all(
       files.map(async (f) => ({
         file: f,
-        raw: await fetch(`scripts/${f}`).then((r) => r.json()),
+        raw: await fetch(`scripts/${encodeURIComponent(f)}`).then((r) =>
+          r.json(),
+        ),
       })),
     );
 
@@ -278,6 +280,11 @@ function render() {
   $("ask").disabled = !t || talk.already || !talk.remaining;
   $("nominate").disabled = !t?.alive || !h.alive;
   $("slay").hidden = !(h.shown === "slayer" && !s.slayerUsed && h.alive);
+  $("artist-controls").hidden = !(
+    h.shown === "artist" &&
+    !h.artistUsed &&
+    h.alive
+  );
 
   reveal();
 }
@@ -389,6 +396,18 @@ $("slay").onclick = () => {
   }
 };
 
+$("artist-ask").onclick = () => {
+  try {
+    $("answer").textContent = e.artist(
+      selectedPlayerId,
+      $("artist-question").value,
+    );
+    render();
+  } catch (err) {
+    $("answer").textContent = err.message;
+  }
+};
+
 $("pass").onclick = () => {
   try {
     e.endDay();
@@ -405,5 +424,9 @@ $("seats").innerHTML = Array.from(
 ).join("");
 
 $("seats").value = 10;
+
+$("artist-question").innerHTML = Object.entries(ARTIST_QUESTIONS)
+  .map(([k, v]) => `<option value="${k}">Is this player ${esc(v)}?</option>`)
+  .join("");
 
 load();

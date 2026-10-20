@@ -5,7 +5,10 @@ export function parseScript(raw) {
   const meta = raw.find((x) => typeof x === "object" && x.id === "_meta") ?? {
       name: "Unnamed",
     },
-    ids = raw.filter((x) => typeof x === "string"),
+    // Scripts list roles either as "id" strings or as { "id": ... } objects.
+    ids = raw
+      .map((x) => (typeof x === "string" ? x : x?.id))
+      .filter((id) => id && id !== "_meta"),
     bad = ids.filter((x) => !ROLES[x]);
 
   if (bad.length) throw Error(`Unsupported: ${bad}`);
@@ -91,6 +94,10 @@ export function createState(raw, seats, seed = Date.now()) {
       bluff: null,
       shotUsed: false,
       virginUsed: false,
+      artistUsed: false,
+      assassinUsed: false,
+      foolUsed: false,
+      grandchild: null,
       memories: [],
       talks: [],
       death: null,
@@ -140,6 +147,8 @@ export function createState(raw, seats, seed = Date.now()) {
     talkDay: 0,
     red,
     slayerUsed: false,
+    moonCurse: null,
+    advocate: null,
   };
 
   players.forEach((p) =>

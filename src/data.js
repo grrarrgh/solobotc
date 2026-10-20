@@ -13,15 +13,32 @@ export const ROLES = {
   slayer: ["Slayer", "townsfolk"],
   soldier: ["Soldier", "townsfolk"],
   mayor: ["Mayor", "townsfolk"],
+  clockmaker: ["Clockmaker", "townsfolk"],
+  grandmother: ["Grandmother", "townsfolk"],
+  gambler: ["Gambler", "townsfolk"],
+  artist: ["Artist", "townsfolk"],
+  fool: ["Fool", "townsfolk"],
   butler: ["Butler", "outsider"],
   drunk: ["Drunk", "outsider"],
   recluse: ["Recluse", "outsider"],
   saint: ["Saint", "outsider"],
+  moonchild: ["Moonchild", "outsider"],
   poisoner: ["Poisoner", "minion"],
   spy: ["Spy", "minion"],
   scarletwoman: ["Scarlet Woman", "minion"],
   baron: ["Baron", "minion"],
+  assassin: ["Assassin", "minion"],
+  devilsadvocate: ["Devil's Advocate", "minion"],
   imp: ["Imp", "demon"],
+};
+
+// Yes/no questions an Artist can ask the Storyteller about a player.
+export const ARTIST_QUESTIONS = {
+  evil: "evil",
+  demon: "the Demon",
+  minion: "a Minion",
+  outsider: "an Outsider",
+  townsfolk: "a Townsfolk",
 };
 
 // seats: [townsfolk, outsiders, minions, demons]
@@ -39,7 +56,16 @@ export const COUNTS = {
   15: [9, 2, 3, 1],
 };
 
-export const FORBIDDEN_HUMAN = new Set(["ravenkeeper", "virgin", "soldier"]);
+// Roles the human can't be dealt: their abilities depend on things the solo
+// human never faces (night choices, night attacks, being nominated).
+export const FORBIDDEN_HUMAN = new Set([
+  "ravenkeeper",
+  "virgin",
+  "soldier",
+  "gambler",
+  "fool",
+  "moonchild",
+]);
 
 export const name = (id) => ROLES[id]?.[0] ?? id;
 export const team = (id) => ROLES[id]?.[1];

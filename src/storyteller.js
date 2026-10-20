@@ -1,4 +1,4 @@
-import { ROLES, name, team } from "./data.js";
+import { ROLES, ARTIST_QUESTIONS, name, team, alignment } from "./data.js";
 import { pick, sample } from "./util.js";
 
 // The Drunk acts as the character they were shown.
@@ -14,7 +14,14 @@ const evil = (p) =>
       ? false
       : p.alignment === "evil";
 
-const FIRST_NIGHT = ["washerwoman", "librarian", "investigator", "chef"];
+const FIRST_NIGHT = [
+  "washerwoman",
+  "librarian",
+  "investigator",
+  "chef",
+  "clockmaker",
+  "grandmother",
+];
 const EACH_NIGHT = ["empath", "fortuneteller"];
 
 // The team each "one of these two players is X" role learns about.
@@ -51,6 +58,44 @@ export const monkInfo = (s, t, functioning = true) => ({
   trigger: "normal",
   functioning,
 });
+
+// What a Gambler remembers about their guess (they never learn if it was right).
+export const gamblerInfo = (s, t, guess) => ({
+  night: s.night,
+  role: "gambler",
+  text: `Gambler: guessed ${t.label} is the ${name(guess)}.`,
+  targets: [t.id],
+  trigger: "normal",
+  functioning: true,
+});
+
+const artistTruth = (t, q) =>
+  q === "evil" ? evil(t) : q === "demon" ? t.role === "imp" : team(t.role) === q;
+
+// The Storyteller's yes/no answer to an Artist. `mode` is "truth", "lie"
+// (an evil bluffer) or "random" (a drunk or poisoned Artist).
+export function artistInfo(s, t, q, mode) {
+  const truth = artistTruth(t, q);
+  const yes =
+    mode === "truth" ? truth : mode === "lie" ? !truth : s.r() < 0.5;
+
+  return {
+    day: s.day,
+    night: s.night,
+    role: "artist",
+    text: `Artist: asked if ${t.label} is ${ARTIST_QUESTIONS[q]}: ${
+      yes ? "YES" : "NO"
+    }.`,
+    targets: [t.id],
+    trigger: "day",
+    functioning: mode === "truth",
+  };
+}
+
+const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+
+// Possible Clockmaker answers: 1 up to half the circle.
+const clockRange = (s) => range(1, Math.max(1, Math.floor(s.players.length / 2)));
 
 // Nearest living neighbours on each side.
 function neigh(s, p) {
@@ -93,12 +138,32 @@ const fortuneYes = (s, ts) =>
 
 const executed = (s) => s.players.find((x) => x.id === s.lastExecution);
 
-// Any number from 0–2 except the true one.
-const wrongNumber = (s, n) =>
+// Seats from the Demon to its nearest Minion, the shorter way round.
+function clockmakerCount(s) {
+  const n = s.players.length;
+  const d = s.players.findIndex((x) => x.role === "imp");
+  const steps = s.players
+    .map((x, i) => [x, Math.abs(i - d)])
+    .filter(([x]) => team(x.role) === "minion")
+    .map(([, k]) => Math.min(k, n - k));
+
+  return d < 0 || !steps.length ? 0 : Math.min(...steps);
+}
+
+// Any of the options except the true number (0–2 by default).
+const wrongNumber = (s, n, options = [0, 1, 2]) =>
   pick(
-    [0, 1, 2].filter((k) => k !== n),
+    options.filter((k) => k !== n),
     s.r,
   );
+
+const otherGood = (s, p) =>
+  s.players.filter((x) => x.id !== p.id && x.alignment === "good");
+
+const goodRoles = (s) => s.script.ids.filter((id) => alignment(id) === "good");
+
+const grandchildText = (g, role) =>
+  `Grandmother: your grandchild is ${g.label}, the ${name(role)}.`;
 
 // Correct information for `role`, seen from player p's seat.
 function trueInfo(s, p, role, strat) {
@@ -152,6 +217,18 @@ function trueInfo(s, p, role, strat) {
       targets: [],
       text: x ? `Executed player was ${name(x.role)}.` : "Nobody was executed.",
     };
+  }
+
+  if (role === "clockmaker") {
+    return { targets: [], text: `Clockmaker number: ${clockmakerCount(s)}.` };
+  }
+
+  if (role === "grandmother") {
+    const g = pick(otherGood(s, p), s.r);
+
+    return g
+      ? { targets: [g.id], text: grandchildText(g, g.role) }
+      : { targets: [], text: "No information." };
   }
 
   return { targets: [], text: "No information." };
@@ -219,11 +296,50 @@ function falseInfo(s, p, role, strat) {
     return { targets: [], text: `Executed player was ${name(shown)}.` };
   }
 
+  if (role === "clockmaker") {
+    const n = wrongNumber(s, clockmakerCount(s), clockRange(s));
+
+    return { targets: [], text: `Clockmaker number: ${n ?? 0}.` };
+  }
+
+  if (role === "grandmother") {
+    // Vouch for another player with a good character they don't have.
+    const g = pick(
+      s.players.filter((x) => x.id !== p.id),
+      s.r,
+    );
+    const shown = pick(
+      goodRoles(s).filter((id) => id !== g.role),
+      s.r,
+    );
+
+    return { targets: [g.id], text: grandchildText(g, shown) };
+  }
+
   return { targets: [], text: "No information." };
 }
 
 // Random information for a drunk or poisoned player.
-function unreliableInfo(s, role, targets) {
+function unreliableInfo(s, p, role, targets) {
+  if (role === "clockmaker") {
+    return {
+      targets: [],
+      text: `Clockmaker number: ${pick(clockRange(s), s.r)}.`,
+    };
+  }
+
+  if (role === "grandmother") {
+    const g = pick(
+      s.players.filter((x) => x.id !== p.id),
+      s.r,
+    );
+
+    return {
+      targets: [g.id],
+      text: grandchildText(g, pick(goodRoles(s), s.r)),
+    };
+  }
+
   if (PAIR_TEAM[role]) {
     const pair = sample(s.players, 2, s.r);
     const possible = s.script.ids.filter((id) => team(id) === PAIR_TEAM[role]);
@@ -287,10 +403,16 @@ export function nightInfo(s, p, strat) {
 
   let { text, targets } = trueInfo(s, p, role, strat);
 
+  // The Grandmother's link to her real grandchild exists even if she is
+  // misinformed; whether it kills her is checked when the Demon strikes.
+  if (role === "grandmother") {
+    p.grandchild = targets[0] ?? null;
+  }
+
   const functioning = works(p);
 
   if (!functioning) {
-    ({ text, targets } = unreliableInfo(s, role, targets));
+    ({ text, targets } = unreliableInfo(s, p, role, targets));
   }
 
   return {
@@ -312,6 +434,12 @@ export function bluffInfo(s, p, strat) {
     const t = s.night > 1 ? strat.monk(s, p) : null;
 
     return t ? monkInfo(s, t) : null;
+  }
+
+  if (role === "gambler") {
+    const guess = s.night > 1 ? strat.gamble(s, p) : null;
+
+    return guess ? gamblerInfo(s, guess.target, guess.role) : null;
   }
 
   if (!actsTonight(role, s.night)) {

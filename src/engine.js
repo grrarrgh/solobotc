@@ -1,10 +1,12 @@
-import { name, team } from "./data.js";
+import { ARTIST_QUESTIONS, name, team } from "./data.js";
 import {
   nightInfo,
   ability,
   works,
   ravenInfo,
   monkInfo,
+  gamblerInfo,
+  artistInfo,
 } from "./storyteller.js";
 import { SimpleStrategy } from "./strategy.js";
 import { pick } from "./util.js";
@@ -17,6 +19,11 @@ const KEY_MOMENT_TYPES = new Set([
   "succession",
   "slayer",
   "virgin",
+  "gambler",
+  "fool",
+  "moonchild",
+  "assassin",
+  "advocate",
   "game_over",
 ]);
 
@@ -83,7 +90,11 @@ export class Engine {
       ...info,
     });
 
-    if (p.human) {
+    // Info carries a `day` when it was learned during the day (the Artist).
+    if (p.human && info.day) {
+      this.s.privateLog.push(`Day ${info.day}: ${info.text}`);
+      this.s.publicLog.push(`Day ${info.day} — You received: ${info.text}`);
+    } else if (p.human) {
       this.s.privateLog.push(`Night ${info.night}: ${info.text}`);
       this.s.publicLog.push(
         `Day ${info.night} — Night ${info.night}: You received: ${info.text}`,
@@ -133,6 +144,8 @@ export class Engine {
       }
     }
 
+    this.advocate();
+
     if (s.night > 1) {
       for (const m of s.players.filter(
         (x) => x.alive && ability(x) === "monk",
@@ -162,7 +175,16 @@ export class Engine {
         }
       }
 
-      this.demon();
+      this.gamblers();
+      this.resolveMoonCurse();
+
+      if (!s.winner) {
+        this.demon();
+      }
+
+      if (!s.winner) {
+        this.assassin();
+      }
     }
 
     if (s.winner) {
@@ -191,6 +213,196 @@ export class Engine {
     this.audit("day", `Day ${s.day} began.`);
 
     this.npcShots();
+    this.npcArtists();
+  }
+
+  // ── Night actions: Everyone Can Play ──────────────────────
+
+  // The Devil's Advocate picks someone (not last night's pick) who survives
+  // execution tomorrow.
+  advocate() {
+    const s = this.s;
+    const lastId = s.advocate?.targetId ?? null;
+    const da = s.players.find((x) => x.alive && x.role === "devilsadvocate");
+
+    s.advocate = null;
+
+    if (!da) {
+      return;
+    }
+
+    const t = this.strat.advocate(s, da, lastId);
+
+    if (!t) {
+      return;
+    }
+
+    const effective = works(da);
+
+    s.advocate = { targetId: t.id, day: s.night, effective };
+
+    this.audit(
+      "advocate",
+      `${da.label} (${name(da.role)}) chose ${t.label}; ${
+        effective ? "protected from execution" : "protection failed"
+      }.`,
+      { actorId: da.id, targetId: t.id, effective },
+    );
+  }
+
+  // Whether the Devil's Advocate saves p from execution today.
+  advocated(p) {
+    const a = this.s.advocate;
+
+    return Boolean(a?.effective && a.targetId === p.id && a.day === this.s.day);
+  }
+
+  // Each Gambler guesses a player's character; a wrong guess kills them.
+  gamblers() {
+    const s = this.s;
+
+    for (const g of s.players.filter(
+      (x) => x.alive && ability(x) === "gambler",
+    )) {
+      const guess = this.strat.gamble(s, g);
+
+      if (!guess) {
+        continue;
+      }
+
+      const wrong = guess.target.role !== guess.role;
+      const dies = wrong && works(g);
+
+      this.audit(
+        "gambler",
+        `${g.label} (${name(g.role)}) guessed ${guess.target.label} is ${name(
+          guess.role,
+        )}; ${wrong ? "wrong" : "right"}${dies ? ", and died" : ""}.`,
+        { actorId: g.id, targetId: guess.target.id, guess: guess.role, wrong },
+      );
+
+      this.remember(g, gamblerInfo(s, guess.target, guess.role));
+
+      if (dies) {
+        this.kill(g, "gambler");
+        this.check();
+      }
+    }
+  }
+
+  // Last night's (or today's) Moonchild choice dies tonight if good.
+  resolveMoonCurse() {
+    const s = this.s;
+    const t = this.player(s.moonCurse);
+
+    s.moonCurse = null;
+
+    if (!t?.alive || t.alignment !== "good" || t.protected) {
+      return;
+    }
+
+    this.kill(t, "moonchild");
+    this.check();
+  }
+
+  // Once per game, the Assassin kills a player; nothing can stop it.
+  assassin() {
+    const s = this.s;
+    const a = s.players.find(
+      (x) => x.alive && x.role === "assassin" && !x.assassinUsed,
+    );
+
+    if (!a) {
+      return;
+    }
+
+    const t = this.strat.assassin(s, a);
+
+    if (!t) {
+      return;
+    }
+
+    const effective = works(a);
+
+    a.assassinUsed = true;
+
+    this.audit(
+      "assassin",
+      `${a.label} (${name(a.role)}) chose ${t.label}; ${
+        effective ? "killed" : "the kill failed"
+      }.`,
+      { actorId: a.id, targetId: t.id, effective },
+    );
+
+    if (effective && this.kill(t, "assassin")) {
+      this.check();
+    }
+  }
+
+  // A dying Moonchild publicly picks a living player to curse. An evil NPC
+  // bluffing Moonchild makes the same show, with no effect.
+  moonchild(p) {
+    const s = this.s;
+    const t = this.strat.moonchild(s, p);
+
+    if (!t) {
+      return;
+    }
+
+    const real = p.role === "moonchild" && !p.poisoned;
+
+    p.claimKnown = true;
+
+    if (real) {
+      s.moonCurse = t.id;
+    }
+
+    s.publicLog.push(`${p.label} claims Moonchild and chooses ${t.label}.`);
+
+    this.audit(
+      "moonchild",
+      `${p.label} (${name(p.role)}) chose ${t.label}; ${
+        real ? "cursed" : "no effect"
+      }.`,
+      { actorId: p.id, targetId: t.id, effective: real },
+    );
+  }
+
+  // At dawn, NPC Artists (and evil NPCs bluffing Artist) ask their question.
+  npcArtists() {
+    const s = this.s;
+
+    for (const p of s.players) {
+      const claimsArtist =
+        ability(p) === "artist" ||
+        (p.alignment === "evil" && p.claim === "artist");
+
+      if (s.winner || p.human || !p.alive || p.artistUsed || !claimsArtist) {
+        continue;
+      }
+
+      const ask = this.strat.artist(s, p);
+
+      if (!ask) {
+        continue;
+      }
+
+      p.artistUsed = true;
+
+      if (p.alignment === "good") {
+        this.remember(
+          p,
+          artistInfo(s, ask.target, ask.question, works(p) ? "truth" : "random"),
+        );
+      } else {
+        const spy = p.role === "spy" && works(p);
+
+        this.rememberBluff(
+          p,
+          artistInfo(s, ask.target, ask.question, spy ? "truth" : "lie"),
+        );
+      }
+    }
   }
 
   // Evil NPCs gather night info to report for the role they are bluffing.
@@ -273,6 +485,11 @@ export class Engine {
       }
     }
 
+    if (outcome !== "blocked" && this.foolSaves(t, "demon")) {
+      outcome = "fool";
+      detail = `${t.label} survived as the Fool`;
+    }
+
     const result = outcome === "killed" ? `${t.label} was killed` : detail;
 
     this.audit(
@@ -287,7 +504,9 @@ export class Engine {
     );
 
     if (outcome !== "blocked") {
-      this.kill(t, "demon");
+      if (this.kill(t, "demon")) {
+        this.grandmother(t);
+      }
 
       if (t === d) {
         this.successor(d, before, true);
@@ -297,8 +516,37 @@ export class Engine {
     }
   }
 
+  // A working Fool survives their first death, unless it is the Assassin's.
+  foolSaves(p, cause) {
+    return (
+      p.role === "fool" && works(p) && !p.foolUsed && cause !== "assassin"
+    );
+  }
+
+  // If the Demon kills a working Grandmother's grandchild, she dies too.
+  grandmother(t) {
+    for (const g of this.s.players) {
+      if (g.role === "grandmother" && g.grandchild === t.id && works(g)) {
+        this.kill(g, "grandmother");
+      }
+    }
+  }
+
+  // Returns whether p actually died.
   kill(p, cause) {
     if (!p?.alive) {
+      return false;
+    }
+
+    if (this.foolSaves(p, cause)) {
+      p.foolUsed = true;
+
+      this.audit(
+        "fool",
+        `${p.label} (Fool) would have died (${cause}) but survived.`,
+        { playerId: p.id, cause },
+      );
+
       return false;
     }
 
@@ -329,6 +577,14 @@ export class Engine {
       if (t) {
         this.rememberBluff(p, ravenInfo(this.s, p, t, p.role !== "spy"));
       }
+    }
+
+    if (
+      !p.human &&
+      (p.role === "moonchild" ||
+        (p.alignment === "evil" && p.claim === "moonchild"))
+    ) {
+      this.moonchild(p);
     }
 
     return true;
@@ -486,13 +742,25 @@ export class Engine {
       const before = this.alive().length;
 
       s.lastExecution = id;
-      this.kill(n, "execution");
 
-      if (n.role === "saint") {
+      // The Devil's Advocate's pick (or a Fool) is executed but doesn't die.
+      const advocated = this.advocated(n);
+
+      if (advocated) {
+        this.audit(
+          "advocate",
+          `${n.label} was executed but survived (Devil's Advocate).`,
+          { playerId: n.id },
+        );
+      }
+
+      const died = !advocated && this.kill(n, "execution");
+
+      if (died && n.role === "saint") {
         this.finish("evil", "Saint executed.");
-      } else if (n.role === "imp") {
+      } else if (died && n.role === "imp") {
         this.successor(n, before, false);
-      } else {
+      } else if (died) {
         this.check();
       }
 
@@ -521,8 +789,10 @@ export class Engine {
       `Day ${s.day} — You nominated ${n.label} and were executed immediately.`,
     );
 
-    this.kill(h, "execution");
-    this.check();
+    if (!this.advocated(h)) {
+      this.kill(h, "execution");
+      this.check();
+    }
 
     if (!s.winner) {
       s.night++;
@@ -572,6 +842,34 @@ export class Engine {
     this.s.slayerUsed = true;
 
     return this.shoot(p, t);
+  }
+
+  // Once per game, the human Artist asks the Storyteller a yes/no question
+  // about a player.
+  artist(id, question) {
+    const s = this.s;
+    const h = this.human();
+    const t = this.player(id);
+
+    if (
+      s.phase !== "day" ||
+      s.winner ||
+      ability(h) !== "artist" ||
+      h.artistUsed ||
+      !h.alive ||
+      !t ||
+      !ARTIST_QUESTIONS[question]
+    ) {
+      throw Error("Artist unavailable.");
+    }
+
+    h.artistUsed = true;
+
+    const info = artistInfo(s, t, question, works(h) ? "truth" : "random");
+
+    this.remember(h, info);
+
+    return info.text;
   }
 
   // Resolves a Slayer shot; only a working Slayer can kill, and only the
