@@ -1,53 +1,59 @@
-import{name,COUNTS}from"./data.js";
-import{createState}from"./setup.js";
-import{Engine}from"./engine.js";
+import {
+  name,
+  COUNTS
+} from "./data.js";
+import {
+  createState
+} from "./setup.js";
+import {
+  Engine
+} from "./engine.js";
 
-const $=id=>
+const $ = id =>
   document.getElementById(id);
 
-const esc=x=>
-  String(x??"").replace(
+const esc = x =>
+  String(x ?? "").replace(
     /[&<>"']/g,
-    c=>({
-      "&":"&amp;",
-      "<":"&lt;",
-      ">":"&gt;",
-      '"':"&quot;",
-      "'":"&#39;"
-    }[c])
+    c => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    } [c])
   );
 
-let scripts=[];
+let scripts = [];
 let s;
 let e;
-let selectedPlayerId=null;
+let selectedPlayerId = null;
 
-async function load(){
-  try{
-    const files=
+async function load() {
+  try {
+    const files =
       await fetch(
         "scripts/index.json"
-      ).then(r=>r.json());
+      ).then(r => r.json());
 
-    scripts=
+    scripts =
       await Promise.all(
         files.map(
-          async f=>({
-            file:f,
-            raw:
-              await fetch(
-                `scripts/${f}`
-              ).then(
-                r=>r.json()
-              )
+          async f => ({
+            file: f,
+            raw: await fetch(
+              `scripts/${f}`
+            ).then(
+              r => r.json()
+            )
           })
         )
       );
 
-    $("script").innerHTML=
+    $("script").innerHTML =
       scripts.map(
-        (x,i)=>
-          `<option value="${i}">${
+        (x, i) =>
+        `<option value="${i}">${
             esc(
               x.raw.find(
                 y=>y?.id==="_meta"
@@ -55,15 +61,15 @@ async function load(){
             )
           }</option>`
       ).join("");
-  }catch(err){
-    $("error").textContent=
+  } catch (err) {
+    $("error").textContent =
       err.message;
   }
 }
 
-function start(){
-  try{
-    s=createState(
+function start() {
+  try {
+    s = createState(
       scripts[
         +$("script").value
       ].raw,
@@ -71,41 +77,41 @@ function start(){
       $("seed").value
     );
 
-    e=new Engine(s);
+    e = new Engine(s);
     e.start();
 
-    selectedPlayerId=null;
+    selectedPlayerId = null;
 
-    $("setup").hidden=true;
-    $("game").hidden=false;
+    $("setup").hidden = true;
+    $("game").hidden = false;
 
     render();
-  }catch(err){
-    $("error").textContent=
+  } catch (err) {
+    $("error").textContent =
       err.message;
   }
 }
-function circle(){
-  const voters=
+
+function circle() {
+  const voters =
     new Set(
       (
-        s.lastVote?.records??
-        []
+        s.lastVote?.records ?? []
       )
-        .filter(x=>x.counted)
-        .map(x=>x.playerId)
+      .filter(x => x.counted)
+      .map(x => x.playerId)
     );
 
-  $("circle").innerHTML=
+  $("circle").innerHTML =
     s.players.map(
-      (p,i)=>{
-        const token=
-          p.human||
-          p.claimKnown
-            ?name(p.claim)
-            :"Unknown";
+      (p, i) => {
+        const token =
+          p.human ||
+          p.claimKnown ?
+          name(p.claim) :
+          "Unknown";
 
-        return`
+        return `
           <button
             title="${esc(p.label)}"
             class="seat ${
@@ -165,59 +171,59 @@ function circle(){
       "[data-id]:not(:disabled)"
     )
     .forEach(
-      b=>
-        b.onclick=()=>{
-          selectedPlayerId=
-            b.dataset.id;
+      b =>
+      b.onclick = () => {
+        selectedPlayerId =
+          b.dataset.id;
 
-          $("answer").textContent="";
-          render();
-        }
+        $("answer").textContent = "";
+        render();
+      }
     );
 }
-function renderPublic(){
-  const groups=[];
-  let current=null;
 
-  for(const text of s.publicLog){
-    const m=
+function renderPublic() {
+  const groups = [];
+  let current = null;
+
+  for (const text of s.publicLog) {
+    const m =
       text.match(
         /^Day\s+(\d+)/i
       );
 
-    const day=
-      m?.[1]??
-      current?.day??
-      String(s.day||1);
+    const day =
+      m?.[1] ??
+      current?.day ??
+      String(s.day || 1);
 
-    if(
-      !current||
-      current.day!==day
-    ){
-      current={
+    if (
+      !current ||
+      current.day !== day
+    ) {
+      current = {
         day,
-        items:[]
+        items: []
       };
 
       groups.push(current);
     }
 
     current.items.push(
-      m
-        ?text.replace(
-            /^Day\s+\d+\s*[:—-]?\s*/i,
-            ""
-          )
-        :text
+      m ?
+      text.replace(
+        /^Day\s+\d+\s*[:—-]?\s*/i,
+        ""
+      ) :
+      text
     );
   }
 
-  $("public").innerHTML=
-    [...groups]
-      .reverse()
-      .map(
-        g=>
-          `<li class="day-break">
+  $("public").innerHTML = [...groups]
+    .reverse()
+    .map(
+      g =>
+      `<li class="day-break">
             <span>
               Day ${esc(g.day)}
             </span>
@@ -233,20 +239,20 @@ function renderPublic(){
               )
               .join("")
           }`
-      )
-      .join("");
+    )
+    .join("");
 }
 
-function reveal(){
-  const r=e.reveal();
+function reveal() {
+  const r = e.reveal();
 
-  $("reveal").hidden=!r;
+  $("reveal").hidden = !r;
 
-  if(!r){
+  if (!r) {
     return;
   }
 
-  $("result").innerHTML=
+  $("result").innerHTML =
     `<div class="result-banner">
       <strong>
         ${esc(
@@ -257,10 +263,10 @@ function reveal(){
         ${esc(r.reason)}
       </span>
     </div>`;
-     $("roles").innerHTML=
+  $("roles").innerHTML =
     r.players.map(
-      p=>
-        `<article class="reveal-card">
+      p =>
+      `<article class="reveal-card">
           <header>
             ${esc(p.label)}
           </header>
@@ -312,12 +318,12 @@ function reveal(){
         </article>`
     ).join("");
 
-  const key=
+  const key =
     r.keyMoments;
 
-  $("audit").innerHTML=
-    key.length
-      ?`<h3>Key moments</h3>
+  $("audit").innerHTML =
+    key.length ?
+    `<h3>Key moments</h3>
         ${
           [...key]
             .reverse()
@@ -333,44 +339,45 @@ function reveal(){
                 </div>`
             )
             .join("")
-        }`
-      :"";
+        }` :
+    "";
 }
-function render(){
-  const h=e.human();
 
-  const t=
-    selectedPlayerId
-      ?e.player(
-          selectedPlayerId
-        )
-      :null;
+function render() {
+  const h = e.human();
 
-  const talk=
+  const t =
+    selectedPlayerId ?
+    e.player(
+      selectedPlayerId
+    ) :
+    null;
+
+  const talk =
     e.talkStatus(
       t?.id
     );
 
-  $("role").textContent=
+  $("role").textContent =
     `You are ${name(h.shown)}`;
 
-  $("status").textContent=
-    s.winner
-      ?`${s.winner.toUpperCase()}: ${s.reason}`
-      :`${s.phase} ${
+  $("status").textContent =
+    s.winner ?
+    `${s.winner.toUpperCase()}: ${s.reason}` :
+    `${s.phase} ${
           s.day||s.night
         } — ${
           e.alive().length
         } alive`;
 
-  $("selected-player").textContent=
-    t
-      ?`Selected: ${t.label}`
-      :"";
+  $("selected-player").textContent =
+    t ?
+    `Selected: ${t.label}` :
+    "";
 
-  $("talk").textContent=
-    t
-      ?`Conversations: ${
+  $("talk").textContent =
+    t ?
+    `Conversations: ${
           talk.used
         }/${
           talk.limit
@@ -380,80 +387,76 @@ function render(){
           talk.already
             ?"; already asked this player"
             :""
-        }.`
-      :"";
+        }.` :
+    "";
 
   circle();
 
-  $("private").innerHTML=
-    [...s.privateLog]
-      .reverse()
-      .map(
-        x=>`<li>${esc(x)}</li>`
-      )
-      .join("");
+  $("private").innerHTML = [...s.privateLog]
+    .reverse()
+    .map(
+      x => `<li>${esc(x)}</li>`
+    )
+    .join("");
 
   renderPublic();
 
-  $("actions").hidden=
-    !!s.winner||
+  $("actions").hidden = !!s.winner ||
     !t;
 
-  $("ask").disabled=
-    !t||
-    talk.already||
+  $("ask").disabled = !t ||
+    talk.already ||
     !talk.remaining;
 
-  $("nominate").disabled=
-    !t?.alive;
+  $("nominate").disabled = !t?.alive;
 
-  $("slay").hidden=
-    !(
-      h.shown==="slayer"&&
-      !s.slayerUsed
-    );
+  $("slay").hidden = !(
+    h.shown === "slayer" &&
+    !s.slayerUsed
+  );
 
   reveal();
 }
-function randomSeed(){
-  let n=0;
 
-  while(!n){
-    if(
+function randomSeed() {
+  let n = 0;
+
+  while (!n) {
+    if (
       globalThis.crypto
-        ?.getRandomValues
-    ){
-      const a=
+      ?.getRandomValues
+    ) {
+      const a =
         new Uint32Array(1);
 
       crypto.getRandomValues(a);
-      n=a[0];
-    }else{
-      n=
+      n = a[0];
+    } else {
+      n =
         Math.floor(
-          Math.random()*
+          Math.random() *
           4294967295
-        )+1;
+        ) + 1;
     }
   }
 
-  $("seed").value=String(n);
+  $("seed").value = String(n);
 }
 
-function toggleCountInfo(){
-  const box=$("count-popup");
-  const btn=$("count-info");
+function toggleCountInfo() {
+  const box = $("count-popup");
+  const btn = $("count-info");
 
-  const c=
+  const c =
     COUNTS[
       +$("seats").value
     ];
 
-  if(!c){
+  if (!c) {
     return;
   }
 
-  box.innerHTML=
+  box.innerHTML =
     `<strong aria-label="Townsfolk Outsiders Minions Demons">
       <span class="good-count">
         ${c[0]}/${c[1]}
@@ -468,7 +471,7 @@ function toggleCountInfo(){
       Minions / Demons
     </small>`;
 
-  box.hidden=!box.hidden;
+  box.hidden = !box.hidden;
 
   btn.setAttribute(
     "aria-expanded",
@@ -476,20 +479,20 @@ function toggleCountInfo(){
   );
 }
 
-function resetGame(){
-  s=null;
-  e=null;
-  selectedPlayerId=null;
+function resetGame() {
+  s = null;
+  e = null;
+  selectedPlayerId = null;
 
-  $("game").hidden=true;
-  $("setup").hidden=false;
-  $("reveal").hidden=true;
-  $("actions").hidden=true;
+  $("game").hidden = true;
+  $("setup").hidden = false;
+  $("reveal").hidden = true;
+  $("actions").hidden = true;
 
-  $("answer").textContent="";
-  $("error").textContent="";
+  $("answer").textContent = "";
+  $("error").textContent = "";
 
-  $("count-popup").hidden=true;
+  $("count-popup").hidden = true;
 
   $("count-info").setAttribute(
     "aria-expanded",
@@ -497,15 +500,15 @@ function resetGame(){
   );
 }
 
-$("random-seed").onclick=
+$("random-seed").onclick =
   randomSeed;
 
-$("count-info").onclick=
+$("count-info").onclick =
   toggleCountInfo;
 
-$("seats").onchange=()=>{
-  if(!$("count-popup").hidden){
-    $("count-popup").hidden=true;
+$("seats").onchange = () => {
+  if (!$("count-popup").hidden) {
+    $("count-popup").hidden = true;
 
     $("count-info").setAttribute(
       "aria-expanded",
@@ -514,63 +517,64 @@ $("seats").onchange=()=>{
   }
 };
 
-$("reset").onclick=resetGame;
-$("start").onclick=start;
+$("reset").onclick = resetGame;
+$("start").onclick = start;
 
-$("ask").onclick=()=>{
-  try{
-    $("answer").textContent=
+$("ask").onclick = () => {
+  try {
+    $("answer").textContent =
       e.ask(selectedPlayerId);
 
     render();
-  }catch(err){
-    $("answer").textContent=
+  } catch (err) {
+    $("answer").textContent =
       err.message;
   }
 };
 
-$("nominate").onclick=()=>{
-  try{
+$("nominate").onclick = () => {
+  try {
     e.nominate(
       selectedPlayerId
     );
 
-    selectedPlayerId=null;
+    selectedPlayerId = null;
     render();
-  }catch(err){
-    $("answer").textContent=
+  } catch (err) {
+    $("answer").textContent =
       err.message;
   }
 };
 
-$("slay").onclick=()=>{
-  try{
+$("slay").onclick = () => {
+  try {
     e.slay(selectedPlayerId);
     render();
-  }catch(err){
-    $("answer").textContent=
+  } catch (err) {
+    $("answer").textContent =
       err.message;
   }
 };
 
-$("pass").onclick=()=>{
-  try{
+$("pass").onclick = () => {
+  try {
     e.endDay();
-    selectedPlayerId=null;
+    selectedPlayerId = null;
     render();
-  }catch(err){
-    $("answer").textContent=
+  } catch (err) {
+    $("answer").textContent =
       err.message;
   }
 };
 
-$("seats").innerHTML=
-  Array.from(
-    {length:11},
-    (_,i)=>
-      `<option>${i+5}</option>`
+$("seats").innerHTML =
+  Array.from({
+      length: 11
+    },
+    (_, i) =>
+    `<option>${i+5}</option>`
   ).join("");
 
-$("seats").value=10;
+$("seats").value = 10;
 
 load();
