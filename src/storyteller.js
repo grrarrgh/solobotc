@@ -82,21 +82,32 @@ export const gamblerInfo = (s, t, guess) => ({
 const artistTruth = (t, q) =>
   q === "evil" ? evil(t) : q === "demon" ? t.role === "imp" : team(t.role) === q;
 
-// The Storyteller's yes/no answer to an Artist. `mode` is "truth", "lie"
-// (an evil bluffer or a Drunk) or "random" (a poisoned Artist).
-export function artistInfo(s, t, q, mode) {
-  const truth = artistTruth(t, q);
+const listLabels = (ts) =>
+  ts.length < 2
+    ? ts.map((x) => x.label).join("")
+    : `${ts
+        .slice(0, -1)
+        .map((x) => x.label)
+        .join(", ")} and ${ts.at(-1).label}`;
+
+// The Storyteller's yes/no answer to an Artist asking about one or more
+// players ("is any of them ...?"). `mode` is "truth", "lie" (an evil bluffer
+// or a Drunk) or "random" (a poisoned Artist).
+export function artistInfo(s, targets, q, mode) {
+  const ts = [].concat(targets);
+  const truth = ts.some((t) => artistTruth(t, q));
   const yes =
     mode === "truth" ? truth : mode === "lie" ? !truth : s.r() < 0.5;
+  const who = ts.length > 1 ? `any of ${listLabels(ts)}` : ts[0].label;
 
   return {
     day: s.day,
     night: s.night,
     role: "artist",
-    text: `Artist: asked if ${t.label} is ${ARTIST_QUESTIONS[q]}: ${
+    text: `Artist: asked if ${who} is ${ARTIST_QUESTIONS[q]}: ${
       yes ? "YES" : "NO"
     }.`,
-    targets: [t.id],
+    targets: ts.map((t) => t.id),
     trigger: "day",
     functioning: mode === "truth",
   };

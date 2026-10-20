@@ -6,13 +6,14 @@ import {
   FORBIDDEN_HUMAN,
   FIRST_NIGHT_INFO,
   ONGOING_INFO,
+  ARTIST_QUESTIONS,
   name,
   team,
 } from "../src/data.js";
 import { createState } from "../src/setup.js";
 import { Engine } from "../src/engine.js";
 import { SimpleStrategy } from "../src/strategy.js";
-import { ravenInfo } from "../src/storyteller.js";
+import { ravenInfo, artistInfo } from "../src/storyteller.js";
 
 const script = JSON.parse(
   fs.readFileSync(new URL("../scripts/trouble-brewing.json", import.meta.url)),
@@ -843,7 +844,7 @@ test("NPC Artists ask at dawn; evil Artist bluffers lie about the answer", () =>
   s.day = 0;
 
   const strat = new SimpleStrategy();
-  strat.artist = () => ({ target: imp, question: "demon" });
+  strat.artist = () => ({ targets: [imp], question: "demon" });
 
   const e = new Engine(s, strat);
 
@@ -1291,5 +1292,167 @@ test("NPC Slayers never shoot on Day 1, then 20% on Day 2, rising 20% a day", ()
     const t = strat.slay(s, slayer);
 
     assert.ok(t.alive && !t.human && t.id !== slayer.id);
+  }
+});
+
+// ── Spy bluffs, Virgin nominations, Minion suspicion, Artist ─
+
+test("the Spy knows the Demon's bluffs and claims a different, not-in-play character", () => {
+  let spies = 0;
+
+  for (const raw of [script, ecp]) {
+    for (let seed = 0; seed < 200; seed++) {
+      const s = createState(raw, 12, seed);
+      const spy = s.players.find((p) => p.role === "spy");
+
+      if (!spy) {
+        continue;
+      }
+
+      spies++;
+
+      const shown = new Set(s.players.map((p) => p.shown));
+
+      assert.deepEqual(spy.bluffs, s.demonBluffs);
+      assert.ok(!s.demonBluffs.includes(spy.claim), spy.claim);
+      assert.ok(!shown.has(spy.claim), `${spy.claim} is in play`);
+      assert.ok(
+        !s.players.some((p) => p !== spy && p.claim === spy.claim),
+        `${spy.claim} is double-claimed`,
+      );
+    }
+  }
+
+  assert.ok(spies > 0);
+});
+
+test("evil Minions never cast suspicion on the Demon", () => {
+  const strat = new SimpleStrategy();
+
+  for (let seed = 0; seed < 100; seed++) {
+    const s = createState(ecp, 12, seed);
+    const demon = s.players.find((p) => p.role === "imp");
+
+    for (const m of s.players.filter((p) => team(p.role) === "minion")) {
+      // Even a stale suspect who is now evil is dropped.
+      m.suspicion = { targetId: demon.id, day: 0 };
+
+      for (let day = 1; day < 5; day++) {
+        s.day = day;
+
+        const t = strat.suspicion(s, m);
+
+        assert.ok(t, `${m.label} has nobody to suspect`);
+        assert.equal(
+          s.players.find((p) => p.id === t.targetId).alignment,
+          "good",
+        );
+      }
+    }
+  }
+});
+
+test("requesting a nomination of a Virgin executes a Townsfolk NPC nominator", () => {
+  const s = base("request-virgin");
+  const chef = s.players[1];
+  const virgin = s.players[2];
+
+  role(virgin, "virgin", "good");
+
+  const strat = new SimpleStrategy();
+
+  strat.nominator = () => chef;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+  const result = e.requestNomination(virgin.id);
+
+  assert.equal(result.virgin, true);
+  assert.equal(chef.alive, false);
+  assert.equal(virgin.alive, true);
+  assert.equal(s.players[0].alive, true);
+  assert.equal(s.day, 2);
+  assert.ok(
+    s.publicLog.includes(
+      `Day 1 — You asked for a nomination: ${chef.label} nominates ${virgin.label}.`,
+    ),
+  );
+  assert.ok(
+    s.publicLog.includes(
+      `Day 1 — ${chef.label} nominated ${virgin.label} and was executed immediately.`,
+    ),
+  );
+});
+
+test("a requested Virgin nomination by an evil or Outsider NPC goes to a normal vote", () => {
+  for (const nominatorRole of ["baron", "butler"]) {
+    const s = base(`request-virgin-${nominatorRole}`);
+    const virgin = s.players[1];
+    const nominator = s.players.find((p) => p.role === nominatorRole);
+
+    role(virgin, "virgin", "good");
+
+    const strat = new SimpleStrategy();
+
+    strat.nominator = () => nominator;
+    strat.vote = () => false;
+
+    const e = new Engine(s, strat);
+    const result = e.requestNomination(virgin.id);
+
+    assert.equal(result.virgin, undefined);
+    assert.equal(nominator.alive, true);
+    assert.equal(virgin.virginUsed, true);
+    assert.equal(s.day, 1);
+  }
+});
+
+test("a dead human can't nominate, but can request a nomination", () => {
+  const s = base("dead-request");
+  const human = s.players[0];
+  const chef = s.players[1];
+
+  human.alive = false;
+
+  const strat = new SimpleStrategy();
+
+  strat.vote = () => false;
+
+  const e = new Engine(s, strat);
+
+  assert.throws(() => e.nominate(chef.id), /Request a nomination/);
+
+  const result = e.requestNomination(chef.id);
+
+  assert.equal(result.executed, false);
+  assert.equal(e.nominatedToday(chef.id), true);
+});
+
+test("Artist questions can cover 1–3 players: 'Is any of X, Y and Z ...?'", () => {
+  const s = base("artist-multi");
+  const [, chef, butler, baron, imp] = s.players;
+
+  assert.equal(
+    artistInfo(s, [chef, butler, imp], "demon", "truth").text,
+    `Artist: asked if any of ${chef.label}, ${butler.label} and ${imp.label} is the Demon: YES.`,
+  );
+  assert.equal(
+    artistInfo(s, [chef, butler], "evil", "truth").text,
+    `Artist: asked if any of ${chef.label} and ${butler.label} is evil: NO.`,
+  );
+  assert.equal(
+    artistInfo(s, [baron], "minion", "lie").text,
+    `Artist: asked if ${baron.label} is a Minion: NO.`,
+  );
+
+  const strat = new SimpleStrategy();
+
+  for (let i = 0; i < 50; i++) {
+    const ask = strat.artist(s, chef);
+
+    assert.ok(ask.targets.length >= 1 && ask.targets.length <= 3);
+    assert.equal(new Set(ask.targets).size, ask.targets.length);
+    assert.ok(ask.targets.every((t) => t.alive && !t.human && t !== chef));
+    assert.ok(Object.keys(ARTIST_QUESTIONS).includes(ask.question));
   }
 });

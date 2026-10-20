@@ -152,23 +152,36 @@ export function createState(
   // to a Drunk, and never the Drunk itself) and bluffs as one of them. Each
   // Minion also learns them with probability `minionBluffChance`; a Minion who
   // doesn't bluffs as any Townsfolk on the script.
+  //
+  // The Spy sees the Grimoire, so always knows the bluffs, and claims a
+  // character that is neither in play nor one of the Demon's bluffs, so it
+  // never doubles up with anyone.
   const tokens = new Set(players.map((p) => p.shown));
-  const demonBluffs = sample(
-    script.ids.filter(
-      (x) => alignment(x) === "good" && x !== "drunk" && !tokens.has(x),
-    ),
-    3,
-    r,
+  const notInPlay = script.ids.filter(
+    (x) => alignment(x) === "good" && x !== "drunk" && !tokens.has(x),
   );
+  const demonBluffs = sample(notInPlay, 3, r);
+  const spyOptions = notInPlay.filter((x) => !demonBluffs.includes(x));
+
+  // The Demon picks first and the Spy last, so the Spy sees every claim.
+  const order = (p) =>
+    team(p.role) === "demon" ? 0 : p.role === "spy" ? 2 : 1;
   const evil = players
     .filter((x) => x.alignment === "evil")
-    .sort((a, b) => (team(b.role) === "demon") - (team(a.role) === "demon"));
+    .sort((a, b) => order(a) - order(b));
   const taken = new Set();
 
   for (const p of evil) {
-    const knows = team(p.role) === "demon" || r() < minionBluffChance;
-    const options =
-      knows && demonBluffs.length ? demonBluffs : pool("townsfolk");
+    const spy = p.role === "spy";
+    const knows =
+      team(p.role) === "demon" || spy || r() < minionBluffChance;
+    const options = spy
+      ? spyOptions.length
+        ? spyOptions
+        : demonBluffs
+      : knows && demonBluffs.length
+        ? demonBluffs
+        : pool("townsfolk");
 
     // Teammates avoid claiming the same character when they can.
     p.bluffs = knows ? demonBluffs : [];

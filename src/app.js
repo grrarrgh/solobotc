@@ -468,7 +468,17 @@ function render() {
 
   $("actions").hidden = !!s.winner || !t || !!s.pending;
   $("ask").disabled = !t || talk.already || !talk.remaining;
-  $("nominate").disabled = !t?.alive || !h.alive || e.nominatedToday(t.id);
+  // Dead players can't nominate, but can always ask an NPC to; so can anyone
+  // nominating a known Virgin (only a Townsfolk nominator triggers her).
+  const blocked = !t?.alive || e.nominatedToday(t.id);
+
+  $("nominate").hidden = !h.alive;
+  $("nominate").disabled = blocked;
+  $("request-nomination").hidden = !(
+    !h.alive ||
+    (t?.claimKnown && t.claim === "virgin")
+  );
+  $("request-nomination").disabled = blocked;
   $("slay").hidden = !(h.shown === "slayer" && !s.slayerUsed && h.alive);
   $("artist-controls").hidden = !(
     h.shown === "artist" &&
@@ -587,6 +597,16 @@ $("ask").onclick = () => {
 $("nominate").onclick = () => {
   try {
     e.nominate(selectedPlayerId);
+    selectedPlayerId = null;
+    render();
+  } catch (err) {
+    $("answer").textContent = err.message;
+  }
+};
+
+$("request-nomination").onclick = () => {
+  try {
+    e.requestNomination(selectedPlayerId);
     selectedPlayerId = null;
     render();
   } catch (err) {

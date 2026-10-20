@@ -67,3 +67,8 @@ test("night choices have a Select panel wired to the engine", () => {
   assert.match(html, /id="night-select"[^>]*>Select</);
   assert.match(app, /e\.choose\(nightPicks\)/);
 });
+
+test("a Request nomination button is wired to the engine", () => {
+  assert.match(html, /id="request-nomination"[^>]*>Request nomination</);
+  assert.match(app, /e\.requestNomination\(selectedPlayerId\)/);
+});

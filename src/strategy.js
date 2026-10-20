@@ -1,5 +1,6 @@
 import {
   name,
+  ARTIST_QUESTIONS,
   SLAYER_SHOOT_AFTER_DAY,
   SLAYER_START_CHANCE,
   SLAYER_CHANCE_STEP,
@@ -36,11 +37,16 @@ export class SimpleStrategy {
 
   // Each NPC keeps one suspect. It can move at the start of a new day (35%
   // chance), and must move if the suspect has died. It only ever moves to a
-  // living NPC, never the human.
+  // living NPC, never the human. Evil NPCs never suspect a teammate (such as
+  // the Demon), even one who turned evil after they picked them.
   suspicion(s, p) {
     const current = s.players.find((x) => x.id === p.suspicion?.targetId);
     const newDay = p.suspicion?.day !== s.day;
-    const move = !current?.alive || (newDay && s.r() < 0.35);
+    const stale =
+      !current?.alive ||
+      current.human ||
+      (p.alignment === "evil" && current.alignment === "evil");
+    const move = stale || (newDay && s.r() < 0.35);
 
     const target = move
       ? this.suspect(
@@ -171,15 +177,36 @@ export class SimpleStrategy {
     return target ? { target, role: target.claim } : null;
   }
 
-  // An Artist asks whether someone they suspect is the Demon.
+  // An Artist asks "Is any of these 1–3 players <evil / the Demon / a Minion
+  // / an Outsider / a Townsfolk>?", always including someone they suspect.
   artist(s, p) {
-    const target = this.suspect(
-      s,
-      p,
-      s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
+    const pool = s.players.filter((x) => x.alive && !x.human && x.id !== p.id);
+    const suspect = this.suspect(s, p, pool);
+
+    if (!suspect) {
+      return null;
+    }
+
+    const count = 1 + Math.floor(s.r() * Math.min(3, pool.length));
+    const others = sample(
+      pool.filter((x) => x !== suspect),
+      count - 1,
+      s.r,
     );
 
-    return target ? { target, question: "demon" } : null;
+    return {
+      targets: [suspect, ...others],
+      question: pick(Object.keys(ARTIST_QUESTIONS), s.r),
+    };
+  }
+
+  // When the human requests a nomination, a living NPC (not the nominee)
+  // makes it.
+  nominator(s, n) {
+    return pick(
+      s.players.filter((x) => x.alive && !x.human && x.id !== n.id),
+      s.r,
+    );
   }
 
   // A dying Moonchild curses a living NPC they suspect.

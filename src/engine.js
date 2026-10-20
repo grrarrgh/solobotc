@@ -532,14 +532,14 @@ export class Engine {
       if (p.alignment === "good") {
         this.remember(
           p,
-          artistInfo(s, ask.target, ask.question, artistMode(p)),
+          artistInfo(s, ask.targets, ask.question, artistMode(p)),
         );
       } else {
         const spy = p.role === "spy" && works(p);
 
         this.rememberBluff(
           p,
-          artistInfo(s, ask.target, ask.question, spy ? "truth" : "lie"),
+          artistInfo(s, ask.targets, ask.question, spy ? "truth" : "lie"),
         );
       }
     }
@@ -832,22 +832,62 @@ export class Engine {
     return this.s.nominated.includes(id);
   }
 
-  nominate(id) {
+  // The living NPC that can be nominated right now, or an error.
+  nominee(id) {
     const s = this.s;
     const n = this.player(id);
-    const h = this.human();
 
     if (s.phase !== "day" || s.winner || !n?.alive || n.human) {
       throw Error("Choose a living NPC.");
     }
 
-    if (!h.alive) {
-      throw Error("Dead players cannot nominate.");
-    }
-
     if (this.nominatedToday(id)) {
       throw Error("Already nominated today.");
     }
+
+    return n;
+  }
+
+  // The human nominates a living NPC.
+  nominate(id) {
+    const h = this.human();
+
+    if (!h.alive) {
+      throw Error("Dead players cannot nominate. Request a nomination instead.");
+    }
+
+    return this.runNomination(h, this.nominee(id));
+  }
+
+  // The human asks the town for a nomination; a living NPC makes it. (A dead
+  // human can still do this.)
+  requestNomination(id) {
+    const s = this.s;
+    const n = this.nominee(id);
+    const nominator = this.strat.nominator(s, n);
+
+    if (!nominator) {
+      throw Error("Nobody is able to nominate.");
+    }
+
+    s.publicLog.push(
+      `Day ${s.day} — You asked for a nomination: ${nominator.label} nominates ${n.label}.`,
+    );
+
+    this.audit(
+      "request",
+      `You asked for a nomination of ${n.label}; ${nominator.label} (${name(
+        nominator.role,
+      )}) nominated.`,
+      { actorId: nominator.id, targetId: n.id },
+    );
+
+    return this.runNomination(nominator, n);
+  }
+
+  runNomination(nominator, n) {
+    const s = this.s;
+    const id = n.id;
 
     s.nominated.push(id);
 
@@ -855,8 +895,8 @@ export class Engine {
     if (n.role === "virgin" && !n.virginUsed) {
       n.virginUsed = true;
 
-      if (works(n) && team(h.role) === "townsfolk") {
-        return this.virgin(n, h);
+      if (works(n) && team(nominator.role) === "townsfolk") {
+        return this.virgin(n, nominator);
       }
     }
 
@@ -924,24 +964,28 @@ export class Engine {
     return result;
   }
 
-  virgin(n, h) {
+  // The Virgin's ability: the Townsfolk who nominated them (`by`, the human
+  // or an NPC) is executed immediately, and the day ends.
+  virgin(n, by) {
     const s = this.s;
 
-    s.lastExecution = h.id;
+    s.lastExecution = by.id;
     s.lastVote = null;
 
     this.audit(
       "virgin",
-      `${h.label} nominated ${n.label} (${name(n.role)}) and was executed.`,
-      { actorId: h.id, targetId: n.id },
+      `${by.label} nominated ${n.label} (${name(n.role)}) and was executed.`,
+      { actorId: by.id, targetId: n.id },
     );
 
     s.publicLog.push(
-      `Day ${s.day} — You nominated ${n.label} and were executed immediately.`,
+      by.human
+        ? `Day ${s.day} — You nominated ${n.label} and were executed immediately.`
+        : `Day ${s.day} — ${by.label} nominated ${n.label} and was executed immediately.`,
     );
 
-    if (!this.advocated(h)) {
-      this.kill(h, "execution");
+    if (!this.advocated(by)) {
+      this.kill(by, "execution");
       this.check();
     }
 
