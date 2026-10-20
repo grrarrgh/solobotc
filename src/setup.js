@@ -63,8 +63,15 @@ export function createState(raw, seats, seed = Date.now()) {
   const used = new Set(roles),
     unusedTF = pool("townsfolk").filter((x) => !used.has(x));
 
+  // The Drunk is shown a Townsfolk token that isn't in play; a human Drunk
+  // is never shown a role that is unsafe in solo play.
+  const drunkToken = (human) => {
+    const k = unusedTF.findIndex((x) => !human || !FORBIDDEN_HUMAN.has(x));
+    return k < 0 ? "chef" : unusedTF.splice(k, 1)[0];
+  };
+
   const players = roles.map((role, i) => {
-    const shown = role === "drunk" ? (unusedTF.shift() ?? "chef") : role;
+    const shown = role === "drunk" ? drunkToken(i === 0) : role;
     return {
       id: `p${i + 1}`,
       seat: i + 1,
@@ -82,6 +89,8 @@ export function createState(raw, seats, seed = Date.now()) {
       claim: shown,
       claimKnown: i === 0,
       bluff: null,
+      shotUsed: false,
+      virginUsed: false,
       memories: [],
       talks: [],
       death: null,

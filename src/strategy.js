@@ -1,13 +1,13 @@
 import { name } from "./data.js";
+import { monkInfo, fortuneInfo } from "./storyteller.js";
 import { pick, sample } from "./util.js";
 
 export class SimpleStrategy {
   // Good NPCs point at evil players, unless drunk or poisoned (50% wrong).
   // Evil NPCs always point at good players.
-  suspicion(s, p) {
-    const npcs = s.players.filter((x) => !x.human && x.id !== p.id);
-    const truthful = npcs.filter((x) => x.alignment === "evil");
-    const falseTargets = npcs.filter((x) => x.alignment === "good");
+  suspect(s, p, pool) {
+    const truthful = pool.filter((x) => x.alignment === "evil");
+    const falseTargets = pool.filter((x) => x.alignment === "good");
 
     let candidates;
 
@@ -26,7 +26,15 @@ export class SimpleStrategy {
       candidates = truthful;
     }
 
-    const target = pick(candidates, s.r);
+    return pick(candidates, s.r);
+  }
+
+  suspicion(s, p) {
+    const target = this.suspect(
+      s,
+      p,
+      s.players.filter((x) => !x.human && x.id !== p.id),
+    );
 
     return target
       ? {
@@ -36,12 +44,12 @@ export class SimpleStrategy {
       : null;
   }
 
+  // Good NPCs share what they learned; evil NPCs only have bluffed info.
   ask(s, p) {
-    const details =
-      p.alignment === "good"
-        ? p.memories.length
-          ? p.memories.map((x) => `Night ${x.night}: ${x.text}`).join(" ")
-          : "I have no stored information."
+    const details = p.memories.length
+      ? p.memories.map((x) => `Night ${x.night}: ${x.text}`).join(" ")
+      : p.alignment === "good"
+        ? "I have no stored information."
         : "";
 
     const suspicion = this.suspicion(s, p);
@@ -98,5 +106,33 @@ export class SimpleStrategy {
       2,
       s.r,
     );
+  }
+
+  // Each day, an NPC Slayer has a 35% chance to shoot a living NPC they suspect.
+  slay(s, p) {
+    if (s.r() >= 0.35) {
+      return null;
+    }
+
+    return this.suspect(
+      s,
+      p,
+      s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
+    );
+  }
+
+  // Invented night info for an evil NPC bluffing a role that picks players.
+  bluff(s, p) {
+    if (p.claim === "monk" && s.night > 1) {
+      const t = this.monk(s, p);
+
+      return t ? monkInfo(s, t) : null;
+    }
+
+    if (p.claim === "fortuneteller") {
+      return fortuneInfo(s, s.r() < 0.5, this.ft(s, p));
+    }
+
+    return null;
   }
 }

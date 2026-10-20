@@ -1,5 +1,11 @@
 import { name, team } from "./data.js";
-import { nightInfo, ability, works, ravenInfo } from "./storyteller.js";
+import {
+  nightInfo,
+  ability,
+  works,
+  ravenInfo,
+  monkInfo,
+} from "./storyteller.js";
 import { SimpleStrategy } from "./strategy.js";
 import { pick } from "./util.js";
 
@@ -9,6 +15,8 @@ const KEY_MOMENT_TYPES = new Set([
   "demon",
   "death",
   "succession",
+  "slayer",
+  "virgin",
   "game_over",
 ]);
 
@@ -149,6 +157,8 @@ export class Engine {
               effective,
             },
           );
+
+          this.remember(m, monkInfo(s, t, effective));
         }
       }
 
@@ -167,6 +177,8 @@ export class Engine {
       }
     }
 
+    this.bluffs();
+
     s.day = s.night;
     s.phase = "day";
     s.talkDay = s.day;
@@ -177,6 +189,31 @@ export class Engine {
     );
 
     this.audit("day", `Day ${s.day} began.`);
+
+    this.npcShots();
+  }
+
+  // Evil NPCs bluffing a role that picks players invent a pick to report.
+  bluffs() {
+    const s = this.s;
+
+    for (const p of s.players) {
+      if (p.human || !p.alive || p.alignment !== "evil") {
+        continue;
+      }
+
+      const info = this.strat.bluff(s, p);
+
+      if (info) {
+        p.memories.push(info);
+
+        this.audit(
+          "bluff",
+          `${p.label} (${name(p.role)}) bluffed: ${info.text}`,
+          { playerId: p.id, ...info },
+        );
+      }
+    }
   }
 
   demon() {
@@ -381,9 +418,23 @@ export class Engine {
   nominate(id) {
     const s = this.s;
     const n = this.player(id);
+    const h = this.human();
 
     if (s.phase !== "day" || s.winner || !n?.alive || n.human) {
       throw Error("Choose a living NPC.");
+    }
+
+    if (!h.alive) {
+      throw Error("Dead players cannot nominate.");
+    }
+
+    // A working Virgin's first nomination executes a Townsfolk nominator.
+    if (n.role === "virgin" && !n.virginUsed) {
+      n.virginUsed = true;
+
+      if (works(n) && team(h.role) === "townsfolk") {
+        return this.virgin(n, h);
+      }
     }
 
     const records = this.votes(n);
@@ -438,6 +489,40 @@ export class Engine {
     return result;
   }
 
+  virgin(n, h) {
+    const s = this.s;
+
+    s.lastExecution = h.id;
+    s.lastVote = null;
+
+    this.audit(
+      "virgin",
+      `${h.label} nominated ${n.label} (${name(n.role)}) and was executed.`,
+      { actorId: h.id, targetId: n.id },
+    );
+
+    s.publicLog.push(
+      `Day ${s.day} — You nominated ${n.label} and were executed immediately.`,
+    );
+
+    this.kill(h, "execution");
+    this.check();
+
+    if (!s.winner) {
+      s.night++;
+      this.night();
+    }
+
+    return {
+      nomineeId: n.id,
+      count: 0,
+      threshold: 0,
+      executed: false,
+      virgin: true,
+      records: [],
+    };
+  }
+
   endDay() {
     if (this.s.phase !== "day" || this.s.winner) {
       throw Error("Cannot end day.");
@@ -459,25 +544,88 @@ export class Engine {
     const p = this.human();
     const t = this.player(id);
 
-    if (this.s.slayerUsed || ability(p) !== "slayer" || !t?.alive) {
+    if (
+      this.s.slayerUsed ||
+      ability(p) !== "slayer" ||
+      !p.alive ||
+      !t?.alive
+    ) {
       throw Error("Slayer unavailable.");
     }
 
     this.s.slayerUsed = true;
 
-    if (works(p) && (t.role === "imp" || t.role === "recluse")) {
+    return this.shoot(p, t);
+  }
+
+  // Resolves a Slayer shot; only a working Slayer can kill, and only the
+  // Imp (or the Recluse, who registers as one).
+  shoot(p, t) {
+    if (
+      ability(p) === "slayer" &&
+      works(p) &&
+      (t.role === "imp" || t.role === "recluse")
+    ) {
       const before = this.alive().length;
 
       this.kill(t, "slayer");
 
       if (t.role === "imp") {
         this.successor(t, before, false);
+      } else {
+        this.check();
       }
 
       return true;
     }
 
     return false;
+  }
+
+  // At dawn, NPC Slayers (and evil NPCs bluffing Slayer) may shoot once.
+  npcShots() {
+    const s = this.s;
+
+    for (const p of s.players) {
+      if (s.winner) {
+        return;
+      }
+
+      const claimsSlayer =
+        ability(p) === "slayer" ||
+        (p.alignment === "evil" && p.claim === "slayer");
+
+      if (p.human || !p.alive || p.shotUsed || !claimsSlayer) {
+        continue;
+      }
+
+      const t = this.strat.slay(s, p);
+
+      if (!t) {
+        continue;
+      }
+
+      p.shotUsed = true;
+      p.claimKnown = true;
+
+      s.publicLog.push(
+        `Day ${s.day} — ${p.label} claims Slayer and shoots ${t.label}.`,
+      );
+
+      const killed = this.shoot(p, t);
+
+      if (!killed) {
+        s.publicLog.push(`Day ${s.day} — Nothing happens.`);
+      }
+
+      this.audit(
+        "slayer",
+        `${p.label} (${name(p.role)}) shot ${t.label}; ${
+          killed ? "killed" : "no effect"
+        }.`,
+        { actorId: p.id, targetId: t.id, killed },
+      );
+    }
   }
 
   // ── Demon succession & game end ───────────────────────────

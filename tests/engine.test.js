@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
+import { FORBIDDEN_HUMAN, team } from "../src/data.js";
 import { createState } from "../src/setup.js";
 import { Engine } from "../src/engine.js";
 import { SimpleStrategy } from "../src/strategy.js";
+import { ravenInfo } from "../src/storyteller.js";
 
 const script = JSON.parse(
   fs.readFileSync(new URL("../scripts/trouble-brewing.json", import.meta.url)),
@@ -245,4 +247,213 @@ test("post-game Key Moments include hidden Poisoner, Monk, and Demon night actio
   assert.equal(demon.data.actorId, imp.id);
   assert.equal(demon.data.outcome, "no_target");
   assert.ok(!key.some((x) => x.type === "information"));
+});
+
+test("NPC Monks report who they protected when asked", () => {
+  const s = base("monk-ask");
+  const monk = s.players[1];
+  const target = s.players[2];
+
+  role(monk, "monk", "good");
+
+  s.phase = "night";
+  s.night = 2;
+  s.day = 1;
+
+  const strat = new SimpleStrategy();
+
+  strat.monk = () => target;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  e.night();
+
+  const response = e.ask(monk.id);
+
+  assert.ok(response.includes(`Night 2: Monk: protected ${target.label}.`));
+});
+
+test("evil NPCs bluffing a choosing role report an invented choice", () => {
+  const s = base("bluff-monk");
+  const baron = s.players[3];
+  const target = s.players[1];
+
+  baron.claim = "monk";
+
+  s.phase = "night";
+  s.night = 2;
+  s.day = 1;
+
+  const strat = new SimpleStrategy();
+
+  strat.monk = () => target;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  e.night();
+
+  const response = e.ask(baron.id);
+
+  assert.ok(response.startsWith("I claim Monk."));
+  assert.ok(response.includes(`Night 2: Monk: protected ${target.label}.`));
+  assert.ok(s.audit.some((x) => x.type === "bluff"));
+});
+
+test("an NPC Slayer can shoot and kill the Imp", () => {
+  const s = base("npc-slayer");
+  const slayer = s.players[1];
+  const imp = s.players[4];
+
+  role(slayer, "slayer", "good");
+
+  const strat = new SimpleStrategy();
+  strat.slay = () => imp;
+
+  const e = new Engine(s, strat);
+
+  e.npcShots();
+
+  assert.equal(imp.alive, false);
+  assert.equal(slayer.shotUsed, true);
+  assert.equal(slayer.claimKnown, true);
+  assert.equal(s.winner, "good");
+  assert.ok(
+    s.publicLog.includes(
+      `Day 1 — ${slayer.label} claims Slayer and shoots ${imp.label}.`,
+    ),
+  );
+  assert.ok(e.reveal().keyMoments.some((x) => x.type === "slayer"));
+});
+
+test("an evil NPC bluffing Slayer shoots once and nothing happens", () => {
+  const s = base("bluff-slayer");
+  const baron = s.players[3];
+  const target = s.players[1];
+
+  baron.claim = "slayer";
+
+  const strat = new SimpleStrategy();
+  strat.slay = () => target;
+
+  const e = new Engine(s, strat);
+
+  e.npcShots();
+  e.npcShots();
+
+  assert.equal(target.alive, true);
+  assert.equal(baron.shotUsed, true);
+  assert.ok(s.publicLog.includes("Day 1 — Nothing happens."));
+  assert.equal(
+    s.publicLog.filter((x) => x.includes("claims Slayer")).length,
+    1,
+  );
+});
+
+test("nominating a Virgin executes the Human and ends the day", () => {
+  const s = base("virgin");
+  const human = s.players[0];
+  const virgin = s.players[2];
+
+  role(virgin, "virgin", "good");
+
+  const strat = new SimpleStrategy();
+
+  strat.vote = () => false;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+  const result = e.nominate(virgin.id);
+
+  assert.equal(result.virgin, true);
+  assert.equal(human.alive, false);
+  assert.equal(virgin.alive, true);
+  assert.equal(s.lastExecution, human.id);
+  assert.equal(s.day, 2);
+  assert.equal(s.phase, "day");
+  assert.ok(
+    s.publicLog.includes(
+      `Day 1 — You nominated ${virgin.label} and were executed immediately.`,
+    ),
+  );
+  assert.throws(() => e.nominate(s.players[1].id), /Dead players/);
+});
+
+test("the Virgin only triggers on her first nomination, and only for Townsfolk", () => {
+  const s = base("virgin-drunk");
+  const human = s.players[0];
+  const virgin = s.players[2];
+
+  role(human, "drunk", "good");
+  human.shown = "chef";
+  human.claim = "chef";
+  role(virgin, "virgin", "good");
+
+  const strat = new SimpleStrategy();
+
+  strat.vote = () => false;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  assert.equal(e.nominate(virgin.id).virgin, undefined);
+  assert.equal(human.alive, true);
+  assert.equal(virgin.virginUsed, true);
+
+  role(human, "mayor", "good");
+
+  assert.equal(e.nominate(virgin.id).virgin, undefined);
+  assert.equal(human.alive, true);
+  assert.equal(s.day, 1);
+});
+
+test("Drunks see a Townsfolk token that is not in play", () => {
+  let drunks = 0;
+
+  for (let seed = 0; seed < 300; seed++) {
+    const s = createState(script, 9, seed);
+    const inPlay = new Set(s.players.map((p) => p.role));
+
+    for (const p of s.players.filter((x) => x.role === "drunk")) {
+      drunks++;
+
+      assert.equal(team(p.shown), "townsfolk");
+      assert.ok(!inPlay.has(p.shown));
+      assert.equal(p.claim, p.shown);
+
+      if (p.human) {
+        assert.ok(!FORBIDDEN_HUMAN.has(p.shown));
+      }
+    }
+  }
+
+  assert.ok(drunks > 0);
+});
+
+test("Drunks receive unreliable information for their shown role", () => {
+  const s = base("drunk-info");
+  const drunk = s.players[1];
+
+  role(drunk, "drunk", "good");
+  drunk.shown = "empath";
+  drunk.claim = "empath";
+
+  s.phase = "night";
+  s.night = 1;
+  s.day = 0;
+
+  const strat = new SimpleStrategy();
+  strat.demon = () => null;
+
+  new Engine(s, strat).start();
+
+  assert.equal(drunk.memories.length, 1);
+  assert.equal(drunk.memories[0].role, "empath");
+  assert.equal(drunk.memories[0].functioning, false);
+
+  role(drunk, "drunk", "good");
+  drunk.shown = "ravenkeeper";
+
+  assert.equal(ravenInfo(s, drunk, s.players[4]).functioning, false);
 });

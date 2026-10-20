@@ -14,6 +14,30 @@ const evil = (p) =>
       ? false
       : p.alignment === "evil";
 
+const fortuneText = (yes, ts) =>
+  `Fortune Teller: ${yes ? "YES" : "NO"} for ${ts
+    .map((x) => x.label)
+    .join(" and ")}.`;
+
+// What a Monk remembers about their own choice.
+export const monkInfo = (s, t, functioning = true) => ({
+  night: s.night,
+  role: "monk",
+  text: `Monk: protected ${t.label}.`,
+  targets: [t.id],
+  trigger: "normal",
+  functioning,
+});
+
+export const fortuneInfo = (s, yes, ts) => ({
+  night: s.night,
+  role: "fortuneteller",
+  text: fortuneText(yes, ts),
+  targets: ts.map((x) => x.id),
+  trigger: "normal",
+  functioning: true,
+});
+
 // Nearest living neighbours on each side.
 function neigh(s, p) {
   const a = s.players;
@@ -79,9 +103,7 @@ function unreliableInfo(s, role, targets) {
 
     return {
       targets,
-      text: `Fortune Teller: ${s.r() < 0.5 ? "YES" : "NO"} for ${selected
-        .map((x) => x.label)
-        .join(" and ")}.`,
+      text: fortuneText(s.r() < 0.5, selected),
     };
   }
 
@@ -170,9 +192,7 @@ export function nightInfo(s, p, strat) {
     const yes = ts.some(
       (x) => x.role === "imp" || x.id === s.red || x.role === "recluse",
     );
-    text = `Fortune Teller: ${yes ? "YES" : "NO"} for ${ts
-      .map((x) => x.label)
-      .join(" and ")}.`;
+    text = fortuneText(yes, ts);
   } else if (role === "undertaker") {
     const x = s.players.find((x) => x.id === s.lastExecution);
 
@@ -198,8 +218,10 @@ export function nightInfo(s, p, strat) {
   };
 }
 
+// The Ravenkeeper is already dead here, so works() can't be used.
 export function ravenInfo(s, p, t) {
-  const seen = !p.poisoned ? t.role : pick(Object.keys(ROLES), s.r);
+  const functioning = p.role !== "drunk" && !p.poisoned;
+  const seen = functioning ? t.role : pick(Object.keys(ROLES), s.r);
 
   return {
     night: s.night,
@@ -207,6 +229,6 @@ export function ravenInfo(s, p, t) {
     text: `${t.label} is ${name(seen)}.`,
     targets: [t.id],
     trigger: "death",
-    functioning: !p.poisoned,
+    functioning,
   };
 }

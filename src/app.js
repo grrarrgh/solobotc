@@ -276,8 +276,8 @@ function render() {
 
   $("actions").hidden = !!s.winner || !t;
   $("ask").disabled = !t || talk.already || !talk.remaining;
-  $("nominate").disabled = !t?.alive;
-  $("slay").hidden = !(h.shown === "slayer" && !s.slayerUsed);
+  $("nominate").disabled = !t?.alive || !h.alive;
+  $("slay").hidden = !(h.shown === "slayer" && !s.slayerUsed && h.alive);
 
   reveal();
 }
