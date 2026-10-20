@@ -42,8 +42,14 @@ input {
   padding: 70px 65px;
 }
 
+/* The circle grows by 40px per seat (--n is set from app.js), but never
+   past the space left for it: the screen width minus the page, section and
+   town-square padding. */
 .circle {
-  --size: min(62vw, 610px);
+  --size: min(
+    clamp(300px, calc(var(--n, 10) * 40px + 120px), 720px),
+    calc(100vw - 210px)
+  );
   width: var(--size);
   aspect-ratio: 1;
   border: 9px double #b69455;
@@ -239,7 +245,10 @@ input {
   }
 
   .circle {
-    --size: min(74vw, 470px);
+    --size: min(
+      clamp(220px, calc(var(--n, 10) * 30px + 80px), 470px),
+      calc(100vw - 130px)
+    );
   }
 
   .seat {

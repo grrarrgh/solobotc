@@ -29,12 +29,23 @@ export class SimpleStrategy {
     return pick(candidates, s.r);
   }
 
+  // Each NPC keeps one suspect. It can move at the start of a new day (35%
+  // chance), and must move if the suspect has died. It only ever moves to a
+  // living NPC, never the human.
   suspicion(s, p) {
-    const target = this.suspect(
-      s,
-      p,
-      s.players.filter((x) => !x.human && x.id !== p.id),
-    );
+    const current = s.players.find((x) => x.id === p.suspicion?.targetId);
+    const newDay = p.suspicion?.day !== s.day;
+    const move = !current?.alive || (newDay && s.r() < 0.35);
+
+    const target = move
+      ? this.suspect(
+          s,
+          p,
+          s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
+        )
+      : current;
+
+    p.suspicion = target ? { targetId: target.id, day: s.day } : null;
 
     return target
       ? {

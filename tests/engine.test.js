@@ -2,7 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-import { FORBIDDEN_HUMAN, name, team } from "../src/data.js";
+import {
+  FORBIDDEN_HUMAN,
+  FIRST_NIGHT_INFO,
+  ONGOING_INFO,
+  name,
+  team,
+} from "../src/data.js";
 import { createState } from "../src/setup.js";
 import { Engine } from "../src/engine.js";
 import { SimpleStrategy } from "../src/strategy.js";
@@ -1016,4 +1022,89 @@ test("the debug log records every night's player states and all interactions", (
   // Night 1 comes before Day 1, which comes before Night 2.
   assert.ok(log.indexOf("=== Night 1") < log.indexOf("=== Day 1"));
   assert.ok(log.indexOf("=== Day 1") < log.indexOf("=== Night 2"));
+});
+
+test("setup deals two first-night and two ongoing information Townsfolk when it can", () => {
+  for (const raw of [script, ecp]) {
+    for (let seats = 5; seats <= 15; seats++) {
+      for (let seed = 0; seed < 30; seed++) {
+        const tf = createState(raw, seats, seed)
+          .players.map((p) => p.role)
+          .filter((id) => team(id) === "townsfolk");
+        const first = tf.filter((id) => FIRST_NIGHT_INFO.includes(id)).length;
+        const ongoing = tf.filter((id) => ONGOING_INFO.includes(id)).length;
+
+        if (tf.length >= 4) {
+          assert.ok(first >= 2 && ongoing >= 2, `${seats}/${seed}: ${tf}`);
+        } else {
+          // Too few Townsfolk slots: every one is an information role.
+          assert.equal(first + ongoing, tf.length, `${seats}/${seed}: ${tf}`);
+        }
+      }
+    }
+  }
+});
+
+test("the Demon gets three bluffs that are not in play and claims one", () => {
+  for (let seed = 0; seed < 100; seed++) {
+    const s = createState(ecp, 10, seed);
+    const tokens = new Set(s.players.flatMap((p) => [p.role, p.shown]));
+    const demon = s.players.find((p) => p.role === "imp");
+
+    assert.equal(s.demonBluffs.length, 3);
+    assert.deepEqual(demon.bluffs, s.demonBluffs);
+    assert.ok(s.demonBluffs.includes(demon.claim));
+
+    for (const id of s.demonBluffs) {
+      assert.ok(!tokens.has(id), `${id} is in play`);
+      assert.notEqual(id, "drunk");
+      assert.notEqual(team(id), "minion");
+      assert.notEqual(team(id), "demon");
+    }
+  }
+});
+
+test("Minions share the Demon's bluffs only at the configured chance", () => {
+  for (let seed = 0; seed < 50; seed++) {
+    const always = createState(ecp, 12, seed, { minionBluffChance: 1 });
+    const never = createState(ecp, 12, seed, { minionBluffChance: 0 });
+    const minions = (s) => s.players.filter((p) => team(p.role) === "minion");
+
+    for (const p of minions(always)) {
+      assert.deepEqual(p.bluffs, always.demonBluffs);
+      assert.ok(always.demonBluffs.includes(p.claim));
+    }
+
+    for (const p of minions(never)) {
+      assert.deepEqual(p.bluffs, []);
+      assert.equal(team(p.claim), "townsfolk");
+      assert.ok(never.script.ids.includes(p.claim));
+    }
+  }
+});
+
+test("NPC suspicion stays put within a day, moves off dead players, and never lands on the human", () => {
+  const s = base("suspicion");
+  const strat = new SimpleStrategy();
+  const chef = s.players[1];
+
+  const first = strat.suspicion(s, chef);
+
+  for (let i = 0; i < 10; i++) {
+    assert.equal(strat.suspicion(s, chef).targetId, first.targetId);
+  }
+
+  s.players.find((x) => x.id === first.targetId).alive = false;
+
+  for (let day = 2; day < 30; day++) {
+    s.day = day;
+
+    const now = s.players.find(
+      (x) => x.id === strat.suspicion(s, chef).targetId,
+    );
+
+    assert.ok(now.alive);
+    assert.equal(now.human, false);
+    assert.notEqual(now.id, chef.id);
+  }
 });

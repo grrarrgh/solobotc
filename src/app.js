@@ -79,6 +79,8 @@ function circle() {
       .map((x) => x.playerId),
   );
 
+  $("circle").style.setProperty("--n", s.players.length);
+
   $("circle").innerHTML = s.players
     .map((p, i) => {
       const token = p.human || p.claimKnown ? name(p.claim) : "Unknown";

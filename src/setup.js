@@ -1,5 +1,42 @@
-import { ROLES, COUNTS, FORBIDDEN_HUMAN, team, alignment, name } from "./data.js";
+import {
+  ROLES,
+  COUNTS,
+  FORBIDDEN_HUMAN,
+  FIRST_NIGHT_INFO,
+  ONGOING_INFO,
+  MINION_BLUFF_CHANCE,
+  team,
+  alignment,
+  name,
+} from "./data.js";
 import { rng, pick, sample, shuffle } from "./util.js";
+
+// Draws n Townsfolk, alternating first-night and ongoing information roles
+// until there are two of each (or no Townsfolk slots left), then fills the
+// rest at random.
+function drawTownsfolk(pool, n, r) {
+  const first = shuffle(
+    pool.filter((x) => FIRST_NIGHT_INFO.includes(x)),
+    r,
+  );
+  const ongoing = shuffle(
+    pool.filter((x) => ONGOING_INFO.includes(x)),
+    r,
+  );
+  const picked = [];
+
+  for (let k = 0; k < 2; k++) {
+    for (const group of [first, ongoing]) {
+      if (picked.length < n && group.length) {
+        picked.push(group.shift());
+      }
+    }
+  }
+
+  const rest = pool.filter((x) => !picked.includes(x));
+
+  return [...picked, ...sample(rest, n - picked.length, r)];
+}
 
 export function parseScript(raw) {
   const meta = raw.find((x) => typeof x === "object" && x.id === "_meta") ?? {
@@ -16,7 +53,12 @@ export function parseScript(raw) {
   return { meta, ids };
 }
 
-export function createState(raw, seats, seed = Date.now()) {
+export function createState(
+  raw,
+  seats,
+  seed = Date.now(),
+  { minionBluffChance = MINION_BLUFF_CHANCE } = {},
+) {
   const script = parseScript(raw),
     base = COUNTS[seats];
   if (!base) throw Error("Choose 5–15 seats");
@@ -34,7 +76,7 @@ export function createState(raw, seats, seed = Date.now()) {
 
   let roles = shuffle(
     [
-      ...sample(pool("townsfolk"), t, r),
+      ...drawTownsfolk(pool("townsfolk"), t, r),
       ...sample(pool("outsider"), o, r),
       ...mins,
       ...sample(pool("demon"), 1, r),
@@ -92,6 +134,8 @@ export function createState(raw, seats, seed = Date.now()) {
       claim: shown,
       claimKnown: i === 0,
       bluff: null,
+      bluffs: [],
+      suspicion: null,
       shotUsed: false,
       virginUsed: false,
       artistUsed: false,
@@ -104,21 +148,40 @@ export function createState(raw, seats, seed = Date.now()) {
     };
   });
 
-  // Evil players bluff as good characters not in play. Nobody claims the
-  // Drunk: a real Drunk believes they are a Townsfolk.
-  const bluffs = sample(
+  // The Demon learns three good characters that are not in play (nor shown
+  // to a Drunk, and never the Drunk itself) and bluffs as one of them. Each
+  // Minion also learns them with probability `minionBluffChance`; a Minion who
+  // doesn't bluffs as any Townsfolk on the script.
+  const tokens = new Set(players.map((p) => p.shown));
+  const demonBluffs = sample(
     script.ids.filter(
-      (x) => alignment(x) === "good" && x !== "drunk" && !used.has(x),
+      (x) => alignment(x) === "good" && x !== "drunk" && !tokens.has(x),
     ),
     3,
     r,
   );
-  players
+  const evil = players
     .filter((x) => x.alignment === "evil")
-    .forEach((p, i) => {
-      p.bluff = bluffs[i % Math.max(1, bluffs.length)] ?? "chef";
-      p.claim = p.bluff;
-    });
+    .sort((a, b) => (team(b.role) === "demon") - (team(a.role) === "demon"));
+  const taken = new Set();
+
+  for (const p of evil) {
+    const knows = team(p.role) === "demon" || r() < minionBluffChance;
+    const options =
+      knows && demonBluffs.length ? demonBluffs : pool("townsfolk");
+
+    // Teammates avoid claiming the same character when they can.
+    p.bluffs = knows ? demonBluffs : [];
+    p.bluff =
+      pick(
+        options.filter((x) => !taken.has(x)),
+        r,
+      ) ??
+      pick(options, r) ??
+      "chef";
+    p.claim = p.bluff;
+    taken.add(p.bluff);
+  }
 
   // Fortune Teller red herring.
   const red = pick(
@@ -150,19 +213,36 @@ export function createState(raw, seats, seed = Date.now()) {
     talked: [],
     talkDay: 0,
     red,
+    demonBluffs,
+    options: { minionBluffChance },
     slayerUsed: false,
     moonCurse: null,
     advocate: null,
   };
 
+  const setupLog = (type, text) =>
+    s.audit.push({ id: s.auditId++, group: "Setup", type, text });
+
   players.forEach((p) =>
-    s.audit.push({
-      id: s.auditId++,
-      group: "Setup",
-      type: "role",
-      text: `${p.label}: ${name(p.role)}; shown ${name(p.shown)}; claim ${name(p.claim)}.`,
-    }),
+    setupLog(
+      "role",
+      `${p.label}: ${name(p.role)}; shown ${name(p.shown)}; claim ${name(p.claim)}.`,
+    ),
   );
+
+  setupLog(
+    "bluffs",
+    `Demon bluffs: ${demonBluffs.map(name).join(", ") || "none"}.`,
+  );
+
+  for (const p of evil.filter((x) => team(x.role) === "minion")) {
+    setupLog(
+      "bluffs",
+      `${p.label} (${name(p.role)}) ${
+        p.bluffs.length ? "knows" : "does not know"
+      } the Demon's bluffs.`,
+    );
+  }
 
   return s;
 }

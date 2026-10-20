@@ -1,4 +1,11 @@
-import { ROLES, ARTIST_QUESTIONS, name, team, alignment } from "./data.js";
+import {
+  ROLES,
+  ARTIST_QUESTIONS,
+  FIRST_NIGHT_INFO,
+  name,
+  team,
+  alignment,
+} from "./data.js";
 import { pick, sample } from "./util.js";
 
 // The Drunk acts as the character they were shown.
@@ -14,14 +21,7 @@ const evil = (p) =>
       ? false
       : p.alignment === "evil";
 
-const FIRST_NIGHT = [
-  "washerwoman",
-  "librarian",
-  "investigator",
-  "chef",
-  "clockmaker",
-  "grandmother",
-];
+const FIRST_NIGHT = FIRST_NIGHT_INFO;
 const EACH_NIGHT = ["empath", "fortuneteller"];
 
 // The team each "one of these two players is X" role learns about.

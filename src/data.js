@@ -32,6 +32,22 @@ export const ROLES = {
   imp: ["Imp", "demon"],
 };
 
+// Townsfolk who learn something on the first night only, and those who keep
+// learning on later nights. Setup deals at least two of each when it can.
+export const FIRST_NIGHT_INFO = [
+  "washerwoman",
+  "librarian",
+  "investigator",
+  "chef",
+  "clockmaker",
+  "grandmother",
+];
+export const ONGOING_INFO = ["empath", "fortuneteller", "undertaker"];
+
+// Chance (0–1) that each Minion also learns the Demon's three bluffs.
+// Adjust here: 0 = Minions never know them, 1 = they always do.
+export const MINION_BLUFF_CHANCE = 0.5;
+
 // Yes/no questions an Artist can ask the Storyteller about a player.
 export const ARTIST_QUESTIONS = {
   evil: "evil",
