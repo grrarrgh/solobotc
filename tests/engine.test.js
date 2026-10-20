@@ -402,10 +402,11 @@ test("the Virgin only triggers on her first nomination, and only for Townsfolk",
   assert.equal(virgin.virginUsed, true);
 
   role(human, "mayor", "good");
+  e.endDay();
 
   assert.equal(e.nominate(virgin.id).virgin, undefined);
   assert.equal(human.alive, true);
-  assert.equal(s.day, 1);
+  assert.equal(s.day, 2);
 });
 
 test("Drunks see a Townsfolk token that is not in play", () => {
@@ -845,4 +846,85 @@ test("NPC Artists ask at dawn; evil Artist bluffers lie about the answer", () =>
     baron.memories[0].text,
     `Artist: asked if ${imp.label} is the Demon: NO.`,
   );
+});
+
+// ── Bug fixes ────────────────────────────────────────────────
+
+test("a player can only be nominated once per day", () => {
+  const s = base("nominate-once");
+  const chef = s.players[1];
+  const strat = new SimpleStrategy();
+
+  strat.vote = () => false;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  e.nominate(chef.id);
+
+  assert.equal(e.nominatedToday(chef.id), true);
+  assert.throws(() => e.nominate(chef.id), /Already nominated today/);
+
+  e.endDay();
+
+  assert.equal(e.nominatedToday(chef.id), false);
+  assert.equal(e.nominate(chef.id).executed, false);
+});
+
+test("nobody bluffs as the Drunk", () => {
+  for (let seed = 0; seed < 300; seed++) {
+    for (const p of createState(ecp, 8, seed).players) {
+      assert.notEqual(p.claim, "drunk");
+      assert.notEqual(p.shown, "drunk");
+    }
+  }
+});
+
+test("a Drunk thinks they are a Townsfolk and always gets wrong information", () => {
+  for (let i = 0; i < 20; i++) {
+    const s = bluffNight(`drunk-wrong-${i}`);
+    const drunk = s.players[1];
+
+    role(drunk, "drunk", "good");
+    drunk.shown = "chef";
+    drunk.claim = "chef";
+
+    const e = new Engine(s);
+
+    e.start();
+
+    // The Spy registers as good, so the true Chef number is 0.
+    assert.notEqual(drunk.memories[0].text, "Chef number: 0.");
+    assert.equal(drunk.memories[0].role, "chef");
+    assert.ok(e.ask(drunk.id).startsWith("I claim Chef."));
+  }
+});
+
+test("the human Washerwoman always learns about two other players", () => {
+  for (const status of ["sober", "poisoned", "drunk"]) {
+    for (let i = 0; i < 20; i++) {
+      const s = bluffNight(`ww-${status}-${i}`);
+      const human = s.players[0];
+
+      role(human, status === "drunk" ? "drunk" : "washerwoman", "good");
+      human.shown = "washerwoman";
+
+      const strat = new SimpleStrategy();
+
+      // Poison the human every night.
+      strat.poison = () => (status === "poisoned" ? human : null);
+
+      if (status === "poisoned") {
+        role(s.players[3], "poisoner", "evil");
+      }
+
+      new Engine(s, strat).start();
+
+      const info = human.memories[0];
+
+      assert.equal(info.targets.length, 2, `${status}: ${info.text}`);
+      assert.ok(!info.targets.includes(human.id), `${status}: ${info.text}`);
+      assert.ok(!info.text.includes("You"), `${status}: ${info.text}`);
+    }
+  }
 });

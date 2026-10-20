@@ -104,9 +104,12 @@ export function createState(raw, seats, seed = Date.now()) {
     };
   });
 
-  // Evil players bluff as good characters not in play.
+  // Evil players bluff as good characters not in play. Nobody claims the
+  // Drunk: a real Drunk believes they are a Townsfolk.
   const bluffs = sample(
-    script.ids.filter((x) => alignment(x) === "good" && !used.has(x)),
+    script.ids.filter(
+      (x) => alignment(x) === "good" && x !== "drunk" && !used.has(x),
+    ),
     3,
     r,
   );
@@ -143,6 +146,7 @@ export function createState(raw, seats, seed = Date.now()) {
     poisoned: null,
     lastExecution: null,
     lastVote: null,
+    nominated: [],
     talked: [],
     talkDay: 0,
     red,

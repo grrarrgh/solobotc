@@ -73,7 +73,7 @@ const artistTruth = (t, q) =>
   q === "evil" ? evil(t) : q === "demon" ? t.role === "imp" : team(t.role) === q;
 
 // The Storyteller's yes/no answer to an Artist. `mode` is "truth", "lie"
-// (an evil bluffer) or "random" (a drunk or poisoned Artist).
+// (an evil bluffer or a Drunk) or "random" (a poisoned Artist).
 export function artistInfo(s, t, q, mode) {
   const truth = artistTruth(t, q);
   const yes =
@@ -319,7 +319,7 @@ function falseInfo(s, p, role, strat) {
   return { targets: [], text: "No information." };
 }
 
-// Random information for a drunk or poisoned player.
+// Random information for a poisoned player.
 function unreliableInfo(s, p, role, targets) {
   if (role === "clockmaker") {
     return {
@@ -341,7 +341,11 @@ function unreliableInfo(s, p, role, targets) {
   }
 
   if (PAIR_TEAM[role]) {
-    const pair = sample(s.players, 2, s.r);
+    const pair = sample(
+      s.players.filter((x) => x.id !== p.id),
+      2,
+      s.r,
+    );
     const possible = s.script.ids.filter((id) => team(id) === PAIR_TEAM[role]);
     const shown = pick(possible, s.r);
 
@@ -411,7 +415,10 @@ export function nightInfo(s, p, strat) {
 
   const functioning = works(p);
 
-  if (!functioning) {
+  // The Drunk always hears something wrong; poisoned players hear noise.
+  if (p.role === "drunk") {
+    ({ text, targets } = falseInfo(s, p, role, strat));
+  } else if (!functioning) {
     ({ text, targets } = unreliableInfo(s, p, role, targets));
   }
 
@@ -461,9 +468,9 @@ export function bluffInfo(s, p, strat) {
   };
 }
 
-// The Ravenkeeper is already dead here, so works() can't be used. An evil
-// bluffer passes `lie` to name a character the target is not.
-export function ravenInfo(s, p, t, lie = false) {
+// The Ravenkeeper is already dead here, so works() can't be used. A Drunk,
+// or an evil bluffer passing `lie`, names a character the target is not.
+export function ravenInfo(s, p, t, lie = p.role === "drunk") {
   const functioning = !lie && p.role !== "drunk" && !p.poisoned;
   const seen = lie
     ? pick(

@@ -278,7 +278,7 @@ function render() {
 
   $("actions").hidden = !!s.winner || !t;
   $("ask").disabled = !t || talk.already || !talk.remaining;
-  $("nominate").disabled = !t?.alive || !h.alive;
+  $("nominate").disabled = !t?.alive || !h.alive || e.nominatedToday(t.id);
   $("slay").hidden = !(h.shown === "slayer" && !s.slayerUsed && h.alive);
   $("artist-controls").hidden = !(
     h.shown === "artist" &&

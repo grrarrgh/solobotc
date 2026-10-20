@@ -27,6 +27,11 @@ const KEY_MOMENT_TYPES = new Set([
   "game_over",
 ]);
 
+// How the Storyteller answers a good Artist: a Drunk is told the wrong answer,
+// a poisoned Artist a random one.
+const artistMode = (p) =>
+  p.role === "drunk" ? "lie" : works(p) ? "truth" : "random";
+
 export class Engine {
   constructor(s, strat = new SimpleStrategy()) {
     this.s = s;
@@ -205,6 +210,7 @@ export class Engine {
     s.phase = "day";
     s.talkDay = s.day;
     s.talked = [];
+    s.nominated = [];
 
     s.publicLog.push(
       `Day ${s.day}: ${this.alive().length} alive; talk to ${this.talkLimit()} distinct players.`,
@@ -392,7 +398,7 @@ export class Engine {
       if (p.alignment === "good") {
         this.remember(
           p,
-          artistInfo(s, ask.target, ask.question, works(p) ? "truth" : "random"),
+          artistInfo(s, ask.target, ask.question, artistMode(p)),
         );
       } else {
         const spy = p.role === "spy" && works(p);
@@ -687,6 +693,11 @@ export class Engine {
     return records;
   }
 
+  // Each player can only be nominated once per day.
+  nominatedToday(id) {
+    return this.s.nominated.includes(id);
+  }
+
   nominate(id) {
     const s = this.s;
     const n = this.player(id);
@@ -699,6 +710,12 @@ export class Engine {
     if (!h.alive) {
       throw Error("Dead players cannot nominate.");
     }
+
+    if (this.nominatedToday(id)) {
+      throw Error("Already nominated today.");
+    }
+
+    s.nominated.push(id);
 
     // A working Virgin's first nomination executes a Townsfolk nominator.
     if (n.role === "virgin" && !n.virginUsed) {
@@ -865,7 +882,7 @@ export class Engine {
 
     h.artistUsed = true;
 
-    const info = artistInfo(s, t, question, works(h) ? "truth" : "random");
+    const info = artistInfo(s, t, question, artistMode(h));
 
     this.remember(h, info);
 
