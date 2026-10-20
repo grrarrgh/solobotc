@@ -101,3 +101,7 @@ Feature update:
 - Drunk or poisoned: the human is still woken and still chooses, but the result may be wrong: a Monk's protection fails, a Fortune Teller's answer is wrong (Drunk) or random (poisoned), and a Butler's vote restriction doesn't apply.
 - NPC Butlers now choose a master each night too (before, their votes never counted). Evil NPCs bluffing as the Butler report a choice.
 - The wake-up and the human's choice are recorded in log.txt.
+
+## Bug Fix: NPC Slayer Timing
+
+- NPC Slayers (and evil NPCs bluffing as Slayer) no longer shoot on Day 1. They have a 50% chance to shoot at dawn on Day 2, and always shoot at dawn on Day 3 if they haven't yet. This replaces the old 35% chance every day.

@@ -1266,3 +1266,19 @@ test("a human Butler picks a master, whose vote their own vote depends on", () =
   assert.equal(mine.attempted, true);
   assert.equal(mine.counted, false);
 });
+
+test("NPC Slayers never shoot on Day 1, and always shoot by Day 3", () => {
+  for (let i = 0; i < 30; i++) {
+    const s = base(`slayer-timing-${i}`);
+    const strat = new SimpleStrategy();
+    const slayer = s.players[1];
+
+    role(slayer, "slayer", "good");
+
+    s.day = 1;
+    assert.equal(strat.slay(s, slayer), null);
+
+    s.day = 3;
+    assert.ok(strat.slay(s, slayer));
+  }
+});

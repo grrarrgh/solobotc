@@ -121,9 +121,10 @@ export class SimpleStrategy {
     );
   }
 
-  // Each day, an NPC Slayer has a 35% chance to shoot a living NPC they suspect.
+  // An NPC Slayer shoots a living NPC they suspect on Day 2 or Day 3: never
+  // on Day 1, a 50% chance on Day 2, and always by Day 3 if they haven't yet.
   slay(s, p) {
-    if (s.r() >= 0.35) {
+    if (s.day < 2 || (s.day === 2 && s.r() >= 0.5)) {
       return null;
     }
 
