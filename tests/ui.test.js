@@ -14,6 +14,7 @@ test("feature controls are present", () => {
   assert.match(html, /id="reset"/);
   assert.match(html, /id="artist-question"/);
   assert.match(html, /id="artist-ask"/);
+  assert.match(html, /id="download-log"[^>]*download="log.txt"/);
 });
 
 test("role counts and log reversal are wired", () => {
@@ -31,4 +32,5 @@ test("count colours are distinct", () => {
 test("post-game reveal renders engine-provided Key Moments", () => {
   assert.match(app, /r\.keyMoments/);
   assert.match(app, /Key moments/);
+  assert.match(app, /debugLog\(\)/);
 });

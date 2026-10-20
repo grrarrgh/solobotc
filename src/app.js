@@ -157,9 +157,8 @@ function renderPublic() {
           .reverse()
           .map(
             (x) =>
-              `<li class="log-entry">
-                ${esc(x)}
-              </li>`,
+              // No whitespace around the text: entries keep their line breaks.
+              `<li class="log-entry">${esc(x)}</li>`,
           )
           .join("")}`,
     )
@@ -174,6 +173,8 @@ function reveal() {
   if (!r) {
     return;
   }
+
+  updateLogLink();
 
   $("result").innerHTML = `<div class="result-banner">
     <strong>
@@ -246,6 +247,19 @@ function reveal() {
         )
         .join("")}`
     : "";
+}
+
+// Points the "Download log.txt" link at a fresh copy of the debug log.
+function updateLogLink() {
+  const link = $("download-log");
+
+  if (link.href.startsWith("blob:")) {
+    URL.revokeObjectURL(link.href);
+  }
+
+  link.href = URL.createObjectURL(
+    new Blob([e.debugLog()], { type: "text/plain" }),
+  );
 }
 
 function render() {

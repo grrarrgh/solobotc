@@ -10,6 +10,7 @@ import {
 } from "./storyteller.js";
 import { SimpleStrategy } from "./strategy.js";
 import { pick } from "./util.js";
+import { formatLog } from "./log.js";
 
 const KEY_MOMENT_TYPES = new Set([
   "poison",
@@ -205,6 +206,7 @@ export class Engine {
     }
 
     this.bluffs();
+    this.snapshot();
 
     s.day = s.night;
     s.phase = "day";
@@ -831,6 +833,8 @@ export class Engine {
       throw Error("Cannot end day.");
     }
 
+    this.audit("end_day", `You ended Day ${this.s.day}.`);
+
     if (
       this.alive().length === 3 &&
       this.human().role === "mayor" &&
@@ -858,7 +862,17 @@ export class Engine {
 
     this.s.slayerUsed = true;
 
-    return this.shoot(p, t);
+    const killed = this.shoot(p, t);
+
+    this.audit(
+      "slayer",
+      `${p.label} (${name(p.role)}) shot ${t.label}; ${
+        killed ? "killed" : "no effect"
+      }.`,
+      { actorId: p.id, targetId: t.id, killed },
+    );
+
+    return killed;
   }
 
   // Once per game, the human Artist asks the Storyteller a yes/no question
@@ -1007,6 +1021,36 @@ export class Engine {
       {},
       "Game Over",
     );
+
+    this.snapshot("Game Over");
+  }
+
+  // Records every player's full state (and what they learned tonight) for
+  // the debug log.
+  snapshot(group) {
+    const s = this.s;
+    const players = s.players.map((p) => ({
+      seat: p.seat,
+      label: p.label,
+      role: p.role,
+      shown: p.shown,
+      claim: p.claim,
+      alignment: p.alignment,
+      alive: p.alive,
+      drunk: p.role === "drunk",
+      poisoned: p.poisoned,
+      protected: p.protected,
+      info: p.memories
+        .filter((m) => !m.day && m.night === s.night)
+        .map((m) => m.text),
+    }));
+
+    this.audit("state", "Player states", { players }, group);
+  }
+
+  // The whole game as human-readable text (downloaded as log.txt).
+  debugLog() {
+    return formatLog(this.s);
   }
 
   reveal() {

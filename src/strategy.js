@@ -45,11 +45,12 @@ export class SimpleStrategy {
   }
 
   // Good NPCs share what they learned; evil NPCs share their bluffed info.
+  // Each night's (or day's) information goes on its own line.
   ask(s, p) {
     const details = p.memories.length
       ? p.memories
           .map((x) => `${x.day ? `Day ${x.day}` : `Night ${x.night}`}: ${x.text}`)
-          .join(" ")
+          .join("\n")
       : "I have no stored information.";
 
     const suspicion = this.suspicion(s, p);
@@ -60,7 +61,7 @@ export class SimpleStrategy {
       suspicion ? `${suspicion.text}.` : "",
     ]
       .filter(Boolean)
-      .join(" ");
+      .join("\n");
   }
 
   vote(s, v, n) {
@@ -93,16 +94,17 @@ export class SimpleStrategy {
         );
   }
 
+  // Night choices only ever pick living players.
   raven(s, p) {
     return pick(
-      s.players.filter((x) => x.id !== p.id),
+      s.players.filter((x) => x.alive && x.id !== p.id),
       s.r,
     );
   }
 
   ft(s, p) {
     return sample(
-      s.players.filter((x) => x.id !== p.id),
+      s.players.filter((x) => x.alive && x.id !== p.id),
       2,
       s.r,
     );

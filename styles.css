@@ -131,6 +131,12 @@ input {
 .log-entry {
   padding: 7px 4px;
   border-bottom: 1px solid #343a45;
+  white-space: pre-line;
+}
+
+/* NPC answers list each night's information on its own line. */
+#answer {
+  white-space: pre-line;
 }
 
 .day-break {
@@ -306,11 +312,21 @@ input {
   color: #ef6b72;
 }
 
-.reset-button {
-  display: block;
+.reveal-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
   margin: 20px auto 4px;
+}
+
+.reset-button {
   padding: 10px 22px;
   border-color: #b69455;
   color: #f0cf83;
   cursor: pointer;
+}
+
+.download-link {
+  color: #f0cf83;
 }

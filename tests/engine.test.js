@@ -271,7 +271,7 @@ test("NPC Monks report who they protected when asked", () => {
 
   const response = e.ask(monk.id);
 
-  assert.ok(response.includes(`Night 2: Monk: protected ${target.label}.`));
+  assert.ok(response.includes(`Night 2: Monk: protected ${target.label} from the Demon.`));
 });
 
 test("evil NPCs bluffing a choosing role report an invented choice", () => {
@@ -297,7 +297,7 @@ test("evil NPCs bluffing a choosing role report an invented choice", () => {
   const response = e.ask(baron.id);
 
   assert.ok(response.startsWith("I claim Monk."));
-  assert.ok(response.includes(`Night 2: Monk: protected ${target.label}.`));
+  assert.ok(response.includes(`Night 2: Monk: protected ${target.label} from the Demon.`));
   assert.ok(s.audit.some((x) => x.type === "bluff"));
 });
 
@@ -927,4 +927,93 @@ test("the human Washerwoman always learns about two other players", () => {
       assert.ok(!info.text.includes("You"), `${status}: ${info.text}`);
     }
   }
+});
+
+test("the Monk lists each night's protection on its own line", () => {
+  const strat = new SimpleStrategy();
+  const { s, e } = nightTwo("monk-lines", strat);
+  const monk = s.players[1];
+  const picks = [s.players[2], s.players[3]];
+
+  role(monk, "monk", "good");
+  strat.monk = () => picks.shift();
+
+  e.night();
+  e.endDay();
+
+  const lines = e.ask(monk.id).split("\n");
+
+  assert.equal(lines[0], "I claim Monk.");
+  assert.equal(lines[1], `Night 2: Monk: protected ${s.players[2].label} from the Demon.`);
+  assert.equal(lines[2], `Night 3: Monk: protected ${s.players[3].label} from the Demon.`);
+});
+
+test("night choices never pick dead players", () => {
+  const s = base("no-dead-picks");
+  const strat = new SimpleStrategy();
+  const chooser = s.players[1];
+
+  s.players[2].alive = false;
+  s.players[3].alive = false;
+
+  for (let i = 0; i < 50; i++) {
+    for (const t of [
+      strat.raven(s, chooser),
+      ...strat.ft(s, chooser),
+      strat.monk(s, chooser),
+      strat.gamble(s, chooser).target,
+    ]) {
+      assert.equal(t.alive, true);
+    }
+  }
+});
+
+test("the debug log records every night's player states and all interactions", () => {
+  const s = base("debug-log");
+  const chef = s.players[1];
+  const poisoner = s.players[3];
+
+  role(poisoner, "poisoner", "evil");
+
+  s.phase = "night";
+  s.night = 1;
+  s.day = 0;
+
+  const strat = new SimpleStrategy();
+
+  strat.poison = () => chef;
+  strat.vote = () => false;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  e.start();
+  e.ask(chef.id);
+  e.nominate(chef.id);
+  e.endDay();
+  e.finish("good", "Test complete.");
+
+  const log = e.debugLog();
+
+  for (const text of [
+    "SOLO CLOCKTOWER — DEBUG LOG",
+    "=== Night 1",
+    "=== Day 1",
+    "=== Night 2",
+    "=== Game Over",
+    "-- Player states --",
+    "[poison]",
+    "[conversation]",
+    "[vote_result]",
+    "votes: You",
+    "[end_day] You ended Day 1.",
+    "POISONED",
+    `info: ${chef.memories[0].text}`,
+  ]) {
+    assert.ok(log.includes(text), `missing: ${text}`);
+  }
+
+  // Night 1 comes before Day 1, which comes before Night 2.
+  assert.ok(log.indexOf("=== Night 1") < log.indexOf("=== Day 1"));
+  assert.ok(log.indexOf("=== Day 1") < log.indexOf("=== Night 2"));
 });

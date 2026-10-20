@@ -53,7 +53,7 @@ const fortuneText = (yes, ts) =>
 export const monkInfo = (s, t, functioning = true) => ({
   night: s.night,
   role: "monk",
-  text: `Monk: protected ${t.label}.`,
+  text: `Monk: protected ${t.label} from the Demon.`,
   targets: [t.id],
   trigger: "normal",
   functioning,

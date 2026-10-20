@@ -160,7 +160,7 @@ export function createState(raw, seats, seed = Date.now()) {
       id: s.auditId++,
       group: "Setup",
       type: "role",
-      text: `${name(p.role)}; shown ${name(p.shown)}; claim ${name(p.claim)}.`,
+      text: `${p.label}: ${name(p.role)}; shown ${name(p.shown)}; claim ${name(p.claim)}.`,
     }),
   );
 
