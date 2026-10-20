@@ -1,4 +1,4 @@
-import { name, COUNTS, ARTIST_QUESTIONS } from "./data.js";
+import { name, team, COUNTS, ARTIST_QUESTIONS, ABILITIES } from "./data.js";
 import { createState } from "./setup.js";
 import { Engine } from "./engine.js";
 
@@ -115,6 +115,19 @@ function circle() {
     })
     .join("");
 
+  $("circle").insertAdjacentHTML(
+    "beforeend",
+    `<button
+      id="fireplace"
+      type="button"
+      class="fireplace"
+      title="Show the script"
+      aria-label="Show the script and character abilities"
+    >${FIREPLACE_SVG}</button>`,
+  );
+
+  $("fireplace").onclick = showScript;
+
   $("circle")
     .querySelectorAll("[data-id]:not(:disabled)")
     .forEach((b) => {
@@ -125,6 +138,59 @@ function circle() {
         render();
       };
     });
+}
+
+// ── Script sheet ─────────────────────────────────────────────
+
+// A hearth with a fire, drawn in the town square's gold and ember colours.
+const FIREPLACE_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true">
+  <rect x="4" y="8" width="56" height="8" rx="2" fill="#b69455" />
+  <rect x="10" y="16" width="44" height="40" fill="#5a3b2e" />
+  <path d="M20 56V36a12 12 0 0 1 24 0v20z" fill="#1a1110" />
+  <path
+    d="M32 54c-8 0-10-6-7-11 1 4 4 4 4 2 0-5 3-8 6-11 0 4 4 6 4 11 2-1 2-3 2-4 3 4 2 13-9 13z"
+    fill="#f39c3d"
+  />
+  <path
+    d="M32 54c-4 0-5-3-3-6 1 2 2 2 2 0 0-2 2-4 3-5 0 3 3 4 3 7 0 2-2 4-5 4z"
+    fill="#f0cf83"
+  />
+  <rect x="6" y="56" width="52" height="4" rx="1" fill="#b69455" />
+</svg>`;
+
+const TEAMS = [
+  ["townsfolk", "Townsfolk"],
+  ["outsider", "Outsiders"],
+  ["minion", "Minions"],
+  ["demon", "Demons"],
+];
+
+// Opens a popup listing the script's characters and abilities by team.
+function showScript() {
+  const { meta, ids } = s.script;
+
+  const sections = TEAMS.map(([t, title]) => {
+    const roles = ids.filter((id) => team(id) === t);
+
+    return roles.length
+      ? `<h3 class="team-${t}">${title}</h3>
+        <dl class="ability-list">
+          ${roles
+            .map(
+              (id) =>
+                `<dt>${esc(name(id))}</dt><dd>${esc(ABILITIES[id] ?? "")}</dd>`,
+            )
+            .join("")}
+        </dl>`
+      : "";
+  }).join("");
+
+  $("script-sheet").innerHTML = `<h2>${esc(meta.name)}</h2>
+    ${meta.author ? `<p class="script-author">by ${esc(meta.author)}</p>` : ""}
+    ${sections}
+    <p class="script-footnote">* Not the first night.</p>`;
+
+  $("script-dialog").showModal();
 }
 
 // Groups log lines by their "Day N" prefix, newest first.
@@ -378,6 +444,13 @@ $("seats").onchange = () => {
   if (!$("count-popup").hidden) {
     $("count-popup").hidden = true;
     $("count-info").setAttribute("aria-expanded", "false");
+  }
+};
+
+// Clicking the dimmed backdrop (outside the sheet) closes the script popup.
+$("script-dialog").onclick = (ev) => {
+  if (ev.target === $("script-dialog")) {
+    $("script-dialog").close();
   }
 };
 

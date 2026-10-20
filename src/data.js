@@ -48,6 +48,62 @@ export const ONGOING_INFO = ["empath", "fortuneteller", "undertaker"];
 // Adjust here: 0 = Minions never know them, 1 = they always do.
 export const MINION_BLUFF_CHANCE = 0.5;
 
+// Official ability text, shown on the script sheet. "*" means "not the first
+// night".
+export const ABILITIES = {
+  washerwoman:
+    "You start knowing that 1 of 2 players is a particular Townsfolk.",
+  librarian:
+    "You start knowing that 1 of 2 players is a particular Outsider. (Or that zero are in play.)",
+  investigator:
+    "You start knowing that 1 of 2 players is a particular Minion.",
+  chef: "You start knowing how many pairs of evil players there are.",
+  empath: "Each night, you learn how many of your 2 alive neighbours are evil.",
+  fortuneteller:
+    "Each night, choose 2 players: you learn if either is a Demon. There is a good player that registers as a Demon to you.",
+  undertaker:
+    "Each night*, you learn which character died by execution today.",
+  monk: "Each night*, choose a player (not yourself): they are safe from the Demon tonight.",
+  ravenkeeper:
+    "If you die at night, you are woken to choose a player: you learn their character.",
+  virgin:
+    "The 1st time you are nominated, if the nominator is a Townsfolk, they are executed immediately.",
+  slayer:
+    "Once per game, during the day, publicly choose a player: if they are the Demon, they die.",
+  soldier: "You are safe from the Demon.",
+  mayor:
+    "If only 3 players live & no execution occurs, your team wins. If you die at night, another player might die instead.",
+  clockmaker:
+    "You start knowing how many steps from the Demon to its nearest Minion.",
+  grandmother:
+    "You start knowing a good player & their character. If the Demon kills them, you die too.",
+  gambler:
+    "Each night*, choose a player & guess their character: if you guess wrong, you die.",
+  artist:
+    "Once per game, during the day, privately ask the Storyteller any yes/no question.",
+  fool: "The 1st time you die, you don't.",
+  butler:
+    "Each night, choose a player (not yourself): tomorrow, you may only vote if they are voting too.",
+  drunk:
+    "You do not know you are the Drunk. You think you are a Townsfolk character, but you are not.",
+  recluse:
+    "You might register as evil & as a Minion or Demon, even if dead.",
+  saint: "If you die by execution, your team loses.",
+  moonchild:
+    "When you learn that you died, publicly choose 1 alive player. Tonight, if it was a good player, they die.",
+  poisoner:
+    "Each night, choose a player: they are poisoned tonight and tomorrow day.",
+  spy: "Each night, you see the Grimoire. You might register as good & as a Townsfolk or Outsider, even if dead.",
+  scarletwoman:
+    "If there are 5 or more players alive & the Demon dies, you become the Demon.",
+  baron: "There are extra Outsiders in play. [+2 Outsiders]",
+  assassin:
+    "Once per game, at night*, choose a player: they die, even if for some reason they could not.",
+  devilsadvocate:
+    "Each night, choose a living player (different to last night): if executed tomorrow, they don't die.",
+  imp: "Each night*, choose a player: they die. If you kill yourself this way, a Minion becomes the Imp.",
+};
+
 // Yes/no questions an Artist can ask the Storyteller about a player.
 export const ARTIST_QUESTIONS = {
   evil: "evil",

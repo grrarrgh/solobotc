@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
+import { ROLES, ABILITIES } from "../src/data.js";
+
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
 const html = read("../index.html");
@@ -14,6 +16,7 @@ test("feature controls are present", () => {
   assert.match(html, /id="reset"/);
   assert.match(html, /id="artist-question"/);
   assert.match(html, /id="artist-ask"/);
+  assert.match(html, /id="script-dialog"/);
   assert.match(html, /id="download-log"[^>]*download="log.txt"/);
 });
 
@@ -33,4 +36,15 @@ test("post-game reveal renders engine-provided Key Moments", () => {
   assert.match(app, /r\.keyMoments/);
   assert.match(app, /Key moments/);
   assert.match(app, /debugLog\(\)/);
+});
+
+test("the fireplace opens a script sheet with every character's ability", () => {
+  assert.match(app, /class="fireplace"/);
+  assert.match(app, /showScript/);
+  assert.match(app, /showModal\(\)/);
+  assert.match(css, /\.fireplace/);
+
+  for (const id of Object.keys(ROLES)) {
+    assert.ok(ABILITIES[id], `missing ability text for ${id}`);
+  }
 });
