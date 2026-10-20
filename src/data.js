@@ -48,6 +48,14 @@ export const ONGOING_INFO = ["empath", "fortuneteller", "undertaker"];
 // Adjust here: 0 = Minions never know them, 1 = they always do.
 export const MINION_BLUFF_CHANCE = 0.75;
 
+// When an NPC Slayer (or evil Slayer bluffer) fires their one shot. They never
+// shoot before SLAYER_SHOOT_AFTER_DAY; that day the chance is SLAYER_START_CHANCE,
+// rising by SLAYER_CHANCE_STEP each day after (capped at 100%).
+// With the defaults: Day 1 0%, Day 2 20%, Day 3 40%, ... Day 6 onwards 100%.
+export const SLAYER_SHOOT_AFTER_DAY = 2;
+export const SLAYER_START_CHANCE = 0.2;
+export const SLAYER_CHANCE_STEP = 0.2;
+
 // Official ability text, shown on the script sheet. "*" means "not the first
 // night".
 export const ABILITIES = {

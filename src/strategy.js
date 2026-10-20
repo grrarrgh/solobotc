@@ -1,4 +1,9 @@
-import { name } from "./data.js";
+import {
+  name,
+  SLAYER_SHOOT_AFTER_DAY,
+  SLAYER_START_CHANCE,
+  SLAYER_CHANCE_STEP,
+} from "./data.js";
 import { bluffInfo } from "./storyteller.js";
 import { pick, sample } from "./util.js";
 
@@ -121,10 +126,23 @@ export class SimpleStrategy {
     );
   }
 
-  // An NPC Slayer shoots a living NPC they suspect on Day 2 or Day 3: never
-  // on Day 1, a 50% chance on Day 2, and always by Day 3 if they haven't yet.
+  // The chance an NPC Slayer shoots today (see SLAYER_* in data.js).
+  slayChance(day) {
+    if (day < SLAYER_SHOOT_AFTER_DAY) {
+      return 0;
+    }
+
+    return Math.min(
+      1,
+      SLAYER_START_CHANCE + SLAYER_CHANCE_STEP * (day - SLAYER_SHOOT_AFTER_DAY),
+    );
+  }
+
+  // An NPC Slayer who hasn't fired yet may shoot a living NPC they suspect.
   slay(s, p) {
-    if (s.day < 2 || (s.day === 2 && s.r() >= 0.5)) {
+    const chance = this.slayChance(s.day);
+
+    if (!chance || s.r() >= chance) {
       return null;
     }
 

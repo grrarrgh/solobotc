@@ -1267,10 +1267,17 @@ test("a human Butler picks a master, whose vote their own vote depends on", () =
   assert.equal(mine.counted, false);
 });
 
-test("NPC Slayers never shoot on Day 1, and always shoot by Day 3", () => {
+test("NPC Slayers never shoot on Day 1, then 20% on Day 2, rising 20% a day", () => {
+  const strat = new SimpleStrategy();
+
+  assert.equal(strat.slayChance(1), 0);
+  assert.equal(strat.slayChance(2), 0.2);
+  assert.ok(Math.abs(strat.slayChance(3) - 0.4) < 1e-9);
+  assert.ok(Math.abs(strat.slayChance(4) - 0.6) < 1e-9);
+  assert.equal(strat.slayChance(10), 1);
+
   for (let i = 0; i < 30; i++) {
     const s = base(`slayer-timing-${i}`);
-    const strat = new SimpleStrategy();
     const slayer = s.players[1];
 
     role(slayer, "slayer", "good");
@@ -1278,7 +1285,11 @@ test("NPC Slayers never shoot on Day 1, and always shoot by Day 3", () => {
     s.day = 1;
     assert.equal(strat.slay(s, slayer), null);
 
-    s.day = 3;
-    assert.ok(strat.slay(s, slayer));
+    // By Day 10 the chance is 100%, at a living NPC they suspect.
+    s.day = 10;
+
+    const t = strat.slay(s, slayer);
+
+    assert.ok(t.alive && !t.human && t.id !== slayer.id);
   }
 });

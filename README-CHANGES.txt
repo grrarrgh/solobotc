@@ -104,4 +104,5 @@ Feature update:
 
 ## Bug Fix: NPC Slayer Timing
 
-- NPC Slayers (and evil NPCs bluffing as Slayer) no longer shoot on Day 1. They have a 50% chance to shoot at dawn on Day 2, and always shoot at dawn on Day 3 if they haven't yet. This replaces the old 35% chance every day.
+- NPC Slayers (and evil NPCs bluffing as Slayer) never shoot on Day 1. At dawn on Day 2 they have a 20% chance to shoot a living NPC they're suspicious of, rising by 20% each day after (40% on Day 3, 60% on Day 4, ... 100% from Day 6) until they've fired. This replaces the old 35% chance every day.
+- The timing is configurable in src/data.js: SLAYER_SHOOT_AFTER_DAY (default 2), SLAYER_START_CHANCE (default 0.2) and SLAYER_CHANCE_STEP (default 0.2).
