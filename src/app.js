@@ -1,4 +1,11 @@
-import { name, team, COUNTS, ARTIST_QUESTIONS, ABILITIES } from "./data.js";
+import {
+  ROLES,
+  name,
+  team,
+  COUNTS,
+  ARTIST_QUESTIONS,
+  ABILITIES,
+} from "./data.js";
 import { createState } from "./setup.js";
 import { Engine } from "./engine.js";
 
@@ -16,6 +23,58 @@ const esc = (x) =>
         "'": "&#39;",
       })[c],
   );
+
+// ── Role links ───────────────────────────────────────────────
+
+const ROLE_BY_NAME = new Map(Object.keys(ROLES).map((id) => [name(id), id]));
+
+const escapeRegExp = (x) => x.replace(/[.*+?^$()|[\]\\{}]/g, "\\$&");
+
+// Every character name, longest first so "Scarlet Woman" beats shorter ones.
+const ROLE_PATTERN = new RegExp(
+  `\\b(${[...ROLE_BY_NAME.keys()]
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRegExp)
+    .join("|")})\\b`,
+  "g",
+);
+
+// A character name that can be pressed to read about the role.
+const roleLink = (id) =>
+  `<button type="button" class="role-link" data-role="${esc(id)}">${esc(
+    name(id),
+  )}</button>`;
+
+// Escapes text, turning every character name in it into a role link.
+// (split() with a capture group puts the matched names at odd indexes.)
+const linkRoles = (text) =>
+  String(text ?? "")
+    .split(ROLE_PATTERN)
+    .map((part, i) => (i % 2 ? roleLink(ROLE_BY_NAME.get(part)) : esc(part)))
+    .join("");
+
+const TEAM_NAMES = {
+  townsfolk: "Townsfolk",
+  outsider: "Outsider",
+  minion: "Minion",
+  demon: "Demon",
+};
+
+// Opens a popup describing one character; pressing the popup closes it.
+function showRole(id) {
+  const ability = ABILITIES[id] ?? "";
+
+  $("role-sheet").innerHTML = `<h2>${esc(name(id))}</h2>
+    <p class="role-team team-${team(id)}">${esc(TEAM_NAMES[team(id)] ?? "")}</p>
+    <p>${esc(ability)}</p>
+    ${
+      ability.includes("*")
+        ? '<p class="script-footnote">* Not the first night.</p>'
+        : ""
+    }`;
+
+  $("role-dialog").showModal();
+}
 
 let scripts = [];
 let s;
@@ -226,7 +285,7 @@ function renderPublic() {
           .map(
             (x) =>
               // No whitespace around the text: entries keep their line breaks.
-              `<li class="log-entry">${esc(x)}</li>`,
+              `<li class="log-entry">${linkRoles(x)}</li>`,
           )
           .join("")}`,
     )
@@ -249,7 +308,7 @@ function reveal() {
       ${esc(r.winner.toUpperCase())} WINS
     </strong>
     <span>
-      ${esc(r.reason)}
+      ${linkRoles(r.reason)}
     </span>
   </div>`;
 
@@ -262,7 +321,7 @@ function reveal() {
           </header>
 
           <strong class="true-role">
-            ${esc(name(p.startRole))}
+            ${roleLink(p.startRole)}
           </strong>
 
           <span class="alignment ${p.alignment}">
@@ -272,7 +331,7 @@ function reveal() {
           ${
             p.role !== p.startRole
               ? `<p>
-                  Became ${esc(name(p.role))}
+                  Became ${roleLink(p.role)}
                 </p>`
               : ""
           }
@@ -288,7 +347,7 @@ function reveal() {
           ${
             p.claim !== p.startRole
               ? `<small>
-                  Claimed ${esc(name(p.claim))}
+                  Claimed ${roleLink(p.claim)}
                 </small>`
               : ""
           }
@@ -309,7 +368,7 @@ function reveal() {
                 ${esc(x.group)}
               </b>
               <span>
-                ${esc(x.text)}
+                ${linkRoles(x.text)}
               </span>
             </div>`,
         )
@@ -335,7 +394,7 @@ function render() {
   const t = selectedPlayerId ? e.player(selectedPlayerId) : null;
   const talk = e.talkStatus(t?.id);
 
-  $("role").textContent = `You are ${name(h.shown)}`;
+  $("role").innerHTML = `You are ${roleLink(h.shown)}`;
 
   $("status").textContent = s.winner
     ? `${s.winner.toUpperCase()}: ${s.reason}`
@@ -353,7 +412,7 @@ function render() {
 
   $("private").innerHTML = [...s.privateLog]
     .reverse()
-    .map((x) => `<li>${esc(x)}</li>`)
+    .map((x) => `<li class="log-entry">${linkRoles(x)}</li>`)
     .join("");
 
   renderPublic();
@@ -447,19 +506,26 @@ $("seats").onchange = () => {
   }
 };
 
-// Clicking the dimmed backdrop (outside the sheet) closes the script popup.
-$("script-dialog").onclick = (ev) => {
-  if (ev.target === $("script-dialog")) {
-    $("script-dialog").close();
+// Pressing a popup (or the dimmed backdrop around it) closes it.
+for (const id of ["script-dialog", "role-dialog"]) {
+  $(id).onclick = () => $(id).close();
+}
+
+// Any character name outside the town square opens its role popup.
+document.addEventListener("click", (ev) => {
+  const link = ev.target.closest?.(".role-link");
+
+  if (link) {
+    showRole(link.dataset.role);
   }
-};
+});
 
 $("reset").onclick = resetGame;
 $("start").onclick = start;
 
 $("ask").onclick = () => {
   try {
-    $("answer").textContent = e.ask(selectedPlayerId);
+    $("answer").innerHTML = linkRoles(e.ask(selectedPlayerId));
     render();
   } catch (err) {
     $("answer").textContent = err.message;
@@ -487,9 +553,8 @@ $("slay").onclick = () => {
 
 $("artist-ask").onclick = () => {
   try {
-    $("answer").textContent = e.artist(
-      selectedPlayerId,
-      $("artist-question").value,
+    $("answer").innerHTML = linkRoles(
+      e.artist(selectedPlayerId, $("artist-question").value),
     );
     render();
   } catch (err) {

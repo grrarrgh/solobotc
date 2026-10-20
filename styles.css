@@ -129,7 +129,9 @@ input {
   gap: 10px;
 }
 
-#public {
+/* Log entries already start with "Day N" / "Night N", so no list numbers. */
+#public,
+#private {
   list-style: none;
   padding: 0;
 }
@@ -433,6 +435,39 @@ input {
   font-size: 0.8rem;
 }
 
-.script-dialog form {
-  text-align: center;
+.script-dialog {
+  cursor: pointer;
+}
+
+/* ── Role links & role popup ─────────────────────────────── */
+
+/* Character names in text: press one to read about the role. */
+.role-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  border-bottom: 1px dotted currentColor;
+  border-radius: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.role-link:hover,
+.role-link:focus-visible {
+  color: #f0cf83;
+}
+
+.role-dialog {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.role-team {
+  margin: 2px 0 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.8rem;
 }

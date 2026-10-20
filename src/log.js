@@ -63,6 +63,7 @@ export function formatLog(s) {
     `Seats:   ${s.seats}`,
     `Seed:    ${s.seed}`,
     `Version: ${s.version}`,
+    `Bluffs:  ${(s.demonBluffs ?? []).map(name).join(", ") || "none"}`,
     `Result:  ${
       s.winner ? `${s.winner.toUpperCase()} wins — ${s.reason}` : "in progress"
     }`,

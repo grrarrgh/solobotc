@@ -230,9 +230,13 @@ export function createState(
     ),
   );
 
+  const demon = evil.find((x) => team(x.role) === "demon");
+
   setupLog(
     "bluffs",
-    `Demon bluffs: ${demonBluffs.map(name).join(", ") || "none"}.`,
+    `Demon bluffs (told to ${demon?.label ?? "the Demon"}): ${
+      demonBluffs.map(name).join(", ") || "none"
+    }. ${demon ? `${demon.label} bluffs as ${name(demon.claim)}.` : ""}`.trim(),
   );
 
   for (const p of evil.filter((x) => team(x.role) === "minion")) {

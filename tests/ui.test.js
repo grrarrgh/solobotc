@@ -48,3 +48,16 @@ test("the fireplace opens a script sheet with every character's ability", () => 
     assert.ok(ABILITIES[id], `missing ability text for ${id}`);
   }
 });
+
+test("character names become role popups that close when pressed", () => {
+  assert.match(html, /id="role-dialog"/);
+  assert.doesNotMatch(html, /id="script-close"/);
+  assert.match(app, /linkRoles/);
+  assert.match(app, /class="role-link"/);
+  assert.match(app, /\$\(id\)\.close\(\)/);
+  assert.match(css, /\.role-link/);
+});
+
+test("the Storyteller log has no list numbers", () => {
+  assert.match(css, /#private\s*\{\s*list-style: none/);
+});

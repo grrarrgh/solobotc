@@ -83,3 +83,11 @@ Feature update:
 ## New Feature: Fireplace Script Sheet
 
 - A fireplace sits in the centre of the town square. Pressing it opens a popup showing the script being played (name and author) and every character on it, grouped into Townsfolk, Outsiders, Minions and Demons (good teams in blue, evil in red), each with its official ability text. Close it with the Close button, the Escape key, or by clicking outside it.
+
+## Bug Fixes: Bluffs in Log, Role Popups, Script Popup & Storyteller Log
+
+- Debug log: the header now lists the Demon's three bluffs, and the Setup section records which player was told them and which one they bluff as.
+- Role popups: every character name outside the town square (your role heading, NPC answers, the Storyteller and Public logs, the final reveal and Key Moments) is now a dotted-underlined link. Pressing it opens a popup with the character's name, team and ability; pressing the popup closes it. The town square seats are unchanged.
+- Script popup: the Close button is gone; pressing the popup (or the area around it) closes it.
+- Storyteller log: entries no longer have list numbers ("1.", "2.", ...); each line starts with its "Night N" label, styled like the Public Log.
+- Increase chance that Minions get bluffs by 25%

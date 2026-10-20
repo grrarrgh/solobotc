@@ -1108,3 +1108,19 @@ test("NPC suspicion stays put within a day, moves off dead players, and never la
     assert.notEqual(now.id, chef.id);
   }
 });
+
+test("the debug log lists the Demon's bluffs at setup", () => {
+  const s = createState(ecp, 10, "log-bluffs");
+  const e = new Engine(s);
+
+  e.start();
+  e.finish("good", "Test complete.");
+
+  const log = e.debugLog();
+  const names = s.demonBluffs.map(name).join(", ");
+
+  assert.equal(s.demonBluffs.length, 3);
+  assert.ok(log.includes(`Bluffs:  ${names}`));
+  assert.ok(log.includes(`[bluffs] Demon bluffs (told to `));
+  assert.ok(log.indexOf("[bluffs]") < log.indexOf("=== Night 1"));
+});

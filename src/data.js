@@ -46,7 +46,7 @@ export const ONGOING_INFO = ["empath", "fortuneteller", "undertaker"];
 
 // Chance (0–1) that each Minion also learns the Demon's three bluffs.
 // Adjust here: 0 = Minions never know them, 1 = they always do.
-export const MINION_BLUFF_CHANCE = 0.5;
+export const MINION_BLUFF_CHANCE = 0.75;
 
 // Official ability text, shown on the script sheet. "*" means "not the first
 // night".
