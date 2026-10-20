@@ -134,6 +134,14 @@ export class SimpleStrategy {
     );
   }
 
+  // A Butler picks any other living player as master.
+  butler(s, p) {
+    return pick(
+      s.players.filter((x) => x.alive && x.id !== p.id),
+      s.r,
+    );
+  }
+
   // A Gambler guesses another living player is the character they claim.
   gamble(s, p) {
     const target = pick(

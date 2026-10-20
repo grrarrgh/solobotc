@@ -218,6 +218,8 @@ export function createState(
     slayerUsed: false,
     moonCurse: null,
     advocate: null,
+    pending: null,
+    humanChoice: null,
   };
 
   const setupLog = (type, text) =>

@@ -91,3 +91,13 @@ Feature update:
 - Script popup: the Close button is gone; pressing the popup (or the area around it) closes it.
 - Storyteller log: entries no longer have list numbers ("1.", "2.", ...); each line starts with its "Night N" label, styled like the Public Log.
 - Increase chance that Minions get bluffs by 25%
+
+## Bug Fix: Human Night Choices
+
+- If the human's character chooses players at night, the Storyteller now wakes them. A panel below the town square shows the prompt; the human clicks living players in the town square (clicking again un-picks; a new pick replaces the oldest once the limit is reached) and presses "Select". The night then carries on in night order.
+  - Monk (from Night 2): choose 1 player to protect from the Demon.
+  - Fortune Teller (every night): choose 2 players; you learn if either is the Demon.
+  - Butler (every night): choose your master; tomorrow your vote only counts if they vote too.
+- Drunk or poisoned: the human is still woken and still chooses, but the result may be wrong: a Monk's protection fails, a Fortune Teller's answer is wrong (Drunk) or random (poisoned), and a Butler's vote restriction doesn't apply.
+- NPC Butlers now choose a master each night too (before, their votes never counted). Evil NPCs bluffing as the Butler report a choice.
+- The wake-up and the human's choice are recorded in log.txt.

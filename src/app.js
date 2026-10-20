@@ -81,6 +81,9 @@ let s;
 let e;
 let selectedPlayerId = null;
 
+// Players picked in the town square while the Storyteller has woken you.
+let nightPicks = [];
+
 async function load() {
   try {
     const files = await fetch("scripts/index.json").then((r) => r.json());
@@ -148,7 +151,9 @@ function circle() {
         <button
           title="${esc(p.label)}"
           class="seat ${p.human ? "human" : ""} ${p.alive ? "" : "dead"} ${
-            p.id === selectedPlayerId ? "selected" : ""
+            (s.pending ? nightPicks.includes(p.id) : p.id === selectedPlayerId)
+              ? "selected"
+              : ""
           }"
           style="--a:${i / s.players.length * 360}deg"
           data-id="${p.id}"
@@ -191,12 +196,55 @@ function circle() {
     .querySelectorAll("[data-id]:not(:disabled)")
     .forEach((b) => {
       b.onclick = () => {
-        selectedPlayerId = b.dataset.id;
+        if (s.pending) {
+          pickAtNight(b.dataset.id);
+        } else {
+          selectedPlayerId = b.dataset.id;
+          $("answer").textContent = "";
+        }
 
-        $("answer").textContent = "";
         render();
       };
     });
+}
+
+// Toggles a living player in or out of tonight's picks. Once the limit is
+// reached, a new pick replaces the oldest one.
+function pickAtNight(id) {
+  if (!e.player(id)?.alive) {
+    return;
+  }
+
+  if (nightPicks.includes(id)) {
+    nightPicks = nightPicks.filter((x) => x !== id);
+  } else {
+    nightPicks = [...nightPicks, id].slice(-s.pending.count);
+  }
+
+  $("night-error").textContent = "";
+}
+
+// The "Storyteller wakes you" panel shown during a night choice.
+function renderNightChoice() {
+  const p = s.pending;
+
+  $("night-choice").hidden = !p;
+
+  if (!p) {
+    return;
+  }
+
+  const labels = nightPicks.map((id) => e.player(id).label).join(" and ");
+
+  $("night-prompt").innerHTML = `Night ${p.night}: the Storyteller wakes you (${roleLink(
+    p.role,
+  )}). ${esc(p.prompt)}`;
+
+  $("night-picks").textContent = nightPicks.length
+    ? `Selected: ${labels}`
+    : `Click ${p.count} player${p.count > 1 ? "s" : ""} in the town square.`;
+
+  $("night-select").disabled = nightPicks.length !== p.count;
 }
 
 // ── Script sheet ─────────────────────────────────────────────
@@ -416,8 +464,9 @@ function render() {
     .join("");
 
   renderPublic();
+  renderNightChoice();
 
-  $("actions").hidden = !!s.winner || !t;
+  $("actions").hidden = !!s.winner || !t || !!s.pending;
   $("ask").disabled = !t || talk.already || !talk.remaining;
   $("nominate").disabled = !t?.alive || !h.alive || e.nominatedToday(t.id);
   $("slay").hidden = !(h.shown === "slayer" && !s.slayerUsed && h.alive);
@@ -481,6 +530,9 @@ function resetGame() {
   s = null;
   e = null;
   selectedPlayerId = null;
+  nightPicks = [];
+
+  $("night-choice").hidden = true;
 
   $("game").hidden = true;
   $("setup").hidden = false;
@@ -559,6 +611,16 @@ $("artist-ask").onclick = () => {
     render();
   } catch (err) {
     $("answer").textContent = err.message;
+  }
+};
+
+$("night-select").onclick = () => {
+  try {
+    e.choose(nightPicks);
+    nightPicks = [];
+    render();
+  } catch (err) {
+    $("night-error").textContent = err.message;
   }
 };
 

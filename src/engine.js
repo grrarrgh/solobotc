@@ -5,6 +5,7 @@ import {
   works,
   ravenInfo,
   monkInfo,
+  butlerInfo,
   gamblerInfo,
   artistInfo,
 } from "./storyteller.js";
@@ -115,6 +116,8 @@ export class Engine {
     return this.s;
   }
 
+  // Starts a night. If the human has a night choice, the Storyteller wakes
+  // them and the night waits (s.pending) until choose() is called.
   night() {
     const s = this.s;
 
@@ -123,12 +126,99 @@ export class Engine {
     }
 
     s.phase = "night";
+    s.humanChoice = null;
 
     s.players.forEach((x) => {
       x.protected = false;
       x.poisoned = false;
     });
 
+    s.pending = this.wakeHuman();
+
+    if (s.pending) {
+      this.audit(
+        "wake",
+        `The Storyteller woke ${this.human().label} (${name(
+          s.pending.role,
+        )}): ${s.pending.prompt}`,
+      );
+      return;
+    }
+
+    this.resolveNight();
+  }
+
+  // What the human must choose tonight, or null if they don't wake.
+  wakeHuman() {
+    const s = this.s;
+    const h = this.human();
+    const role = ability(h);
+    const candidates = s.players.filter((x) => x.alive && !x.human);
+
+    const wake = {
+      monk:
+        s.night > 1 && {
+          count: 1,
+          prompt: "Choose a player to protect from the Demon tonight.",
+        },
+      fortuneteller: {
+        count: 2,
+        prompt: "Choose 2 players: you learn if either is the Demon.",
+      },
+      butler: {
+        count: 1,
+        prompt:
+          "Choose your master: tomorrow, your vote only counts if they vote too.",
+      },
+    }[role];
+
+    if (!h.alive || !wake || candidates.length < wake.count) {
+      return null;
+    }
+
+    return { role, night: s.night, ...wake };
+  }
+
+  // The human's night choice: `ids` are the players they selected.
+  choose(ids) {
+    const s = this.s;
+    const p = s.pending;
+
+    const picked = [...new Set(ids)].map((id) => this.player(id));
+
+    if (!p) {
+      throw Error("Nothing to choose.");
+    }
+
+    if (
+      picked.length !== p.count ||
+      picked.some((x) => !x?.alive || x.human)
+    ) {
+      throw Error(`Select ${p.count} living player${p.count > 1 ? "s" : ""}.`);
+    }
+
+    s.pending = null;
+    s.humanChoice = { role: p.role, night: s.night, players: picked };
+
+    this.audit(
+      "choice",
+      `${this.human().label} chose ${picked.map((x) => x.label).join(" and ")}.`,
+      { targetIds: picked.map((x) => x.id) },
+    );
+
+    this.resolveNight();
+  }
+
+  // The human's choice for tonight, if they made one.
+  humanPicks(p) {
+    const c = this.s.humanChoice;
+
+    return p.human && c?.night === this.s.night ? c.players : null;
+  }
+
+  // The rest of the night, in night order, then dawn.
+  resolveNight() {
+    const s = this.s;
     const poisoner = s.players.find((x) => x.alive && x.role === "poisoner");
 
     if (poisoner) {
@@ -156,7 +246,7 @@ export class Engine {
       for (const m of s.players.filter(
         (x) => x.alive && ability(x) === "monk",
       )) {
-        const t = this.strat.monk(s, m);
+        const t = this.humanPicks(m)?.[0] ?? this.strat.monk(s, m);
 
         if (t) {
           const effective = works(m);
@@ -198,13 +288,14 @@ export class Engine {
     }
 
     for (const p of s.players) {
-      const info = nightInfo(s, p, this.strat);
+      const info = nightInfo(s, p, this.strategyFor(p));
 
       if (info) {
         this.remember(p, info);
       }
     }
 
+    this.butlers();
     this.bluffs();
     this.snapshot();
 
@@ -222,6 +313,47 @@ export class Engine {
 
     this.npcShots();
     this.npcArtists();
+  }
+
+  // The strategy used for p's night info: for the human, the Fortune Teller's
+  // two players are the ones they selected (even if drunk or poisoned, in
+  // which case only the answer may be wrong).
+  strategyFor(p) {
+    const picks = this.humanPicks(p);
+
+    if (!picks) {
+      return this.strat;
+    }
+
+    const strat = Object.create(this.strat);
+    strat.ft = () => picks;
+
+    return strat;
+  }
+
+  // Each Butler picks a master for tomorrow's vote.
+  butlers() {
+    const s = this.s;
+
+    for (const b of s.players.filter(
+      (x) => x.alive && ability(x) === "butler",
+    )) {
+      const t = this.humanPicks(b)?.[0] ?? this.strat.butler(s, b);
+
+      if (!t) {
+        continue;
+      }
+
+      b.master = t.id;
+
+      this.audit(
+        "butler",
+        `${b.label} (${name(b.role)}) chose ${t.label} as master.`,
+        { actorId: b.id, targetId: t.id, effective: works(b) },
+      );
+
+      this.remember(b, butlerInfo(s, t));
+    }
   }
 
   // ── Night actions: Everyone Can Play ──────────────────────

@@ -59,6 +59,16 @@ export const monkInfo = (s, t, functioning = true) => ({
   functioning,
 });
 
+// What a Butler remembers about the master they chose.
+export const butlerInfo = (s, t) => ({
+  night: s.night,
+  role: "butler",
+  text: `Butler: chose ${t.label} as master.`,
+  targets: [t.id],
+  trigger: "normal",
+  functioning: true,
+});
+
 // What a Gambler remembers about their guess (they never learn if it was right).
 export const gamblerInfo = (s, t, guess) => ({
   night: s.night,
@@ -441,6 +451,12 @@ export function bluffInfo(s, p, strat) {
     const t = s.night > 1 ? strat.monk(s, p) : null;
 
     return t ? monkInfo(s, t) : null;
+  }
+
+  if (role === "butler") {
+    const t = strat.butler(s, p);
+
+    return t ? butlerInfo(s, t) : null;
   }
 
   if (role === "gambler") {

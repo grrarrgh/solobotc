@@ -61,3 +61,9 @@ test("character names become role popups that close when pressed", () => {
 test("the Storyteller log has no list numbers", () => {
   assert.match(css, /#private\s*\{\s*list-style: none/);
 });
+
+test("night choices have a Select panel wired to the engine", () => {
+  assert.match(html, /id="night-choice"/);
+  assert.match(html, /id="night-select"[^>]*>Select</);
+  assert.match(app, /e\.choose\(nightPicks\)/);
+});

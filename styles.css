@@ -118,6 +118,24 @@ input {
   text-align: center;
 }
 
+/* The Storyteller has woken you: pick players in the town square. */
+.night-choice {
+  max-width: 650px;
+  margin: 12px auto;
+  text-align: center;
+  border-color: #b69455;
+  background: #1a1d26;
+}
+
+.night-choice h3 {
+  margin: 0 0 6px;
+  color: #f0cf83;
+}
+
+#night-error {
+  color: #ef6b72;
+}
+
 #selected-player {
   margin: 0 0 8px;
   color: #f0cf83;

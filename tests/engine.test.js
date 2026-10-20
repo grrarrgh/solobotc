@@ -67,6 +67,7 @@ test("starts game", () => {
   const e = new Engine(s);
 
   e.start();
+  settle(e);
 
   assert.equal(s.players.length, 10);
   assert.equal(s.phase, "day");
@@ -615,7 +616,10 @@ test("Everyone Can Play loads ({ id } entries) and starts", () => {
   assert.equal(s.script.meta.name, "Everyone Can Play");
   assert.equal(s.script.ids.length, 24);
 
-  new Engine(s).start();
+  const e = new Engine(s);
+
+  e.start();
+  settle(e);
 
   assert.equal(s.phase, "day");
 });
@@ -780,6 +784,7 @@ test("the Devil's Advocate's pick survives execution the next day", () => {
   const strat = new SimpleStrategy();
 
   strat.advocate = () => imp;
+  strat.butler = () => s.players[0]; // the Butler follows the human's vote
   strat.vote = () => true;
   strat.demon = () => null;
 
@@ -1114,6 +1119,7 @@ test("the debug log lists the Demon's bluffs at setup", () => {
   const e = new Engine(s);
 
   e.start();
+  settle(e);
   e.finish("good", "Test complete.");
 
   const log = e.debugLog();
@@ -1123,4 +1129,140 @@ test("the debug log lists the Demon's bluffs at setup", () => {
   assert.ok(log.includes(`Bluffs:  ${names}`));
   assert.ok(log.includes(`[bluffs] Demon bluffs (told to `));
   assert.ok(log.indexOf("[bluffs]") < log.indexOf("=== Night 1"));
+});
+
+// ── Human night choices ──────────────────────────────────────
+
+// If the Storyteller has woken the human, choose the first eligible players.
+function settle(e) {
+  while (e.s.pending) {
+    e.choose(
+      e.s.players
+        .filter((p) => p.alive && !p.human)
+        .slice(0, e.s.pending.count)
+        .map((p) => p.id),
+    );
+  }
+}
+
+// Night 1 with the human as `shown` (secretly `trueRole`).
+function humanNight(seed, trueRole, shown = trueRole, night = 1) {
+  const s = base(seed);
+  const human = s.players[0];
+
+  role(human, trueRole, "good");
+  human.shown = shown;
+  human.claim = shown;
+
+  s.phase = "night";
+  s.night = night;
+  s.day = night - 1;
+
+  const strat = new SimpleStrategy();
+  strat.demon = () => null;
+
+  return { s, human, strat, e: new Engine(s, strat) };
+}
+
+test("a human Fortune Teller is woken to pick 2 players, and learns about them", () => {
+  const { s, human, e } = humanNight("human-ft", "fortuneteller");
+  const imp = s.players[4];
+  const chef = s.players[1];
+
+  e.start();
+
+  assert.equal(s.phase, "night");
+  assert.equal(s.pending.count, 2);
+  assert.throws(() => e.ask(chef.id), /Talk during the day/);
+  assert.throws(() => e.choose([chef.id]), /Select 2 living players/);
+
+  e.choose([chef.id, imp.id]);
+
+  assert.equal(s.pending, null);
+  assert.equal(s.phase, "day");
+  assert.equal(
+    human.memories[0].text,
+    `Fortune Teller: YES for ${chef.label} and ${imp.label}.`,
+  );
+  assert.deepEqual(human.memories[0].targets, [chef.id, imp.id]);
+});
+
+test("a drunk human Fortune Teller's picks are used, but the answer is wrong", () => {
+  const { s, human, e } = humanNight("human-ft-drunk", "drunk", "fortuneteller");
+  const chef = s.players[1];
+  const imp = s.players[4];
+
+  e.start();
+  e.choose([chef.id, imp.id]);
+
+  assert.equal(
+    human.memories[0].text,
+    `Fortune Teller: NO for ${chef.label} and ${imp.label}.`,
+  );
+});
+
+test("a human Monk is woken from Night 2, and their pick is safe from the Demon", () => {
+  const { s, human, strat, e } = humanNight("human-monk", "monk", "monk", 2);
+  const chef = s.players[1];
+
+  strat.demon = () => chef;
+
+  e.night();
+
+  assert.equal(s.pending.count, 1);
+  assert.throws(() => e.choose([human.id]), /Select 1 living player/);
+
+  e.choose([chef.id]);
+
+  assert.equal(chef.alive, true);
+  assert.equal(
+    human.memories[0].text,
+    `Monk: protected ${chef.label} from the Demon.`,
+  );
+});
+
+test("a poisoned human Monk still picks, but the protection fails", () => {
+  const { s, human, strat, e } = humanNight("human-monk-poisoned", "monk", "monk", 2);
+  const chef = s.players[1];
+
+  role(s.players[3], "poisoner", "evil");
+  strat.poison = () => human;
+  strat.demon = () => chef;
+
+  e.night();
+  e.choose([chef.id]);
+
+  assert.equal(human.poisoned, true);
+  assert.equal(chef.alive, false);
+  assert.equal(
+    human.memories[0].text,
+    `Monk: protected ${chef.label} from the Demon.`,
+  );
+});
+
+test("the human Monk is not woken on Night 1", () => {
+  const { s, e } = humanNight("human-monk-n1", "monk");
+
+  e.start();
+
+  assert.equal(s.pending, null);
+  assert.equal(s.phase, "day");
+});
+
+test("a human Butler picks a master, whose vote their own vote depends on", () => {
+  const { s, human, e } = humanNight("human-butler", "butler");
+  const chef = s.players[1];
+
+  e.strat.vote = () => false;
+  e.start();
+  e.choose([chef.id]);
+
+  assert.equal(human.master, chef.id);
+
+  // The chef doesn't vote, so the Butler's own vote doesn't count.
+  const result = e.nominate(s.players[2].id);
+  const mine = result.records.find((r) => r.playerId === human.id);
+
+  assert.equal(mine.attempted, true);
+  assert.equal(mine.counted, false);
 });
