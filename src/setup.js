@@ -1,60 +1,74 @@
-import {
-  ROLES,
-  COUNTS,
-  FORBIDDEN_HUMAN,
-  team,
-  alignment,
-  name
-} from "./data.js";
-import {
-  rng,
-  pick,
-  sample,
-  shuffle
-} from "./util.js";
+import { ROLES, COUNTS, FORBIDDEN_HUMAN, team, alignment, name } from "./data.js";
+import { rng, pick, sample, shuffle } from "./util.js";
+
 export function parseScript(raw) {
-  const meta = raw.find(x => typeof x === "object" && x.id === "_meta") ?? {
-      name: "Unnamed"
+  const meta = raw.find((x) => typeof x === "object" && x.id === "_meta") ?? {
+      name: "Unnamed",
     },
-    ids = raw.filter(x => typeof x === "string"),
-    bad = ids.filter(x => !ROLES[x]);
+    ids = raw.filter((x) => typeof x === "string"),
+    bad = ids.filter((x) => !ROLES[x]);
+
   if (bad.length) throw Error(`Unsupported: ${bad}`);
-  return {
-    meta,
-    ids
-  }
+
+  return { meta, ids };
 }
+
 export function createState(raw, seats, seed = Date.now()) {
   const script = parseScript(raw),
     base = COUNTS[seats];
   if (!base) throw Error("Choose 5–15 seats");
+
   const r = rng(seed),
-    pool = t => script.ids.filter(id => team(id) === t);
+    pool = (t) => script.ids.filter((id) => team(id) === t);
+
+  // Draw roles; the Baron swaps two townsfolk for two outsiders.
   let [t, o, m] = base;
   const mins = sample(pool("minion"), m, r);
   if (mins.includes("baron")) {
     t -= 2;
-    o += 2
+    o += 2;
   }
-  let roles = shuffle([...sample(pool("townsfolk"), t, r), ...sample(pool("outsider"), o, r), ...mins, ...sample(pool("demon"), 1, r)], r);
-  let safe = roles.map((x, i) => alignment(x) === "good" && !FORBIDDEN_HUMAN.has(x) ? i : -1).filter(i => i >= 0);
+
+  let roles = shuffle(
+    [
+      ...sample(pool("townsfolk"), t, r),
+      ...sample(pool("outsider"), o, r),
+      ...mins,
+      ...sample(pool("demon"), 1, r),
+    ],
+    r,
+  );
+
+  // The human must get a good role that works in solo play.
+  let safe = roles
+    .map((x, i) =>
+      alignment(x) === "good" && !FORBIDDEN_HUMAN.has(x) ? i : -1,
+    )
+    .filter((i) => i >= 0);
+
   if (!safe.length) {
-    const i = roles.findIndex(x => alignment(x) === "good"),
-      replacement = pool("townsfolk").find(x => !roles.includes(x) && !FORBIDDEN_HUMAN.has(x));
+    const i = roles.findIndex((x) => alignment(x) === "good"),
+      replacement = pool("townsfolk").find(
+        (x) => !roles.includes(x) && !FORBIDDEN_HUMAN.has(x),
+      );
     if (i < 0 || !replacement) throw Error("No solo-safe human role");
     roles[i] = replacement;
-    safe = [i]
+    safe = [i];
   }
+
+  // Move the human's role into seat 1.
   const hi = pick(safe, r);
   [roles[0], roles[hi]] = [roles[hi], roles[0]];
+
   const used = new Set(roles),
-    unusedTF = pool("townsfolk").filter(x => !used.has(x));
+    unusedTF = pool("townsfolk").filter((x) => !used.has(x));
+
   const players = roles.map((role, i) => {
     const shown = role === "drunk" ? (unusedTF.shift() ?? "chef") : role;
     return {
-      id: `p${i+1}`,
+      id: `p${i + 1}`,
       seat: i + 1,
-      label: i ? `Player ${i+1}` : "You",
+      label: i ? `Player ${i + 1}` : "You",
       human: i === 0,
       role,
       startRole: role,
@@ -70,15 +84,29 @@ export function createState(raw, seats, seed = Date.now()) {
       bluff: null,
       memories: [],
       talks: [],
-      death: null
-    }
+      death: null,
+    };
   });
-  const bluffs = sample(script.ids.filter(x => alignment(x) === "good" && !used.has(x)), 3, r);
-  players.filter(x => x.alignment === "evil").forEach((p, i) => {
-    p.bluff = bluffs[i % Math.max(1, bluffs.length)] ?? "chef";
-    p.claim = p.bluff
-  });
-  const red = pick(players.filter(x => x.alignment === "good"), r)?.id;
+
+  // Evil players bluff as good characters not in play.
+  const bluffs = sample(
+    script.ids.filter((x) => alignment(x) === "good" && !used.has(x)),
+    3,
+    r,
+  );
+  players
+    .filter((x) => x.alignment === "evil")
+    .forEach((p, i) => {
+      p.bluff = bluffs[i % Math.max(1, bluffs.length)] ?? "chef";
+      p.claim = p.bluff;
+    });
+
+  // Fortune Teller red herring.
+  const red = pick(
+    players.filter((x) => x.alignment === "good"),
+    r,
+  )?.id;
+
   const s = {
     version: "2.3.1",
     script,
@@ -102,13 +130,17 @@ export function createState(raw, seats, seed = Date.now()) {
     talked: [],
     talkDay: 0,
     red,
-    slayerUsed: false
+    slayerUsed: false,
   };
-  players.forEach(p => s.audit.push({
-    id: s.auditId++,
-    group: "Setup",
-    type: "role",
-    text: `${name(p.role)}; shown ${name(p.shown)}; claim ${name(p.claim)}.`
-  }));
-  return s
+
+  players.forEach((p) =>
+    s.audit.push({
+      id: s.auditId++,
+      group: "Setup",
+      type: "role",
+      text: `${name(p.role)}; shown ${name(p.shown)}; claim ${name(p.claim)}.`,
+    }),
+  );
+
+  return s;
 }

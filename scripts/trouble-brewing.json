@@ -1,5 +1,25 @@
-[{
-  "id": "_meta",
-  "name": "Trouble Brewing",
-  "author": "Scriptorium"
-}, "washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "ravenkeeper", "virgin", "slayer", "soldier", "mayor", "butler", "drunk", "recluse", "saint", "poisoner", "spy", "scarletwoman", "baron", "imp"]
+[
+  { "id": "_meta", "name": "Trouble Brewing", "author": "Scriptorium" },
+  "washerwoman",
+  "librarian",
+  "investigator",
+  "chef",
+  "empath",
+  "fortuneteller",
+  "undertaker",
+  "monk",
+  "ravenkeeper",
+  "virgin",
+  "slayer",
+  "soldier",
+  "mayor",
+  "butler",
+  "drunk",
+  "recluse",
+  "saint",
+  "poisoner",
+  "spy",
+  "scarletwoman",
+  "baron",
+  "imp"
+]

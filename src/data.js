@@ -1,3 +1,4 @@
+// id: [display name, team]
 export const ROLES = {
   washerwoman: ["Washerwoman", "townsfolk"],
   librarian: ["Librarian", "townsfolk"],
@@ -23,6 +24,7 @@ export const ROLES = {
   imp: ["Imp", "demon"],
 };
 
+// seats: [townsfolk, outsiders, minions, demons]
 export const COUNTS = {
   5: [3, 0, 1, 1],
   6: [3, 1, 1, 1],
@@ -41,4 +43,5 @@ export const FORBIDDEN_HUMAN = new Set(["ravenkeeper", "virgin", "soldier"]);
 
 export const name = (id) => ROLES[id]?.[0] ?? id;
 export const team = (id) => ROLES[id]?.[1];
-export const alignment = (id) => ["townsfolk", "outsider"].includes(team(id)) ? "good" : "evil";
+export const alignment = (id) =>
+  ["townsfolk", "outsider"].includes(team(id)) ? "good" : "evil";

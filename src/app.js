@@ -1,27 +1,20 @@
-import {
-  name,
-  COUNTS
-} from "./data.js";
-import {
-  createState
-} from "./setup.js";
-import {
-  Engine
-} from "./engine.js";
+import { name, COUNTS } from "./data.js";
+import { createState } from "./setup.js";
+import { Engine } from "./engine.js";
 
-const $ = id =>
-  document.getElementById(id);
+const $ = (id) => document.getElementById(id);
 
-const esc = x =>
+const esc = (x) =>
   String(x ?? "").replace(
     /[&<>"']/g,
-    c => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;"
-    } [c])
+    (c) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[c],
   );
 
 let scripts = [];
@@ -31,50 +24,34 @@ let selectedPlayerId = null;
 
 async function load() {
   try {
-    const files =
-      await fetch(
-        "scripts/index.json"
-      ).then(r => r.json());
+    const files = await fetch("scripts/index.json").then((r) => r.json());
 
-    scripts =
-      await Promise.all(
-        files.map(
-          async f => ({
-            file: f,
-            raw: await fetch(
-              `scripts/${f}`
-            ).then(
-              r => r.json()
-            )
-          })
-        )
-      );
+    scripts = await Promise.all(
+      files.map(async (f) => ({
+        file: f,
+        raw: await fetch(`scripts/${f}`).then((r) => r.json()),
+      })),
+    );
 
-    $("script").innerHTML =
-      scripts.map(
+    $("script").innerHTML = scripts
+      .map(
         (x, i) =>
-        `<option value="${i}">${
-            esc(
-              x.raw.find(
-                y=>y?.id==="_meta"
-              )?.name??x.file
-            )
-          }</option>`
-      ).join("");
+          `<option value="${i}">${esc(
+            x.raw.find((y) => y?.id === "_meta")?.name ?? x.file,
+          )}</option>`,
+      )
+      .join("");
   } catch (err) {
-    $("error").textContent =
-      err.message;
+    $("error").textContent = err.message;
   }
 }
 
 function start() {
   try {
     s = createState(
-      scripts[
-        +$("script").value
-      ].raw,
+      scripts[+$("script").value].raw,
       +$("seats").value,
-      $("seed").value
+      $("seed").value,
     );
 
     e = new Engine(s);
@@ -87,158 +64,102 @@ function start() {
 
     render();
   } catch (err) {
-    $("error").textContent =
-      err.message;
+    $("error").textContent = err.message;
   }
 }
 
+// ── Rendering ────────────────────────────────────────────────
+
 function circle() {
-  const voters =
-    new Set(
-      (
-        s.lastVote?.records ?? []
-      )
-      .filter(x => x.counted)
-      .map(x => x.playerId)
-    );
+  const voters = new Set(
+    (s.lastVote?.records ?? [])
+      .filter((x) => x.counted)
+      .map((x) => x.playerId),
+  );
 
-  $("circle").innerHTML =
-    s.players.map(
-      (p, i) => {
-        const token =
-          p.human ||
-          p.claimKnown ?
-          name(p.claim) :
-          "Unknown";
+  $("circle").innerHTML = s.players
+    .map((p, i) => {
+      const token = p.human || p.claimKnown ? name(p.claim) : "Unknown";
 
-        return `
-          <button
-            title="${esc(p.label)}"
-            class="seat ${
-              p.human?"human":""
-            } ${
-              p.alive?"":"dead"
-            } ${
-              p.id===selectedPlayerId
-                ?"selected"
-                :""
-            }"
-            style="--a:${
-              i/s.players.length*360
-            }deg"
-            data-id="${p.id}"
-            ${
-              p.human
-                ?"disabled"
-                :""
-            }
-          >
-            ${
-              voters.has(p.id)
-                ?'<span class="vote-hand">✋</span>'
-                :""
-            }
+      return `
+        <button
+          title="${esc(p.label)}"
+          class="seat ${p.human ? "human" : ""} ${p.alive ? "" : "dead"} ${
+            p.id === selectedPlayerId ? "selected" : ""
+          }"
+          style="--a:${i / s.players.length * 360}deg"
+          data-id="${p.id}"
+          ${p.human ? "disabled" : ""}
+        >
+          ${voters.has(p.id) ? '<span class="vote-hand">✋</span>' : ""}
 
-            <span class="token ${
-              p.claimKnown||
-              p.human
-                ?""
-                :"unknown"
-            }">
-              ${esc(token)}
-            </span>
+          <span class="token ${p.claimKnown || p.human ? "" : "unknown"}">
+            ${esc(token)}
+          </span>
 
-            <small>
-              ${esc(p.label)}
-            </small>
+          <small>
+            ${esc(p.label)}
+          </small>
 
-            <br>
+          <br>
 
-            <small>
-              ${
-                p.alive
-                  ?"alive"
-                  :"DEAD"
-              }
-            </small>
-          </button>
-        `;
-      }
-    ).join("");
+          <small>
+            ${p.alive ? "alive" : "DEAD"}
+          </small>
+        </button>
+      `;
+    })
+    .join("");
 
   $("circle")
-    .querySelectorAll(
-      "[data-id]:not(:disabled)"
-    )
-    .forEach(
-      b =>
+    .querySelectorAll("[data-id]:not(:disabled)")
+    .forEach((b) => {
       b.onclick = () => {
-        selectedPlayerId =
-          b.dataset.id;
+        selectedPlayerId = b.dataset.id;
 
         $("answer").textContent = "";
         render();
-      }
-    );
+      };
+    });
 }
 
+// Groups log lines by their "Day N" prefix, newest first.
 function renderPublic() {
   const groups = [];
   let current = null;
 
   for (const text of s.publicLog) {
-    const m =
-      text.match(
-        /^Day\s+(\d+)/i
-      );
+    const m = text.match(/^Day\s+(\d+)/i);
+    const day = m?.[1] ?? current?.day ?? String(s.day || 1);
 
-    const day =
-      m?.[1] ??
-      current?.day ??
-      String(s.day || 1);
-
-    if (
-      !current ||
-      current.day !== day
-    ) {
-      current = {
-        day,
-        items: []
-      };
-
+    if (!current || current.day !== day) {
+      current = { day, items: [] };
       groups.push(current);
     }
 
     current.items.push(
-      m ?
-      text.replace(
-        /^Day\s+\d+\s*[:—-]?\s*/i,
-        ""
-      ) :
-      text
+      m ? text.replace(/^Day\s+\d+\s*[:—-]?\s*/i, "") : text,
     );
   }
 
   $("public").innerHTML = [...groups]
     .reverse()
     .map(
-      g =>
-      `<li class="day-break">
-            <span>
-              Day ${esc(g.day)}
-            </span>
-          </li>
-          ${
-            [...g.items]
-              .reverse()
-              .map(
-                x=>
-                  `<li class="log-entry">
-                    ${esc(x)}
-                  </li>`
-              )
-              .join("")
-          }`
+      (g) =>
+        `<li class="day-break">
+          <span>
+            Day ${esc(g.day)}
+          </span>
+        </li>
+        ${[...g.items]
+          .reverse()
+          .map(
+            (x) =>
+              `<li class="log-entry">
+                ${esc(x)}
+              </li>`,
+          )
+          .join("")}`,
     )
     .join("");
 }
@@ -252,29 +173,25 @@ function reveal() {
     return;
   }
 
-  $("result").innerHTML =
-    `<div class="result-banner">
-      <strong>
-        ${esc(
-          r.winner.toUpperCase()
-        )} WINS
-      </strong>
-      <span>
-        ${esc(r.reason)}
-      </span>
-    </div>`;
-  $("roles").innerHTML =
-    r.players.map(
-      p =>
-      `<article class="reveal-card">
+  $("result").innerHTML = `<div class="result-banner">
+    <strong>
+      ${esc(r.winner.toUpperCase())} WINS
+    </strong>
+    <span>
+      ${esc(r.reason)}
+    </span>
+  </div>`;
+
+  $("roles").innerHTML = r.players
+    .map(
+      (p) =>
+        `<article class="reveal-card">
           <header>
             ${esc(p.label)}
           </header>
 
           <strong class="true-role">
-            ${esc(
-              name(p.startRole)
-            )}
+            ${esc(name(p.startRole))}
           </strong>
 
           <span class="alignment ${p.alignment}">
@@ -282,161 +199,102 @@ function reveal() {
           </span>
 
           ${
-            p.role!==p.startRole
-              ?`<p>
-                  Became ${
-                    esc(name(p.role))
-                  }
+            p.role !== p.startRole
+              ? `<p>
+                  Became ${esc(name(p.role))}
                 </p>`
-              :""
+              : ""
           }
 
           <p>
             ${
               p.alive
-                ?"Survived"
-                :`Died by ${
-                    esc(
-                      p.death??
-                      "unknown cause"
-                    )
-                  }`
+                ? "Survived"
+                : `Died by ${esc(p.death ?? "unknown cause")}`
             }
           </p>
 
           ${
-            p.claim!==p.startRole
-              ?`<small>
-                  Claimed ${
-                    esc(
-                      name(p.claim)
-                    )
-                  }
+            p.claim !== p.startRole
+              ? `<small>
+                  Claimed ${esc(name(p.claim))}
                 </small>`
-              :""
+              : ""
           }
-        </article>`
-    ).join("");
+        </article>`,
+    )
+    .join("");
 
-  const key =
-    r.keyMoments;
+  const key = r.keyMoments;
 
-  $("audit").innerHTML =
-    key.length ?
-    `<h3>Key moments</h3>
-        ${
-          [...key]
-            .reverse()
-            .map(
-              x=>
-                `<div class="key-event">
-                  <b>
-                    ${esc(x.group)}
-                  </b>
-                  <span>
-                    ${esc(x.text)}
-                  </span>
-                </div>`
-            )
-            .join("")
-        }` :
-    "";
+  $("audit").innerHTML = key.length
+    ? `<h3>Key moments</h3>
+      ${[...key]
+        .reverse()
+        .map(
+          (x) =>
+            `<div class="key-event">
+              <b>
+                ${esc(x.group)}
+              </b>
+              <span>
+                ${esc(x.text)}
+              </span>
+            </div>`,
+        )
+        .join("")}`
+    : "";
 }
 
 function render() {
   const h = e.human();
+  const t = selectedPlayerId ? e.player(selectedPlayerId) : null;
+  const talk = e.talkStatus(t?.id);
 
-  const t =
-    selectedPlayerId ?
-    e.player(
-      selectedPlayerId
-    ) :
-    null;
+  $("role").textContent = `You are ${name(h.shown)}`;
 
-  const talk =
-    e.talkStatus(
-      t?.id
-    );
+  $("status").textContent = s.winner
+    ? `${s.winner.toUpperCase()}: ${s.reason}`
+    : `${s.phase} ${s.day || s.night} — ${e.alive().length} alive`;
 
-  $("role").textContent =
-    `You are ${name(h.shown)}`;
+  $("selected-player").textContent = t ? `Selected: ${t.label}` : "";
 
-  $("status").textContent =
-    s.winner ?
-    `${s.winner.toUpperCase()}: ${s.reason}` :
-    `${s.phase} ${
-          s.day||s.night
-        } — ${
-          e.alive().length
-        } alive`;
-
-  $("selected-player").textContent =
-    t ?
-    `Selected: ${t.label}` :
-    "";
-
-  $("talk").textContent =
-    t ?
-    `Conversations: ${
-          talk.used
-        }/${
-          talk.limit
-        }; ${
-          talk.remaining
-        } remaining${
-          talk.already
-            ?"; already asked this player"
-            :""
-        }.` :
-    "";
+  $("talk").textContent = t
+    ? `Conversations: ${talk.used}/${talk.limit}; ${talk.remaining} remaining${
+        talk.already ? "; already asked this player" : ""
+      }.`
+    : "";
 
   circle();
 
   $("private").innerHTML = [...s.privateLog]
     .reverse()
-    .map(
-      x => `<li>${esc(x)}</li>`
-    )
+    .map((x) => `<li>${esc(x)}</li>`)
     .join("");
 
   renderPublic();
 
-  $("actions").hidden = !!s.winner ||
-    !t;
-
-  $("ask").disabled = !t ||
-    talk.already ||
-    !talk.remaining;
-
+  $("actions").hidden = !!s.winner || !t;
+  $("ask").disabled = !t || talk.already || !talk.remaining;
   $("nominate").disabled = !t?.alive;
-
-  $("slay").hidden = !(
-    h.shown === "slayer" &&
-    !s.slayerUsed
-  );
+  $("slay").hidden = !(h.shown === "slayer" && !s.slayerUsed);
 
   reveal();
 }
+
+// ── Setup controls ───────────────────────────────────────────
 
 function randomSeed() {
   let n = 0;
 
   while (!n) {
-    if (
-      globalThis.crypto
-      ?.getRandomValues
-    ) {
-      const a =
-        new Uint32Array(1);
+    if (globalThis.crypto?.getRandomValues) {
+      const a = new Uint32Array(1);
 
       crypto.getRandomValues(a);
       n = a[0];
     } else {
-      n =
-        Math.floor(
-          Math.random() *
-          4294967295
-        ) + 1;
+      n = Math.floor(Math.random() * 4294967295) + 1;
     }
   }
 
@@ -446,37 +304,29 @@ function randomSeed() {
 function toggleCountInfo() {
   const box = $("count-popup");
   const btn = $("count-info");
-
-  const c =
-    COUNTS[
-      +$("seats").value
-    ];
+  const c = COUNTS[+$("seats").value];
 
   if (!c) {
     return;
   }
 
-  box.innerHTML =
-    `<strong aria-label="Townsfolk Outsiders Minions Demons">
-      <span class="good-count">
-        ${c[0]}/${c[1]}
-      </span>
-      /
-      <span class="evil-count">
-        ${c[2]}/${c[3]}
-      </span>
-    </strong>
-    <small>
-      Townsfolk / Outsiders /
-      Minions / Demons
-    </small>`;
+  box.innerHTML = `<strong aria-label="Townsfolk Outsiders Minions Demons">
+    <span class="good-count">
+      ${c[0]}/${c[1]}
+    </span>
+    /
+    <span class="evil-count">
+      ${c[2]}/${c[3]}
+    </span>
+  </strong>
+  <small>
+    Townsfolk / Outsiders /
+    Minions / Demons
+  </small>`;
 
   box.hidden = !box.hidden;
 
-  btn.setAttribute(
-    "aria-expanded",
-    String(!box.hidden)
-  );
+  btn.setAttribute("aria-expanded", String(!box.hidden));
 }
 
 function resetGame() {
@@ -493,27 +343,18 @@ function resetGame() {
   $("error").textContent = "";
 
   $("count-popup").hidden = true;
-
-  $("count-info").setAttribute(
-    "aria-expanded",
-    "false"
-  );
+  $("count-info").setAttribute("aria-expanded", "false");
 }
 
-$("random-seed").onclick =
-  randomSeed;
+// ── Event wiring ─────────────────────────────────────────────
 
-$("count-info").onclick =
-  toggleCountInfo;
+$("random-seed").onclick = randomSeed;
+$("count-info").onclick = toggleCountInfo;
 
 $("seats").onchange = () => {
   if (!$("count-popup").hidden) {
     $("count-popup").hidden = true;
-
-    $("count-info").setAttribute(
-      "aria-expanded",
-      "false"
-    );
+    $("count-info").setAttribute("aria-expanded", "false");
   }
 };
 
@@ -522,27 +363,20 @@ $("start").onclick = start;
 
 $("ask").onclick = () => {
   try {
-    $("answer").textContent =
-      e.ask(selectedPlayerId);
-
+    $("answer").textContent = e.ask(selectedPlayerId);
     render();
   } catch (err) {
-    $("answer").textContent =
-      err.message;
+    $("answer").textContent = err.message;
   }
 };
 
 $("nominate").onclick = () => {
   try {
-    e.nominate(
-      selectedPlayerId
-    );
-
+    e.nominate(selectedPlayerId);
     selectedPlayerId = null;
     render();
   } catch (err) {
-    $("answer").textContent =
-      err.message;
+    $("answer").textContent = err.message;
   }
 };
 
@@ -551,8 +385,7 @@ $("slay").onclick = () => {
     e.slay(selectedPlayerId);
     render();
   } catch (err) {
-    $("answer").textContent =
-      err.message;
+    $("answer").textContent = err.message;
   }
 };
 
@@ -562,18 +395,14 @@ $("pass").onclick = () => {
     selectedPlayerId = null;
     render();
   } catch (err) {
-    $("answer").textContent =
-      err.message;
+    $("answer").textContent = err.message;
   }
 };
 
-$("seats").innerHTML =
-  Array.from({
-      length: 11
-    },
-    (_, i) =>
-    `<option>${i+5}</option>`
-  ).join("");
+$("seats").innerHTML = Array.from(
+  { length: 11 },
+  (_, i) => `<option>${i + 5}</option>`,
+).join("");
 
 $("seats").value = 10;
 
