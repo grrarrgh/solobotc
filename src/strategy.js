@@ -1,5 +1,5 @@
 import { name } from "./data.js";
-import { monkInfo, fortuneInfo } from "./storyteller.js";
+import { bluffInfo } from "./storyteller.js";
 import { pick, sample } from "./util.js";
 
 export class SimpleStrategy {
@@ -44,13 +44,11 @@ export class SimpleStrategy {
       : null;
   }
 
-  // Good NPCs share what they learned; evil NPCs only have bluffed info.
+  // Good NPCs share what they learned; evil NPCs share their bluffed info.
   ask(s, p) {
     const details = p.memories.length
       ? p.memories.map((x) => `Night ${x.night}: ${x.text}`).join(" ")
-      : p.alignment === "good"
-        ? "I have no stored information."
-        : "";
+      : "I have no stored information.";
 
     const suspicion = this.suspicion(s, p);
 
@@ -121,18 +119,8 @@ export class SimpleStrategy {
     );
   }
 
-  // Invented night info for an evil NPC bluffing a role that picks players.
+  // Night info an evil NPC reports for their bluff (true only for the Spy).
   bluff(s, p) {
-    if (p.claim === "monk" && s.night > 1) {
-      const t = this.monk(s, p);
-
-      return t ? monkInfo(s, t) : null;
-    }
-
-    if (p.claim === "fortuneteller") {
-      return fortuneInfo(s, s.r() < 0.5, this.ft(s, p));
-    }
-
-    return null;
+    return bluffInfo(s, p, this);
   }
 }

@@ -14,6 +14,29 @@ const evil = (p) =>
       ? false
       : p.alignment === "evil";
 
+const FIRST_NIGHT = ["washerwoman", "librarian", "investigator", "chef"];
+const EACH_NIGHT = ["empath", "fortuneteller"];
+
+// The team each "one of these two players is X" role learns about.
+const PAIR_TEAM = {
+  washerwoman: "townsfolk",
+  librarian: "outsider",
+  investigator: "minion",
+};
+
+// Whether an information role wakes tonight.
+function actsTonight(role, night) {
+  if (FIRST_NIGHT.includes(role)) {
+    return night === 1;
+  }
+
+  if (EACH_NIGHT.includes(role)) {
+    return true;
+  }
+
+  return role === "undertaker" && night > 1;
+}
+
 const fortuneText = (yes, ts) =>
   `Fortune Teller: ${yes ? "YES" : "NO"} for ${ts
     .map((x) => x.label)
@@ -27,15 +50,6 @@ export const monkInfo = (s, t, functioning = true) => ({
   targets: [t.id],
   trigger: "normal",
   functioning,
-});
-
-export const fortuneInfo = (s, yes, ts) => ({
-  night: s.night,
-  role: "fortuneteller",
-  text: fortuneText(yes, ts),
-  targets: ts.map((x) => x.id),
-  trigger: "normal",
-  functioning: true,
 });
 
 // Nearest living neighbours on each side.
@@ -59,18 +73,160 @@ function neigh(s, p) {
   return o;
 }
 
+// Count adjacent evil pairs around the circle.
+function chefCount(s) {
+  let n = 0;
+
+  s.players.forEach((x, i) => {
+    if (evil(x) && evil(s.players[(i + 1) % s.players.length])) {
+      n++;
+    }
+  });
+
+  return n;
+}
+
+const empathCount = (s, p) => neigh(s, p).filter(evil).length;
+
+const fortuneYes = (s, ts) =>
+  ts.some((x) => x.role === "imp" || x.id === s.red || x.role === "recluse");
+
+const executed = (s) => s.players.find((x) => x.id === s.lastExecution);
+
+// Any number from 0–2 except the true one.
+const wrongNumber = (s, n) =>
+  pick(
+    [0, 1, 2].filter((k) => k !== n),
+    s.r,
+  );
+
+// Correct information for `role`, seen from player p's seat.
+function trueInfo(s, p, role, strat) {
+  const wanted = PAIR_TEAM[role];
+
+  if (wanted) {
+    const real = pick(
+      s.players.filter((x) => x.id !== p.id && team(x.role) === wanted),
+      s.r,
+    );
+
+    if (!real) {
+      return { targets: [], text: "No matching character is in play." };
+    }
+
+    const fake = pick(
+      s.players.filter((x) => x.id !== p.id && x.id !== real.id),
+      s.r,
+    );
+
+    return {
+      targets: [real.id, fake.id],
+      text: `One of ${real.label} and ${fake.label} is ${name(real.role)}.`,
+    };
+  }
+
+  if (role === "chef") {
+    return { targets: [], text: `Chef number: ${chefCount(s)}.` };
+  }
+
+  if (role === "empath") {
+    return {
+      targets: neigh(s, p).map((x) => x.id),
+      text: `Empath number: ${empathCount(s, p)}.`,
+    };
+  }
+
+  if (role === "fortuneteller") {
+    const ts = strat.ft(s, p);
+
+    return {
+      targets: ts.map((x) => x.id),
+      text: fortuneText(fortuneYes(s, ts), ts),
+    };
+  }
+
+  if (role === "undertaker") {
+    const x = executed(s);
+
+    return {
+      targets: [],
+      text: x ? `Executed player was ${name(x.role)}.` : "Nobody was executed.",
+    };
+  }
+
+  return { targets: [], text: "No information." };
+}
+
+// Deliberately false information for `role`, as an evil bluffer tells it.
+function falseInfo(s, p, role, strat) {
+  const wanted = PAIR_TEAM[role];
+
+  if (wanted) {
+    const shown = pick(
+      s.script.ids.filter((id) => team(id) === wanted),
+      s.r,
+    );
+
+    // Neither named player holds the character; frame good players if possible.
+    const others = s.players.filter((x) => x.id !== p.id && x.role !== shown);
+    const good = others.filter((x) => x.alignment === "good");
+    const pair = sample(good.length >= 2 ? good : others, 2, s.r);
+
+    return shown && pair.length === 2
+      ? {
+          targets: pair.map((x) => x.id),
+          text: `One of ${pair[0].label} and ${pair[1].label} is ${name(shown)}.`,
+        }
+      : { targets: [], text: "No matching character is in play." };
+  }
+
+  if (role === "chef") {
+    return {
+      targets: [],
+      text: `Chef number: ${wrongNumber(s, chefCount(s))}.`,
+    };
+  }
+
+  if (role === "empath") {
+    return {
+      targets: neigh(s, p).map((x) => x.id),
+      text: `Empath number: ${wrongNumber(s, empathCount(s, p))}.`,
+    };
+  }
+
+  if (role === "fortuneteller") {
+    const ts = strat.ft(s, p);
+
+    return {
+      targets: ts.map((x) => x.id),
+      text: fortuneText(!fortuneYes(s, ts), ts),
+    };
+  }
+
+  if (role === "undertaker") {
+    const x = executed(s);
+
+    // Everyone saw whether there was an execution, so only the role is a lie.
+    if (!x) {
+      return { targets: [], text: "Nobody was executed." };
+    }
+
+    const shown = pick(
+      s.script.ids.filter((id) => id !== x.role),
+      s.r,
+    );
+
+    return { targets: [], text: `Executed player was ${name(shown)}.` };
+  }
+
+  return { targets: [], text: "No information." };
+}
+
 // Random information for a drunk or poisoned player.
 function unreliableInfo(s, role, targets) {
-  if (["washerwoman", "librarian", "investigator"].includes(role)) {
-    const wanted =
-      role === "washerwoman"
-        ? "townsfolk"
-        : role === "librarian"
-          ? "outsider"
-          : "minion";
-
+  if (PAIR_TEAM[role]) {
     const pair = sample(s.players, 2, s.r);
-    const possible = s.script.ids.filter((id) => team(id) === wanted);
+    const possible = s.script.ids.filter((id) => team(id) === PAIR_TEAM[role]);
     const shown = pick(possible, s.r);
 
     return {
@@ -123,89 +279,18 @@ function unreliableInfo(s, role, targets) {
 }
 
 export function nightInfo(s, p, strat) {
-  if (!p.alive) {
-    return null;
-  }
-
   const role = ability(p);
 
-  const first = ["washerwoman", "librarian", "investigator", "chef"].includes(
-    role,
-  );
-  const each = ["empath", "fortuneteller"].includes(role);
-  const other = role === "undertaker";
-
-  if (
-    (!first && !each && !other) ||
-    (s.night === 1 && other) ||
-    (s.night > 1 && first)
-  ) {
+  if (!p.alive || !actsTonight(role, s.night)) {
     return null;
   }
 
-  let text = "";
-  let targets = [];
-
-  if (["washerwoman", "librarian", "investigator"].includes(role)) {
-    const wanted =
-      role === "washerwoman"
-        ? "townsfolk"
-        : role === "librarian"
-          ? "outsider"
-          : "minion";
-
-    const real = pick(
-      s.players.filter((x) => team(x.role) === wanted),
-      s.r,
-    );
-
-    if (!real) {
-      text = "No matching character is in play.";
-    } else {
-      const fake = pick(
-        s.players.filter((x) => x.id !== real.id),
-        s.r,
-      );
-
-      targets = [real.id, fake.id];
-      text = `One of ${real.label} and ${fake.label} is ${name(real.role)}.`;
-    }
-  } else if (role === "chef") {
-    // Count adjacent evil pairs around the circle.
-    let n = 0;
-
-    s.players.forEach((x, i) => {
-      if (evil(x) && evil(s.players[(i + 1) % s.players.length])) {
-        n++;
-      }
-    });
-
-    text = `Chef number: ${n}.`;
-  } else if (role === "empath") {
-    targets = neigh(s, p).map((x) => x.id);
-    text = `Empath number: ${neigh(s, p).filter(evil).length}.`;
-  } else if (role === "fortuneteller") {
-    const ts = strat.ft(s, p);
-
-    targets = ts.map((x) => x.id);
-
-    const yes = ts.some(
-      (x) => x.role === "imp" || x.id === s.red || x.role === "recluse",
-    );
-    text = fortuneText(yes, ts);
-  } else if (role === "undertaker") {
-    const x = s.players.find((x) => x.id === s.lastExecution);
-
-    text = x ? `Executed player was ${name(x.role)}.` : "Nobody was executed.";
-  }
+  let { text, targets } = trueInfo(s, p, role, strat);
 
   const functioning = works(p);
 
   if (!functioning) {
-    const unreliable = unreliableInfo(s, role, targets);
-
-    text = unreliable.text;
-    targets = unreliable.targets;
+    ({ text, targets } = unreliableInfo(s, role, targets));
   }
 
   return {
@@ -218,10 +303,48 @@ export function nightInfo(s, p, strat) {
   };
 }
 
-// The Ravenkeeper is already dead here, so works() can't be used.
-export function ravenInfo(s, p, t) {
-  const functioning = p.role !== "drunk" && !p.poisoned;
-  const seen = functioning ? t.role : pick(Object.keys(ROLES), s.r);
+// What an evil NPC reports for the role they are bluffing. A working Spy has
+// seen the Grimoire and tells the truth; every other evil player lies.
+export function bluffInfo(s, p, strat) {
+  const role = p.claim;
+
+  if (role === "monk") {
+    const t = s.night > 1 ? strat.monk(s, p) : null;
+
+    return t ? monkInfo(s, t) : null;
+  }
+
+  if (!actsTonight(role, s.night)) {
+    return null;
+  }
+
+  const truthful = p.role === "spy" && works(p);
+  const { text, targets } = truthful
+    ? trueInfo(s, p, role, strat)
+    : falseInfo(s, p, role, strat);
+
+  return {
+    night: s.night,
+    role,
+    text,
+    targets,
+    trigger: "normal",
+    functioning: truthful,
+  };
+}
+
+// The Ravenkeeper is already dead here, so works() can't be used. An evil
+// bluffer passes `lie` to name a character the target is not.
+export function ravenInfo(s, p, t, lie = false) {
+  const functioning = !lie && p.role !== "drunk" && !p.poisoned;
+  const seen = lie
+    ? pick(
+        Object.keys(ROLES).filter((id) => id !== t.role),
+        s.r,
+      )
+    : functioning
+      ? t.role
+      : pick(Object.keys(ROLES), s.r);
 
   return {
     night: s.night,

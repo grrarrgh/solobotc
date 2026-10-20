@@ -193,7 +193,7 @@ export class Engine {
     this.npcShots();
   }
 
-  // Evil NPCs bluffing a role that picks players invent a pick to report.
+  // Evil NPCs gather night info to report for the role they are bluffing.
   bluffs() {
     const s = this.s;
 
@@ -205,15 +205,20 @@ export class Engine {
       const info = this.strat.bluff(s, p);
 
       if (info) {
-        p.memories.push(info);
-
-        this.audit(
-          "bluff",
-          `${p.label} (${name(p.role)}) bluffed: ${info.text}`,
-          { playerId: p.id, ...info },
-        );
+        this.rememberBluff(p, info);
       }
     }
+  }
+
+  // Bluffed info is stored for the NPC to repeat, but is not real information.
+  rememberBluff(p, info) {
+    p.memories.push(info);
+
+    this.audit(
+      "bluff",
+      `${p.label} (${name(p.role)}) bluffed: ${info.text}`,
+      { playerId: p.id, ...info },
+    );
   }
 
   demon() {
@@ -312,6 +317,17 @@ export class Engine {
 
       if (t) {
         this.remember(p, ravenInfo(this.s, p, t));
+      }
+    } else if (
+      cause === "demon" &&
+      p.alignment === "evil" &&
+      p.claim === "ravenkeeper"
+    ) {
+      // An evil Ravenkeeper bluffer "learns" a character too; only the Spy's is true.
+      const t = this.strat.raven(this.s, p);
+
+      if (t) {
+        this.rememberBluff(p, ravenInfo(this.s, p, t, p.role !== "spy"));
       }
     }
 

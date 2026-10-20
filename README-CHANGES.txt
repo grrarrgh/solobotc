@@ -30,3 +30,11 @@ Feature update:
 - NPC Virgins: the first time the Human nominates a Virgin who isn't drunk or poisoned, the Human is executed if their true character is a Townsfolk, and the day ends. A Human who is secretly the Drunk does not trigger it. Dead players can no longer nominate or use the Slayer ability.
 - The Drunk (an Outsider) is shown a Townsfolk token that is not in play, and gets unreliable information for that role. A human Drunk is never shown a Ravenkeeper, Virgin or Soldier token. Fixed: a Drunk who thinks they are the Ravenkeeper now gets unreliable information instead of the truth.
 - A Slayer shot that kills the Recluse now checks for the two-players-left victory.
+
+## Evil Bluff Information
+
+- Evil NPCs now report night information that fits the role they are bluffing, on the nights that role would wake: Washerwoman, Librarian, Investigator and Chef on Night 1; Empath and Fortune Teller every night; Undertaker from Night 2; Monk choices from Night 2; and a Ravenkeeper reading if they are killed at night. Bluffing a role with no night information gets "I have no stored information.", the same as a good NPC.
+- A Spy who isn't poisoned has seen the Grimoire, so their bluffed information is true.
+- All other evil NPCs give information that is definitely wrong: a wrong Chef or Empath number, the opposite Fortune Teller answer, a wrong Undertaker or Ravenkeeper character, and Washerwoman/Librarian/Investigator pairs where neither player has the named character (good players are framed where possible).
+- Bluffed information is recorded as a "bluff" in the post-game event log, not as real information.
+- Washerwoman, Librarian and Investigator information never names the player receiving it.

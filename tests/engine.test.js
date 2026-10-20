@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-import { FORBIDDEN_HUMAN, team } from "../src/data.js";
+import { FORBIDDEN_HUMAN, name, team } from "../src/data.js";
 import { createState } from "../src/setup.js";
 import { Engine } from "../src/engine.js";
 import { SimpleStrategy } from "../src/strategy.js";
@@ -456,4 +456,127 @@ test("Drunks receive unreliable information for their shown role", () => {
   drunk.shown = "ravenkeeper";
 
   assert.equal(ravenInfo(s, drunk, s.players[4]).functioning, false);
+});
+
+// Night 1 with Mayor (you), Chef, Butler, Spy, Imp. The Spy registers as
+// good, so the true Chef number is 0.
+function bluffNight(seed) {
+  const s = base(seed);
+
+  role(s.players[3], "spy", "evil");
+
+  s.phase = "night";
+  s.night = 1;
+  s.day = 0;
+
+  return s;
+}
+
+test("the Spy bluffs with true information; other evil NPCs lie", () => {
+  const s = bluffNight("bluff-chef");
+  const chef = s.players[1];
+  const spy = s.players[3];
+  const imp = s.players[4];
+
+  spy.claim = "chef";
+  imp.claim = "chef";
+
+  const e = new Engine(s);
+
+  e.start();
+
+  assert.equal(chef.memories[0].text, "Chef number: 0.");
+  assert.equal(spy.memories[0].text, "Chef number: 0.");
+  assert.notEqual(imp.memories[0].text, "Chef number: 0.");
+  assert.ok(e.ask(imp.id).includes(`Night 1: ${imp.memories[0].text}`));
+});
+
+test("a poisoned Spy's bluff is not guaranteed to be true", () => {
+  const s = bluffNight("bluff-poisoned-spy");
+  const spy = s.players[3];
+
+  spy.claim = "chef";
+
+  const strat = new SimpleStrategy();
+  const e = new Engine(s, strat);
+
+  // Run bluffs() directly: night() would clear the poison first.
+  spy.poisoned = true;
+  e.bluffs();
+
+  assert.notEqual(spy.memories[0].text, "Chef number: 0.");
+  assert.equal(spy.memories[0].functioning, false);
+});
+
+test("evil Washerwoman bluffs name two players who don't hold the character", () => {
+  for (let i = 0; i < 20; i++) {
+    const s = bluffNight(`bluff-ww-${i}`);
+    const imp = s.players[4];
+
+    imp.claim = "washerwoman";
+
+    new Engine(s).start();
+
+    const info = imp.memories[0];
+    const shown = info.text.match(/ is (.+)\.$/)[1];
+
+    assert.equal(info.targets.length, 2);
+    assert.ok(!info.targets.includes(imp.id));
+
+    for (const id of info.targets) {
+      assert.notEqual(name(s.players.find((x) => x.id === id).role), shown);
+    }
+  }
+});
+
+test("evil Empath and Fortune Teller bluffs contradict the truth", () => {
+  const s = bluffNight("bluff-each-night");
+  const spy = s.players[3];
+  const imp = s.players[4];
+
+  spy.claim = "empath";
+  imp.claim = "fortuneteller";
+
+  const strat = new SimpleStrategy();
+  strat.ft = (_, p) => s.players.filter((x) => x.id !== p.id).slice(0, 2);
+
+  new Engine(s, strat).start();
+
+  // The Spy's neighbours are the Butler and the Imp: one evil.
+  assert.equal(spy.memories[0].text, "Empath number: 1.");
+
+  // The Imp's picks are You and the Chef; the red herring decides the truth.
+  const truth = [s.players[0], s.players[1]].some((x) => x.id === s.red);
+
+  assert.match(imp.memories[0].text, truth ? /: NO for/ : /: YES for/);
+});
+
+test("evil NPCs bluffing a role without night info say they have none", () => {
+  const s = base("bluff-soldier");
+  const baron = s.players[3];
+
+  baron.claim = "soldier";
+
+  const e = new Engine(s);
+
+  assert.ok(e.ask(baron.id).includes("I have no stored information."));
+});
+
+test("an evil Ravenkeeper bluffer killed at night names a wrong character", () => {
+  const s = base("bluff-raven");
+  const baron = s.players[3];
+  const chef = s.players[1];
+
+  baron.claim = "ravenkeeper";
+
+  const strat = new SimpleStrategy();
+  strat.raven = () => chef;
+
+  const e = new Engine(s, strat);
+
+  e.kill(baron, "demon");
+
+  assert.equal(baron.memories.length, 1);
+  assert.ok(baron.memories[0].text.startsWith(`${chef.label} is `));
+  assert.notEqual(baron.memories[0].text, `${chef.label} is Chef.`);
 });
