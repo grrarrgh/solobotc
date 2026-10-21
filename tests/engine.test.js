@@ -15,6 +15,7 @@ import { createState } from "../src/setup.js";
 import { Engine } from "../src/engine.js";
 import { SimpleStrategy } from "../src/strategy.js";
 import { ravenInfo, artistInfo } from "../src/storyteller.js";
+import { shuffle, sample } from "../src/util.js";
 
 const script = JSON.parse(
   fs.readFileSync(new URL("../scripts/trouble-brewing.json", import.meta.url)),
@@ -2748,11 +2749,10 @@ test("the Juggler's guesses aren't always the claimed characters", () => {
   }
 });
 
-test("nobody claims the Mutant: not bluffs, madness, or a new Mutant", () => {
+test("nobody alive claims the Mutant: not bluffers, madness, or a new Mutant", () => {
   for (let seed = 0; seed < 200; seed++) {
     const s = createState(sv, 10, seed);
 
-    assert.ok(!s.demonBluffs.includes("mutant"));
     assert.ok(s.players.every((p) => p.claim !== "mutant"));
   }
 
@@ -2804,4 +2804,141 @@ test("a Juggler always juggles on their first day, and only once", () => {
 
   assert.equal(juggles(), 2);
   assert.equal(chef.juggled, true);
+});
+
+// ── Dead players, unused abilities, more evil bluffs ─────────
+
+test("once dead, a Mutant (or Mutant bluffer) claims the Mutant; other evil keep their bluffs", () => {
+  const s = base("dead-reveal", sv);
+  const [, mutant, , baron, imp] = s.players;
+  const strat = new SimpleStrategy();
+
+  role(mutant, "mutant", "good");
+  mutant.claim = "dreamer";
+  baron.bluff = "mutant";
+  baron.claim = "oracle";
+  imp.bluff = "savant";
+  imp.claim = "savant";
+
+  const e = new Engine(s, strat);
+
+  for (const p of [mutant, baron, imp]) {
+    p.alive = false;
+  }
+
+  assert.ok(e.ask(mutant.id).startsWith("I claim Mutant."));
+  assert.equal(mutant.claim, "mutant");
+
+  // The Baron took the Mutant bluff: now dead, they claim it.
+  assert.equal(strat.revealsWhenDead(baron), true);
+
+  // The Imp sticks to their bluff, dead or alive.
+  assert.equal(strat.revealsWhenDead(imp), false);
+  assert.ok(strat.ask(s, imp).startsWith("I claim Savant."));
+});
+
+test("an evil player who takes the Mutant bluff claims a Townsfolk not in play", () => {
+  let mutantBluffs = 0;
+
+  for (let seed = 0; seed < 300; seed++) {
+    const s = createState(sv, 10, seed);
+    const tokens = new Set(s.players.map((p) => p.shown));
+
+    for (const p of s.players.filter((x) => x.bluff === "mutant")) {
+      mutantBluffs++;
+      assert.equal(team(p.claim), "townsfolk");
+      assert.ok(!tokens.has(p.claim), p.claim);
+    }
+  }
+
+  assert.ok(mutantBluffs > 0);
+});
+
+test("NPCs say when they haven't used a once-per-game ability (bluffers too)", () => {
+  const s = base("unused");
+  const strat = new SimpleStrategy();
+  const [, slayer, , baron] = s.players;
+
+  role(slayer, "slayer", "good");
+  baron.claim = "artist";
+
+  assert.ok(strat.ask(s, slayer).includes("I haven't used my Slayer ability yet."));
+  assert.ok(strat.ask(s, baron).includes("I haven't used my Artist ability yet."));
+
+  slayer.shotUsed = true;
+  baron.artistUsed = true;
+
+  assert.ok(!strat.ask(s, slayer).includes("haven't used"));
+  assert.ok(!strat.ask(s, baron).includes("haven't used"));
+});
+
+test("an evil Philosopher bluffer gains an in-play Townsfolk and bluffs as it", () => {
+  const s = bluffNight("philo-bluff");
+  const imp = s.players[4];
+
+  imp.claim = "philosopher";
+
+  new Engine(s).start();
+
+  // The only in-play information Townsfolk is the Chef (the Spy registers
+  // good, so the true Chef number is 0).
+  assert.equal(imp.bluffGained, "chef");
+  assert.equal(imp.memories[0].text, "Philosopher: gained the Chef ability.");
+  assert.match(imp.memories[1].text, /^Chef number: [12]\.$/);
+});
+
+test("evil Seamstress, Snake Charmer and Sage bluffers give false information", () => {
+  const s = base("more-bluffs");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron, imp] = s.players;
+  const e = new Engine(s, strat);
+
+  // Seamstress: once, and wrong (the Chef and Butler are both good).
+  baron.claim = "seamstress";
+  strat.seamstress = () => [chef, butler];
+  e.bluffs();
+  e.bluffs();
+
+  assert.equal(baron.memories.length, 1);
+  assert.equal(
+    baron.memories[0].text,
+    `Seamstress: ${chef.label} and ${butler.label} are different alignments.`,
+  );
+
+  // Snake Charmer: a choice each night.
+  baron.claim = "snakecharmer";
+  strat.snake = () => chef;
+  e.bluffs();
+
+  assert.equal(baron.memories.at(-1).text, `Snake Charmer: chose ${chef.label}.`);
+
+  // Sage, killed by the Demon: a pair that doesn't include the Demon.
+  baron.claim = "sage";
+  e.kill(baron, "demon");
+
+  const sage = baron.memories.at(-1);
+
+  assert.ok(sage.text.startsWith("Sage: the Demon is "));
+  assert.ok(!sage.targets.includes(imp.id));
+});
+
+test("Juggler guesses that aren't claims are other claims or the Demon's bluffs", () => {
+  const s = base("juggle-plausible");
+  const strat = new SimpleStrategy();
+  const plausible = new Set([
+    ...s.players.map((p) => p.claim),
+    ...s.demonBluffs,
+  ]);
+
+  s.r = () => 0.99; // never within JUGGLER_CLAIM_GUESS_CHANCE
+
+  for (const g of strat.juggle(s, s.players[1])) {
+    assert.ok(plausible.has(g.role), g.role);
+  }
+});
+
+test("shuffling or sampling an empty list returns nothing (and doesn't hang)", () => {
+  assert.deepEqual(shuffle([]), []);
+  assert.deepEqual(sample([], 2), []);
+  assert.deepEqual(shuffle([7]), [7]);
 });

@@ -167,6 +167,31 @@ export class SimpleStrategy {
     return sus ? { type: "suspicious", ...sus } : nothing;
   }
 
+  // Once dead, the Mutant (no longer at risk of execution) can claim to be
+  // the Mutant, and so can an evil player who took the Mutant bluff. Other
+  // evil players stick to their bluffs.
+  revealsWhenDead(p) {
+    return !p.alive && (p.role === "mutant" || p.bluff === "mutant");
+  }
+
+  // "I haven't used my X ability yet." for a living NPC whose claimed
+  // character has a once-per-game ability they (say they) haven't used.
+  unusedAbility(p) {
+    const used = {
+      slayer: p.shotUsed,
+      artist: p.artistUsed,
+      seamstress: p.seamUsed,
+      juggler: p.juggled,
+      philosopher: p.gained ?? p.bluffGained,
+      virgin: p.virginUsed,
+      fool: p.foolUsed,
+    };
+
+    return p.alive && p.claim in used && !used[p.claim]
+      ? `I haven't used my ${name(p.claim)} ability yet.`
+      : null;
+  }
+
   // The living other twin of an Evil Twin pair p belongs to, if any.
   twinOf(s, p) {
     const t = s.twins;
@@ -239,6 +264,7 @@ export class SimpleStrategy {
       `I claim ${name(mad ? mad.role : p.claim)}.`,
       twin && `${twin.label} is my twin, and I am the good twin.`,
       details,
+      !mad && this.unusedAbility(p),
       opinion.text,
     ]
       .filter(Boolean)
@@ -552,18 +578,37 @@ export class SimpleStrategy {
     return pick(fresh.length ? fresh : good, s.r);
   }
 
+  // An evil Philosopher bluffer "gains" a Townsfolk that is in play
+  // (preferring information characters), as if its holder were now drunk.
+  philosopherBluff(s, p) {
+    const inPlay = s.players
+      .filter((x) => x !== p && team(x.role) === "townsfolk")
+      .map((x) => x.role)
+      .filter((id) => id !== "philosopher");
+    const info = inPlay.filter(
+      (id) => FIRST_NIGHT_INFO.includes(id) || ONGOING_INFO.includes(id),
+    );
+
+    return pick(info.length ? info : inPlay, s.r);
+  }
+
   // The Juggler guesses up to 5 living players' characters: what they claim
-  // (at JUGGLER_CLAIM_GUESS_CHANCE), otherwise any character on the script.
+  // (at JUGGLER_CLAIM_GUESS_CHANCE), otherwise another plausible character:
+  // one somebody is claiming, or one of the evil team's bluffs.
   juggle(s, p) {
+    const plausible = [
+      ...new Set([...s.players.map((y) => y.claim), ...(s.demonBluffs ?? [])]),
+    ];
+
     return sample(this.others(s, p), 5, s.r).map((x) => ({
       id: x.id,
       role:
         s.r() < JUGGLER_CLAIM_GUESS_CHANCE
           ? x.claim
-          : pick(
-              s.script.ids.filter((id) => id !== x.claim),
+          : (pick(
+              plausible.filter((id) => id !== x.claim),
               s.r,
-            ),
+            ) ?? x.claim),
     }));
   }
 

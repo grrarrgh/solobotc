@@ -11,6 +11,7 @@ import {
   isDemon,
   isDrunk,
   infoMode,
+  philosopherInfo,
 } from "./storyteller.js";
 import { SimpleStrategy } from "./strategy.js";
 import { pick } from "./util.js";
@@ -602,6 +603,17 @@ export class Engine {
         continue;
       }
 
+      // A Philosopher bluffer "gains" an in-play Townsfolk on their first
+      // night (implying its real holder is drunk), then bluffs as it.
+      if (p.claim === "philosopher" && !p.bluffGained) {
+        const role = this.strat.philosopherBluff(s, p);
+
+        if (role) {
+          p.bluffGained = role;
+          this.rememberBluff(p, philosopherInfo(s, role));
+        }
+      }
+
       const info = this.strat.bluff(s, p);
 
       if (info) {
@@ -813,6 +825,11 @@ export class Engine {
 
     s.talked.push(id);
     p.claimKnown = true;
+
+    // A dead Mutant (or Mutant bluffer) now claims the Mutant.
+    if (this.strat.revealsWhenDead?.(p)) {
+      p.claim = "mutant";
+    }
 
     const response = this.strat.ask(s, p);
 

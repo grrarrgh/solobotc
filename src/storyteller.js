@@ -965,7 +965,28 @@ export function madInfo(s, p, role, strat) {
 // the Demon's claim when their role allows it; otherwise a working Spy has
 // seen the Grimoire and tells the truth, and every other evil player lies.
 export function bluffInfo(s, p, strat) {
-  const role = p.claim;
+  // A Philosopher bluffer reports for the character they "gained".
+  const role = p.claim === "philosopher" ? p.bluffGained : p.claim;
+  const spy = p.role === "spy" && works(p);
+
+  if (role === "snakecharmer") {
+    const t = strat.snake(s, p);
+
+    return t ? snakeInfo(s, t) : null;
+  }
+
+  // Once per game, on a night of their choosing.
+  if (role === "seamstress") {
+    const picks = !p.seamUsed && strat.seamstress(s, p);
+
+    if (!picks) {
+      return null;
+    }
+
+    p.seamUsed = true;
+
+    return seamstressInfo(s, picks[0], picks[1], spy ? "truth" : "lie");
+  }
 
   if (role === "monk") {
     const t = s.night > 1 ? strat.monk(s, p) : null;

@@ -1,8 +1,17 @@
+## Bug Fixes: Dead Claims, Unused Abilities, Evil Bluffs & Clock Hands
+
+- Once dead, the Mutant (no longer at risk of execution) claims the Mutant when asked. The Mutant can be one of the Demon's bluffs: an evil player who takes it claims a Townsfolk that isn't in play (like a real Mutant), and once dead claims the Mutant. Other evil players stick to their bluffs, dead or alive.
+- NPCs whose claimed character has a once-per-game ability they haven't used say so when asked ("I haven't used my Slayer ability yet."): Slayer, Artist, Seamstress, Juggler, Philosopher, Virgin and Fool. Evil bluffers say it too, until they've "used" it.
+- Juggler: when a guess isn't the player's claim, it's another plausible character: one somebody is claiming, or one of the evil team's bluffs.
+- Evil Philosopher bluffers "gain" a Townsfolk that is in play (preferring information characters, which implies its real holder is drunk) and then give false information for that character each night.
+- Evil bluffers now give false information for every character they can bluff, including the Seamstress (once), the Snake Charmer (a nightly choice) and the Sage (a false Demon pair if the Demon kills them). The Spy still tells the truth for their bluff.
+- The clock hands in the vote animation are thinner.
+
 ## Bug Fixes: Twins, Juggler, Mutant, Log Layout & Vote Speed
 
 - Twins: while both twins live, each is suspicious of the other ("I'm suspicious of Player X, my evil twin."), above any other opinion. Once the other twin dies, they form a new opinion from their information. When asked, each twin says "Player X is my twin, and I am the good twin.", and on Day 1 each NPC twin says so publicly in the Public Log.
 - Juggler: guesses a player's claimed character only at JUGGLER_CLAIM_GUESS_CHANCE (in src/data.js, default 50%), otherwise a random character on the script, so their guesses are no longer always right. Every NPC Juggler juggles on their first day as the Juggler (Day 1, or the day after they become one), once.
-- Mutant: nobody claims the Mutant. It's never one of the Demon's (or the Spy's) bluffs or a Cerenovus madness, and a player turned into the Mutant by the Pit-Hag or Barber claims a Townsfolk that isn't in play instead.
+- Mutant: nobody alive claims the Mutant. It's never a Cerenovus madness, and a player turned into the Mutant by the Pit-Hag or Barber claims a Townsfolk that isn't in play instead. (An evil player can take the Mutant as a bluff; see above.)
 - Information on its own line: in the logs, information now starts on a new line after "Player X claimed Y:" and "You received:", and each of the Savant's two statements is on its own line.
 - Vote animation: the time the large hand takes per seat is set by VOTE_TICK_MS (in src/data.js, default 450 ms); the hand's swing and the raised hands scale with it.
 

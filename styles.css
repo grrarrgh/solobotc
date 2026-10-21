@@ -636,17 +636,17 @@ input {
 
 /* The small hand points at the nominator... */
 .hand.hour {
-  width: 8px;
+  width: 4px;
   height: calc(var(--size) * 0.2);
-  margin-left: -4px;
+  margin-left: -2px;
   background: #b69455;
 }
 
 /* ...and the large hand at the nominee, then round the voters. */
 .hand.minute {
-  width: 5px;
+  width: 2px;
   height: calc(var(--size) * 0.33);
-  margin-left: -2.5px;
+  margin-left: -1px;
   background: #f0cf83;
 }
 

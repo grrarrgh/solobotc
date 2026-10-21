@@ -154,6 +154,7 @@ export function createState(
       lastingPoison: null, // poisoned from now on (Snake Charmer)
       vigor: false, // a Minion killed by the Vigormortis keeps their ability
       gained: null, // the ability a Philosopher gained
+      bluffGained: null, // ...or that an evil Philosopher bluffer "gained"
       seamUsed: false,
       juggled: false,
       savantDay: 0,
@@ -174,11 +175,7 @@ export function createState(
   // never doubles up with anyone.
   const tokens = new Set(players.map((p) => p.shown));
   const notInPlay = script.ids.filter(
-    (x) =>
-      alignment(x) === "good" &&
-      x !== "drunk" &&
-      x !== "mutant" &&
-      !tokens.has(x),
+    (x) => alignment(x) === "good" && x !== "drunk" && !tokens.has(x),
   );
   const demonBluffs = sample(notInPlay, 3, r);
   const spyOptions = notInPlay.filter((x) => !demonBluffs.includes(x));
@@ -214,8 +211,19 @@ export function createState(
 
     p.bluffs = knows ? demonBluffs : [];
     p.bluff = pick(preferred, r) ?? pick(free, r) ?? pick(options, r) ?? "chef";
-    p.claim = p.bluff;
     taken.add(p.bluff);
+
+    // Like a real Mutant, a Mutant bluffer can't claim it openly: they claim
+    // a Townsfolk that isn't in play instead (and can admit to the Mutant
+    // once dead).
+    p.claim =
+      p.bluff === "mutant"
+        ? (pick(
+            pool("townsfolk").filter((x) => !tokens.has(x) && !taken.has(x)),
+            r,
+          ) ?? "chef")
+        : p.bluff;
+    taken.add(p.claim);
   }
 
   // The Mutant is "mad" that they're not an Outsider: they claim a Townsfolk

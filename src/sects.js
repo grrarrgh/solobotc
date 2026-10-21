@@ -632,9 +632,19 @@ export const sectsAndViolets = {
     const s = this.s;
     const sober = !p.poisoned && !isDrunk(p);
 
-    // The Sage, killed by the Demon, learns the Demon is 1 of 2 players.
+    // The Sage, killed by the Demon, learns the Demon is 1 of 2 players. An
+    // evil Sage bluffer "learns" a false pair (true for the Spy).
     if (cause === "demon" && ability(p) === "sage") {
       this.remember(p, sageInfo(s, p, infoMode(s, p, true)));
+    } else if (
+      cause === "demon" &&
+      p.alignment === "evil" &&
+      p.claim === "sage"
+    ) {
+      this.rememberBluff(
+        p,
+        sageInfo(s, p, p.role === "spy" && !p.poisoned ? "truth" : "lie"),
+      );
     }
 
     // The Sweetheart: someone is drunk from now on.

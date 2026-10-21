@@ -20,7 +20,9 @@ export const pick = (a, r = Math.random) =>
 
 export function shuffle(a, r = Math.random) {
   a = [...a];
-  for (let i = a.length - 1; i; i--) {
+  // `i > 0`, not just `i`: for an empty array i starts at -1, which would
+  // count down forever.
+  for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(r() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
   }
