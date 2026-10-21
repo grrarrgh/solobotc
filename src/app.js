@@ -182,15 +182,15 @@ function circle() {
   $("circle").insertAdjacentHTML(
     "beforeend",
     `<button
-      id="fireplace"
+      id="clocktower"
       type="button"
-      class="fireplace"
+      class="clocktower"
       title="Show the script"
       aria-label="Show the script and character abilities"
-    >${FIREPLACE_SVG}</button>`,
+    >${CLOCKTOWER_SVG}</button>`,
   );
 
-  $("fireplace").onclick = showScript;
+  $("clocktower").onclick = showScript;
 
   $("circle")
     .querySelectorAll("[data-id]:not(:disabled)")
@@ -249,20 +249,23 @@ function renderNightChoice() {
 
 // ── Script sheet ─────────────────────────────────────────────
 
-// A hearth with a fire, drawn in the town square's gold and ember colours.
-const FIREPLACE_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true">
-  <rect x="4" y="8" width="56" height="8" rx="2" fill="#b69455" />
-  <rect x="10" y="16" width="44" height="40" fill="#5a3b2e" />
-  <path d="M20 56V36a12 12 0 0 1 24 0v20z" fill="#1a1110" />
+// A clock tower (spire, clock face, belfry and door), drawn in the town
+// square's gold and stone colours.
+const CLOCKTOWER_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true">
+  <circle cx="32" cy="3" r="1.5" fill="#f0cf83" />
+  <path d="M32 4 21 19h22z" fill="#b69455" />
+  <rect x="22" y="19" width="20" height="21" fill="#5a4a3a" />
+  <circle cx="32" cy="29" r="7" fill="#f0cf83" stroke="#b69455" stroke-width="1.5" />
   <path
-    d="M32 54c-8 0-10-6-7-11 1 4 4 4 4 2 0-5 3-8 6-11 0 4 4 6 4 11 2-1 2-3 2-4 3 4 2 13-9 13z"
-    fill="#f39c3d"
+    d="M32 29v-5M32 29l3.5 2"
+    stroke="#1a1110"
+    stroke-width="1.6"
+    stroke-linecap="round"
   />
-  <path
-    d="M32 54c-4 0-5-3-3-6 1 2 2 2 2 0 0-2 2-4 3-5 0 3 3 4 3 7 0 2-2 4-5 4z"
-    fill="#f0cf83"
-  />
-  <rect x="6" y="56" width="52" height="4" rx="1" fill="#b69455" />
+  <rect x="19" y="39" width="26" height="3" fill="#b69455" />
+  <rect x="20" y="42" width="24" height="16" fill="#4a3c30" />
+  <path d="M28 58v-7a4 4 0 0 1 8 0v7z" fill="#1a1110" />
+  <rect x="14" y="58" width="36" height="4" rx="1" fill="#b69455" />
 </svg>`;
 
 const TEAMS = [

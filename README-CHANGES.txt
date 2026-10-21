@@ -1,3 +1,7 @@
+## Minor Change: Clock Tower
+
+- The fireplace in the centre of the town square is now a clock tower (spire, clock face, belfry and door) in the same gold and stone colours. It still opens the script popup when pressed, and glows gold on hover.
+
 ## New Features: Improving Evil
 
 - Demon kills: the Demon never attacks its own teammates, and skips NPCs who have publicly claimed Soldier or Mayor. It goes after good NPCs who have publicly claimed an information role (ongoing ones such as Empath, Fortune Teller and Undertaker first) at DEMON_INFO_KILL_CHANCE (default 75%); otherwise it attacks a random good NPC.

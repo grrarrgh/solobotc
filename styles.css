@@ -360,10 +360,10 @@ input {
   color: #f0cf83;
 }
 
-/* ── Fireplace & script sheet ────────────────────────────── */
+/* ── Clock tower & script sheet ──────────────────────────── */
 
 /* Sits in the centre of the town square, scaled with the circle. */
-.fireplace {
+.clocktower {
   position: absolute;
   left: 50%;
   top: 50%;
@@ -377,15 +377,15 @@ input {
   cursor: pointer;
 }
 
-.fireplace svg {
+.clocktower svg {
   display: block;
   width: 100%;
   height: 100%;
 }
 
-.fireplace:hover,
-.fireplace:focus-visible {
-  filter: drop-shadow(0 0 10px #f39c3d);
+.clocktower:hover,
+.clocktower:focus-visible {
+  filter: drop-shadow(0 0 10px #f0cf83);
 }
 
 .script-dialog {

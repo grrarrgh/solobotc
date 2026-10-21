@@ -38,11 +38,11 @@ test("post-game reveal renders engine-provided Key Moments", () => {
   assert.match(app, /debugLog\(\)/);
 });
 
-test("the fireplace opens a script sheet with every character's ability", () => {
-  assert.match(app, /class="fireplace"/);
+test("the clock tower opens a script sheet with every character's ability", () => {
+  assert.match(app, /class="clocktower"/);
   assert.match(app, /showScript/);
   assert.match(app, /showModal\(\)/);
-  assert.match(css, /\.fireplace/);
+  assert.match(css, /\.clocktower/);
 
   for (const id of Object.keys(ROLES)) {
     assert.ok(ABILITIES[id], `missing ability text for ${id}`);
