@@ -107,8 +107,8 @@ const listLabels = (ts) =>
         .join(", ")} and ${ts.at(-1).label}`;
 
 // The Storyteller's yes/no answer to an Artist asking about one or more
-// players ("is any of them ...?"). `mode` is "truth", "lie" (an evil bluffer
-// or a Drunk) or "random" (a poisoned Artist).
+// players ("is any of them ...?"). `mode` is "truth", "lie" (an evil bluffer,
+// or a Drunk or poisoned Artist) or "random".
 export function artistInfo(s, targets, q, mode) {
   const ts = [].concat(targets);
   const truth = ts.some((t) => artistTruth(t, q));
@@ -252,15 +252,20 @@ const crierText = (yes) =>
 const oracleText = (n) =>
   `Oracle: ${n} dead player${n === 1 ? " is" : "s are"} evil.`;
 
-// How a player's information comes out: "lie" for the Drunk (or anyone made
-// drunk) and for Townsfolk under the Vortox, "random" if poisoned (or dead,
-// unless `deadOk`), otherwise "truth".
+// How a player's information comes out: "lie" (false, and as helpful to the
+// evil team as the evil team's own bluffs) for the Drunk (or anyone made
+// drunk), anyone poisoned, and Townsfolk under the Vortox; "random" if dead
+// (unless `deadOk`); otherwise "truth".
 export function infoMode(s, p, deadOk = false) {
   if (isDrunk(p) || (team(p.role) === "townsfolk" && vortoxActive(s))) {
     return "lie";
   }
 
-  return (deadOk || p.alive || p.vigor) && !p.poisoned ? "truth" : "random";
+  if (!(deadOk || p.alive || p.vigor)) {
+    return "random";
+  }
+
+  return p.poisoned ? "lie" : "truth";
 }
 
 // The Seamstress: are these two players the same alignment?
@@ -325,9 +330,14 @@ export function jugglerInfo(s, guesses, mode) {
   };
 }
 
-// Things a Savant can be told, each as a true and a false statement.
+// Things a Savant can be told, each as a true and a false statement (and
+// the players it names). Never about the human, and about different players
+// from the Savant's last visit where possible.
 function savantFacts(s, p) {
-  const others = nameable(s, p);
+  const all = nameable(s, p).filter((x) => !x.human);
+  const last = p.lastPicks?.savant ?? [];
+  const fresh = all.filter((x) => !last.includes(x.id));
+  const others = fresh.filter((x) => x.alive).length >= 2 ? fresh : all;
   const t = pick(
     others.filter((x) => x.alive),
     s.r,
@@ -347,14 +357,17 @@ function savantFacts(s, p) {
 
   return [
     t && {
+      ids: [t.id],
       yes: `${t.label} is ${evil(t) ? "evil" : "good"}.`,
       no: `${t.label} is ${evil(t) ? "good" : "evil"}.`,
     },
     {
+      ids: [],
       yes: thereAre(outsiders),
       no: thereAre(outsiders ? outsiders + (s.r() < 0.5 ? -1 : 1) : 1),
     },
     c && {
+      ids: [c.id],
       yes: `${c.label} is the ${name(c.role)}.`,
       no: `${c.label} is the ${name(
         pick(
@@ -365,6 +378,7 @@ function savantFacts(s, p) {
     },
     d &&
       x && {
+        ids: [x.id],
         yes: `The Demon is ${near ? "" : "not "}a neighbour of ${x.label}.`,
         no: `The Demon is ${near ? "not " : ""}a neighbour of ${x.label}.`,
       },
@@ -375,6 +389,10 @@ function savantFacts(s, p) {
 // false for a Drunk or under the Vortox; either way when poisoned).
 export function savantInfo(s, p, mode) {
   const [a, b] = sample(savantFacts(s, p), 2, s.r);
+
+  // Remembered so the next visit is about other players.
+  p.lastPicks = { ...p.lastPicks, savant: [...a.ids, ...b.ids] };
+
   const said =
     mode === "truth"
       ? shuffle([a.yes, b.no], s.r)
@@ -494,6 +512,19 @@ function trueInfo(s, p, role, strat) {
       return { targets: [], text: "No information." };
     }
 
+    // Either twin: the Evil Twin and the good twin's character, so the
+    // twins look the same.
+    const twins = s.twins && [s.twins.evilId, s.twins.goodId].includes(t.id);
+    const evilTwin = twins && byId(s, s.twins.evilId);
+    const goodTwin = twins && byId(s, s.twins.goodId);
+
+    if (evilTwin?.role === "eviltwin" && goodTwin) {
+      return {
+        targets: [t.id],
+        text: dreamText(t, ...shuffle(["eviltwin", goodTwin.role], s.r)),
+      };
+    }
+
     // One correct character, and one of the opposite alignment.
     const other = pick(
       (alignment(t.role) === "good" ? evilRoles(s) : goodRoles(s)).filter(
@@ -553,10 +584,20 @@ export function scapegoat(s) {
   return next;
 }
 
-// The scapegoat an evil player frames; null for good (e.g. Drunk) players.
-const framed = (s, p) => (p.alignment === "evil" ? scapegoat(s) : null);
+// The good player false information frames: the evil team's scapegoat
+// (never p themselves).
+function framed(s, p) {
+  const goat = scapegoat(s);
+
+  return goat && goat !== p ? goat : null;
+}
+
+// p's living evil neighbours, whom false information covers for.
+const evilNear = (s, p) => neigh(s, p).filter((x) => evil(x));
 
 // Deliberately false information for `role`, as an evil bluffer tells it.
+// A Drunk or poisoned good player hears the same kind of lie, so it helps
+// the evil team: it frames the scapegoat and vouches for evil players.
 function falseInfo(s, p, role, strat) {
   const wanted = PAIR_TEAM[role];
 
@@ -580,7 +621,25 @@ function falseInfo(s, p, role, strat) {
         pool.filter((x) => x !== goat),
         s.r,
       );
-    const pair = mate ? shuffle([goat, mate], s.r) : sample(pool, 2, s.r);
+
+    // A Washerwoman's "Townsfolk" pair gives an evil player cover.
+    const shield =
+      role === "washerwoman" &&
+      pick(
+        others.filter((x) => x.alignment === "evil"),
+        s.r,
+      );
+    const cover =
+      shield &&
+      pick(
+        good.filter((x) => x !== shield),
+        s.r,
+      );
+    const pair = mate
+      ? shuffle([goat, mate], s.r)
+      : cover
+        ? shuffle([shield, cover], s.r)
+        : sample(pool, 2, s.r);
 
     return shown && pair.length === 2
       ? {
@@ -590,10 +649,13 @@ function falseInfo(s, p, role, strat) {
       : { targets: [], text: "No matching character is in play." };
   }
 
+  // Fewer evil pairs than there are, where possible.
   if (role === "chef") {
+    const n = chefCount(s);
+
     return {
       targets: [],
-      text: `Chef number: ${wrongNumber(s, chefCount(s))}.`,
+      text: `Chef number: ${n > 0 ? n - 1 : n + 1}.`,
     };
   }
 
@@ -608,9 +670,13 @@ function falseInfo(s, p, role, strat) {
     const all = [0, 1, 2].filter((k) => k !== truth && k !== last?.n);
     const close = all.filter((k) => Math.abs(k - truth) === 1);
     const options = close.length ? close : all;
+    // With the scapegoat as a neighbour the number goes up; otherwise, with an
+    // evil neighbour, it goes down.
     const framing = near.includes(framed(s, p))
       ? options.filter((k) => k > truth)
-      : options;
+      : evilNear(s, p).length
+        ? options.filter((k) => k < truth)
+        : options;
 
     const n =
       last && last.key === key && last.n !== truth
@@ -628,8 +694,9 @@ function falseInfo(s, p, role, strat) {
 
   if (role === "fortuneteller") {
     // An evil Fortune Teller "gets a YES" on the scapegoat and another good
-    // player (one that really reads NO, so it's still a lie).
-    const goat = framed(s, p);
+    // player (one that really reads NO, so it's still a lie). A misinformed
+    // good one keeps their own picks: a Demon among them reads NO.
+    const goat = p.alignment === "evil" && framed(s, p);
     const mate =
       goat &&
       pick(
@@ -667,10 +734,19 @@ function falseInfo(s, p, role, strat) {
       return { targets: [], text: "Nobody was executed." };
     }
 
-    const shown = pick(
-      s.script.ids.filter((id) => id !== x.role),
-      s.r,
-    );
+    // A good player "was" evil (the town thinks it got one); an evil player
+    // "was" good (the town thinks it made a mistake).
+    const shown =
+      pick(
+        s.script.ids.filter(
+          (id) => id !== x.role && alignment(id) !== alignment(x.role),
+        ),
+        s.r,
+      ) ??
+      pick(
+        s.script.ids.filter((id) => id !== x.role),
+        s.r,
+      );
 
     return { targets: [], text: `Executed player was ${name(shown)}.` };
   }
@@ -682,8 +758,13 @@ function falseInfo(s, p, role, strat) {
   }
 
   if (role === "grandmother") {
-    // Vouch for another player with a good character they don't have.
-    const g = pick(nameable(s, p), s.r);
+    // Vouch for an evil player (or anyone else) with a good character they
+    // don't have.
+    const g =
+      pick(
+        nameable(s, p).filter((x) => x.alignment === "evil"),
+        s.r,
+      ) ?? pick(nameable(s, p), s.r);
     const shown = pick(
       goodRoles(s).filter((id) => id !== g.role),
       s.r,
@@ -749,7 +830,7 @@ function falseInfo(s, p, role, strat) {
   return { targets: [], text: "No information." };
 }
 
-// Random information for a poisoned player.
+// Random information (e.g. a mad player's made-up information).
 function unreliableInfo(s, p, role, targets) {
   if (role === "clockmaker") {
     return {

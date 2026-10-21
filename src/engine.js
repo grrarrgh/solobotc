@@ -13,7 +13,7 @@ import {
   infoMode,
   philosopherInfo,
 } from "./storyteller.js";
-import { SimpleStrategy } from "./strategy.js";
+import { SimpleStrategy, isTwin } from "./strategy.js";
 import { byId, pick } from "./util.js";
 import { formatLog } from "./log.js";
 import { sectsAndViolets } from "./sects.js";
@@ -683,9 +683,15 @@ export class Engine {
       outcome = "blocked";
       detail = "blocked by Monk protection";
     } else if (t.role === "mayor" && works(t)) {
+      // (Never onto the human, the Demon or either twin.)
       const alt = pick(
         s.players.filter(
-          (x) => x.alive && !x.human && x.id !== t.id && x.id !== d.id,
+          (x) =>
+            x.alive &&
+            !x.human &&
+            x.id !== t.id &&
+            x.id !== d.id &&
+            !isTwin(s, x),
         ),
         s.r,
       );
@@ -824,6 +830,19 @@ export class Engine {
 
   // Abilities that trigger "when you learn that you died".
   learnsDeath(p) {
+    // A dead Mutant (or Mutant bluffer) is no longer at risk of execution,
+    // so they reveal it.
+    if (!p.human && this.strat.revealsWhenDead?.(p) && p.claim !== "mutant") {
+      p.claim = "mutant";
+      this.claimPublicly(p);
+      this.s.publicLog.push(
+        `Day ${this.s.day} — ${p.label} reveals they were the Mutant.`,
+      );
+      this.audit("mutant", `${p.label} revealed they were the Mutant.`, {
+        playerId: p.id,
+      });
+    }
+
     if (
       !p.human &&
       (p.role === "moonchild" ||

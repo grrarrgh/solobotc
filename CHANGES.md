@@ -2,6 +2,31 @@
 
 Newest first.
 
+## New Feature: Misinformation Helps the Evil Team
+
+- Poisoned players now hear false information, the same as a Drunk, instead of random answers. This covers night information and the Artist, Seamstress, Sage, Savant and Juggler.
+- False information for a Drunk or poisoned good player is now the kind that helps the evil team, like the evil team's own bluffs:
+  - Washerwoman: one of the two players is evil, so they look like a Townsfolk.
+  - Investigator: the evil team's scapegoat is named as one of the two "Minions".
+  - Grandmother: the "grandchild" is an evil player, vouched for as a good character.
+  - Chef: one fewer evil pair than there is (or 1 when there are none).
+  - Empath: higher with the scapegoat as a neighbour; lower with an evil neighbour.
+  - Undertaker: an executed good player "was" an evil character, and an executed evil player "was" a good one.
+  - A misinformed Fortune Teller keeps their own picks; a Demon among them reads NO.
+
+## Bug Fixes: Twins, Savant, Mutant, Dreamer, Reset & Colours
+
+- Evil Twin: when asked, the Evil Twin answers exactly as their good twin does: the same claim, the same information word for word (their "X is your Evil Twin" names the good twin), and the same kind of opinion.
+- The Demon never kills either twin, and the Mayor's bounce never lands on one.
+- Savant: statements are never about the human, and each visit is about different players from the last one where possible.
+- Mutant: when a Mutant (or an evil player bluffing the Mutant) learns they died, they publicly reveal they were the Mutant ("Player X reveals they were the Mutant.").
+- Vigormortis: when the Vigormortis dies, every dead Minion it killed loses the ability it kept, and the poison on their Townsfolk neighbours ends (unless the Poisoner or a Snake Charmer swap poisoned them too).
+- Dreamer: picking either twin shows "the Evil Twin or the <good twin's character>", so the twins look alike.
+- Reset is now at the bottom of the Final reveal, so it's hidden while the reveal is collapsed. Download log.txt stays visible.
+- Colours: each player has their own colour (PLAYER_COLOURS in src/data.js, no reds or blues) for their name everywhere it appears: the town square, the Storyteller and public logs, the selected player, the marked-for-execution line, night choices and the Final reveal (Grimoire, notes and timeline). Character names everywhere (logs, answers, tokens, the script sheet, role popups and the Final reveal) are blue for good and red for evil.
+- Town square tokens with long names (Investigator, Mathematician) use a smaller font so they fit on one line.
+- Games now start at 8 seats (COUNTS in src/data.js), and the setup error message follows COUNTS. The tests' 5-player scenarios are dealt from 8 seats.
+
 ## New Features: Votes Needed, Round Seats & Capitalised Day
 
 - Votes needed: the middle of the town square, under the clock tower, shows how many votes a nomination needs right now to mark someone for execution: half the living players (rounded up), or one more than the player already marked (or tied) got today. While a vote is counted, the tally counts towards that number ("3 / 5 needed").

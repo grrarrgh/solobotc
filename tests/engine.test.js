@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 import {
+  COUNTS,
   DEMON_KILL_PRIORITY,
   FORBIDDEN_HUMAN,
   FIRST_NIGHT_INFO,
@@ -14,7 +15,13 @@ import {
 import { createState } from "../src/setup.js";
 import { Engine } from "../src/engine.js";
 import { SimpleStrategy } from "../src/strategy.js";
-import { ravenInfo, artistInfo } from "../src/storyteller.js";
+import {
+  ravenInfo,
+  artistInfo,
+  savantInfo,
+  nightInfo,
+  infoMode,
+} from "../src/storyteller.js";
 import { shuffle, sample } from "../src/util.js";
 
 const script = JSON.parse(
@@ -39,8 +46,13 @@ const role = (p, id, alignment) =>
   });
 
 // A 5-player Day 1 with known roles: Mayor (you), Chef, Butler, Baron, Imp.
+// (Games start at 8 seats, so it deals 8 and keeps the first 5.)
 function base(seed = "feature-test", raw = script) {
-  const s = createState(raw, 5, seed);
+  const s = createState(raw, 8, seed);
+
+  s.players = s.players.slice(0, 5);
+  s.seats = 5;
+  s.twins = null;
 
   s.phase = "day";
   s.night = 1;
@@ -62,6 +74,11 @@ function base(seed = "feature-test", raw = script) {
   role(s.players[3], "baron", "evil");
   role(s.players[4], "imp", "evil");
 
+  // The Fortune Teller's red herring is one of the 5 good players.
+  if (!s.players.some((p) => p.id === s.red)) {
+    s.red = s.players[1].id;
+  }
+
   return s;
 }
 
@@ -78,7 +95,7 @@ test("starts game", () => {
 });
 
 test("reveal hidden before end", () => {
-  const e = new Engine(createState(script, 7, "test"));
+  const e = new Engine(createState(script, 8, "test"));
 
   e.start();
 
@@ -1059,7 +1076,7 @@ test("the debug log records every night's player states and all interactions", (
 
 test("setup deals two first-night and two ongoing information Townsfolk when it can", () => {
   for (const raw of [script, ecp]) {
-    for (let seats = 5; seats <= 15; seats++) {
+    for (const seats of Object.keys(COUNTS).map(Number)) {
       for (let seed = 0; seed < 30; seed++) {
         const tf = createState(raw, seats, seed)
           .players.map((p) => p.role)
@@ -2017,7 +2034,7 @@ function playOut(raw, seats, seed) {
 
 test("whole games play out on every script without errors", () => {
   for (const raw of [script, ecp, sv]) {
-    for (const seats of [5, 7, 10, 13, 15]) {
+    for (const seats of [8, 10, 12, 13, 15]) {
       for (let seed = 0; seed < 16; seed++) {
         const { s, e } = playOut(raw, seats, `play-${seats}-${seed}`);
 
@@ -3390,4 +3407,225 @@ test("night deaths are announced at dawn, and a Moonchild learns of their death 
     s.publicLog.includes("Day 3 — Nobody died in the night.") ||
       s.publicLog.some((x) => x.startsWith("Day 3 —") && x.includes("died in the night")),
   );
+});
+
+// ── Twins, Savant, Mutant, Dreamer ──────────────────────────
+
+// Sects & Violets: Chef (good twin, Player 2) and Evil Twin (Player 4).
+function twinsState(seed = "twins") {
+  const s = base(seed, sv);
+  const [, good, , evil] = s.players;
+
+  role(good, "chef", "good");
+  role(evil, "eviltwin", "evil");
+  evil.claim = "chef";
+  s.twins = { evilId: evil.id, goodId: good.id };
+
+  return { s, good, evil };
+}
+
+test("the Evil Twin's answers mirror the good twin's word for word", () => {
+  const { s, good, evil } = twinsState();
+  const strat = new SimpleStrategy();
+
+  good.memories = [
+    { night: 1, role: "eviltwin", text: `Evil Twin: ${evil.label} is your Evil Twin.` },
+    { night: 1, role: "chef", text: "Chef: 1 pair of evil players." },
+  ];
+  evil.memories = [{ night: 1, role: "chef", text: "Chef: 0 pairs of evil players." }];
+
+  // Swap the two labels, so the good twin's answer reads as the evil one's.
+  const swap = (text) =>
+    text
+      .replaceAll(good.label, "\u0000")
+      .replaceAll(evil.label, good.label)
+      .replaceAll("\u0000", evil.label);
+
+  assert.equal(strat.ask(s, evil), swap(strat.ask(s, good)));
+  assert.match(strat.ask(s, evil), /Chef: 1 pair of evil players\./);
+});
+
+test("the Demon never kills either twin, nor does the Mayor's bounce land on one", () => {
+  const { s, good, evil } = twinsState("demon-twins");
+  const strat = new SimpleStrategy();
+  const imp = s.players[4];
+
+  for (let i = 0; i < 300; i++) {
+    const t = strat.demon(s, imp);
+
+    assert.ok(t !== good && t !== evil, `night ${i}: ${t?.label}`);
+  }
+
+  // With only the twins left to kill, the Demon kills nobody.
+  s.players[2].alive = false;
+
+  assert.equal(strat.demon(s, imp), null);
+});
+
+test("Savant statements never name the human, and move on to new players each visit", () => {
+  const s = createState(sv, 12, "savant-visits");
+  const savant = s.players[1];
+  const human = s.players[0];
+
+  role(savant, "savant", "good");
+
+  let last = [];
+
+  for (let day = 1; day <= 12; day++) {
+    s.day = day;
+
+    const info = savantInfo(s, savant, "truth");
+    const named = savant.lastPicks.savant;
+
+    assert.ok(!info.text.includes(human.label), info.text);
+    assert.ok(!named.includes(human.id));
+    assert.ok(
+      named.every((id) => !last.includes(id)),
+      `day ${day}: ${named} after ${last}`,
+    );
+
+    last = named;
+  }
+});
+
+test("a Mutant (or Mutant bluffer) reveals it publicly when they learn they died", () => {
+  const s = base("mutant-dies", sv);
+  const e = new Engine(s, new SimpleStrategy());
+  const [, mutant, bluffer] = s.players;
+
+  role(mutant, "mutant", "good");
+  mutant.claim = "chef";
+  role(bluffer, "baron", "evil");
+  bluffer.bluff = "mutant";
+  bluffer.claim = "chef";
+
+  for (const p of [mutant, bluffer]) {
+    p.alive = false;
+    e.learnsDeath(p);
+
+    assert.equal(p.claim, "mutant");
+    assert.ok(
+      s.publicLog.includes(`Day 1 — ${p.label} reveals they were the Mutant.`),
+      s.publicLog.join("\n"),
+    );
+  }
+});
+
+test("a Dreamer who picks either twin sees the Evil Twin and the good twin's character", () => {
+  const { s, good, evil } = twinsState("dream-twins");
+  const dreamer = s.players[2];
+
+  role(dreamer, "dreamer", "good");
+  s.night = 2;
+
+  for (const t of [good, evil]) {
+    const strat = new SimpleStrategy();
+
+    strat.dream = () => t;
+
+    const { text } = nightInfo(s, dreamer, strat);
+
+    assert.match(text, new RegExp(`^Dreamer: ${t.label} is the `));
+    assert.ok(text.includes("the Evil Twin") && text.includes("the Chef"), text);
+  }
+});
+
+test("when the Vigormortis dies, the dead Minions it kept going lose their abilities", () => {
+  const strat = new SimpleStrategy();
+  const { s, e } = nightTwo("vigormortis-dies", strat);
+  const [, , , baron, vigormortis] = s.players;
+
+  role(vigormortis, "vigormortis", "evil");
+  strat.demon = () => baron;
+
+  e.night();
+
+  const poisoned = s.players.find((x) => x.id === s.lastingPoison[0].id);
+
+  assert.equal(baron.vigor, true);
+  assert.equal(poisoned.poisoned, true);
+
+  s.poisoned = null;
+  e.kill(vigormortis, "execution");
+
+  assert.equal(baron.vigor, false);
+  assert.equal(poisoned.poisoned, false);
+  assert.deepEqual(s.lastingPoison, []);
+});
+
+// ── Misinformation helps the evil team ──────────────────────
+
+// Player 2 (good) made drunk on Night 1 as `id`; Baron and Imp are evil.
+function misinformed(id, seed) {
+  const s = base(seed);
+  const p = s.players[1];
+
+  role(p, id, "good");
+  p.drunkFrom = "sweetheart";
+  s.phase = "night";
+
+  return { s, p, evil: [s.players[3], s.players[4]] };
+}
+
+test("poisoned players hear lies, the same as a Drunk", () => {
+  const s = base("poison-lies");
+  const p = s.players[1];
+
+  p.poisoned = true;
+  assert.equal(infoMode(s, p), "lie");
+
+  p.poisoned = false;
+  assert.equal(infoMode(s, p), "truth");
+});
+
+test("a misinformed Washerwoman's pair gives an evil player cover", () => {
+  for (let i = 0; i < 20; i++) {
+    const { s, p, evil } = misinformed("washerwoman", `wash-${i}`);
+    const info = nightInfo(s, p, new SimpleStrategy());
+
+    assert.ok(
+      info.targets.some((id) => evil.some((x) => x.id === id)),
+      info.text,
+    );
+  }
+});
+
+test("a misinformed Grandmother vouches for an evil player", () => {
+  for (let i = 0; i < 20; i++) {
+    const { s, p, evil } = misinformed("grandmother", `gran-${i}`);
+    const info = nightInfo(s, p, new SimpleStrategy());
+
+    assert.ok(evil.some((x) => x.id === info.targets[0]), info.text);
+  }
+});
+
+test("a misinformed Undertaker sees the executed player as the other alignment", () => {
+  const { s, p } = misinformed("undertaker", "undertaker-lies");
+  const [, , butler, baron] = s.players;
+
+  s.night = 2;
+
+  s.lastExecution = butler.id;
+  assert.match(nightInfo(s, p, new SimpleStrategy()).text, /was (Poisoner|Spy|Scarlet Woman|Baron|Imp)\.$/);
+
+  s.lastExecution = baron.id;
+  assert.doesNotMatch(nightInfo(s, p, new SimpleStrategy()).text, /was (Poisoner|Spy|Scarlet Woman|Baron|Imp)\.$/);
+});
+
+test("a misinformed Investigator names the evil team's scapegoat as a Minion", () => {
+  const { s, p } = misinformed("investigator", "investigator-lies");
+  const chef = s.players[2];
+
+  role(chef, "chef", "good");
+  chef.claimKnown = true;
+  s.scapegoat = chef.id;
+
+  assert.ok(nightInfo(s, p, new SimpleStrategy()).targets.includes(chef.id));
+});
+
+test("a misinformed Chef reports fewer evil pairs where possible", () => {
+  const { s, p } = misinformed("chef", "chef-lies");
+
+  // Baron and Imp sit together: 1 pair, so the lie is 0.
+  assert.equal(nightInfo(s, p, new SimpleStrategy()).text, "Chef number: 0.");
 });

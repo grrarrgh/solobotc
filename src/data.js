@@ -212,11 +212,11 @@ export const PITHAG_NO_DEATH_CHANCE = 0.3;
 
 // Vote animation: how long (in ms) the clock hands point at the nominator
 // and nominee before the large hand starts counting votes.
-export const VOTE_COUNT_DELAY_MS = 1500;
+export const VOTE_COUNT_DELAY_MS = 500;
 
 // Vote animation: how long (in ms) the large hand takes per seat as it
 // counts votes. (A voter's hand goes up just before the clock hand arrives.)
-export const VOTE_TICK_MS = 450;
+export const VOTE_TICK_MS = 200;
 
 // Town square size, set from the menu (☰) by the title (as a fraction of
 // the normal size). The −/+ buttons step it by TOWN_SQUARE_SIZE_STEP, between
@@ -335,6 +335,27 @@ export const ARTIST_QUESTIONS = {
   outsider: "an Outsider",
   townsfolk: "a Townsfolk",
 };
+
+// Each seat's colour for player names in the town square and the public log,
+// in seat order (seat 1 is you). No reds or blues: those mark evil and good
+// characters.
+export const PLAYER_COLOURS = [
+  "#f2c14e", // gold
+  "#8bd450", // lime
+  "#e8873a", // orange
+  "#4fd1a5", // mint
+  "#c79bf2", // lavender
+  "#f29bd0", // orchid
+  "#c8c85a", // olive
+  "#5ed6c0", // turquoise
+  "#c49a6c", // tan
+  "#b6eab0", // pale green
+  "#e6e6e6", // silver
+  "#ffcf99", // peach
+  "#9fbf3b", // moss
+  "#fff07a", // lemon
+  "#d6a8e0", // lilac
+];
 
 // The number of seats selected on the setup screen when the page opens.
 export const DEFAULT_SEATS = 12;

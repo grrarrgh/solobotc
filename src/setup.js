@@ -62,7 +62,11 @@ export function createState(
 ) {
   const script = parseScript(raw),
     base = COUNTS[seats];
-  if (!base) throw Error("Choose 5–15 seats");
+  if (!base) {
+    const sizes = Object.keys(COUNTS);
+
+    throw Error(`Choose ${sizes[0]}–${sizes.at(-1)} seats`);
+  }
 
   const r = rng(seed),
     pool = (t) => script.ids.filter((id) => team(id) === t);

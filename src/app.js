@@ -4,6 +4,8 @@ import {
   team,
   COUNTS,
   DEFAULT_SEATS,
+  PLAYER_COLOURS,
+  alignment,
   ARTIST_QUESTIONS,
   ABILITIES,
   VOTE_COUNT_DELAY_MS,
@@ -48,17 +50,54 @@ const ROLE_PATTERN = new RegExp(
 );
 
 // A character name that can be pressed to read about the role.
+// (Coloured by alignment: blue good, red evil.)
 const roleLink = (id) =>
-  `<button type="button" class="role-link" data-role="${esc(id)}">${esc(
-    name(id),
-  )}</button>`;
+  `<button type="button" class="role-link role-${alignment(
+    id,
+  )}" data-role="${esc(id)}">${esc(name(id))}</button>`;
 
-// Escapes text, turning every character name in it into a role link.
+// ── Player colours ───────────────────────────────────────────
+
+// Each seat's colour (PLAYER_COLOURS in data.js), by seat order.
+const playerColour = (p) =>
+  PLAYER_COLOURS[s.players.indexOf(p) % PLAYER_COLOURS.length];
+
+// Escaped text with every player's name ("Player 3", "You") in their colour
+// (just escaped before a game starts).
+// (`(?!\d)` keeps "Player 1" from matching the start of "Player 10".)
+function colourPlayers(text) {
+  if (!s) {
+    return esc(text);
+  }
+
+  const byLabel = new Map(s.players.map((p) => [p.label, p]));
+  const pattern = new RegExp(
+    `\\b(${[...byLabel.keys()]
+      .sort((a, b) => b.length - a.length)
+      .map(escapeRegExp)
+      .join("|")})\\b(?!\\d)`,
+    "g",
+  );
+
+  return esc(text).replace(
+    pattern,
+    (label) =>
+      `<span class="player-name" style="color:${playerColour(
+        byLabel.get(label),
+      )}">${label}</span>`,
+  );
+}
+
+
+// Escapes text, turning every character name in it into a role link and
+// every player's name into their colour (see colourPlayers()).
 // (split() with a capture group puts the matched names at odd indexes.)
 const linkRoles = (text) =>
   String(text ?? "")
     .split(ROLE_PATTERN)
-    .map((part, i) => (i % 2 ? roleLink(ROLE_BY_NAME.get(part)) : esc(part)))
+    .map((part, i) =>
+      i % 2 ? roleLink(ROLE_BY_NAME.get(part)) : colourPlayers(part),
+    )
     .join("");
 
 const TEAM_NAMES = {
@@ -72,7 +111,7 @@ const TEAM_NAMES = {
 function showRole(id) {
   const ability = ABILITIES[id] ?? "";
 
-  $("role-sheet").innerHTML = `<h2>${esc(name(id))}</h2>
+  $("role-sheet").innerHTML = `<h2 class="role-${alignment(id)}">${esc(name(id))}</h2>
     <p class="role-team team-${team(id)}">${esc(TEAM_NAMES[team(id)] ?? "")}</p>
     <p>${esc(ability)}</p>
     ${
@@ -189,11 +228,13 @@ function circle() {
               : ""
           }
 
-          <span class="token ${p.claimKnown || p.human ? "" : "unknown"}">
+          <span class="token ${
+            p.claimKnown || p.human ? `role-${alignment(p.claim)}` : "unknown"
+          } ${token.length > 10 ? "long" : ""}">
             ${esc(token)}
           </span>
 
-          <small>
+          <small class="player-name" style="color:${playerColour(p)}">
             ${esc(p.label)}
           </small>
 
@@ -413,8 +454,8 @@ function renderNightChoice() {
     p.role,
   )}). ${esc(p.prompt)}`;
 
-  $("night-picks").textContent = nightPicks.length
-    ? `Selected: ${labels}`
+  $("night-picks").innerHTML = nightPicks.length
+    ? colourPlayers(`Selected: ${labels}`)
     : `Click ${p.count} player${p.count > 1 ? "s" : ""} in the town square.`;
 
   $("night-select").disabled = nightPicks.length !== p.count;
@@ -462,7 +503,7 @@ function showScript() {
           ${roles
             .map(
               (id) =>
-                `<dt>${esc(name(id))}</dt><dd>${esc(ABILITIES[id] ?? "")}</dd>`,
+                `<dt class="role-${alignment(id)}">${esc(name(id))}</dt><dd>${esc(ABILITIES[id] ?? "")}</dd>`,
             )
             .join("")}
         </dl>`
@@ -566,7 +607,7 @@ function fate(p, events) {
 // The extra lines under a player's Grimoire row: what happened to their
 // character, lasting effects and twins.
 function playerNotes(p, r) {
-  const label = (id) => esc(byId(r, id)?.label ?? id);
+  const label = (id) => colourPlayers(byId(r, id)?.label ?? id);
   const notes = [];
 
   if (p.startRole === "drunk") {
@@ -627,7 +668,7 @@ function grimoire(r) {
       const team = `team-row-${p.alignment}${p.alive ? "" : " is-dead"}`;
 
       return `<tr class="${team}" title="${esc(p.alignment)}">
-          <td>${esc(p.label)}</td>
+          <td>${colourPlayers(p.label)}</td>
           <td>${character}</td>
           <td>${roleLink(p.claim)}</td>
           <td>${esc(fate(p, r.events))}</td>
@@ -664,7 +705,7 @@ function bluffLine(r) {
 
   const knew = r.players
     .filter((p) => p.alignment === "evil" && p.bluffs?.length)
-    .map((p) => esc(p.label));
+    .map((p) => colourPlayers(p.label));
 
   return `<p class="grimoire-bluffs">
     <strong>Demon bluffs:</strong> ${r.bluffs.map(roleLink).join(", ")}${
@@ -710,7 +751,9 @@ function voters(ev, r) {
     ? `<small class="event-detail">votes: ${voted
         .map(
           (x) =>
-            `${esc(label(x.playerId))}${x.counted ? "" : " (not counted)"}`,
+            `${colourPlayers(label(x.playerId))}${
+              x.counted ? "" : " (not counted)"
+            }`,
         )
         .join(", ")}</small>`
     : "";
@@ -850,7 +893,7 @@ function render() {
       ? `Night ${s.night} — ${e.alive().length} alive`
       : `Day ${s.day} — ${e.alive().length} alive`;
 
-  $("selected-player").textContent = t ? `Selected: ${t.label}` : "";
+  $("selected-player").innerHTML = t ? colourPlayers(`Selected: ${t.label}`) : "";
 
   $("talk").textContent = t
     ? `Conversations: ${talk.used}/${talk.limit}; ${talk.remaining} remaining${
@@ -890,14 +933,15 @@ function render() {
   const block = voteAnim ? voteAnim.before.block : s.block;
   const marked = block?.nomineeId ? e.player(block.nomineeId) : null;
 
-  $("block-status").textContent =
+  $("block-status").innerHTML = colourPlayers(
     s.phase !== "day"
       ? ""
       : marked
         ? `Marked for execution: ${marked.label} (${block.count} votes). End the day to execute them.`
         : block
           ? `Tied at ${block.count} votes: nobody is marked for execution.`
-          : "";
+          : "",
+  );
   $("slay").hidden = !(h.shown === "slayer" && !s.slayerUsed && h.alive);
   $("artist-controls").hidden = !(
     h.shown === "artist" &&

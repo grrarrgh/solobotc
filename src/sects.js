@@ -762,6 +762,34 @@ export const sectsAndViolets = {
       this.barberSwap(p);
     }
 
+    // The Vigormortis dies: the dead Minions it kept going lose their
+    // abilities, and their neighbours' poison ends.
+    if (p.role === "vigormortis") {
+      const kept = s.players.filter((x) => !x.alive && x.vigor);
+
+      for (const x of kept) {
+        x.vigor = false;
+      }
+
+      // (Unless the Poisoner or a Snake Charmer swap poisoned them too.)
+      for (const { id } of s.lastingPoison) {
+        const x = this.player(id);
+
+        x.poisoned = Boolean(x.lastingPoison) || s.poisoned === id;
+      }
+
+      s.lastingPoison = [];
+
+      if (kept.length) {
+        this.audit(
+          "vigormortis",
+          `${p.label} (Vigormortis) died; ${kept
+            .map((x) => `${x.label} (${name(x.role)})`)
+            .join(", ")} lost their abilities.`,
+          { playerId: p.id },
+        );
+      }
+    }
   },
 
   // The Klutz, "when you learn that you died", publicly picks a living

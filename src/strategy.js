@@ -21,11 +21,16 @@ import {
 import {
   ability,
   bluffInfo,
+  evilTwinInfo,
   scapegoat,
   isDrunk,
   isDemon,
 } from "./storyteller.js";
 import { byId, pick, sample } from "./util.js";
+
+// One of the Evil Twin pair (good or evil).
+export const isTwin = (s, x) =>
+  Boolean(s.twins) && [s.twins.evilId, s.twins.goodId].includes(x.id);
 
 const ROLE_BY_NAME = new Map(Object.keys(ROLES).map((id) => [name(id), id]));
 
@@ -192,6 +197,24 @@ export class SimpleStrategy {
       : null;
   }
 
+  // For an Evil Twin: their good twin, and the good twin's information to
+  // repeat word for word, with "X is your Evil Twin" naming the good twin.
+  twinCopy(s, p) {
+    const t = s.twins;
+    const twin = t && p.id === t.evilId && p.role === "eviltwin"
+      ? byId(s, t.goodId)
+      : null;
+
+    return twin
+      ? {
+          twin,
+          memories: twin.memories.map((m) =>
+            m.role === "eviltwin" ? { ...m, text: evilTwinInfo(s, twin).text } : m,
+          ),
+        }
+      : null;
+  }
+
   // The living other twin of an Evil Twin pair p belongs to, if any.
   twinOf(s, p) {
     const t = s.twins;
@@ -243,9 +266,16 @@ export class SimpleStrategy {
   //
   // An NPC the Cerenovus made "mad" claims that character instead, with
   // made-up information to match (and an opinion drawn from it).
+  //
+  // The Evil Twin answers exactly as their good twin does (see twinCopy()).
   ask(s, p) {
     const mad = p.mad?.day === s.day ? p.mad : null;
-    const memories = mad ? (mad.memories ?? []) : p.memories;
+    const copy = !mad && this.twinCopy(s, p);
+    const memories = mad
+      ? (mad.memories ?? [])
+      : copy
+        ? copy.memories
+        : p.memories;
     const details = memories.length
       ? memories
           .map((x) => `${x.day ? `Day ${x.day}` : `Night ${x.night}`}: ${x.text}`)
@@ -264,7 +294,7 @@ export class SimpleStrategy {
       `I claim ${name(mad ? mad.role : p.claim)}.`,
       twin && `${twin.label} is my twin, and I am the good twin.`,
       details,
-      !mad && this.unusedAbility(p),
+      !mad && this.unusedAbility(copy ? copy.twin : p),
       opinion.text,
     ]
       .filter(Boolean)
@@ -400,9 +430,10 @@ export class SimpleStrategy {
               : this.priorityLevel(x)
         : undefined;
 
+    // Neither twin is ever the Demon's kill.
     return this.byPriority(
       s,
-      this.others(s, p),
+      this.others(s, p).filter((x) => !isTwin(s, x)),
       level,
     );
   }

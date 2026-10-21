@@ -53,7 +53,7 @@ test("character names become role popups that close when pressed", () => {
   assert.match(html, /id="role-dialog"/);
   assert.doesNotMatch(html, /id="script-close"/);
   assert.match(app, /linkRoles/);
-  assert.match(app, /class="role-link"/);
+  assert.match(app, /class="role-link role-\$\{alignment\(/);
   assert.match(app, /\$\(id\)\.close\(\)/);
   assert.match(css, /\.role-link/);
 });
@@ -130,4 +130,19 @@ test("seats are round, and the votes needed show under the clock tower", () => {
   assert.match(app, /class="votes-needed">\$\{needed\} votes needed/);
   assert.match(app, /\$\{votes\} \/ \$\{result\.needed\} needed/);
   assert.match(css, /\.circle\.voting \.votes-needed/);
+});
+
+test("players have their own colours; characters are blue (good) or red (evil)", () => {
+  assert.match(app, /PLAYER_COLOURS\[/);
+  assert.match(app, /class="player-name" style="color:/);
+  assert.match(app, /i % 2 \? roleLink\(ROLE_BY_NAME\.get\(part\)\) : colourPlayers\(part\)/);
+  assert.match(css, /\.role-good,\s*\.token\.role-good,[^{]*\{\s*color: #64b5f6/);
+  assert.match(css, /\.role-evil,\s*\.token\.role-evil,[^{]*\{\s*color: #ef6b72/);
+});
+
+test("Reset sits at the bottom of the Final reveal and collapses with it", () => {
+  assert.match(
+    html,
+    /<details id="reveal-panel"[\s\S]*?id="reset"[\s\S]*?<\/details>/,
+  );
 });

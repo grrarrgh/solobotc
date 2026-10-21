@@ -65,7 +65,7 @@ input {
   left: 50%;
   top: 50%;
   /* Always a circle: the width sets the size, the height follows. */
-  width: 88px;
+  width: 92px;
   aspect-ratio: 1;
   display: flex;
   flex-direction: column;
@@ -89,8 +89,15 @@ input {
 .token {
   display: block;
   max-width: 100%;
+  font-size: 0.78rem;
+  line-height: 1.15;
   color: #f0cf83;
   font-weight: 800;
+}
+
+/* Long one-word names (Investigator, Mathematician) fit on one line. */
+.token.long {
+  font-size: 0.64rem;
 }
 
 .human {
@@ -404,7 +411,8 @@ input {
     font-size: 0.65rem;
   }
 
-  .token {
+  .token,
+  .token.long {
     font-size: 0.62rem;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -826,3 +834,23 @@ input {
   display: inline;
 }
 
+
+/* Alignment colours for characters everywhere (blue good, red evil), and
+   each player's own colour for their name. */
+.role-good,
+.token.role-good,
+.ability-list dt.role-good,
+.script-dialog h2.role-good {
+  color: #64b5f6;
+}
+
+.role-evil,
+.token.role-evil,
+.ability-list dt.role-evil,
+.script-dialog h2.role-evil {
+  color: #ef6b72;
+}
+
+.player-name {
+  font-weight: 700;
+}
