@@ -1,3 +1,22 @@
+## Improvements: Code Clean-up, Start Script & README
+
+- `npm start` now runs a small built-in Node server (serve.js) instead of `python3`, which usually isn't available on Windows. `npm run check` syntax-checks every file in src/ without a hand-kept list.
+- README.md is rewritten: how to play, the scripts, the tuning constants in src/data.js, the code layout and the tests.
+- index.html declares `<!doctype html>` and a language, so browsers no longer render it in quirks mode.
+- Removed unused files (src/strategies.js, src/talk-limit.js and an empty test file) and stale comments about the old SLAYER_* and SEAMSTRESS_NIGHT_CHANCE settings. The Slayer's timing is now its own row in ONCE_PER_GAME.
+- Shared helpers replace repeated code: `byId` (in src/util.js) for looking up a player, and the strategy's `others()` for "living NPCs other than me".
+
+## Bug Fixes & Improvements: Picks, Bluffs, Votes, Timing & Dawn Deaths
+
+- Vigormortis: its own Minions are a high kill priority (VIGORMORTIS_MINION_PRIORITY in src/data.js), since a Minion it kills keeps their ability.
+- Evil bluffs never name the human: every pick and pair in an evil player's bluffed information (Washerwoman/Librarian/Investigator pairs, Fortune Teller and Dreamer picks, Grandmother, Sage, Savant, Butler, Gambler, Ravenkeeper...) leaves the human out, including the Spy's true bluffs.
+- Night picks vary: NPCs avoid picking the same player(s) as last time when anyone else is available (Monk, Fortune Teller, Dreamer, Snake Charmer, Butler, Gambler, Poisoner, Witch, Cerenovus, Pit-Hag).
+- False information is less obvious: wrong numbers are just above or below the truth; the Oracle never says more evil are dead than are dead; the Flowergirl and Town Crier don't claim a vote or nomination on a day with none.
+- Dead votes: a dead good NPC keeps their one ghost vote and only spends it on a nominee they're suspicious of.
+- Game over: the status line just says "Game Over!" (the winner is in the Final reveal), and the Public log and Final reveal are both collapsed; click a heading to open it. Reset and Download log.txt stay visible.
+- Once-per-game timing: ONCE_PER_GAME in src/data.js sets AFTER_DAY, START_CHANCE and STEP_CHANCE for when NPCs use (or evil bluffers "use") the Slayer (replacing the old SLAYER_* settings), Artist, Seamstress, Philosopher and Assassin abilities. The Juggler still juggles on their first day.
+- Dawn deaths: night deaths are announced in the morning ("Player X died in the night." or "Nobody died in the night."), which is when the human learns they died too. "When you learn that you died" abilities (Moonchild, Klutz) trigger then. The Ravenkeeper still wakes during the night.
+
 ## New Features: Madness & Pit-Hag Improvements
 
 - Public announcements: at dawn, a living NPC whose claim no longer matches what they last claimed in public (to the human when asked, or publicly) says so in the Public Log; if they never claimed in public, nothing is said: "Player 2 now claims to be the Mayor." (made mad; the madness isn't given away), 'Player 2: "Yesterday the Cerenovus made me mad as the Mayor, I am actually the Chef."' (no longer mad, or made mad again about something else, which they then name as what they actually are), or "Player 4 says they woke up as the Klutz." (changed by the Pit-Hag, Barber or Snake Charmer).

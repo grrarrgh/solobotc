@@ -105,3 +105,11 @@ test("nominations animate clock hands, mark with a skull, and End day executes",
   assert.match(html, /id="block-status"/);
   assert.doesNotMatch(html, /id="request-nomination" hidden/);
 });
+
+test("game over: the status says Game Over!, and the logs collapse", () => {
+  assert.match(app, /"Game Over!"/);
+  assert.match(html, /id="public-panel"[^>]*open/);
+  assert.match(html, /id="reveal-panel"/);
+  assert.match(app, /\$\("public-panel"\)\.open = false/);
+  assert.match(app, /\$\("reveal-panel"\)\.open = false/);
+});

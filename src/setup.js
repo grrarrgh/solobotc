@@ -297,6 +297,8 @@ export function createState(
     executedToday: false,
     dayVoters: [],
     dayNominators: [],
+    nightDeaths: [], // announced at dawn
+    dawnLearn: [], // "when you learn that you died", at dawn
     block: null, // { nomineeId, count }: marked for execution today
     pending: null,
     humanChoice: null,

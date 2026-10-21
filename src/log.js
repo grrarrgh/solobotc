@@ -1,4 +1,5 @@
 import { name } from "./data.js";
+import { byId } from "./util.js";
 
 const pad = (x, n) => String(x).padEnd(n);
 
@@ -42,7 +43,7 @@ function stateLines(players) {
 }
 
 function voteLine(s, records) {
-  const label = (id) => s.players.find((x) => x.id === id)?.label ?? id;
+  const label = (id) => byId(s, id)?.label ?? id;
   const voted = records.filter((r) => r.attempted);
 
   if (!voted.length) {
@@ -80,7 +81,7 @@ export function formatLog(s) {
     if (e.type === "state") {
       lines.push(...stateLines(e.data.players));
 
-      const goat = s.players.find((x) => x.id === e.data.scapegoat);
+      const goat = byId(s, e.data.scapegoat);
 
       if (goat) {
         lines.push(`  Evil team is framing: ${goat.label}`);

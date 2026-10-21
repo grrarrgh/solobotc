@@ -762,7 +762,13 @@ export const sectsAndViolets = {
       this.barberSwap(p);
     }
 
-    // The Klutz publicly picks a living player; if evil, good loses.
+  },
+
+  // The Klutz, "when you learn that you died", publicly picks a living
+  // player; if evil, good loses.
+  klutzDeath(p) {
+    const sober = !p.poisoned && !isDrunk(p);
+
     if (
       !p.human &&
       (p.role === "klutz" || (p.alignment === "evil" && p.claim === "klutz"))

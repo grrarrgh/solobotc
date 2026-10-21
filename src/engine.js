@@ -14,7 +14,7 @@ import {
   philosopherInfo,
 } from "./storyteller.js";
 import { SimpleStrategy } from "./strategy.js";
-import { pick } from "./util.js";
+import { byId, pick } from "./util.js";
 import { formatLog } from "./log.js";
 import { sectsAndViolets } from "./sects.js";
 
@@ -53,7 +53,7 @@ export class Engine {
   }
 
   player(id) {
-    return this.s.players.find((x) => x.id === id);
+    return byId(this.s, id);
   }
 
   alive() {
@@ -260,7 +260,7 @@ export class Engine {
     const poisoner = s.players.find((x) => acts(x) && x.role === "poisoner");
 
     if (poisoner) {
-      const t = this.strat.poison(s);
+      const t = this.strat.poison(s, poisoner);
 
       if (t) {
         t.poisoned = true;
@@ -358,6 +358,12 @@ export class Engine {
     );
 
     this.audit("day", `Day ${s.day} began.`);
+
+    this.dawnDeaths();
+
+    if (s.winner) {
+      return;
+    }
 
     this.npcShots();
     this.npcArtists();
@@ -770,7 +776,12 @@ export class Engine {
       cause,
     });
 
-    this.s.publicLog.push(`${p.label} died.`);
+    // Night deaths are announced in the morning (see dawnDeaths()).
+    if (this.s.phase === "night") {
+      this.s.nightDeaths.push(p.id);
+    } else {
+      this.s.publicLog.push(`${p.label} died.`);
+    }
 
     // "If you die at night": any death at night wakes the Ravenkeeper (the
     // Demon's kill, the Assassin, a Moonchild curse, a random death...). A
@@ -798,6 +809,21 @@ export class Engine {
       }
     }
 
+    this.sectsDeath(p, cause);
+
+    // "When you learn that you died" (Moonchild, Klutz): at night, that's in
+    // the morning.
+    if (this.s.phase === "night") {
+      this.s.dawnLearn.push(p.id);
+    } else {
+      this.learnsDeath(p);
+    }
+
+    return true;
+  }
+
+  // Abilities that trigger "when you learn that you died".
+  learnsDeath(p) {
     if (
       !p.human &&
       (p.role === "moonchild" ||
@@ -806,9 +832,32 @@ export class Engine {
       this.moonchild(p);
     }
 
-    this.sectsDeath(p, cause);
+    this.klutzDeath(p);
+  }
 
-    return true;
+  // At dawn: who died in the night (and the human learns if it was them),
+  // then "when you learn that you died" abilities.
+  dawnDeaths() {
+    const s = this.s;
+    const dead = s.nightDeaths.map((id) => this.player(id));
+
+    for (const p of dead) {
+      s.publicLog.push(`Day ${s.day} — ${p.label} died in the night.`);
+
+      if (p.human) {
+        s.privateLog.push(`Day ${s.day}: You died in the night.`);
+      }
+    }
+
+    if (!dead.length && s.night > 1) {
+      s.publicLog.push(`Day ${s.day} — Nobody died in the night.`);
+    }
+
+    s.nightDeaths = [];
+
+    for (const id of s.dawnLearn.splice(0)) {
+      this.learnsDeath(this.player(id));
+    }
   }
 
   // ── Day ────────────────────────────────────────────────────

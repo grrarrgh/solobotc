@@ -83,13 +83,19 @@ export const ONGOING_INFO = [
 // Adjust here: 0 = Minions never know them, 1 = they always do.
 export const MINION_BLUFF_CHANCE = 1;
 
-// When an NPC Slayer (or evil Slayer bluffer) fires their one shot. They never
-// shoot before SLAYER_SHOOT_AFTER_DAY; that day the chance is SLAYER_START_CHANCE,
-// rising by SLAYER_CHANCE_STEP each day after (capped at 100%).
-// With the defaults: Day 1 0%, Day 2 20%, Day 3 40%, ... Day 6 onwards 100%.
-export const SLAYER_SHOOT_AFTER_DAY = 2;
-export const SLAYER_START_CHANCE = 0.2;
-export const SLAYER_CHANCE_STEP = 0.2;
+// When NPCs use their once-per-game abilities (and evil NPCs "use" bluffed
+// ones). Never before AFTER_DAY (a day for day abilities, a night for night
+// ones); then START_CHANCE that day, rising by STEP_CHANCE each day after
+// (capped at 100%). E.g. the Slayer: Day 1 0%, Day 2 20%, Day 3 40%, ...
+// Day 6 onwards 100%. (The Juggler always juggles on their first day, as
+// their ability says.)
+export const ONCE_PER_GAME = {
+  slayer: { AFTER_DAY: 2, START_CHANCE: 0.2, STEP_CHANCE: 0.2 }, // day
+  artist: { AFTER_DAY: 1, START_CHANCE: 0.5, STEP_CHANCE: 0.25 }, // day
+  seamstress: { AFTER_DAY: 1, START_CHANCE: 0.5, STEP_CHANCE: 0.25 }, // night
+  philosopher: { AFTER_DAY: 1, START_CHANCE: 1, STEP_CHANCE: 0 }, // night
+  assassin: { AFTER_DAY: 2, START_CHANCE: 0.3, STEP_CHANCE: 0.15 }, // night
+};
 
 // How the Demon picks its nightly kill. It "finds" a good player's character
 // when they have publicly claimed it, and always knows its own Minions'
@@ -173,6 +179,10 @@ export const DEMON_KILL_PRIORITY = {
 // a Minion, on a night after it was nominated and survived.
 export const DEMON_STAR_PASS_CHANCE = 0.75;
 
+// The Vigormortis's kill priority for its own Minions: a Minion it kills
+// keeps their ability (and poisons a Townsfolk neighbour), so it's keen to.
+export const VIGORMORTIS_MINION_PRIORITY = "high";
+
 // Chance an NPC Gambler makes a wild guess (a random character on the
 // script) instead of guessing the character their target claims. A wrong
 // guess kills a working Gambler.
@@ -185,10 +195,7 @@ export const SCAPEGOAT_CHANCE = 0.8;
 // Sects & Violets NPC behaviour.
 // WITCH_HUMAN_CHANCE: chance the Witch curses the human (the player most
 //   likely to nominate) rather than a random good NPC.
-// SEAMSTRESS_NIGHT_CHANCE: chance an NPC Seamstress uses their once-per-game
-//   ability on any given night.
 export const WITCH_HUMAN_CHANCE = 0.2;
-export const SEAMSTRESS_NIGHT_CHANCE = 0.5;
 
 // PITHAG_EVIL_CHANCE: chance the Pit-Hag changes an evil teammate into a
 //   not-in-play character of the same kind (Minion or Demon) instead of

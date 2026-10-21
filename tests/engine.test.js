@@ -1301,11 +1301,11 @@ test("a human Butler picks a master, whose vote their own vote depends on", () =
 test("NPC Slayers never shoot on Day 1, then 20% on Day 2, rising 20% a day", () => {
   const strat = new SimpleStrategy();
 
-  assert.equal(strat.slayChance(1), 0);
-  assert.equal(strat.slayChance(2), 0.2);
-  assert.ok(Math.abs(strat.slayChance(3) - 0.4) < 1e-9);
-  assert.ok(Math.abs(strat.slayChance(4) - 0.6) < 1e-9);
-  assert.equal(strat.slayChance(10), 1);
+  assert.equal(strat.onceChance("slayer", 1), 0);
+  assert.equal(strat.onceChance("slayer", 2), 0.2);
+  assert.ok(Math.abs(strat.onceChance("slayer", 3) - 0.4) < 1e-9);
+  assert.ok(Math.abs(strat.onceChance("slayer", 4) - 0.6) < 1e-9);
+  assert.equal(strat.onceChance("slayer", 10), 1);
 
   for (let i = 0; i < 30; i++) {
     const s = base(`slayer-timing-${i}`);
@@ -1476,6 +1476,8 @@ test("Artist questions can cover 1–3 players: 'Is any of X, Y and Z ...?'", ()
   );
 
   const strat = new SimpleStrategy();
+
+  s.day = 10; // late enough that an NPC Artist always asks (ONCE_PER_GAME)
 
   for (let i = 0; i < 50; i++) {
     const ask = strat.artist(s, chef);
@@ -3222,5 +3224,166 @@ test("made mad again about something else, they say what they were mad as yester
     s.publicLog.includes(
       `Day 3 — ${chef.label}: "Yesterday the Cerenovus made me mad as the Oracle, I am actually the Chef."`,
     ),
+  );
+});
+
+// ── Round of improvements: picks, bluffs, votes, dawn deaths ─
+
+test("the Vigormortis prefers to kill its own Minions", () => {
+  const s = base("vigor-minions", sv);
+  const strat = new SimpleStrategy();
+  const [, , , baron, demon] = s.players;
+
+  role(demon, "vigormortis", "evil");
+  s.r = () => 0; // the "high" priority's chance fires
+
+  assert.equal(strat.demon(s, demon), baron);
+});
+
+test("evil bluffed information never names the human", () => {
+  const roles = ["washerwoman", "investigator", "fortuneteller", "grandmother"];
+
+  for (let i = 0; i < 40; i++) {
+    for (const claim of roles) {
+      const s = bluffNight(`no-human-${claim}-${i}`);
+      const imp = s.players[4];
+
+      imp.claim = claim;
+      new Engine(s).start();
+
+      for (const m of imp.memories) {
+        assert.ok(!m.targets.includes(s.players[0].id), `${claim}: ${m.text}`);
+        assert.ok(!/\bYou\b/.test(m.text), `${claim}: ${m.text}`);
+      }
+    }
+  }
+});
+
+test("night picks don't repeat when there's someone else to pick", () => {
+  const s = base("fresh-picks");
+  const strat = new SimpleStrategy();
+  const chef = s.players[1];
+
+  for (let i = 0; i < 20; i++) {
+    const first = strat.monk(s, chef);
+    const second = strat.monk(s, chef);
+
+    assert.notEqual(first, second);
+
+    const a = strat.ft(s, chef).map((x) => x.id);
+    const b = strat.ft(s, chef).map((x) => x.id);
+
+    // 4 others: a fresh pair is always possible.
+    assert.ok(!b.some((id) => a.includes(id)), `${a} then ${b}`);
+  }
+});
+
+test("false information isn't obviously false", () => {
+  // Wrong numbers stay next to the truth: a lying Chef (truth 0) says 1.
+  for (let i = 0; i < 20; i++) {
+    const s = bluffNight(`near-${i}`);
+    const imp = s.players[4];
+
+    imp.claim = "chef";
+    new Engine(s).start();
+
+    assert.equal(imp.memories[0].text, "Chef number: 1.");
+  }
+
+  // With nobody dead, a lying Oracle can only say 0; with no votes or
+  // nominations, a lying Flowergirl or Town Crier says nobody did.
+  const s = base("obvious", sv);
+  const strat = new SimpleStrategy();
+  const [, , oracle, flower, crier] = s.players;
+
+  role(flower, "witch", "evil");
+  role(crier, "fanggu", "evil"); // (not the Vortox: no execution would end the game)
+  s.phase = "night";
+  s.night = 2;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  for (const [p, claim] of [
+    [flower, "flowergirl"],
+    [crier, "towncrier"],
+  ]) {
+    p.claim = claim;
+  }
+
+  e.night();
+
+  assert.equal(flower.memories.at(-1).text, "Flowergirl: a Demon did not vote today.");
+  assert.equal(crier.memories.at(-1).text, "Town Crier: a Minion did not nominate today.");
+
+  oracle.claim = "oracle";
+  role(oracle, "baron", "evil");
+  oracle.claim = "oracle";
+  e.endDay();
+
+  assert.equal(oracle.memories.at(-1).text, "Oracle: 0 dead players are evil.");
+});
+
+test("dead good NPCs save their vote for someone they suspect", () => {
+  const s = base("ghost-votes");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron] = s.players;
+
+  chef.alive = false;
+
+  // No opinion: they keep their vote.
+  assert.equal(strat.vote(s, chef, butler), false);
+
+  // Suspicious of the Baron (from their own information): they vote.
+  chef.memories.push({
+    night: 1,
+    role: "investigator",
+    text: "One of X and Y is the Poisoner.",
+    targets: [baron.id],
+  });
+
+  assert.equal(strat.vote(s, chef, baron), true);
+  assert.equal(strat.vote(s, chef, butler), false);
+});
+
+test("once-per-game timing follows ONCE_PER_GAME", () => {
+  const strat = new SimpleStrategy();
+
+  assert.equal(strat.onceChance("artist", 0), 0);
+  assert.equal(strat.onceChance("artist", 1), 0.5);
+  assert.equal(strat.onceChance("artist", 2), 0.75);
+  assert.equal(strat.onceChance("artist", 3), 1);
+  assert.equal(strat.onceChance("assassin", 1), 0);
+  assert.equal(strat.onceChance("philosopher", 1), 1);
+});
+
+test("night deaths are announced at dawn, and a Moonchild learns of their death then", () => {
+  const strat = new SimpleStrategy();
+  const { s, e } = nightTwo("dawn-deaths", strat);
+  const moonchild = s.players[2];
+
+  role(moonchild, "moonchild", "good");
+  strat.demon = () => moonchild;
+  strat.moonchild = () => s.players[1];
+
+  e.night();
+
+  const dawn = s.publicLog.indexOf(s.publicLog.find((x) => /^Day 2:/.test(x)));
+  const died = s.publicLog.indexOf(`Day 2 — ${moonchild.label} died in the night.`);
+  const curse = s.publicLog.indexOf(
+    `${moonchild.label} claims Moonchild and chooses ${s.players[1].label}.`,
+  );
+
+  assert.ok(dawn >= 0 && died > dawn && curse > died, s.publicLog.join(" | "));
+  assert.ok(!s.publicLog.includes(`${moonchild.label} died.`));
+
+  // A quiet night says so.
+  strat.demon = () => null;
+  strat.moonchild = () => null;
+  e.endDay();
+
+  assert.ok(
+    s.publicLog.includes("Day 3 — Nobody died in the night.") ||
+      s.publicLog.some((x) => x.startsWith("Day 3 —") && x.includes("died in the night")),
   );
 });

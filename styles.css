@@ -697,3 +697,14 @@ input {
 .vote-hand.counted {
   filter: drop-shadow(0 0 6px #f0cf83);
 }
+
+/* Collapsible panels (Public log, Final reveal): the heading is the toggle. */
+.panel > summary {
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.panel > summary h2 {
+  display: inline;
+}
+

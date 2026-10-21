@@ -30,3 +30,5 @@ export function shuffle(a, r = Math.random) {
 }
 
 export const sample = (a, n, r = Math.random) => shuffle(a, r).slice(0, n);
+
+export const byId = (s, id) => s.players.find((x) => x.id === id);

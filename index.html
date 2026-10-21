@@ -1,4 +1,5 @@
-<html>
+<!doctype html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
@@ -75,16 +76,22 @@
             <ol id="private"></ol>
           </section>
           <section>
-            <h2>Public log</h2>
-            <ol id="public"></ol>
+            <!-- Collapses when the game is over. -->
+            <details id="public-panel" class="panel" open>
+              <summary><h2>Public log</h2></summary>
+              <ol id="public"></ol>
+            </details>
           </section>
         </div>
 
         <section id="reveal" hidden>
-          <h2>Final reveal</h2>
-          <div id="result"></div>
-          <div id="roles"></div>
-          <div id="audit"></div>
+          <!-- Shown collapsed when the game is over; click to open. -->
+          <details id="reveal-panel" class="panel">
+            <summary><h2>Final reveal</h2></summary>
+            <div id="result"></div>
+            <div id="roles"></div>
+            <div id="audit"></div>
+          </details>
           <div class="reveal-actions">
             <button id="reset" type="button" class="reset-button">Reset</button>
             <a id="download-log" class="download-link" download="log.txt">

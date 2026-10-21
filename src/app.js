@@ -10,6 +10,7 @@ import {
 } from "./data.js";
 import { createState } from "./setup.js";
 import { Engine } from "./engine.js";
+import { byId } from "./util.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -553,7 +554,7 @@ function fate(p, events) {
 // The extra lines under a player's Grimoire row: what happened to their
 // character, lasting effects and twins.
 function playerNotes(p, r) {
-  const label = (id) => esc(r.players.find((x) => x.id === id)?.label ?? id);
+  const label = (id) => esc(byId(r, id)?.label ?? id);
   const notes = [];
 
   if (p.startRole === "drunk") {
@@ -690,7 +691,7 @@ function sectionSummary(events) {
 
 // Who voted on a nomination (and whose votes didn't count).
 function voters(ev, r) {
-  const label = (id) => r.players.find((x) => x.id === id)?.label ?? id;
+  const label = (id) => byId(r, id)?.label ?? id;
   const voted = (ev.data?.records ?? []).filter((x) => x.attempted);
 
   return voted.length
@@ -751,6 +752,9 @@ function timeline(r) {
     <div class="timeline">${html}</div>`;
 }
 
+// Whether this game's end has been shown (the panels collapse just once).
+let shownGameOver = false;
+
 function reveal() {
   const r = e.reveal();
 
@@ -758,6 +762,14 @@ function reveal() {
 
   if (!r) {
     return;
+  }
+
+  // When the game ends, collapse the Public log and show the Final reveal
+  // collapsed too.
+  if (!shownGameOver) {
+    shownGameOver = true;
+    $("public-panel").open = false;
+    $("reveal-panel").open = false;
   }
 
   updateLogLink();
@@ -819,8 +831,9 @@ function render() {
 
   $("role").innerHTML = `You are ${roleLink(h.shown)}`;
 
+  // The winner is only shown in the Final reveal.
   $("status").textContent = s.winner
-    ? `${s.winner.toUpperCase()}: ${s.reason}`
+    ? "Game Over!"
     : `${s.phase} ${s.day || s.night} — ${e.alive().length} alive`;
 
   $("selected-player").textContent = t ? `Selected: ${t.label}` : "";
@@ -927,6 +940,9 @@ function resetGame() {
   e = null;
   selectedPlayerId = null;
   nightPicks = [];
+  shownGameOver = false;
+
+  $("public-panel").open = true;
 
   $("night-choice").hidden = true;
   $("day-controls").hidden = true;

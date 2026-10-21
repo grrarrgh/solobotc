@@ -13,12 +13,10 @@ import {
   SCAPEGOAT_CHANCE,
   WITCH_HUMAN_CHANCE,
   JUGGLER_CLAIM_GUESS_CHANCE,
-  SEAMSTRESS_NIGHT_CHANCE,
+  ONCE_PER_GAME,
+  VIGORMORTIS_MINION_PRIORITY,
   PITHAG_EVIL_CHANCE,
   CERENOVUS_EVIL_CHANCE,
-  SLAYER_SHOOT_AFTER_DAY,
-  SLAYER_START_CHANCE,
-  SLAYER_CHANCE_STEP,
 } from "./data.js";
 import {
   ability,
@@ -27,7 +25,7 @@ import {
   isDrunk,
   isDemon,
 } from "./storyteller.js";
-import { pick, sample } from "./util.js";
+import { byId, pick, sample } from "./util.js";
 
 const ROLE_BY_NAME = new Map(Object.keys(ROLES).map((id) => [name(id), id]));
 
@@ -109,7 +107,7 @@ export class SimpleStrategy {
   // living NPC, never the human. Evil NPCs never suspect a teammate (such as
   // the Demon), even one who turned evil after they picked them.
   suspicion(s, p) {
-    const current = s.players.find((x) => x.id === p.suspicion?.targetId);
+    const current = byId(s, p.suspicion?.targetId);
     const newDay = p.suspicion?.day !== s.day;
     const stale =
       !current?.alive ||
@@ -121,7 +119,7 @@ export class SimpleStrategy {
       ? this.suspect(
           s,
           p,
-          s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
+          this.others(s, p),
         )
       : current;
 
@@ -198,7 +196,7 @@ export class SimpleStrategy {
   twinOf(s, p) {
     const t = s.twins;
     const id = t?.evilId === p.id ? t.goodId : t?.goodId === p.id ? t.evilId : null;
-    const twin = id && s.players.find((x) => x.id === id);
+    const twin = id && byId(s, id);
 
     return twin?.alive ? twin : null;
   }
@@ -211,7 +209,7 @@ export class SimpleStrategy {
     for (const m of [...p.memories].reverse()) {
       const type = infoStance(m);
       const named = (m.targets ?? [])
-        .map((id) => s.players.find((x) => x.id === id))
+        .map((id) => byId(s, id))
         .filter((x) => x?.alive && !x.human && x.id !== p.id);
 
       if (!type || !named.length) {
@@ -274,25 +272,99 @@ export class SimpleStrategy {
   }
 
   vote(s, v, n) {
-    return (
-      !(v.alignment === "evil" && n.alignment === "evil") &&
-      s.r() < (v.alignment === "evil" ? 0.85 : 0.62)
+    if (v.alignment === "evil" && n.alignment === "evil") {
+      return false;
+    }
+
+    // A dead good player has one vote left: they save it for a nominee they
+    // are suspicious of.
+    if (!v.alive && v.alignment === "good") {
+      const o = this.opinion(s, v);
+
+      return o.type === "suspicious" && o.targetId === n.id;
+    }
+
+    return s.r() < (v.alignment === "evil" ? 0.85 : 0.62);
+  }
+
+  // ── Picking players ────────────────────────────────────────
+
+  // The living players p can pick (not p). An evil player's picks, which
+  // feed their bluffed information, never include the human.
+  pickable(s, p) {
+    return s.players.filter(
+      (x) => x.alive && x.id !== p.id && !(p.alignment === "evil" && x.human),
     );
+  }
+
+  // Living NPCs other than p.
+  others(s, p) {
+    return s.players.filter((x) => x.alive && !x.human && x.id !== p.id);
+  }
+
+  // The part of `pool` p didn't pick last time for this ability (`key`), so
+  // picks don't repeat night after night; all of `pool` if that's everyone.
+  fresh(p, key, pool) {
+    const last = p.lastPicks?.[key] ?? [];
+    const fresh = pool.filter((x) => !last.includes(x.id));
+
+    return fresh.length ? fresh : pool;
+  }
+
+  // Records p's pick(s) for `key` (see fresh()) and returns them.
+  noted(p, key, picks) {
+    const list = [].concat(picks ?? []).filter(Boolean);
+
+    p.lastPicks = { ...p.lastPicks, [key]: list.map((x) => x.id) };
+
+    return picks;
+  }
+
+  // ── Once-per-game timing ───────────────────────────────────
+
+  // The chance an NPC uses a once-per-game ability on this day (or night):
+  // see ONCE_PER_GAME in data.js.
+  onceChance(role, day) {
+    const t = ONCE_PER_GAME[role];
+
+    if (!t) {
+      return 1;
+    }
+
+    if (day < t.AFTER_DAY) {
+      return 0;
+    }
+
+    return Math.min(1, t.START_CHANCE + t.STEP_CHANCE * (day - t.AFTER_DAY));
+  }
+
+  // Whether an NPC uses their once-per-game `role` ability now.
+  onceReady(s, role, day) {
+    const chance = this.onceChance(role, day);
+
+    return chance > 0 && s.r() < chance;
   }
 
   // The Poisoner goes after good players with ongoing information (Empath,
   // Fortune Teller, Undertaker) when there are any.
-  poison(s) {
+  // (Not the same player two nights running, when there's a choice.)
+  poison(s, p = null) {
     const good = s.players.filter((x) => x.alive && x.alignment === "good");
     const ongoing = good.filter((x) => ONGOING_INFO.includes(ability(x)));
+    const pool = ongoing.length ? ongoing : good;
 
-    return pick(ongoing.length ? ongoing : good, s.r);
+    if (!p) {
+      return pick(pool, s.r);
+    }
+
+    return this.noted(p, "poison", pick(this.fresh(p, "poison", pool), s.r));
   }
 
   monk(s, p) {
-    return pick(
-      s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
-      s.r,
+    return this.noted(
+      p,
+      "monk",
+      pick(this.fresh(p, "monk", this.others(s, p)), s.r),
     );
   }
 
@@ -319,9 +391,19 @@ export class SimpleStrategy {
       return p;
     }
 
+    // The Vigormortis's Minions keep their ability if it kills them.
+    const level =
+      p.role === "vigormortis"
+        ? (x) =>
+            team(x.role) === "minion"
+              ? VIGORMORTIS_MINION_PRIORITY
+              : this.priorityLevel(x)
+        : undefined;
+
     return this.byPriority(
       s,
-      s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
+      this.others(s, p),
+      level,
     );
   }
 
@@ -352,11 +434,11 @@ export class SimpleStrategy {
   // high to low at its KILL_PRIORITY_CHANCE, never choosing "avoid" while
   // anyone else is available; if no level fires, a good player who isn't
   // avoided, then any good player, then anyone.
-  byPriority(s, pool) {
-    const notAvoided = pool.filter((x) => this.priorityLevel(x) !== "avoid");
+  byPriority(s, pool, level = (x) => this.priorityLevel(x)) {
+    const notAvoided = pool.filter((x) => level(x) !== "avoid");
 
     for (const tier of ["high", "med", "low"]) {
-      const found = notAvoided.filter((x) => this.priorityLevel(x) === tier);
+      const found = notAvoided.filter((x) => level(x) === tier);
 
       if (found.length && s.r() < KILL_PRIORITY_CHANCE[tier]) {
         return pick(found, s.r);
@@ -367,7 +449,7 @@ export class SimpleStrategy {
 
     return (
       pick(
-        good.filter((x) => this.priorityLevel(x) !== "avoid"),
+        good.filter((x) => level(x) !== "avoid"),
         s.r,
       ) ??
       pick(good, s.r) ??
@@ -380,54 +462,47 @@ export class SimpleStrategy {
   raven(s, p) {
     const goat = p.alignment === "evil" ? scapegoat(s) : null;
 
-    return goat?.alive && goat !== p
-      ? goat
-      : pick(
-          s.players.filter((x) => x.alive && x.id !== p.id),
-          s.r,
-        );
+    return goat?.alive && goat !== p ? goat : pick(this.pickable(s, p), s.r);
   }
 
+  // Two players, avoiding last night's pair where possible.
   ft(s, p) {
-    return sample(
-      s.players.filter((x) => x.alive && x.id !== p.id),
-      2,
-      s.r,
-    );
-  }
+    const pool = this.pickable(s, p);
+    const fresh = this.fresh(p, "ft", pool);
+    const pair =
+      fresh.length >= 2
+        ? sample(fresh, 2, s.r)
+        : [
+            ...fresh,
+            ...sample(
+              pool.filter((x) => !fresh.includes(x)),
+              2 - fresh.length,
+              s.r,
+            ),
+          ];
 
-  // The chance an NPC Slayer shoots today (see SLAYER_* in data.js).
-  slayChance(day) {
-    if (day < SLAYER_SHOOT_AFTER_DAY) {
-      return 0;
-    }
-
-    return Math.min(
-      1,
-      SLAYER_START_CHANCE + SLAYER_CHANCE_STEP * (day - SLAYER_SHOOT_AFTER_DAY),
-    );
+    return this.noted(p, "ft", pair);
   }
 
   // An NPC Slayer who hasn't fired yet may shoot a living NPC they suspect.
   slay(s, p) {
-    const chance = this.slayChance(s.day);
-
-    if (!chance || s.r() >= chance) {
+    if (!this.onceReady(s, "slayer", s.day)) {
       return null;
     }
 
     return this.suspect(
       s,
       p,
-      s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
+      this.others(s, p),
     );
   }
 
   // A Butler picks any other living player as master.
   butler(s, p) {
-    return pick(
-      s.players.filter((x) => x.alive && x.id !== p.id),
-      s.r,
+    return this.noted(
+      p,
+      "butler",
+      pick(this.fresh(p, "butler", this.pickable(s, p)), s.r),
     );
   }
 
@@ -435,9 +510,10 @@ export class SimpleStrategy {
   // (at GAMBLER_WILD_GUESS_CHANCE) takes a wild guess at any character on the
   // script. Either can be wrong, and a wrong guess kills a working Gambler.
   gamble(s, p) {
-    const target = pick(
-      s.players.filter((x) => x.alive && x.id !== p.id),
-      s.r,
+    const target = this.noted(
+      p,
+      "gamble",
+      pick(this.fresh(p, "gamble", this.pickable(s, p)), s.r),
     );
 
     if (!target) {
@@ -451,8 +527,13 @@ export class SimpleStrategy {
 
   // An Artist asks "Is any of these 1–3 players <evil / the Demon / a Minion
   // / an Outsider / a Townsfolk>?", always including someone they suspect.
+  // (Once per game, timed by ONCE_PER_GAME.artist.)
   artist(s, p) {
-    const pool = s.players.filter((x) => x.alive && !x.human && x.id !== p.id);
+    if (!this.onceReady(s, "artist", s.day)) {
+      return null;
+    }
+
+    const pool = this.others(s, p);
     const suspect = this.suspect(s, p, pool);
 
     if (!suspect) {
@@ -507,14 +588,14 @@ export class SimpleStrategy {
     return this.suspect(
       s,
       p,
-      s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
+      this.others(s, p),
     );
   }
 
-  // Each night there's a 30% chance the Assassin spends their kill on a
+  // The Assassin spends their one kill (timed by ONCE_PER_GAME.assassin) on a
   // living good NPC.
   assassin(s) {
-    if (s.r() >= 0.3) {
+    if (!this.onceReady(s, "assassin", s.night)) {
       return null;
     }
 
@@ -535,25 +616,29 @@ export class SimpleStrategy {
 
   // ── Sects & Violets ────────────────────────────────────────
 
-  // Living NPCs other than p.
-  others(s, p) {
-    return s.players.filter((x) => x.alive && !x.human && x.id !== p.id);
-  }
-
-  // The Dreamer looks into someone they suspect.
+  // The Dreamer looks into someone they suspect (not last night's pick).
   dream(s, p) {
-    return this.suspect(s, p, this.others(s, p)) ?? pick(this.others(s, p), s.r);
+    const pool = this.fresh(p, "dream", this.others(s, p));
+
+    return this.noted(
+      p,
+      "dream",
+      this.suspect(s, p, pool) ?? pick(pool, s.r),
+    );
   }
 
-  // The Snake Charmer charms someone they suspect (hoping for the Demon).
+  // The Snake Charmer charms someone they suspect (hoping for the Demon),
+  // not last night's pick.
   snake(s, p) {
-    return this.suspect(s, p, this.others(s, p));
+    const pool = this.fresh(p, "snake", this.others(s, p));
+
+    return this.noted(p, "snake", this.suspect(s, p, pool) ?? pick(pool, s.r));
   }
 
-  // The Seamstress (once per game, on a night of their choosing) compares
-  // someone they suspect with another player.
+  // The Seamstress (once per game, timed by ONCE_PER_GAME.seamstress)
+  // compares someone they suspect with another player.
   seamstress(s, p) {
-    if (s.r() >= SEAMSTRESS_NIGHT_CHANCE) {
+    if (!this.onceReady(s, "seamstress", s.night)) {
       return null;
     }
 
@@ -566,9 +651,14 @@ export class SimpleStrategy {
     return a && b ? [a, b] : null;
   }
 
-  // The Philosopher gains an ongoing information ability not in play (so
-  // nobody is made drunk), or else any other good character.
+  // The Philosopher (once per game, timed by ONCE_PER_GAME.philosopher) gains
+  // an ongoing information ability not in play (so nobody is made drunk), or
+  // else any other good character.
   philosopher(s, p) {
+    if (!this.onceReady(s, "philosopher", s.night)) {
+      return null;
+    }
+
     const inPlay = new Set(s.players.map((x) => x.role));
     const good = s.script.ids.filter(
       (id) => alignment(id) === "good" && id !== "philosopher",
@@ -583,6 +673,10 @@ export class SimpleStrategy {
   // An evil Philosopher bluffer "gains" a Townsfolk that is in play
   // (preferring information characters), as if its holder were now drunk.
   philosopherBluff(s, p) {
+    if (!this.onceReady(s, "philosopher", s.night)) {
+      return null;
+    }
+
     const inPlay = s.players
       .filter((x) => x !== p && team(x.role) === "townsfolk")
       .map((x) => x.role)
@@ -618,7 +712,7 @@ export class SimpleStrategy {
   klutz(s, p) {
     const o = this.infoOpinion(s, p);
     const trusted =
-      o?.type === "trust" ? s.players.find((x) => x.id === o.targetId) : null;
+      o?.type === "trust" ? byId(s, o.targetId) : null;
 
     return trusted?.alive
       ? trusted
@@ -658,17 +752,18 @@ export class SimpleStrategy {
   }
 
   // The Witch curses the human (the likeliest nominator) or a good NPC.
+  // (Not the same player two nights running, when there's a choice.)
   witch(s, p) {
     const human = s.players.find((x) => x.human && x.alive);
+    const humanLast = p.lastPicks?.witch?.includes(human?.id);
 
-    if (human && s.r() < WITCH_HUMAN_CHANCE) {
-      return human;
+    if (human && !humanLast && s.r() < WITCH_HUMAN_CHANCE) {
+      return this.noted(p, "witch", human);
     }
 
-    return pick(
-      this.others(s, p).filter((x) => x.alignment === "good"),
-      s.r,
-    );
+    const good = this.others(s, p).filter((x) => x.alignment === "good");
+
+    return this.noted(p, "witch", pick(this.fresh(p, "witch", good), s.r));
   }
 
   // The Cerenovus makes a good NPC "mad" about another good character.
@@ -683,12 +778,20 @@ export class SimpleStrategy {
   cerenovus(s, p) {
     const teammates = this.others(s, p).filter((x) => x.alignment === "evil");
     const evil = teammates.length && s.r() < CERENOVUS_EVIL_CHANCE;
-    const target = evil
-      ? pick(teammates, s.r)
-      : this.byPriority(
-          s,
-          this.others(s, p).filter((x) => x.alignment === "good"),
-        );
+    const target = this.noted(
+      p,
+      "cerenovus",
+      evil
+        ? pick(this.fresh(p, "cerenovus", teammates), s.r)
+        : this.byPriority(
+            s,
+            this.fresh(
+              p,
+              "cerenovus",
+              this.others(s, p).filter((x) => x.alignment === "good"),
+            ),
+          ),
+    );
     const own = target && [target.role, ability(target), target.claim];
     const tokens = new Set(s.players.flatMap((x) => [x.role, x.shown]));
     const role =
@@ -749,11 +852,14 @@ export class SimpleStrategy {
         x.claimKnown &&
         (FIRST_NIGHT_INFO.includes(x.claim) || ONGOING_INFO.includes(x.claim)),
     );
-    const target = pick(voices.length ? voices : good, s.r);
+    const target = this.noted(
+      p,
+      "pithag",
+      pick(this.fresh(p, "pithag", voices.length ? voices : good), s.r),
+    );
 
     return target && role ? { target, role } : null;
   }
-
 
   // Night info an evil NPC reports for their bluff (true only for the Spy).
   bluff(s, p) {
