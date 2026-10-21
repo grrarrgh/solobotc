@@ -145,11 +145,16 @@ function start() {
 // ── Rendering ────────────────────────────────────────────────
 
 function circle() {
-  const voters = new Set(
-    (s.lastVote?.records ?? [])
-      .filter((x) => x.counted)
-      .map((x) => x.playerId),
-  );
+  // While a vote is being counted, only the hands counted so far are up, and
+  // the skull stays where it was before the vote.
+  const voters = voteAnim
+    ? voteAnim.revealed
+    : new Set(
+        (s.lastVote?.records ?? [])
+          .filter((x) => x.counted)
+          .map((x) => x.playerId),
+      );
+  const skullId = voteAnim ? voteAnim.previousBlock : s.block?.nomineeId;
 
   $("circle").style.setProperty("--n", s.players.length);
 
@@ -170,6 +175,11 @@ function circle() {
           ${p.human ? "disabled" : ""}
         >
           ${voters.has(p.id) ? '<span class="vote-hand">✋</span>' : ""}
+          ${
+            p.id === skullId
+              ? '<span class="skull" title="Marked for execution">💀</span>'
+              : ""
+          }
 
           <span class="token ${p.claimKnown || p.human ? "" : "unknown"}">
             ${esc(token)}
@@ -197,7 +207,13 @@ function circle() {
       class="clocktower"
       title="Show the script"
       aria-label="Show the script and character abilities"
-    >${CLOCKTOWER_SVG}</button>`,
+    >${CLOCKTOWER_SVG}</button>
+    <div class="clock-hands" aria-hidden="true">
+      <div class="hand hour"></div>
+      <div class="hand minute"></div>
+      <div class="clock-pin"></div>
+      <span class="vote-count"></span>
+    </div>`,
   );
 
   $("clocktower").onclick = showScript;
@@ -206,6 +222,10 @@ function circle() {
     .querySelectorAll("[data-id]:not(:disabled)")
     .forEach((b) => {
       b.onclick = () => {
+        if (voteAnim) {
+          return;
+        }
+
         if (s.pending) {
           pickAtNight(b.dataset.id);
         } else {
@@ -216,6 +236,130 @@ function circle() {
         render();
       };
     });
+}
+
+// ── Vote animation ─────────────────────────────────────────
+
+// Set while a vote is being shown: { previousBlock, revealed: Set of ids }.
+let voteAnim = null;
+
+const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+
+const seatAngle = (id) =>
+  (s.players.findIndex((p) => p.id === id) / s.players.length) * 360;
+
+// Points a clock hand at an angle, optionally without animating the move.
+function aim(hand, angle, instant = false) {
+  if (instant) {
+    hand.style.transition = "none";
+  }
+
+  hand.style.transform = `rotate(${angle}deg)`;
+
+  if (instant) {
+    void hand.offsetWidth; // apply now, then restore the transition
+    hand.style.transition = "";
+  }
+}
+
+// Runs a nomination (`fn` calls the engine), then shows its vote: clock hands
+// fade in over the clock tower, the small hand on the nominator and the
+// large hand on the nominee; after 2 seconds the large hand ticks clockwise
+// round the circle (starting after the nominee, ending on them), raising
+// each voter's hand; then the skull marks the nominee if they're now marked
+// for execution, and the clock tower returns.
+async function runVote(fn) {
+  if (voteAnim) {
+    return;
+  }
+
+  const previousBlock = s.block?.nomineeId ?? null;
+  let result;
+
+  try {
+    result = fn();
+  } catch (err) {
+    $("answer").textContent = err.message;
+    return;
+  }
+
+  selectedPlayerId = null;
+
+  // The Virgin (or a Witch curse ending the game) settles it without a vote.
+  if (!result.records.length || s.phase !== "day") {
+    render();
+    return;
+  }
+
+  voteAnim = { previousBlock, revealed: new Set() };
+  render();
+
+  const c = $("circle");
+  const hour = c.querySelector(".hand.hour");
+  const minute = c.querySelector(".hand.minute");
+  const tally = c.querySelector(".vote-count");
+  const n = s.players.length;
+  const start = s.players.findIndex((p) => p.id === result.nomineeId);
+  let angle = seatAngle(result.nomineeId);
+  let votes = 0;
+
+  aim(hour, seatAngle(result.nominatorId), true);
+  aim(minute, angle, true);
+  tally.textContent = `0 / ${result.threshold}`;
+  c.classList.add("voting");
+
+  await sleep(2400);
+
+  for (let k = 1; k <= n; k++) {
+    const p = s.players[(start + k) % n];
+    const record = result.records.find((x) => x.playerId === p.id);
+    const seat = c.querySelector(`[data-id="${p.id}"]`);
+
+    // A voter's hand goes up before the clock hand reaches them...
+    if (record?.attempted) {
+      seat?.insertAdjacentHTML(
+        "afterbegin",
+        `<span class="vote-hand ${record.counted ? "" : "not-counted"}">✋</span>`,
+      );
+
+      await sleep(250);
+    }
+
+    angle += 360 / n;
+    aim(minute, angle);
+
+    await sleep(450);
+
+    // ...and is counted as it passes over them.
+    if (record?.counted) {
+      voteAnim.revealed.add(p.id);
+      votes++;
+      tally.textContent = `${votes} / ${result.threshold}`;
+      seat?.querySelector(".vote-hand")?.classList.add("counted");
+    }
+  }
+
+  await sleep(600);
+
+  // Move the skull to the newly marked player (or clear it on a tie).
+  c.querySelectorAll(".skull").forEach((x) => x.remove());
+
+  if (s.block?.nomineeId) {
+    c.querySelector(`[data-id="${s.block.nomineeId}"]`)?.insertAdjacentHTML(
+      "afterbegin",
+      '<span class="skull" title="Marked for execution">💀</span>',
+    );
+  }
+
+  await sleep(1200);
+
+  // Fade the hands out and the clock tower back in.
+  c.classList.remove("voting");
+
+  await sleep(500);
+
+  voteAnim = null;
+  render();
 }
 
 // Toggles a living player in or out of tonight's picks. Once the limit is
@@ -516,8 +660,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 function sectionSummary(events) {
   const count = (type) => events.filter((x) => x.type === type).length;
   const votes = events.filter((x) => x.type === "vote_result");
-  const executions =
-    votes.filter((x) => x.data?.executed).length + count("virgin");
+  const executions = count("execution") + count("virgin");
   const parts = [];
 
   if (count("conversation")) {
@@ -700,17 +843,22 @@ function render() {
     h.savantDay !== s.day
   );
   $("ask").disabled = !t || talk.already || !talk.remaining;
-  // Dead players can't nominate, but can always ask an NPC to; so can anyone
-  // nominating a known Virgin (only a Townsfolk nominator triggers her).
-  const blocked = !t?.alive || e.nominatedToday(t.id);
+  // Each player can nominate and be nominated once a day. You can always ask
+  // an NPC to nominate instead (the only way once you're dead). Nothing can
+  // be pressed while a vote is being counted.
+  const blocked = !t?.alive || e.nominatedToday(t.id) || !!voteAnim;
 
   $("nominate").hidden = !h.alive;
-  $("nominate").disabled = blocked;
-  $("request-nomination").hidden = !(
-    !h.alive ||
-    (t?.claimKnown && t.claim === "virgin")
-  );
+  $("nominate").disabled = blocked || s.dayNominators.includes(h.id);
+  $("request-nomination").hidden = false;
   $("request-nomination").disabled = blocked;
+  $("pass").disabled = !!voteAnim;
+  $("block-status").textContent =
+    s.phase === "day" && e.marked()
+      ? `Marked for execution: ${e.marked().label} (${s.block.count} votes). End the day to execute them.`
+      : s.phase === "day" && s.block
+        ? `Tied at ${s.block.count} votes: nobody is marked for execution.`
+        : "";
   $("slay").hidden = !(h.shown === "slayer" && !s.slayerUsed && h.alive);
   $("artist-controls").hidden = !(
     h.shown === "artist" &&
@@ -828,25 +976,10 @@ $("ask").onclick = () => {
   }
 };
 
-$("nominate").onclick = () => {
-  try {
-    e.nominate(selectedPlayerId);
-    selectedPlayerId = null;
-    render();
-  } catch (err) {
-    $("answer").textContent = err.message;
-  }
-};
+$("nominate").onclick = () => runVote(() => e.nominate(selectedPlayerId));
 
-$("request-nomination").onclick = () => {
-  try {
-    e.requestNomination(selectedPlayerId);
-    selectedPlayerId = null;
-    render();
-  } catch (err) {
-    $("answer").textContent = err.message;
-  }
-};
+$("request-nomination").onclick = () =>
+  runVote(() => e.requestNomination(selectedPlayerId));
 
 $("slay").onclick = () => {
   try {

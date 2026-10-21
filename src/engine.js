@@ -25,6 +25,7 @@ const KEY_MOMENT_TYPES = new Set([
   "succession",
   "slayer",
   "virgin",
+  "execution",
   "gambler",
   "fool",
   "moonchild",
@@ -345,6 +346,8 @@ export class Engine {
     s.dayVoters = [];
     s.dayNominators = [];
     s.executedToday = false;
+    s.block = null;
+    s.lastVote = null;
 
     this.applyMadness();
 
@@ -907,19 +910,26 @@ export class Engine {
     return n;
   }
 
-  // The human nominates a living NPC.
+  // The human nominates a living NPC (once per day).
   nominate(id) {
+    const s = this.s;
     const h = this.human();
 
     if (!h.alive) {
       throw Error("Dead players cannot nominate. Request a nomination instead.");
     }
 
-    return this.runNomination(h, this.nominee(id));
+    const n = this.nominee(id);
+
+    if (s.dayNominators.includes(h.id)) {
+      throw Error("You have already nominated today.");
+    }
+
+    return this.runNomination(h, n);
   }
 
-  // The human asks the town for a nomination; a living NPC makes it. (A dead
-  // human can still do this.)
+  // The human asks the town for a nomination; a living NPC who hasn't
+  // nominated today makes it. (A dead human can still do this.)
   requestNomination(id) {
     const s = this.s;
     const n = this.nominee(id);
@@ -944,9 +954,23 @@ export class Engine {
     return this.runNomination(nominator, n);
   }
 
+  // A nomination and its vote. Nobody is executed yet: if at least half the
+  // living players vote, and that's more votes than any nomination so far
+  // today, the nominee is marked for execution (s.block) instead. A tie with
+  // the highest count so far (official rules) leaves nobody marked, and a
+  // later nomination must beat that count. Ending the day executes whoever
+  // is marked.
   runNomination(nominator, n) {
     const s = this.s;
     const id = n.id;
+    const base = {
+      nominatorId: nominator.id,
+      nomineeId: id,
+      count: 0,
+      threshold: 0,
+      marked: false,
+      records: [],
+    };
 
     s.nominated.push(id);
     s.dayNominators.push(nominator.id);
@@ -956,13 +980,7 @@ export class Engine {
     this.witchCurse(nominator);
 
     if (s.winner) {
-      return {
-        nomineeId: id,
-        count: 0,
-        threshold: 0,
-        executed: false,
-        records: [],
-      };
+      return base;
     }
 
     // A working Virgin's first nomination executes a Townsfolk nominator.
@@ -970,83 +988,101 @@ export class Engine {
       n.virginUsed = true;
 
       if (works(n) && team(nominator.role) === "townsfolk") {
-        return this.virgin(n, nominator);
+        return this.virgin(n, nominator, base);
       }
     }
 
     const records = this.votes(n);
     const count = records.filter((x) => x.counted).length;
     const threshold = Math.ceil(this.alive().length / 2);
-    const executed = count >= threshold;
+    const previous = s.block;
+    const enough = count >= threshold;
+    const marked = enough && count > (previous?.count ?? 0);
+    const tied = enough && count === previous?.count;
+    const leader = previous?.nomineeId && this.player(previous.nomineeId);
 
-    const result = {
-      nomineeId: id,
-      count,
-      threshold,
-      executed,
-      records,
-    };
+    if (marked) {
+      s.block = { nomineeId: id, count };
+    } else if (tied) {
+      s.block = { nomineeId: null, count };
+    }
+
+    const outcome = marked
+      ? `${n.label} is marked for execution`
+      : !enough
+        ? "not enough votes"
+        : tied
+          ? `a tie${leader ? ` with ${leader.label}` : ""}, so nobody is marked`
+          : `fewer than the ${previous.count} votes to beat`;
+
+    const result = { ...base, count, threshold, marked, records };
 
     s.lastVote = result;
 
     this.audit(
       "vote_result",
-      `${n.label}: ${count}/${threshold}; ${
-        executed ? "executed" : "vote failed"
-      }.`,
+      `${nominator.label} nominated ${n.label}: ${count}/${threshold}; ${outcome}.`,
       result,
     );
 
     s.publicLog.push(
-      `Day ${s.day} — Vote on ${n.label} ${
-        executed ? "passed" : "failed"
-      }: ${count}/${threshold}; ${executed ? "execution" : "no execution"}.`,
+      `Day ${s.day} — ${nominator.label} nominated ${n.label}: ${count} vote${
+        count === 1 ? "" : "s"
+      } (${threshold} needed); ${outcome}.`,
     );
-
-    if (executed) {
-      const before = this.alive().length;
-
-      s.lastExecution = id;
-      s.executedToday = true;
-
-      // The Devil's Advocate's pick (or a Fool) is executed but doesn't die.
-      const advocated = this.advocated(n);
-
-      if (advocated) {
-        this.audit(
-          "advocate",
-          `${n.label} was executed but survived (Devil's Advocate).`,
-          { playerId: n.id },
-        );
-      }
-
-      const died = !advocated && this.kill(n, "execution");
-
-      // (goodTwinExecuted() ends the game if the good twin was executed.)
-      if (died && n.role === "saint") {
-        this.finish("evil", "Saint executed.");
-      } else if (died && isDemon(n)) {
-        this.successor(n, before, false);
-      } else if (died && !this.goodTwinExecuted(n)) {
-        this.check();
-      }
-
-      if (!s.winner) {
-        s.night++;
-        this.night();
-      }
-    }
 
     return result;
   }
 
+  // The player currently marked for execution, if any.
+  marked() {
+    const id = this.s.block?.nomineeId;
+
+    return id ? this.player(id) : null;
+  }
+
+  // Executes p at the end of the day.
+  execute(p) {
+    const s = this.s;
+    const before = this.alive().length;
+
+    s.lastExecution = p.id;
+    s.executedToday = true;
+
+    s.publicLog.push(`Day ${s.day} — ${p.label} is executed.`);
+    this.audit("execution", `${p.label} was executed.`, { playerId: p.id });
+
+    // The Devil's Advocate's pick (or a Fool) is executed but doesn't die.
+    const advocated = this.advocated(p);
+
+    if (advocated) {
+      this.audit(
+        "advocate",
+        `${p.label} was executed but survived (Devil's Advocate).`,
+        { playerId: p.id },
+      );
+    }
+
+    const died = !advocated && this.kill(p, "execution");
+
+    // (goodTwinExecuted() ends the game if the good twin was executed.)
+    if (died && p.role === "saint") {
+      this.finish("evil", "Saint executed.");
+    } else if (died && isDemon(p)) {
+      this.successor(p, before, false);
+    } else if (died && !this.goodTwinExecuted(p)) {
+      this.check();
+    }
+  }
+
   // The Virgin's ability: the Townsfolk who nominated them (`by`, the human
   // or an NPC) is executed immediately, and the day ends.
-  virgin(n, by) {
+  virgin(n, by, base) {
     const s = this.s;
 
     s.lastExecution = by.id;
     s.lastVote = null;
+    s.block = null;
     s.executedToday = true;
 
     this.audit(
@@ -1071,35 +1107,38 @@ export class Engine {
       this.night();
     }
 
-    return {
-      nomineeId: n.id,
-      count: 0,
-      threshold: 0,
-      executed: false,
-      virgin: true,
-      records: [],
-    };
+    return { ...base, virgin: true };
   }
 
+  // Ends the day: whoever is marked for execution is executed; with nobody
+  // marked, nobody is (and the Vortox or a Mayor may decide the game).
   endDay() {
-    if (this.s.phase !== "day" || this.s.winner) {
+    const s = this.s;
+
+    if (s.phase !== "day" || s.winner) {
       throw Error("Cannot end day.");
     }
 
-    this.audit("end_day", `You ended Day ${this.s.day}.`);
+    this.audit("end_day", `You ended Day ${s.day}.`);
 
-    if (this.vortoxDay()) {
+    const p = this.marked();
+
+    s.block = null;
+
+    if (p?.alive) {
+      this.execute(p);
+    } else if (this.vortoxDay()) {
       return;
-    }
-
-    if (
+    } else if (
       this.alive().length === 3 &&
       this.human().role === "mayor" &&
       works(this.human())
     ) {
       this.finish("good", "Mayor final-three victory.");
-    } else {
-      this.s.night++;
+    }
+
+    if (!s.winner) {
+      s.night++;
       this.night();
     }
   }

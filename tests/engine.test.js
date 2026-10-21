@@ -98,23 +98,30 @@ test("failed votes stay in the day, are visible, and allow another nomination", 
 
   const failed = e.nominate(first.id);
 
-  assert.equal(failed.executed, false);
+  assert.equal(failed.marked, false);
   assert.equal(s.phase, "day");
   assert.equal(s.day, 1);
   assert.equal(first.alive, true);
   assert.ok(
-    s.publicLog.some(
-      (x) =>
-        x ===
-        `Day 1 — Vote on ${first.label} failed: ${failed.count}/${failed.threshold}; no execution.`,
+    s.publicLog.includes(
+      `Day 1 — You nominated ${first.label}: ${failed.count} vote (${failed.threshold} needed); not enough votes.`,
     ),
   );
 
+  // The human has nominated today, so an NPC makes the next nomination.
   approve = true;
+  assert.throws(() => e.nominate(second.id), /already nominated today/);
 
-  const passed = e.nominate(second.id);
+  const passed = e.requestNomination(second.id);
 
-  assert.equal(passed.executed, true);
+  // Marked, but only executed when the day ends.
+  assert.equal(passed.marked, true);
+  assert.equal(e.marked(), second);
+  assert.equal(second.alive, true);
+  assert.equal(s.day, 1);
+
+  e.endDay();
+
   assert.equal(second.alive, false);
   assert.equal(s.day, 2);
   assert.equal(s.phase, "day");
@@ -774,6 +781,7 @@ test("an executed Moonchild curses a good player, who dies that night", () => {
   const e = new Engine(s, strat);
 
   e.nominate(moonchild.id);
+  e.endDay();
 
   assert.equal(moonchild.alive, false);
   assert.ok(
@@ -810,7 +818,10 @@ test("the Devil's Advocate's pick survives execution the next day", () => {
 
   const result = e.nominate(imp.id);
 
-  assert.equal(result.executed, true);
+  assert.equal(result.marked, true);
+
+  e.endDay();
+
   assert.equal(imp.alive, true);
   assert.equal(s.winner, null);
   assert.equal(s.day, 2);
@@ -895,7 +906,7 @@ test("a player can only be nominated once per day", () => {
   e.endDay();
 
   assert.equal(e.nominatedToday(chef.id), false);
-  assert.equal(e.nominate(chef.id).executed, false);
+  assert.equal(e.nominate(chef.id).marked, false);
 });
 
 test("nobody bluffs as the Drunk", () => {
@@ -1442,7 +1453,7 @@ test("a dead human can't nominate, but can request a nomination", () => {
 
   const result = e.requestNomination(chef.id);
 
-  assert.equal(result.executed, false);
+  assert.equal(result.marked, false);
   assert.equal(e.nominatedToday(chef.id), true);
 });
 
@@ -1957,7 +1968,7 @@ function playOut(raw, seats, seed) {
   const s = createState(raw, seats, seed);
   const e = new Engine(s);
   const expected =
-    /No conversation slots|Already asked|Nobody is able|Already nominated|Savant unavailable/;
+    /No conversation slots|Already asked|Nobody is able|Already nominated|already nominated today|Savant unavailable/;
   const attempt = (fn) => {
     try {
       fn();
@@ -2174,7 +2185,7 @@ test("a player the Witch cursed dies when they nominate", () => {
 
   assert.equal(human.alive, false);
   assert.equal(human.death, "witch");
-  assert.equal(result.executed, false);
+  assert.equal(result.marked, false);
   assert.ok(result.records.length > 0);
 });
 
@@ -2199,6 +2210,7 @@ test("the Evil Twin: good can't win while both live, and executing the good twin
 
   // Executing the good twin wins it for evil.
   e.nominate(chef.id);
+  e.endDay();
 
   assert.equal(chef.alive, false);
   assert.equal(s.winner, "evil");
@@ -2550,4 +2562,118 @@ test("the Cerenovus picks like the Demon, and the madness is another good charac
       mad,
     );
   }
+});
+
+// ── Nominations: mark, then execute at the end of the day ────
+
+test("a nomination with enough votes marks the nominee; ending the day executes them", () => {
+  const s = base("mark");
+  const strat = new SimpleStrategy();
+  const chef = s.players[1];
+
+  strat.vote = () => true;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+  const result = e.nominate(chef.id);
+
+  assert.equal(result.marked, true);
+  assert.equal(result.nominatorId, s.players[0].id);
+  assert.equal(chef.alive, true);
+  assert.ok(e.debugLog().includes("is marked for execution"));
+
+  e.endDay();
+
+  assert.equal(chef.alive, false);
+  assert.equal(chef.death, "execution");
+  assert.ok(s.audit.some((x) => x.type === "execution"));
+});
+
+test("ending the day with nobody marked executes nobody", () => {
+  const s = base("no-mark");
+  const strat = new SimpleStrategy();
+
+  strat.vote = () => false;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  e.nominate(s.players[1].id);
+  e.endDay();
+
+  assert.ok(s.players.every((p) => p.alive));
+  assert.equal(s.day, 2);
+  assert.equal(s.lastExecution, null);
+});
+
+test("a later nomination only takes the mark with more votes; a tie leaves nobody marked", () => {
+  const s = createState(script, 10, "ties");
+
+  // Plain good players, so nothing but the test changes the vote counts
+  // (evil players won't vote for teammates, a Butler's vote may not count).
+  for (const p of s.players) {
+    role(p, "chef", "good");
+  }
+
+  // Day 1 with everyone alive: 5 votes needed.
+  s.phase = "day";
+  s.night = 1;
+  s.day = 1;
+
+  const strat = new SimpleStrategy();
+  const e = new Engine(s, strat);
+  const npcs = s.players.filter((p) => !p.human);
+  const voteFor = (count) => {
+    const yes = new Set(s.players.slice(0, count).map((p) => p.id));
+
+    strat.vote = (_, v) => yes.has(v.id);
+  };
+
+  // 6 votes (the human always votes): marked.
+  voteFor(6);
+  assert.equal(e.requestNomination(npcs[0].id).marked, true);
+  assert.equal(e.marked(), npcs[0]);
+
+  // 5 votes: enough, but fewer than 6; the mark stays.
+  voteFor(5);
+  assert.equal(e.requestNomination(npcs[1].id).marked, false);
+  assert.equal(e.marked(), npcs[0]);
+
+  // 6 votes again: a tie, so nobody is marked.
+  voteFor(6);
+  assert.equal(e.requestNomination(npcs[2].id).marked, false);
+  assert.equal(e.marked(), null);
+  assert.equal(s.block.count, 6);
+
+  // Still 6: no better than the tie.
+  assert.equal(e.requestNomination(npcs[3].id).marked, false);
+  assert.equal(e.marked(), null);
+
+  // 7 beats the tie.
+  voteFor(7);
+  assert.equal(e.requestNomination(npcs[4].id).marked, true);
+  assert.equal(e.marked(), npcs[4]);
+});
+
+test("each player can nominate only once per day, and requests use NPCs who haven't", () => {
+  const s = base("nominators");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron, imp] = s.players;
+
+  strat.vote = () => false;
+
+  const e = new Engine(s, strat);
+
+  e.nominate(chef.id);
+
+  assert.throws(() => e.nominate(butler.id), /already nominated today/);
+
+  // Every NPC except the Imp has nominated: only the Imp is left to ask.
+  s.dayNominators.push(chef.id, butler.id, baron.id);
+
+  assert.equal(strat.nominator(s, butler), imp);
+
+  e.requestNomination(butler.id);
+
+  assert.throws(() => e.requestNomination(baron.id), /Nobody is able/);
 });

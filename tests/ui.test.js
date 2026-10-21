@@ -94,3 +94,14 @@ test("the final reveal shows a Grimoire and a filterable timeline", () => {
   assert.match(app, /id="key-only"/);
   assert.match(css, /\.key-only \.event:not\(\.key\)/);
 });
+
+test("nominations animate clock hands, mark with a skull, and End day executes", () => {
+  assert.match(app, /class="hand hour"/);
+  assert.match(app, /class="hand minute"/);
+  assert.match(app, /class="skull"/);
+  assert.match(app, /runVote\(/);
+  assert.match(css, /\.circle\.voting \.clock-hands/);
+  assert.match(css, /\.circle\.voting \.clocktower/);
+  assert.match(html, /id="block-status"/);
+  assert.doesNotMatch(html, /id="request-nomination" hidden/);
+});

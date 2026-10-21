@@ -283,6 +283,7 @@ export function createState(
     executedToday: false,
     dayVoters: [],
     dayNominators: [],
+    block: null, // { nomineeId, count }: marked for execution today
     pending: null,
     humanChoice: null,
   };

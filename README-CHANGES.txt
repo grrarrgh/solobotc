@@ -1,3 +1,12 @@
+## New Features: Improved Nomination Phase
+
+- Nominations no longer execute anyone straight away. If at least half the living players vote, and that's more votes than any nomination so far today, the nominee is marked for execution with a skull on their seat. A later nomination takes the mark only with more votes. Following the official rules, a tie with the highest count so far leaves nobody marked, and a later nomination must beat that count.
+- End day executes whoever has the skull and ends the day. With nobody marked, nobody is executed. Everything that happens on an execution (Saint, Demon death and succession, Devil's Advocate, Fool, Evil Twin, Moonchild) now happens then; the Vortox and the Mayor's final-three win apply only when nobody was executed. The Virgin still executes a Townsfolk nominator immediately and ends the day, and a Witch-cursed nominator still dies as they nominate.
+- Each player can nominate once per day and be nominated once per day. "Request nomination" is always available (next to Nominate while you're alive); the NPC who nominates must be alive and not have nominated yet today.
+- The bar above End day shows who is marked for execution (or that a tie leaves nobody marked).
+- Vote animation: when someone is nominated, clock hands fade in over the clock tower, the small hand pointing at the nominator and the large hand at the nominee. After 2 seconds the large hand ticks clockwise round the town square, from the seat after the nominee round to the nominee, with each voter's hand going up just before the clock hand reaches them (faded if the vote doesn't count, e.g. a Butler's) and glowing as it's counted, with a running tally. Then the skull marks the nominee if they're now marked, the clock hands fade out and the clock tower fades back in. Buttons and seats are disabled while the vote is shown.
+- The final reveal and log.txt record each nomination's outcome and each end-of-day execution.
+
 ## Bug Fixes: Juggler & Grimoire Layout
 
 - Juggler: each public guess is on its own line in the Public Log, and the guesses are now also recorded in log.txt and the final reveal's timeline.

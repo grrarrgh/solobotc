@@ -598,3 +598,102 @@ input {
   letter-spacing: 0.08em;
   font-size: 0.8rem;
 }
+
+/* ── Nomination vote ─────────────────────────────────────── */
+
+/* Clock hands fade in over the clock tower while a vote is counted. */
+.clocktower {
+  transition: opacity 0.4s;
+}
+
+.clock-hands {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+
+.circle.voting .clock-hands {
+  opacity: 1;
+}
+
+.circle.voting .clocktower {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Each hand grows up from the centre and rotates about it; 0deg is the top
+   seat, as for the seats themselves. */
+.hand {
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  transform-origin: 50% 100%;
+  border-radius: 4px;
+  transition: transform 0.35s ease-in-out;
+}
+
+/* The small hand points at the nominator... */
+.hand.hour {
+  width: 8px;
+  height: calc(var(--size) * 0.2);
+  margin-left: -4px;
+  background: #b69455;
+}
+
+/* ...and the large hand at the nominee, then round the voters. */
+.hand.minute {
+  width: 5px;
+  height: calc(var(--size) * 0.33);
+  margin-left: -2.5px;
+  background: #f0cf83;
+}
+
+.clock-pin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: #f0cf83;
+}
+
+.vote-count {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 16px);
+  transform: translateX(-50%);
+  color: #f0cf83;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* A vote that was raised but didn't count (e.g. a Butler's). */
+.vote-hand.not-counted {
+  opacity: 0.4;
+}
+
+/* The player marked for execution. */
+.skull {
+  position: absolute;
+  left: -10px;
+  top: -18px;
+  font-size: 1.6rem;
+}
+
+#block-status {
+  margin: 0 0 6px;
+  color: #f0cf83;
+}
+
+#block-status:empty {
+  display: none;
+}
+
+/* A raised hand glows as the clock hand passes and counts it. */
+.vote-hand.counted {
+  filter: drop-shadow(0 0 6px #f0cf83);
+}

@@ -429,7 +429,14 @@ export class SimpleStrategy {
   // (including the Drunk, who claims their Townsfolk token, and evil
   // Townsfolk bluffers), first-night information claimers first.
   nominator(s, n) {
-    const pool = s.players.filter((x) => x.alive && !x.human && x.id !== n.id);
+    // Each player can only nominate once per day.
+    const pool = s.players.filter(
+      (x) =>
+        x.alive &&
+        !x.human &&
+        x.id !== n.id &&
+        !s.dayNominators.includes(x.id),
+    );
 
     if (n.claim !== "virgin") {
       return pick(pool, s.r);
