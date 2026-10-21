@@ -70,4 +70,4 @@ npm test        # npm.cmd test in Windows PowerShell
 npm run check   # syntax-check every file in src/
 ```
 
-Changes are listed in [`README-CHANGES.txt`](README-CHANGES.txt), newest first.
+Changes are listed in [`CHANGES.md`](CHANGES.md), newest first.

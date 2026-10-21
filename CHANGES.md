@@ -1,9 +1,13 @@
+# Changes
+
+Newest first.
+
 ## Improvements: Code Clean-up, Start Script & README
 
 - `npm start` now runs a small built-in Node server (serve.js) instead of `python3`, which usually isn't available on Windows. `npm run check` syntax-checks every file in src/ without a hand-kept list.
 - README.md is rewritten: how to play, the scripts, the tuning constants in src/data.js, the code layout and the tests.
 - index.html declares `<!doctype html>` and a language, so browsers no longer render it in quirks mode.
-- Removed unused files (src/strategies.js, src/talk-limit.js and an empty test file) and stale comments about the old SLAYER_* and SEAMSTRESS_NIGHT_CHANCE settings. The Slayer's timing is now its own row in ONCE_PER_GAME.
+- Removed unused files (src/strategies.js, src/talk-limit.js and an empty test file) and stale comments about the old `SLAYER_*` and SEAMSTRESS_NIGHT_CHANCE settings. The Slayer's timing is now its own row in ONCE_PER_GAME.
 - Shared helpers replace repeated code: `byId` (in src/util.js) for looking up a player, and the strategy's `others()` for "living NPCs other than me".
 
 ## Bug Fixes & Improvements: Picks, Bluffs, Votes, Timing & Dawn Deaths
@@ -14,7 +18,7 @@
 - False information is less obvious: wrong numbers are just above or below the truth; the Oracle never says more evil are dead than are dead; the Flowergirl and Town Crier don't claim a vote or nomination on a day with none.
 - Dead votes: a dead good NPC keeps their one ghost vote and only spends it on a nominee they're suspicious of.
 - Game over: the status line just says "Game Over!" (the winner is in the Final reveal), and the Public log and Final reveal are both collapsed; click a heading to open it. Reset and Download log.txt stay visible.
-- Once-per-game timing: ONCE_PER_GAME in src/data.js sets AFTER_DAY, START_CHANCE and STEP_CHANCE for when NPCs use (or evil bluffers "use") the Slayer (replacing the old SLAYER_* settings), Artist, Seamstress, Philosopher and Assassin abilities. The Juggler still juggles on their first day.
+- Once-per-game timing: ONCE_PER_GAME in src/data.js sets AFTER_DAY, START_CHANCE and STEP_CHANCE for when NPCs use (or evil bluffers "use") the Slayer (replacing the old `SLAYER_*` settings), Artist, Seamstress, Philosopher and Assassin abilities. The Juggler still juggles on their first day.
 - Dawn deaths: night deaths are announced in the morning ("Player X died in the night." or "Nobody died in the night."), which is when the human learns they died too. "When you learn that you died" abilities (Moonchild, Klutz) trigger then. The Ravenkeeper still wakes during the night.
 
 ## New Features: Madness & Pit-Hag Improvements
@@ -142,7 +146,7 @@
 - Virgin: when the human (a true Townsfolk) nominates a working Virgin for the first time, the human is executed immediately and the day ends. Once the human is dead, the Nominate button is replaced by "Request nomination".
 - Request nomination: when the selected player is a known Virgin claimer, or when the human is dead, a "Request nomination" button lets the human ask the town to nominate that player; a living NPC makes the nomination. If the Virgin is real, sober and healthy, and the NPC nominator is a Townsfolk, that NPC is executed immediately and the day ends; if either is evil, an Outsider, drunk or poisoned, it goes to a normal vote. Requests are recorded in the Public Log and log.txt.
 - Suspicion: evil Minions never cast suspicion on the Demon (or any evil teammate). A remembered suspect is dropped if they have since become evil, died, or are the human.
-- Artist: NPC Artists now ask "Is any of X, Y and Z <evil / the Demon / a Minion / an Outsider / a Townsfolk>?" about 1–3 living players (always including someone they suspect), with a random question type. The answer is YES if any of them matches.
+- Artist: NPC Artists now ask `Is any of X, Y and Z <evil / the Demon / a Minion / an Outsider / a Townsfolk>?` about 1–3 living players (always including someone they suspect), with a random question type. The answer is YES if any of them matches.
 
 ## Bug Fix: NPC Slayer Timing
 
