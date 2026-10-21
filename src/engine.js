@@ -715,7 +715,9 @@ export class Engine {
       const t = this.strat.raven(this.s, p);
 
       if (t) {
-        this.rememberBluff(p, ravenInfo(this.s, p, t, p.role !== "spy"));
+        const lie = p.role !== "spy";
+
+        this.rememberBluff(p, ravenInfo(this.s, p, t, lie, lie));
       }
     }
 
@@ -1221,7 +1223,12 @@ export class Engine {
         .map((m) => m.text),
     }));
 
-    this.audit("state", "Player states", { players }, group);
+    this.audit(
+      "state",
+      "Player states",
+      { players, scapegoat: s.scapegoat ?? null },
+      group,
+    );
   }
 
   // The whole game as human-readable text (downloaded as log.txt).

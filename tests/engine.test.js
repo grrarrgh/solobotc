@@ -554,9 +554,14 @@ test("evil Empath and Fortune Teller bluffs contradict the truth", () => {
   // The Spy's neighbours are the Butler and the Imp: one evil.
   assert.equal(spy.memories[0].text, "Empath number: 1.");
 
-  // The Imp's picks are You and the Chef; the red herring decides the truth.
-  const truth = [s.players[0], s.players[1]].some((x) => x.id === s.red);
+  // Whichever two players the Imp names, the answer is the opposite of the
+  // truth for them (only the red herring can make good players read YES).
+  const named = imp.memories[0].targets.map((id) =>
+    s.players.find((x) => x.id === id),
+  );
+  const truth = named.some((x) => x.role === "imp" || x.id === s.red);
 
+  assert.equal(named.length, 2);
   assert.match(imp.memories[0].text, truth ? /: NO for/ : /: YES for/);
 });
 
@@ -1455,4 +1460,294 @@ test("Artist questions can cover 1–3 players: 'Is any of X, Y and Z ...?'", ()
     assert.ok(ask.targets.every((t) => t.alive && !t.human && t !== chef));
     assert.ok(Object.keys(ARTIST_QUESTIONS).includes(ask.question));
   }
+});
+
+// ── Improving evil ───────────────────────────────────────────
+
+test("Minions bluffing a first-night role back up the Demon's claim", () => {
+  for (let i = 0; i < 20; i++) {
+    const s = bluffNight(`confirm-${i}`);
+    const spy = s.players[3];
+    const imp = s.players[4];
+
+    // Minion pair: a Baron as Washerwoman and the Spy as Grandmother.
+    const baron = s.players[2];
+
+    role(baron, "baron", "evil");
+    imp.claim = "empath";
+    baron.claim = "washerwoman";
+    spy.claim = "grandmother";
+
+    new Engine(s).start();
+
+    const ww = baron.memories[0];
+
+    assert.ok(ww.targets.includes(imp.id), ww.text);
+    assert.match(ww.text, / is Empath\.$/);
+    assert.equal(
+      spy.memories[0].text,
+      `Grandmother: your grandchild is ${imp.label}, the Empath.`,
+    );
+  }
+});
+
+test("a Minion Librarian only vouches for the Demon if the Demon claims an Outsider", () => {
+  for (const [claim, vouches] of [
+    ["saint", true],
+    ["empath", false],
+  ]) {
+    const s = bluffNight(`confirm-lib-${claim}`);
+    const spy = s.players[3];
+    const imp = s.players[4];
+
+    imp.claim = claim;
+    spy.claim = "librarian";
+
+    new Engine(s).start();
+
+    const info = spy.memories[0];
+    const vouched =
+      info.targets.includes(imp.id) && info.text.endsWith(`${name(claim)}.`);
+
+    assert.equal(vouched, vouches, info.text);
+  }
+});
+
+test("the Demon avoids bluffing first-night information roles", () => {
+  let checked = 0;
+
+  for (const raw of [script, ecp]) {
+    for (let seed = 0; seed < 200; seed++) {
+      const s = createState(raw, 10, seed);
+      const demon = s.players.find((p) => p.role === "imp");
+      const canAvoid = s.demonBluffs.some((x) => !FIRST_NIGHT_INFO.includes(x));
+
+      if (canAvoid) {
+        checked++;
+        assert.ok(!FIRST_NIGHT_INFO.includes(demon.claim), demon.claim);
+      }
+    }
+  }
+
+  assert.ok(checked > 0);
+});
+
+test("only Townsfolk claimers nominate a claimed Virgin, first-night claimers first", () => {
+  const s = base("virgin-nominator");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron, imp] = s.players;
+
+  role(butler, "virgin", "good");
+  baron.claim = "empath"; // evil Townsfolk bluffer, ongoing info
+  imp.claim = "imp"; // not a Townsfolk claim
+
+  for (let i = 0; i < 30; i++) {
+    assert.equal(strat.nominator(s, butler), chef);
+  }
+
+  // Without a first-night claimer, the evil Empath bluffer steps up.
+  chef.claim = "saint";
+
+  for (let i = 0; i < 30; i++) {
+    assert.equal(strat.nominator(s, butler), baron);
+  }
+
+  // The Drunk claims their Townsfolk token, so they count too.
+  role(chef, "drunk", "good");
+  chef.shown = "chef";
+  chef.claim = "chef";
+
+  for (let i = 0; i < 30; i++) {
+    assert.equal(strat.nominator(s, butler), chef);
+  }
+
+  // Nobody claims a Townsfolk: nobody nominates.
+  chef.claim = "saint";
+  baron.claim = "recluse";
+
+  assert.equal(strat.nominator(s, butler), null);
+});
+
+test("the Poisoner goes after ongoing information roles", () => {
+  const s = base("poison-ongoing");
+  const strat = new SimpleStrategy();
+  const empath = s.players[2];
+
+  role(empath, "empath", "good");
+
+  for (let i = 0; i < 30; i++) {
+    assert.equal(strat.poison(s), empath);
+  }
+});
+
+test("an evil Empath bluffer keeps their number until a neighbour dies", () => {
+  for (let i = 0; i < 20; i++) {
+    const s = base(`empath-bluff-${i}`);
+    const baron = s.players[3];
+    const e = new Engine(s);
+
+    baron.claim = "empath";
+
+    const report = () => {
+      e.bluffs();
+      return baron.memories.at(-1).text;
+    };
+
+    // Neighbours: the Butler and the Imp, so the true number is 1.
+    s.night = 1;
+    const first = report();
+
+    s.night = 2;
+    assert.equal(report(), first);
+    assert.notEqual(first, "Empath number: 1.");
+
+    // The Butler dies; the new neighbours are the Chef and the Imp.
+    s.players[2].alive = false;
+    s.night = 3;
+
+    const after = report();
+
+    assert.notEqual(after, first);
+    assert.notEqual(after, "Empath number: 1.");
+  }
+});
+
+// ── Purposeful Demon kills & a shared scapegoat ──────────────
+
+test("the Demon never attacks teammates and skips public Soldier/Mayor claims", () => {
+  for (let i = 0; i < 50; i++) {
+    const s = base(`demon-target-${i}`);
+    const strat = new SimpleStrategy();
+    const [, chef, butler, , imp] = s.players;
+
+    chef.claimKnown = true;
+    chef.claim = "soldier";
+
+    // Only the Butler is a good NPC without a Soldier/Mayor claim.
+    assert.equal(strat.demon(s, imp), butler);
+  }
+});
+
+test("the Demon prefers public information claimers, ongoing ones first", () => {
+  const s = createState(ecp, 10, "demon-voices");
+  const strat = new SimpleStrategy();
+  const imp = s.players.find((p) => p.role === "imp");
+  const good = s.players.filter((p) => !p.human && p.alignment === "good");
+
+  for (const p of good) {
+    p.claimKnown = false;
+  }
+
+  const [chef, empath] = good;
+
+  chef.claimKnown = true;
+  chef.claim = "chef";
+  empath.claimKnown = true;
+  empath.claim = "empath";
+
+  s.r = () => 0; // always within DEMON_INFO_KILL_CHANCE
+
+  assert.equal(strat.demon(s, imp), empath);
+
+  empath.claim = "saint";
+
+  assert.equal(strat.demon(s, imp), chef);
+});
+
+test("a nominated Demon who survived passes the Demon to a Minion", () => {
+  const s = base("star-pass");
+  const strat = new SimpleStrategy();
+  const imp = s.players[4];
+
+  s.r = () => 0; // always within DEMON_STAR_PASS_CHANCE
+
+  assert.notEqual(strat.demon(s, imp), imp);
+
+  s.nominated = [imp.id];
+
+  assert.equal(strat.demon(s, imp), imp);
+
+  // With no Minion left to take over, it doesn't.
+  s.players[3].alive = false;
+
+  assert.notEqual(strat.demon(s, imp), imp);
+});
+
+test("the evil team shares one scapegoat, and replaces them when they die", () => {
+  const s = base("scapegoat");
+  const strat = new SimpleStrategy();
+  const [, , , baron, imp] = s.players;
+
+  s.r = () => 0; // always within SCAPEGOAT_CHANCE
+
+  const a = strat.suspect(s, baron, s.players.filter((x) => x !== baron));
+  const b = strat.suspect(s, imp, s.players.filter((x) => x !== imp));
+
+  assert.equal(a, b);
+  assert.equal(a.id, s.scapegoat);
+  assert.equal(a.alignment, "good");
+  assert.equal(a.human, false);
+
+  a.alive = false;
+
+  const next = strat.suspect(s, baron, s.players.filter((x) => x.alive));
+
+  assert.notEqual(next, a);
+  assert.equal(next.id, s.scapegoat);
+});
+
+test("evil information bluffs frame the scapegoat", () => {
+  for (let i = 0; i < 20; i++) {
+    const s = bluffNight(`frame-${i}`);
+    const poisoner = s.players[3];
+    const imp = s.players[4];
+
+    // A Poisoner bluffing Investigator, and the Imp bluffing Fortune Teller.
+    role(poisoner, "poisoner", "evil");
+    poisoner.claim = "investigator";
+    imp.claim = "fortuneteller";
+    s.red = s.players[0].id; // keep the red herring off the NPCs
+
+    new Engine(s).start();
+
+    const goat = s.players.find((x) => x.id === s.scapegoat);
+    const inv = poisoner.memories[0];
+    const ft = imp.memories[0];
+
+    assert.ok(goat && goat.alignment === "good" && !goat.human);
+    assert.ok(inv.targets.includes(goat.id), inv.text);
+    assert.ok(ft.targets.includes(goat.id), ft.text);
+    assert.match(ft.text, /: YES for/);
+
+    // A dying evil Ravenkeeper bluffer names the scapegoat as evil.
+    poisoner.claim = "ravenkeeper";
+
+    new Engine(s).kill(poisoner, "demon");
+
+    const raven = poisoner.memories.at(-1).text;
+    const seen = raven.match(/ is (.+)\.$/)[1];
+
+    assert.ok(raven.startsWith(`${goat.label} is `), raven);
+    assert.ok(
+      ["Poisoner", "Spy", "Scarlet Woman", "Baron", "Imp"].includes(seen),
+      seen,
+    );
+  }
+});
+
+test("the debug log shows who the evil team is framing", () => {
+  const s = base("log-scapegoat");
+  const e = new Engine(s);
+
+  s.players[3].claim = "chef";
+  s.phase = "night";
+  s.night = 1;
+  s.day = 0;
+  e.strat.suspect(s, s.players[3], s.players);
+  e.start();
+  e.finish("good", "Test complete.");
+
+  const goat = s.players.find((x) => x.id === s.scapegoat);
+
+  assert.ok(e.debugLog().includes(`Evil team is framing: ${goat.label}`));
 });

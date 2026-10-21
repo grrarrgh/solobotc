@@ -1,11 +1,17 @@
 import {
   name,
+  team,
   ARTIST_QUESTIONS,
+  FIRST_NIGHT_INFO,
+  ONGOING_INFO,
+  DEMON_INFO_KILL_CHANCE,
+  DEMON_STAR_PASS_CHANCE,
+  SCAPEGOAT_CHANCE,
   SLAYER_SHOOT_AFTER_DAY,
   SLAYER_START_CHANCE,
   SLAYER_CHANCE_STEP,
 } from "./data.js";
-import { bluffInfo } from "./storyteller.js";
+import { ability, bluffInfo, scapegoat } from "./storyteller.js";
 import { pick, sample } from "./util.js";
 
 export class SimpleStrategy {
@@ -18,6 +24,13 @@ export class SimpleStrategy {
     let candidates;
 
     if (p.alignment === "evil") {
+      // Evil mostly points at the team's shared scapegoat.
+      const goat = scapegoat(s);
+
+      if (falseTargets.includes(goat) && s.r() < SCAPEGOAT_CHANCE) {
+        return goat;
+      }
+
       candidates = falseTargets;
     } else if (p.role === "drunk" || p.poisoned) {
       const wrong = s.r() < 0.5;
@@ -93,11 +106,13 @@ export class SimpleStrategy {
     );
   }
 
+  // The Poisoner goes after good players with ongoing information (Empath,
+  // Fortune Teller, Undertaker) when there are any.
   poison(s) {
-    return pick(
-      s.players.filter((x) => x.alive && x.alignment === "good"),
-      s.r,
-    );
+    const good = s.players.filter((x) => x.alive && x.alignment === "good");
+    const ongoing = good.filter((x) => ONGOING_INFO.includes(ability(x)));
+
+    return pick(ongoing.length ? ongoing : good, s.r);
   }
 
   monk(s, p) {
@@ -107,21 +122,59 @@ export class SimpleStrategy {
     );
   }
 
+  // The Demon kills with purpose (see DEMON_* in data.js):
+  // - after being nominated (and surviving), it may kill itself so a Minion
+  //   takes over;
+  // - otherwise it attacks a good NPC, never a teammate, skipping public
+  //   Soldier and Mayor claims, and preferring public information claimers
+  //   (ongoing ones first).
   demon(s, p) {
-    return s.r() < 0.06
-      ? p
-      : pick(
-          s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
-          s.r,
-        );
+    const minion = s.players.some(
+      (x) => x.alive && team(x.role) === "minion",
+    );
+
+    if (minion && s.nominated.includes(p.id) && s.r() < DEMON_STAR_PASS_CHANCE) {
+      return p;
+    }
+
+    const good = s.players.filter(
+      (x) => x.alive && !x.human && x.alignment === "good",
+    );
+    const safe = good.filter(
+      (x) => !(x.claimKnown && ["soldier", "mayor"].includes(x.claim)),
+    );
+    const targets = safe.length ? safe : good;
+    const voices = targets.filter(
+      (x) =>
+        x.claimKnown &&
+        (FIRST_NIGHT_INFO.includes(x.claim) || ONGOING_INFO.includes(x.claim)),
+    );
+    const ongoing = voices.filter((x) => ONGOING_INFO.includes(x.claim));
+
+    if (voices.length && s.r() < DEMON_INFO_KILL_CHANCE) {
+      return pick(ongoing.length ? ongoing : voices, s.r);
+    }
+
+    return (
+      pick(targets, s.r) ??
+      pick(
+        s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
+        s.r,
+      )
+    );
   }
 
-  // Night choices only ever pick living players.
+  // Night choices only ever pick living players. An evil Ravenkeeper bluffer
+  // "learns" about the team's scapegoat.
   raven(s, p) {
-    return pick(
-      s.players.filter((x) => x.alive && x.id !== p.id),
-      s.r,
-    );
+    const goat = p.alignment === "evil" ? scapegoat(s) : null;
+
+    return goat?.alive && goat !== p
+      ? goat
+      : pick(
+          s.players.filter((x) => x.alive && x.id !== p.id),
+          s.r,
+        );
   }
 
   ft(s, p) {
@@ -187,9 +240,13 @@ export class SimpleStrategy {
       return null;
     }
 
+    // An evil Artist bluffer only asks about good players, so their lie
+    // frames everyone named.
     const count = 1 + Math.floor(s.r() * Math.min(3, pool.length));
     const others = sample(
-      pool.filter((x) => x !== suspect),
+      pool.filter(
+        (x) => x !== suspect && (p.alignment === "good" || x.alignment === "good"),
+      ),
       count - 1,
       s.r,
     );
@@ -201,12 +258,22 @@ export class SimpleStrategy {
   }
 
   // When the human requests a nomination, a living NPC (not the nominee)
-  // makes it.
+  // makes it. For a claimed Virgin, only NPCs claiming a Townsfolk step up
+  // (including the Drunk, who claims their Townsfolk token, and evil
+  // Townsfolk bluffers), first-night information claimers first.
   nominator(s, n) {
-    return pick(
-      s.players.filter((x) => x.alive && !x.human && x.id !== n.id),
-      s.r,
+    const pool = s.players.filter((x) => x.alive && !x.human && x.id !== n.id);
+
+    if (n.claim !== "virgin") {
+      return pick(pool, s.r);
+    }
+
+    const townsfolk = pool.filter((x) => team(x.claim) === "townsfolk");
+    const firstNight = townsfolk.filter((x) =>
+      FIRST_NIGHT_INFO.includes(x.claim),
     );
+
+    return pick(firstNight.length ? firstNight : townsfolk, s.r);
   }
 
   // A dying Moonchild curses a living NPC they suspect.

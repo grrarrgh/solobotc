@@ -2,11 +2,12 @@ import {
   ROLES,
   ARTIST_QUESTIONS,
   FIRST_NIGHT_INFO,
+  ONGOING_INFO,
   name,
   team,
   alignment,
 } from "./data.js";
-import { pick, sample } from "./util.js";
+import { pick, sample, shuffle } from "./util.js";
 
 // The Drunk acts as the character they were shown.
 export const ability = (p) => (p.role === "drunk" ? p.shown : p.role);
@@ -255,6 +256,32 @@ function trueInfo(s, p, role, strat) {
   return { targets: [], text: "No information." };
 }
 
+const INFO_ROLES = [...FIRST_NIGHT_INFO, ...ONGOING_INFO];
+
+// The good NPC the evil team agrees to frame. Kept until they die, then a new
+// one is chosen, preferring good NPCs who have publicly claimed an
+// information role (the voices the human is most likely to trust).
+export function scapegoat(s) {
+  const current = s.players.find((x) => x.id === s.scapegoat);
+
+  if (current?.alive) {
+    return current;
+  }
+
+  const good = s.players.filter(
+    (x) => x.alive && !x.human && x.alignment === "good",
+  );
+  const voices = good.filter((x) => x.claimKnown && INFO_ROLES.includes(x.claim));
+  const next = pick(voices.length ? voices : good, s.r);
+
+  s.scapegoat = next?.id ?? null;
+
+  return next;
+}
+
+// The scapegoat an evil player frames; null for good (e.g. Drunk) players.
+const framed = (s, p) => (p.alignment === "evil" ? scapegoat(s) : null);
+
 // Deliberately false information for `role`, as an evil bluffer tells it.
 function falseInfo(s, p, role, strat) {
   const wanted = PAIR_TEAM[role];
@@ -265,10 +292,21 @@ function falseInfo(s, p, role, strat) {
       s.r,
     );
 
-    // Neither named player holds the character; frame good players if possible.
+    // Neither named player holds the character; frame good players if
+    // possible. An evil Investigator names the team's scapegoat as one of
+    // the two "Minions".
     const others = s.players.filter((x) => x.id !== p.id && x.role !== shown);
     const good = others.filter((x) => x.alignment === "good");
-    const pair = sample(good.length >= 2 ? good : others, 2, s.r);
+    const pool = good.length >= 2 ? good : others;
+    const goat = role === "investigator" ? framed(s, p) : null;
+    const mate =
+      goat &&
+      pool.includes(goat) &&
+      pick(
+        pool.filter((x) => x !== goat),
+        s.r,
+      );
+    const pair = mate ? shuffle([goat, mate], s.r) : sample(pool, 2, s.r);
 
     return shown && pair.length === 2
       ? {
@@ -286,13 +324,56 @@ function falseInfo(s, p, role, strat) {
   }
 
   if (role === "empath") {
+    // Stay consistent: repeat last night's (wrong) number while the same two
+    // neighbours sit either side; once one dies, report a different number.
+    // With the evil team's scapegoat as a neighbour, the number goes up.
+    const near = neigh(s, p);
+    const key = near.map((x) => x.id).join(",");
+    const truth = empathCount(s, p);
+    const last = p.empathBluff;
+    const options = [0, 1, 2].filter((k) => k !== truth && k !== last?.n);
+    const framing = near.includes(framed(s, p))
+      ? options.filter((k) => k > truth)
+      : options;
+
+    const n =
+      last && last.key === key && last.n !== truth
+        ? last.n
+        : (pick(framing.length ? framing : options, s.r) ??
+          wrongNumber(s, truth));
+
+    p.empathBluff = { key, n };
+
     return {
-      targets: neigh(s, p).map((x) => x.id),
-      text: `Empath number: ${wrongNumber(s, empathCount(s, p))}.`,
+      targets: near.map((x) => x.id),
+      text: `Empath number: ${n}.`,
     };
   }
 
   if (role === "fortuneteller") {
+    // An evil Fortune Teller "gets a YES" on the scapegoat and another good
+    // player (one that really reads NO, so it's still a lie).
+    const goat = framed(s, p);
+    const mate =
+      goat &&
+      pick(
+        s.players.filter(
+          (x) =>
+            x.alive &&
+            x.alignment === "good" &&
+            x !== p &&
+            x !== goat &&
+            !fortuneYes(s, [x]),
+        ),
+        s.r,
+      );
+
+    if (mate && !fortuneYes(s, [goat])) {
+      const ts = shuffle([goat, mate], s.r);
+
+      return { targets: ts.map((x) => x.id), text: fortuneText(true, ts) };
+    }
+
     const ts = strat.ft(s, p);
 
     return {
@@ -453,8 +534,45 @@ export function nightInfo(s, p, strat) {
   };
 }
 
-// What an evil NPC reports for the role they are bluffing. A working Spy has
-// seen the Grimoire and tells the truth; every other evil player lies.
+// A Minion bluffing a first-night role uses it to back up the Demon's claim:
+// as Washerwoman or Librarian they name the Demon as one of the pair (if the
+// Demon claims a character of the team they learn about); as Grandmother they
+// name the Demon as their grandchild. Returns null when the role can't help.
+function confirmDemon(s, p, role) {
+  const d = s.players.find((x) => x.alive && team(x.role) === "demon");
+  const claim = d?.claim;
+
+  if (team(p.role) !== "minion" || !d) {
+    return null;
+  }
+
+  if (PAIR_TEAM[role] && team(claim) === PAIR_TEAM[role]) {
+    const others = s.players.filter((x) => x.id !== p.id && x.id !== d.id);
+    const good = others.filter((x) => x.alignment === "good");
+    const other = pick(good.length ? good : others, s.r);
+
+    if (!other) {
+      return null;
+    }
+
+    const pair = s.r() < 0.5 ? [d, other] : [other, d];
+
+    return {
+      targets: pair.map((x) => x.id),
+      text: `One of ${pair[0].label} and ${pair[1].label} is ${name(claim)}.`,
+    };
+  }
+
+  if (role === "grandmother" && alignment(claim) === "good") {
+    return { targets: [d.id], text: grandchildText(d, claim) };
+  }
+
+  return null;
+}
+
+// What an evil NPC reports for the role they are bluffing. A Minion backs up
+// the Demon's claim when their role allows it; otherwise a working Spy has
+// seen the Grimoire and tells the truth, and every other evil player lies.
 export function bluffInfo(s, p, strat) {
   const role = p.claim;
 
@@ -480,10 +598,11 @@ export function bluffInfo(s, p, strat) {
     return null;
   }
 
-  const truthful = p.role === "spy" && works(p);
-  const { text, targets } = truthful
-    ? trueInfo(s, p, role, strat)
-    : falseInfo(s, p, role, strat);
+  const confirm = confirmDemon(s, p, role);
+  const truthful = !confirm && p.role === "spy" && works(p);
+  const { text, targets } =
+    confirm ??
+    (truthful ? trueInfo(s, p, role, strat) : falseInfo(s, p, role, strat));
 
   return {
     night: s.night,
@@ -497,11 +616,18 @@ export function bluffInfo(s, p, strat) {
 
 // The Ravenkeeper is already dead here, so works() can't be used. A Drunk,
 // or an evil bluffer passing `lie`, names a character the target is not.
-export function ravenInfo(s, p, t, lie = p.role === "drunk") {
+// With `frame`, a good target is named as an evil character on the script.
+export function ravenInfo(s, p, t, lie = p.role === "drunk", frame = false) {
   const functioning = !lie && p.role !== "drunk" && !p.poisoned;
+  const evilRoles =
+    frame && t.alignment === "good"
+      ? s.script.ids.filter((id) => alignment(id) === "evil")
+      : [];
   const seen = lie
     ? pick(
-        Object.keys(ROLES).filter((id) => id !== t.role),
+        evilRoles.length
+          ? evilRoles
+          : Object.keys(ROLES).filter((id) => id !== t.role),
         s.r,
       )
     : functioning

@@ -46,7 +46,7 @@ export const ONGOING_INFO = ["empath", "fortuneteller", "undertaker"];
 
 // Chance (0–1) that each Minion also learns the Demon's three bluffs.
 // Adjust here: 0 = Minions never know them, 1 = they always do.
-export const MINION_BLUFF_CHANCE = 0.75;
+export const MINION_BLUFF_CHANCE = 1;
 
 // When an NPC Slayer (or evil Slayer bluffer) fires their one shot. They never
 // shoot before SLAYER_SHOOT_AFTER_DAY; that day the chance is SLAYER_START_CHANCE,
@@ -55,6 +55,19 @@ export const MINION_BLUFF_CHANCE = 0.75;
 export const SLAYER_SHOOT_AFTER_DAY = 2;
 export const SLAYER_START_CHANCE = 0.2;
 export const SLAYER_CHANCE_STEP = 0.2;
+
+// How the Demon picks its nightly kill. It never attacks evil teammates, and
+// avoids NPCs who have publicly claimed Soldier or Mayor.
+// DEMON_INFO_KILL_CHANCE: chance it goes after a good NPC who has publicly
+//   claimed an information role (ongoing ones first), when there is one.
+// DEMON_STAR_PASS_CHANCE: chance it kills itself to pass the Demon to a
+//   Minion, on a night after it was nominated and survived.
+export const DEMON_INFO_KILL_CHANCE = 0.75;
+export const DEMON_STAR_PASS_CHANCE = 0.75;
+
+// Chance that an evil NPC's suspicion (and Slayer, Moonchild and Artist
+// targets) points at the evil team's shared scapegoat, when one is alive.
+export const SCAPEGOAT_CHANCE = 0.8;
 
 // Official ability text, shown on the script sheet. "*" means "not the first
 // night".
@@ -145,6 +158,8 @@ export const FORBIDDEN_HUMAN = new Set([
   "gambler",
   "fool",
   "moonchild",
+  "mayor",
+  "saint",
 ]);
 
 export const name = (id) => ROLES[id]?.[0] ?? id;

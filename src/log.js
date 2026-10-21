@@ -79,6 +79,13 @@ export function formatLog(s) {
 
     if (e.type === "state") {
       lines.push(...stateLines(e.data.players));
+
+      const goat = s.players.find((x) => x.id === e.data.scapegoat);
+
+      if (goat) {
+        lines.push(`  Evil team is framing: ${goat.label}`);
+      }
+
       continue;
     }
 

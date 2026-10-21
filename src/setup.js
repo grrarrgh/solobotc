@@ -183,15 +183,17 @@ export function createState(
         ? demonBluffs
         : pool("townsfolk");
 
+    // The Demon avoids first-night information roles; Minions favour them,
+    // so their Night 1 "information" can back up the Demon's claim.
     // Teammates avoid claiming the same character when they can.
+    const firstNight = (x) => FIRST_NIGHT_INFO.includes(x);
+    const free = options.filter((x) => !taken.has(x));
+    const preferred = free.filter((x) =>
+      team(p.role) === "demon" ? !firstNight(x) : firstNight(x),
+    );
+
     p.bluffs = knows ? demonBluffs : [];
-    p.bluff =
-      pick(
-        options.filter((x) => !taken.has(x)),
-        r,
-      ) ??
-      pick(options, r) ??
-      "chef";
+    p.bluff = pick(preferred, r) ?? pick(free, r) ?? pick(options, r) ?? "chef";
     p.claim = p.bluff;
     taken.add(p.bluff);
   }
@@ -231,6 +233,7 @@ export function createState(
     slayerUsed: false,
     moonCurse: null,
     advocate: null,
+    scapegoat: null,
     pending: null,
     humanChoice: null,
   };
