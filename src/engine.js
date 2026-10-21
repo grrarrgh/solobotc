@@ -351,6 +351,7 @@ export class Engine {
     s.lastVote = null;
 
     this.applyMadness();
+    this.announceClaims();
 
     s.publicLog.push(
       `Day ${s.day}: ${this.alive().length} alive; talk to ${this.talkLimit()} distinct players.`,

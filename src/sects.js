@@ -36,6 +36,7 @@ export const sectsAndViolets = {
       if (p.mad && p.mad.day < s.night) {
         if (p.mad.previous !== null) {
           p.claim = p.mad.previous;
+          p.wasMad = true;
         }
 
         p.mad = null;
@@ -289,6 +290,41 @@ export const sectsAndViolets = {
     );
   },
 
+  // At dawn, living NPCs whose claim changed overnight say so publicly:
+  // someone now mad about being another character, someone no longer mad
+  // (back to their real character, or an evil player's old bluff), both as
+  // "now claims to be...", or someone who woke up as a new character (the
+  // Pit-Hag, Barber or Snake Charmer).
+  announceClaims() {
+    const s = this.s;
+
+    for (const p of s.players) {
+      const before = p.lastClaim ?? p.claim;
+      const wasMad = p.wasMad;
+
+      p.lastClaim = p.claim;
+      p.wasMad = false;
+
+      if (p.human || !p.alive || before === p.claim) {
+        continue;
+      }
+
+      // Becoming mad and recovering read the same, so madness stays hidden.
+      const said =
+        p.mad?.day === s.day || wasMad
+          ? `now claims to be the ${name(p.claim)}`
+          : `says they woke up as the ${name(p.claim)}`;
+
+      p.claimKnown = true;
+      s.publicLog.push(`Day ${s.day} — ${p.label} ${said}.`);
+      this.audit("claim", `${p.label} ${said}.`, {
+        playerId: p.id,
+        from: before,
+        to: p.claim,
+      });
+    }
+  },
+
   // At dawn, a "mad" NPC switches their claim for the day, and makes up
   // plausible information to go with it.
   applyMadness() {
@@ -325,11 +361,24 @@ export const sectsAndViolets = {
     );
 
     if (effective) {
-      // They learn their new character, and claim it (a Mutant claims a
-      // Townsfolk instead).
+      // They learn their new character. A good player claims it (a Mutant
+      // claims a Townsfolk instead); an evil one keeps their bluff.
+      const demon = team(role) === "demon";
+
       target.role = role;
       target.shown = role;
-      target.claim = this.claimFor(target);
+
+      if (target.alignment === "good") {
+        target.claim = this.claimFor(target);
+      }
+
+      if (demon) {
+        this.audit(
+          "pithag",
+          `A Demon was made (${target.label} is now the ${name(role)}): deaths tonight are the Storyteller's choice.`,
+          { playerId: target.id, role },
+        );
+      }
     }
   },
 

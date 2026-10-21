@@ -14,6 +14,8 @@ import {
   WITCH_HUMAN_CHANCE,
   JUGGLER_CLAIM_GUESS_CHANCE,
   SEAMSTRESS_NIGHT_CHANCE,
+  PITHAG_EVIL_CHANCE,
+  CERENOVUS_EVIL_CHANCE,
   SLAYER_SHOOT_AFTER_DAY,
   SLAYER_START_CHANCE,
   SLAYER_CHANCE_STEP,
@@ -674,12 +676,21 @@ export class SimpleStrategy {
   // makes them mad about a good character that isn't who they are (their
   // true character, the one they think they are, or their claim; never the
   // Drunk).
+  //
+  // At CERENOVUS_EVIL_CHANCE it instead makes an evil teammate mad about a
+  // good character that isn't in play: a fresh bluff for a day, after which
+  // they go back to their old one.
   cerenovus(s, p) {
-    const target = this.byPriority(
-      s,
-      this.others(s, p).filter((x) => x.alignment === "good"),
-    );
+    const teammates = this.others(s, p).filter((x) => x.alignment === "evil");
+    const evil = teammates.length && s.r() < CERENOVUS_EVIL_CHANCE;
+    const target = evil
+      ? pick(teammates, s.r)
+      : this.byPriority(
+          s,
+          this.others(s, p).filter((x) => x.alignment === "good"),
+        );
     const own = target && [target.role, ability(target), target.claim];
+    const tokens = new Set(s.players.flatMap((x) => [x.role, x.shown]));
     const role =
       target &&
       pick(
@@ -687,7 +698,8 @@ export class SimpleStrategy {
           (id) =>
             alignment(id) === "good" &&
             !["drunk", "mutant"].includes(id) &&
-            !own.includes(id),
+            !own.includes(id) &&
+            (!evil || !tokens.has(id)),
         ),
         s.r,
       );
@@ -697,8 +709,34 @@ export class SimpleStrategy {
 
   // The Pit-Hag turns a good NPC (preferring public information claimers)
   // into an Outsider that isn't in play.
+  //
+  // At PITHAG_EVIL_CHANCE it instead changes an evil teammate (or the Demon)
+  // into a not-in-play character of the same kind: a Minion into another
+  // Minion, the Demon into another Demon. (Never the Evil Twin, who needs a
+  // twin from setup.)
   pithag(s, p) {
     const tokens = new Set(s.players.flatMap((x) => [x.role, x.shown]));
+
+    if (s.r() < PITHAG_EVIL_CHANCE) {
+      const choices = s.players
+        .filter((x) => x.alive && !x.human && x.alignment === "evil")
+        .map((t) => ({
+          target: t,
+          roles: s.script.ids.filter(
+            (id) =>
+              team(id) === team(t.role) &&
+              id !== "eviltwin" &&
+              !tokens.has(id),
+          ),
+        }))
+        .filter((c) => c.roles.length);
+      const choice = pick(choices, s.r);
+
+      if (choice) {
+        return { target: choice.target, role: pick(choice.roles, s.r) };
+      }
+    }
+
     const role = pick(
       s.script.ids.filter((id) => team(id) === "outsider" && !tokens.has(id)),
       s.r,

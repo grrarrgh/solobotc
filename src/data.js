@@ -190,6 +190,14 @@ export const SCAPEGOAT_CHANCE = 0.8;
 export const WITCH_HUMAN_CHANCE = 0.5;
 export const SEAMSTRESS_NIGHT_CHANCE = 0.5;
 
+// PITHAG_EVIL_CHANCE: chance the Pit-Hag changes an evil teammate into a
+//   not-in-play character of the same kind (Minion or Demon) instead of
+//   turning a good NPC into an Outsider.
+// CERENOVUS_EVIL_CHANCE: chance the Cerenovus makes an evil teammate mad
+//   (about a good character not in play) instead of a good NPC.
+export const PITHAG_EVIL_CHANCE = 0.25;
+export const CERENOVUS_EVIL_CHANCE = 0.2;
+
 // Vote animation: how long (in ms) the clock hands point at the nominator
 // and nominee before the large hand starts counting votes.
 export const VOTE_COUNT_DELAY_MS = 1500;

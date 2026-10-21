@@ -28,6 +28,7 @@ const role = (p, id, alignment) =>
     startRole: id,
     shown: id,
     claim: id,
+    lastClaim: id,
     alignment,
     alive: true,
     ghost: true,
@@ -2531,9 +2532,10 @@ test("a mad NPC makes up information to match their mad character", () => {
 test("the Cerenovus picks like the Demon, and the madness is another good character", () => {
   const s = base("cerenovus-pick");
   const strat = new SimpleStrategy();
-  const [, chef, butler, cerenovus] = s.players;
+  const [, chef, butler, cerenovus, imp] = s.players;
 
   role(cerenovus, "cerenovus", "evil");
+  imp.alive = false; // no evil teammate to make mad: good targets only
   chef.claimKnown = true;
   chef.claim = "empath"; // a "high" kill priority
   butler.claimKnown = true;
@@ -2941,4 +2943,125 @@ test("shuffling or sampling an empty list returns nothing (and doesn't hang)", (
   assert.deepEqual(shuffle([]), []);
   assert.deepEqual(sample([], 2), []);
   assert.deepEqual(shuffle([7]), [7]);
+});
+
+// ── Madness and Pit-Hag: announcements and the evil team ─────
+
+test("NPCs announce at dawn when they become mad, and when they recover", () => {
+  const s = bluffNight("announce-mad");
+  const chef = s.players[1];
+
+  role(s.players[3], "cerenovus", "evil");
+
+  const strat = new SimpleStrategy();
+
+  strat.cerenovus = () =>
+    s.night === 1 ? { target: chef, role: "mayor" } : null;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  e.start();
+
+  assert.ok(s.publicLog.includes(`Day 1 — ${chef.label} now claims to be the Mayor.`));
+
+  e.endDay();
+
+  assert.ok(
+    s.publicLog.includes(
+      `Day 2 — ${chef.label} now claims to be the Chef.`,
+    ),
+  );
+  assert.ok(e.ask(chef.id).includes("Night 1: Chef number:"));
+});
+
+test("a good NPC changed by the Pit-Hag announces their new character", () => {
+  const strat = new SimpleStrategy();
+  const { s, e } = nightTwo("announce-pithag", strat);
+  const chef = s.players[1];
+
+  role(s.players[3], "pithag", "evil");
+  strat.pithag = () => ({ target: chef, role: "sweetheart" });
+
+  e.night();
+
+  assert.ok(
+    s.publicLog.includes(`Day 2 — ${chef.label} says they woke up as the Sweetheart.`),
+  );
+});
+
+test("the Pit-Hag can change an evil teammate, who keeps their bluff", () => {
+  const s = base("pithag-evil", sv);
+  const strat = new SimpleStrategy();
+  const hag = s.players[3];
+  const demon = s.players[4];
+
+  role(hag, "pithag", "evil");
+  role(demon, "vortox", "evil");
+  demon.claim = "oracle";
+  demon.lastClaim = "oracle";
+
+  // Within PITHAG_EVIL_CHANCE: a teammate becomes a same-kind character
+  // that isn't in play.
+  s.r = () => 0;
+
+  const choice = strat.pithag(s, hag);
+  const tokens = new Set(s.players.flatMap((x) => [x.role, x.shown]));
+
+  assert.equal(choice.target.alignment, "evil");
+  assert.equal(team(choice.role), team(choice.target.role));
+  assert.ok(!tokens.has(choice.role));
+  assert.notEqual(choice.role, "eviltwin");
+
+  // Turning the Vortox into a No Dashii: same claim, nothing announced.
+  s.r = Math.random;
+  s.phase = "night";
+  s.night = 2;
+  strat.pithag = () => ({ target: demon, role: "nodashii" });
+  strat.demon = () => null;
+
+  new Engine(s, strat).night();
+
+  assert.equal(demon.role, "nodashii");
+  assert.equal(demon.claim, "oracle");
+  assert.ok(!s.publicLog.some((x) => x.includes(`${demon.label} says`)));
+});
+
+test("the Cerenovus can make an evil teammate mad; afterwards they return to their bluff", () => {
+  const s = bluffNight("cerenovus-evil");
+  const cerenovus = s.players[3];
+  const imp = s.players[4];
+
+  role(cerenovus, "cerenovus", "evil");
+  imp.claim = "empath";
+  imp.lastClaim = "empath";
+
+  const strat = new SimpleStrategy();
+
+  // Within CERENOVUS_EVIL_CHANCE: the evil teammate, about a good
+  // character that isn't in play.
+  s.r = () => 0;
+
+  const choice = strat.cerenovus(s, cerenovus);
+  const tokens = new Set(s.players.flatMap((x) => [x.role, x.shown]));
+
+  assert.equal(choice.target, imp);
+  assert.ok(!tokens.has(choice.role));
+  assert.notEqual(choice.role, "empath");
+
+  s.r = Math.random;
+  strat.cerenovus = () =>
+    s.night === 1 ? { target: imp, role: "fortuneteller" } : null;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  e.start();
+
+  assert.equal(imp.claim, "fortuneteller");
+  assert.match(e.ask(imp.id), /^I claim Fortune Teller\.\nNight 1: Fortune Teller: (YES|NO)/);
+
+  e.endDay();
+
+  assert.equal(imp.claim, "empath");
 });
