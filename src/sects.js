@@ -421,7 +421,16 @@ export const sectsAndViolets = {
     }
 
     const pool = s.players.filter((x) => x.alive && !x.human && !isDemon(x));
-    const t = s.r() < PITHAG_NO_DEATH_CHANCE ? null : pick(pool, s.r);
+    let t = s.r() < PITHAG_NO_DEATH_CHANCE ? null : pick(pool, s.r);
+
+    // "If you die at night, another player might die instead": the Mayor.
+    if (t?.role === "mayor" && works(t)) {
+      t =
+        pick(
+          pool.filter((x) => x !== t),
+          s.r,
+        ) ?? t;
+    }
 
     this.audit(
       "pithag",

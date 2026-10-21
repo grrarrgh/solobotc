@@ -3094,3 +3094,72 @@ test("when the Pit-Hag makes a Demon, the night's death is random (never the Dem
   // Both a random death and no death happen across the runs.
   assert.deepEqual([...outcomes].sort(), ["death", "none"]);
 });
+
+test("abilities that trigger on dying at night work for any night death", () => {
+  // A random (Pit-Hag) death on a Ravenkeeper: they still learn a character.
+  const s = base("night-death-raven");
+  const [, raven, butler, baron] = s.players;
+  const e = new Engine(s);
+
+  role(raven, "ravenkeeper", "good");
+  butler.alive = false;
+  baron.alive = false;
+  s.phase = "night";
+  s.night = 2;
+  s.arbitraryNight = 2;
+  s.r = () => 0.99; // a death, not "nobody"
+
+  e.arbitraryDeath();
+
+  assert.equal(raven.alive, false);
+  assert.equal(raven.death, "pithag");
+  assert.equal(raven.memories.length, 1);
+  assert.equal(raven.memories[0].role, "ravenkeeper");
+
+  // A Mayor picked for the random death has someone else die instead.
+  const m = base("night-death-mayor");
+  const [, chef, mayor, minion] = m.players;
+  const me = new Engine(m);
+
+  role(mayor, "mayor", "good");
+  minion.alive = false;
+  m.phase = "night";
+  m.night = 2;
+  m.arbitraryNight = 2;
+  m.r = () => 0.99; // picks the last in the pool: the Mayor
+
+  me.arbitraryDeath();
+
+  assert.equal(mayor.alive, true);
+  assert.equal(chef.alive, false);
+});
+
+test("a Mayor's bounce never lands on the Demon or the human", () => {
+  for (let i = 0; i < 40; i++) {
+    // The Pit-Hag's random death...
+    const s = base(`mayor-bounce-${i}`);
+    const [human, mayor, , , imp] = s.players;
+    const e = new Engine(s);
+
+    role(mayor, "mayor", "good");
+    s.phase = "night";
+    s.night = 2;
+    s.arbitraryNight = 2;
+
+    e.arbitraryDeath();
+
+    assert.ok(human.alive && imp.alive);
+
+    // ...and the Demon's own kill.
+    const t = base(`mayor-bounce-demon-${i}`);
+    const strat = new SimpleStrategy();
+
+    role(t.players[1], "mayor", "good");
+    strat.demon = () => t.players[1];
+    t.phase = "night";
+    t.night = 2;
+    new Engine(t, strat).demon();
+
+    assert.ok(t.players[0].alive && t.players[4].alive);
+  }
+});

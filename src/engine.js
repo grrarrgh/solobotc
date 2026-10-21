@@ -772,14 +772,19 @@ export class Engine {
 
     this.s.publicLog.push(`${p.label} died.`);
 
-    if (cause === "demon" && ability(p) === "ravenkeeper") {
+    // "If you die at night": any death at night wakes the Ravenkeeper (the
+    // Demon's kill, the Assassin, a Moonchild curse, a random death...). A
+    // Demon kill always counts as a night death.
+    const atNight = this.s.phase === "night" || cause === "demon";
+
+    if (atNight && ability(p) === "ravenkeeper") {
       const t = this.strat.raven(this.s, p);
 
       if (t) {
         this.remember(p, ravenInfo(this.s, p, t));
       }
     } else if (
-      cause === "demon" &&
+      atNight &&
       p.alignment === "evil" &&
       p.claim === "ravenkeeper"
     ) {
