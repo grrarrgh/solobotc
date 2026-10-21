@@ -251,11 +251,6 @@ export function createState(
     evilTwin.bluff = goodTwin.claim;
   }
 
-  // What each player was last known to claim, for announcing changes.
-  for (const p of players) {
-    p.lastClaim = p.claim;
-  }
-
   // Fortune Teller red herring.
   const red = pick(
     players.filter((x) => x.alignment === "good"),

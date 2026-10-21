@@ -541,7 +541,7 @@ export class Engine {
 
     const real = p.role === "moonchild" && !p.poisoned;
 
-    p.claimKnown = true;
+    this.claimPublicly(p);
 
     if (real) {
       s.moonCurse = t.id;
@@ -813,6 +813,13 @@ export class Engine {
 
   // ── Day ────────────────────────────────────────────────────
 
+  // p has now said their current claim in public (to the human, or to
+  // everyone); later changes to it get announced (see announceClaims()).
+  claimPublicly(p) {
+    p.claimKnown = true;
+    p.publicClaim = p.claim;
+  }
+
   ask(id) {
     const s = this.s;
     const p = this.player(id);
@@ -841,6 +848,8 @@ export class Engine {
     if (this.strat.revealsWhenDead?.(p)) {
       p.claim = "mutant";
     }
+
+    this.claimPublicly(p);
 
     const response = this.strat.ask(s, p);
 
@@ -1275,7 +1284,7 @@ export class Engine {
       }
 
       p.shotUsed = true;
-      p.claimKnown = true;
+      this.claimPublicly(p);
 
       s.publicLog.push(
         `Day ${s.day} — ${p.label} claims Slayer and shoots ${t.label}.`,

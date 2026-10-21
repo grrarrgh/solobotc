@@ -36,7 +36,7 @@ export const sectsAndViolets = {
       if (p.mad && p.mad.day < s.night) {
         if (p.mad.previous !== null) {
           p.claim = p.mad.previous;
-          p.wasMad = true;
+          p.wasMad = p.mad.role;
         }
 
         p.mad = null;
@@ -290,34 +290,39 @@ export const sectsAndViolets = {
     );
   },
 
-  // At dawn, living NPCs whose claim changed overnight say so publicly:
-  // someone now mad about being another character, someone no longer mad
-  // (back to their real character, or an evil player's old bluff), both as
-  // "now claims to be...", or someone who woke up as a new character (the
-  // Pit-Hag, Barber or Snake Charmer).
+  // At dawn, a living NPC whose claim no longer matches what they last
+  // claimed in public says so (nothing is said if they never claimed in
+  // public):
+  // - publicly mad as X yesterday, and no longer (or now mad about something
+  //   else): "Yesterday the Cerenovus made me mad as the X, I am actually the
+  //   Y" (their real character, an evil player's bluff, or the new madness);
+  // - newly mad: "now claims to be the X" (the madness isn't given away);
+  // - changed by the Pit-Hag, Barber or Snake Charmer: "woke up as the X".
   announceClaims() {
     const s = this.s;
 
     for (const p of s.players) {
-      const before = p.lastClaim ?? p.claim;
+      const before = p.publicClaim;
       const wasMad = p.wasMad;
 
-      p.lastClaim = p.claim;
-      p.wasMad = false;
+      p.wasMad = null;
 
-      if (p.human || !p.alive || before === p.claim) {
+      if (p.human || !p.alive || !before || before === p.claim) {
         continue;
       }
 
-      // Becoming mad and recovering read the same, so madness stays hidden.
       const said =
-        p.mad?.day === s.day || wasMad
-          ? `now claims to be the ${name(p.claim)}`
-          : `says they woke up as the ${name(p.claim)}`;
+        wasMad && before === wasMad
+          ? `: "Yesterday the Cerenovus made me mad as the ${name(
+              wasMad,
+            )}, I am actually the ${name(p.claim)}."`
+          : p.mad?.day === s.day
+            ? ` now claims to be the ${name(p.claim)}.`
+            : ` says they woke up as the ${name(p.claim)}.`;
 
-      p.claimKnown = true;
-      s.publicLog.push(`Day ${s.day} — ${p.label} ${said}.`);
-      this.audit("claim", `${p.label} ${said}.`, {
+      this.claimPublicly(p);
+      s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
+      this.audit("claim", `${p.label}${said}`, {
         playerId: p.id,
         from: before,
         to: p.claim,
@@ -695,7 +700,7 @@ export const sectsAndViolets = {
       }
 
       p.juggled = true;
-      p.claimKnown = true;
+      this.claimPublicly(p);
       p.juggle = { night: s.day + 1, guesses };
 
       // One guess per line.
@@ -803,7 +808,7 @@ export const sectsAndViolets = {
       return;
     }
 
-    p.claimKnown = true;
+    this.claimPublicly(p);
     s.publicLog.push(`${p.label} claims Klutz and chooses ${t.label}.`);
 
     this.audit(

@@ -28,7 +28,6 @@ const role = (p, id, alignment) =>
     startRole: id,
     shown: id,
     claim: id,
-    lastClaim: id,
     alignment,
     alive: true,
     ghost: true,
@@ -2947,8 +2946,40 @@ test("shuffling or sampling an empty list returns nothing (and doesn't hang)", (
 
 // ── Madness and Pit-Hag: announcements and the evil team ─────
 
-test("NPCs announce at dawn when they become mad, and when they recover", () => {
+test("NPCs announce madness changes, but only to a claim they made in public", () => {
   const s = bluffNight("announce-mad");
+  const chef = s.players[1];
+
+  role(s.players[3], "cerenovus", "evil");
+
+  const strat = new SimpleStrategy();
+
+  strat.cerenovus = () =>
+    s.night === 2 ? { target: chef, role: "mayor" } : null;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+  const said = (x) => s.publicLog.some((line) => line.includes(x));
+
+  e.start();
+  e.ask(chef.id); // the Chef claims Chef in public on Day 1
+  e.endDay();
+
+  assert.ok(said(`Day 2 — ${chef.label} now claims to be the Mayor.`));
+
+  e.ask(chef.id); // ...and Mayor on Day 2, while mad
+  e.endDay();
+
+  assert.ok(
+    said(
+      `Day 3 — ${chef.label}: "Yesterday the Cerenovus made me mad as the Mayor, I am actually the Chef."`,
+    ),
+  );
+  assert.ok(e.ask(chef.id).includes("Night 1: Chef number:"));
+});
+
+test("a mad NPC who never claimed in public says nothing when the madness ends", () => {
+  const s = bluffNight("announce-quiet");
   const chef = s.players[1];
 
   role(s.players[3], "cerenovus", "evil");
@@ -2961,18 +2992,12 @@ test("NPCs announce at dawn when they become mad, and when they recover", () => 
 
   const e = new Engine(s, strat);
 
-  e.start();
-
-  assert.ok(s.publicLog.includes(`Day 1 — ${chef.label} now claims to be the Mayor.`));
-
+  e.start(); // mad on Day 1, but nobody asks them
   e.endDay();
 
-  assert.ok(
-    s.publicLog.includes(
-      `Day 2 — ${chef.label} now claims to be the Chef.`,
-    ),
-  );
-  assert.ok(e.ask(chef.id).includes("Night 1: Chef number:"));
+  assert.equal(chef.claim, "chef");
+  assert.ok(!s.publicLog.some((x) => x.includes(`${chef.label} now claims`)));
+  assert.ok(!s.publicLog.some((x) => x.includes(`${chef.label}: "Yesterday`)));
 });
 
 test("a good NPC changed by the Pit-Hag announces their new character", () => {
@@ -2982,6 +3007,7 @@ test("a good NPC changed by the Pit-Hag announces their new character", () => {
 
   role(s.players[3], "pithag", "evil");
   strat.pithag = () => ({ target: chef, role: "sweetheart" });
+  e.claimPublicly(chef); // they had claimed Chef in public
 
   e.night();
 
@@ -2999,7 +3025,6 @@ test("the Pit-Hag can change an evil teammate, who keeps their bluff", () => {
   role(hag, "pithag", "evil");
   role(demon, "vortox", "evil");
   demon.claim = "oracle";
-  demon.lastClaim = "oracle";
 
   // Within PITHAG_EVIL_CHANCE: a teammate becomes a same-kind character
   // that isn't in play.
@@ -3034,7 +3059,6 @@ test("the Cerenovus can make an evil teammate mad; afterwards they return to the
 
   role(cerenovus, "cerenovus", "evil");
   imp.claim = "empath";
-  imp.lastClaim = "empath";
 
   const strat = new SimpleStrategy();
 
@@ -3162,4 +3186,41 @@ test("a Mayor's bounce never lands on the Demon or the human", () => {
 
     assert.ok(t.players[0].alive && t.players[4].alive);
   }
+});
+
+test("made mad again about something else, they say what they were mad as yesterday", () => {
+  const s = bluffNight("mad-again");
+  const chef = s.players[1];
+
+  role(s.players[3], "cerenovus", "evil");
+
+  const strat = new SimpleStrategy();
+  const madness = { 1: "mayor", 2: "oracle" };
+
+  strat.cerenovus = () =>
+    madness[s.night] ? { target: chef, role: madness[s.night] } : null;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  e.start();
+  e.ask(chef.id); // claims Mayor in public while mad
+  e.endDay();
+
+  assert.equal(chef.claim, "oracle");
+  assert.ok(
+    s.publicLog.includes(
+      `Day 2 — ${chef.label}: "Yesterday the Cerenovus made me mad as the Mayor, I am actually the Oracle."`,
+    ),
+  );
+
+  e.ask(chef.id); // claims Oracle in public while mad
+  e.endDay();
+
+  assert.equal(chef.claim, "chef");
+  assert.ok(
+    s.publicLog.includes(
+      `Day 3 — ${chef.label}: "Yesterday the Cerenovus made me mad as the Oracle, I am actually the Chef."`,
+    ),
+  );
 });
