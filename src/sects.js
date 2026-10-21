@@ -558,10 +558,19 @@ export const sectsAndViolets = {
       p.claimKnown = true;
       p.juggle = { night: s.day + 1, guesses };
 
+      // One guess per line.
+      const list = guesses
+        .map((g) => `${this.player(g.id).label} is the ${name(g.role)}`)
+        .join("\n");
+
       s.publicLog.push(
-        `Day ${s.day} — ${p.label} claims Juggler and guesses: ${guesses
-          .map((g) => `${this.player(g.id).label} is the ${name(g.role)}`)
-          .join(", ")}.`,
+        `Day ${s.day} — ${p.label} claims Juggler and guesses:\n${list}`,
+      );
+
+      this.audit(
+        "juggler",
+        `${p.label} (${name(p.role)}) claims Juggler and guesses:\n${list}`,
+        { actorId: p.id, guesses },
       );
     }
   },

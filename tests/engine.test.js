@@ -2447,7 +2447,7 @@ test("an NPC Juggler guesses publicly on Day 1 and learns how many were right", 
 
   assert.ok(
     s.publicLog.includes(
-      `Day 1 — ${juggler.label} claims Juggler and guesses: ${butler.label} is the Butler, ${imp.label} is the Chef.`,
+      `Day 1 — ${juggler.label} claims Juggler and guesses:\n${butler.label} is the Butler\n${imp.label} is the Chef`,
     ),
   );
 

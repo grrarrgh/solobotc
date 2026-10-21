@@ -1344,6 +1344,7 @@ export class Engine {
       seats: this.s.seats,
       seed: this.s.seed,
       twins: this.s.twins,
+      bluffs: this.s.demonBluffs ?? [],
       players: this.s.players,
       events,
       keyMoments: events.filter((e) => KEY_MOMENT_TYPES.has(e.type)),

@@ -216,14 +216,11 @@ input {
   color: #bbb;
 }
 
-/* Grimoire: every player, one row each (plus notes); scrolls sideways on
-   narrow screens rather than squashing. */
-.grimoire-wrap {
-  overflow-x: auto;
-}
-
+/* Grimoire: every player, one row each (plus notes), coloured by team. Long
+   text wraps so the table always fits the screen's width. */
 .grimoire {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.92rem;
 }
@@ -234,13 +231,29 @@ input {
   font-weight: 700;
   border-bottom: 1px solid #b69455;
   padding: 6px 8px;
-  white-space: nowrap;
 }
 
 .grimoire td {
   padding: 6px 8px;
   border-bottom: 1px solid #343a45;
   vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.team-row-good td {
+  background: #244b6855;
+}
+
+.team-row-evil td {
+  background: #682d3566;
+}
+
+.grimoire-bluffs {
+  margin: 10px 2px 0;
+}
+
+.grimoire-bluffs small {
+  color: #bbb;
 }
 
 .grimoire tr.notes td {
@@ -366,6 +379,15 @@ input {
   .event {
     grid-template-columns: 1fr;
     gap: 2px;
+  }
+
+  .grimoire {
+    font-size: 0.78rem;
+  }
+
+  .grimoire th,
+  .grimoire td {
+    padding: 5px 4px;
   }
 }
 

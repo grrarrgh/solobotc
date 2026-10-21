@@ -1,3 +1,9 @@
+## Bug Fixes: Juggler & Grimoire Layout
+
+- Juggler: each public guess is on its own line in the Public Log, and the guesses are now also recorded in log.txt and the final reveal's timeline.
+- Grimoire: the # and Team columns are gone; each row is tinted blue (good) or red (evil) instead. Long text wraps so the whole table fits the screen without scrolling sideways (with a smaller size on narrow screens).
+- Grimoire: the Demon's bluffs are listed once, under the table ("Demon bluffs: ... (known by ...)"), instead of under each evil player.
+
 ## New Features: Final Reveal Grimoire & Timeline
 
 - The final reveal now follows log.txt more closely. Under the result banner (which now also shows the script, player count and seed):

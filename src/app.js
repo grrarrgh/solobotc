@@ -401,7 +401,7 @@ function fate(p, events) {
 }
 
 // The extra lines under a player's Grimoire row: what happened to their
-// character, lasting effects, twins and (for evil) the bluffs they knew.
+// character, lasting effects and twins.
 function playerNotes(p, r) {
   const label = (id) => esc(r.players.find((x) => x.id === id)?.label ?? id);
   const notes = [];
@@ -447,14 +447,11 @@ function playerNotes(p, r) {
     notes.push(`good twin of ${label(r.twins.evilId)}`);
   }
 
-  if (p.alignment === "evil" && p.bluffs?.length) {
-    notes.push(`knew the bluffs: ${p.bluffs.map(roleLink).join(", ")}`);
-  }
-
   return notes;
 }
 
-// Every player: character (and how it changed), claim, team and fate.
+// Every player: character (and how it changed), claim and fate, with the
+// row coloured by their team; then the Demon's bluffs and who knew them.
 function grimoire(r) {
   const rows = r.players
     .map((p) => {
@@ -464,17 +461,17 @@ function grimoire(r) {
           : `${roleLink(p.startRole)} → ${roleLink(p.role)}`;
       const notes = playerNotes(p, r);
 
-      return `<tr class="${p.alive ? "" : "is-dead"}">
-          <td>${p.seat}</td>
+      const team = `team-row-${p.alignment}${p.alive ? "" : " is-dead"}`;
+
+      return `<tr class="${team}" title="${esc(p.alignment)}">
           <td>${esc(p.label)}</td>
           <td>${character}</td>
           <td>${roleLink(p.claim)}</td>
-          <td><span class="alignment ${p.alignment}">${esc(p.alignment)}</span></td>
           <td>${esc(fate(p, r.events))}</td>
         </tr>
         ${
           notes.length
-            ? `<tr class="notes"><td></td><td colspan="5">↳ ${notes.join(
+            ? `<tr class="notes ${team}"><td colspan="4">↳ ${notes.join(
                 " · ",
               )}</td></tr>`
             : ""
@@ -487,13 +484,30 @@ function grimoire(r) {
       <table class="grimoire">
         <thead>
           <tr>
-            <th>#</th><th>Player</th><th>Character</th>
-            <th>Claimed</th><th>Team</th><th>Fate</th>
+            <th>Player</th><th>Character</th><th>Claimed</th><th>Fate</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>`;
+    </div>
+    ${bluffLine(r)}`;
+}
+
+// "Demon bluffs: X, Y, Z (known by Player 2, Player 6)" under the Grimoire.
+function bluffLine(r) {
+  if (!r.bluffs.length) {
+    return "";
+  }
+
+  const knew = r.players
+    .filter((p) => p.alignment === "evil" && p.bluffs?.length)
+    .map((p) => esc(p.label));
+
+  return `<p class="grimoire-bluffs">
+    <strong>Demon bluffs:</strong> ${r.bluffs.map(roleLink).join(", ")}${
+      knew.length ? ` <small>(known by ${knew.join(", ")})</small>` : ""
+    }
+  </p>`;
 }
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
