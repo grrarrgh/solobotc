@@ -1,3 +1,10 @@
+## New Features: Final Reveal Grimoire & Timeline
+
+- The final reveal now follows log.txt more closely. Under the result banner (which now also shows the script, player count and seed):
+  - Grimoire: a table of every player with their seat, character (and what it changed to, e.g. "Clockmaker → Klutz"), what they claimed, their team, and how their game ended ("Survived", "Executed Day 3", "Died Night 2 (Demon)"). A notes line underneath shows what happened to them: the character a Drunk thought they were, abilities gained, Pit-Hag / Barber / Demon changes, lasting drunkenness or poison, the Evil Twin pairing, and the bluffs an evil player knew.
+  - Timeline: every event in order, grouped into collapsible Setup / Night / Day sections, each with a short summary (conversations, nominations, executions, deaths). Votes list who voted and whose votes didn't count. "Key moments only" filters down to the important events; "Open all" / "Close all" expands or collapses every section.
+- The per-night player tables stay in log.txt.
+
 ## New Script: Sects & Violets
 
 - A "mad" NPC now makes up plausible information to match the character they're mad about: what that character would have learned on each night so far (e.g. Empath numbers, Fortune Teller answers, a Monk's protections), with random answers. They share it when asked, and their trust/suspicion comes from it. Their real information is kept, and comes back with their real claim the next night.

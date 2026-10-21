@@ -354,6 +354,240 @@ function renderPublic() {
     .join("");
 }
 
+// ── Final reveal ─────────────────────────────────────────────
+
+// Timeline labels for event types (others are just capitalised).
+const EVENT_TAGS = {
+  information: "Info",
+  conversation: "Talk",
+  vote_result: "Vote",
+  end_day: "End day",
+  game_over: "Game over",
+  day: "Dawn",
+  eviltwin: "Evil Twin",
+  pithag: "Pit-Hag",
+  snakecharmer: "Snake Charmer",
+  devilsadvocate: "Devil's Advocate",
+  advocate: "Devil's Advocate",
+};
+
+const capitalise = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+
+const eventTag = (type) =>
+  EVENT_TAGS[type] ?? capitalise(type.replace(/_/g, " "));
+
+// How each cause of death reads in the Grimoire.
+const CAUSES = { fanggu: "Fang Gu" };
+
+const DRUNK_FROM = { sweetheart: "Sweetheart", philosopher: "Philosopher" };
+
+// "Key moments only" survives re-renders of the reveal.
+let keyOnly = false;
+
+// How a player's game ended, e.g. "Executed Day 3" or "Died Night 2 (Demon)".
+function fate(p, events) {
+  if (p.alive) {
+    return "Survived";
+  }
+
+  const death = [...events]
+    .reverse()
+    .find((x) => x.type === "death" && x.data?.playerId === p.id);
+  const when = death?.group ?? "";
+
+  return p.death === "execution"
+    ? `Executed ${when}`
+    : `Died ${when} (${CAUSES[p.death] ?? capitalise(p.death ?? "unknown")})`;
+}
+
+// The extra lines under a player's Grimoire row: what happened to their
+// character, lasting effects, twins and (for evil) the bluffs they knew.
+function playerNotes(p, r) {
+  const label = (id) => esc(r.players.find((x) => x.id === id)?.label ?? id);
+  const notes = [];
+
+  if (p.startRole === "drunk") {
+    notes.push(`thought they were the ${roleLink(p.shown)}`);
+  }
+
+  if (p.gained) {
+    notes.push(`gained the ${roleLink(p.gained)} ability`);
+  }
+
+  for (const ev of r.events) {
+    const d = ev.data ?? {};
+    const when = esc(ev.group);
+
+    if (ev.type === "pithag" && d.targetId === p.id && d.effective) {
+      notes.push(`made the ${roleLink(d.role)} by the Pit-Hag (${when})`);
+    } else if (ev.type === "barber" && d.swapped?.includes(p.id)) {
+      notes.push(`character swapped by the Barber (${when})`);
+    } else if (ev.type === "succession" && d.playerId === p.id) {
+      notes.push(`became the Demon (${when})`);
+    } else if (ev.type === "succession" && d.previousDemonId === p.id && p.alive) {
+      notes.push(`stopped being the Demon (${when})`);
+    }
+  }
+
+  if (p.drunkFrom) {
+    notes.push(`drunk from then on (${DRUNK_FROM[p.drunkFrom] ?? p.drunkFrom})`);
+  }
+
+  if (p.lastingPoison) {
+    notes.push("poisoned from then on (Snake Charmer)");
+  }
+
+  if (p.vigor) {
+    notes.push("kept their ability after death (Vigormortis)");
+  }
+
+  if (r.twins?.evilId === p.id) {
+    notes.push(`Evil Twin of ${label(r.twins.goodId)}`);
+  } else if (r.twins?.goodId === p.id) {
+    notes.push(`good twin of ${label(r.twins.evilId)}`);
+  }
+
+  if (p.alignment === "evil" && p.bluffs?.length) {
+    notes.push(`knew the bluffs: ${p.bluffs.map(roleLink).join(", ")}`);
+  }
+
+  return notes;
+}
+
+// Every player: character (and how it changed), claim, team and fate.
+function grimoire(r) {
+  const rows = r.players
+    .map((p) => {
+      const character =
+        p.startRole === p.role
+          ? roleLink(p.role)
+          : `${roleLink(p.startRole)} → ${roleLink(p.role)}`;
+      const notes = playerNotes(p, r);
+
+      return `<tr class="${p.alive ? "" : "is-dead"}">
+          <td>${p.seat}</td>
+          <td>${esc(p.label)}</td>
+          <td>${character}</td>
+          <td>${roleLink(p.claim)}</td>
+          <td><span class="alignment ${p.alignment}">${esc(p.alignment)}</span></td>
+          <td>${esc(fate(p, r.events))}</td>
+        </tr>
+        ${
+          notes.length
+            ? `<tr class="notes"><td></td><td colspan="5">↳ ${notes.join(
+                " · ",
+              )}</td></tr>`
+            : ""
+        }`;
+    })
+    .join("");
+
+  return `<h3>Grimoire</h3>
+    <div class="grimoire-wrap">
+      <table class="grimoire">
+        <thead>
+          <tr>
+            <th>#</th><th>Player</th><th>Character</th>
+            <th>Claimed</th><th>Team</th><th>Fate</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// A short summary of a timeline section, e.g. "4 conversations · 1 execution".
+function sectionSummary(events) {
+  const count = (type) => events.filter((x) => x.type === type).length;
+  const votes = events.filter((x) => x.type === "vote_result");
+  const executions =
+    votes.filter((x) => x.data?.executed).length + count("virgin");
+  const parts = [];
+
+  if (count("conversation")) {
+    parts.push(plural(count("conversation"), "conversation"));
+  }
+
+  if (votes.length) {
+    parts.push(plural(votes.length, "nomination"));
+  }
+
+  if (executions) {
+    parts.push(plural(executions, "execution"));
+  }
+
+  if (count("death")) {
+    parts.push(plural(count("death"), "death"));
+  }
+
+  return parts.length ? ` · ${parts.join(" · ")}` : "";
+}
+
+// Who voted on a nomination (and whose votes didn't count).
+function voters(ev, r) {
+  const label = (id) => r.players.find((x) => x.id === id)?.label ?? id;
+  const voted = (ev.data?.records ?? []).filter((x) => x.attempted);
+
+  return voted.length
+    ? `<small class="event-detail">votes: ${voted
+        .map(
+          (x) =>
+            `${esc(label(x.playerId))}${x.counted ? "" : " (not counted)"}`,
+        )
+        .join(", ")}</small>`
+    : "";
+}
+
+// Every event, grouped into collapsible Setup / Night / Day sections in the
+// order they happened, with a "Key moments only" filter.
+function timeline(r) {
+  const keyIds = new Set(r.keyMoments.map((x) => x.id));
+  const sections = [];
+
+  for (const ev of r.events) {
+    let section = sections.at(-1);
+
+    if (!section || section.name !== ev.group) {
+      section = { name: ev.group, events: [] };
+      sections.push(section);
+    }
+
+    section.events.push(ev);
+  }
+
+  const html = sections
+    .map(
+      (sec) => `<details class="tl-section ${
+        sec.events.some((x) => keyIds.has(x.id)) ? "has-key" : ""
+      }" ${keyOnly ? "open" : ""}>
+        <summary>${esc(sec.name)}<small>${sectionSummary(sec.events)}</small></summary>
+        <ol class="events">${sec.events
+          .map(
+            (ev) => `<li class="event ${keyIds.has(ev.id) ? "key" : ""}">
+              <span class="event-tag">${esc(eventTag(ev.type))}</span>
+              <span class="event-text">${linkRoles(ev.text)}${
+                ev.type === "vote_result" ? voters(ev, r) : ""
+              }</span>
+            </li>`,
+          )
+          .join("")}</ol>
+      </details>`,
+    )
+    .join("");
+
+  return `<h3>Timeline</h3>
+    <div class="timeline-controls">
+      <label>
+        <input id="key-only" type="checkbox" ${keyOnly ? "checked" : ""} />
+        Key moments only
+      </label>
+      <button id="timeline-open" type="button">Open all</button>
+    </div>
+    <div class="timeline">${html}</div>`;
+}
+
 function reveal() {
   const r = e.reveal();
 
@@ -372,70 +606,34 @@ function reveal() {
     <span>
       ${linkRoles(r.reason)}
     </span>
+    <small>
+      ${esc(r.script)} · ${r.seats} players · seed ${esc(r.seed)}
+    </small>
   </div>`;
 
-  $("roles").innerHTML = r.players
-    .map(
-      (p) =>
-        `<article class="reveal-card">
-          <header>
-            ${esc(p.label)}
-          </header>
+  $("roles").innerHTML = grimoire(r);
+  $("audit").innerHTML = timeline(r);
+  $("audit").classList.toggle("key-only", keyOnly);
 
-          <strong class="true-role">
-            ${roleLink(p.startRole)}
-          </strong>
+  $("key-only").onchange = (ev) => {
+    keyOnly = ev.target.checked;
+    $("audit").classList.toggle("key-only", keyOnly);
 
-          <span class="alignment ${p.alignment}">
-            ${esc(p.alignment)}
-          </span>
+    // Key moments are few, so show them all at once.
+    if (keyOnly) {
+      $("audit")
+        .querySelectorAll("details")
+        .forEach((d) => (d.open = true));
+    }
+  };
 
-          ${
-            p.role !== p.startRole
-              ? `<p>
-                  Became ${roleLink(p.role)}
-                </p>`
-              : ""
-          }
+  $("timeline-open").onclick = () => {
+    const all = [...$("audit").querySelectorAll("details")];
+    const open = !all.every((d) => d.open);
 
-          <p>
-            ${
-              p.alive
-                ? "Survived"
-                : `Died by ${esc(p.death ?? "unknown cause")}`
-            }
-          </p>
-
-          ${
-            p.claim !== p.startRole
-              ? `<small>
-                  Claimed ${roleLink(p.claim)}
-                </small>`
-              : ""
-          }
-        </article>`,
-    )
-    .join("");
-
-  const key = r.keyMoments;
-
-  $("audit").innerHTML = key.length
-    ? `<h3>Key moments</h3>
-      ${[...key]
-        .reverse()
-        .map(
-          (x) =>
-            `<div class="key-event">
-              <b>
-                ${esc(x.group)}
-              </b>
-              <span>
-                ${linkRoles(x.text)}
-              </span>
-            </div>`,
-        )
-        .join("")}`
-    : "";
+    all.forEach((d) => (d.open = open));
+    $("timeline-open").textContent = open ? "Close all" : "Open all";
+  };
 }
 
 // Points the "Download log.txt" link at a fresh copy of the debug log.

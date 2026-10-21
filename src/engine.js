@@ -1333,13 +1333,17 @@ export class Engine {
       return null;
     }
 
-    const events = this.s.audit.filter(
-      (e) => !["vote", "vote_result"].includes(e.type),
-    );
+    // Everything that happened, in order (the per-night player tables stay
+    // in log.txt).
+    const events = this.s.audit.filter((e) => e.type !== "state");
 
     return {
       winner: this.s.winner,
       reason: this.s.reason,
+      script: this.s.script.meta.name,
+      seats: this.s.seats,
+      seed: this.s.seed,
+      twins: this.s.twins,
       players: this.s.players,
       events,
       keyMoments: events.filter((e) => KEY_MOMENT_TYPES.has(e.type)),

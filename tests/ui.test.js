@@ -87,3 +87,10 @@ test("Sects & Violets controls: Seamstress skip and Savant visit", () => {
   assert.match(app, /e\.choose\(\[\]\)/);
   assert.match(app, /e\.savant\(\)/);
 });
+
+test("the final reveal shows a Grimoire and a filterable timeline", () => {
+  assert.match(app, /<h3>Grimoire<\/h3>/);
+  assert.match(app, /<h3>Timeline<\/h3>/);
+  assert.match(app, /id="key-only"/);
+  assert.match(css, /\.key-only \.event:not\(\.key\)/);
+});
