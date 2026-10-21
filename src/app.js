@@ -5,6 +5,7 @@ import {
   COUNTS,
   ARTIST_QUESTIONS,
   ABILITIES,
+  VOTE_COUNT_DELAY_MS,
 } from "./data.js";
 import { createState } from "./setup.js";
 import { Engine } from "./engine.js";
@@ -308,7 +309,8 @@ async function runVote(fn) {
   tally.textContent = `0 / ${result.threshold}`;
   c.classList.add("voting");
 
-  await sleep(2400);
+  // Let the hands fade in (0.4s), then pause before counting starts.
+  await sleep(400 + VOTE_COUNT_DELAY_MS);
 
   for (let k = 1; k <= n; k++) {
     const p = s.players[(start + k) % n];

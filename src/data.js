@@ -113,7 +113,7 @@ export const DEMON_KILL_PRIORITY = {
   fortuneteller: "high",
   undertaker: "high",
   monk: "high",
-  
+
   // First-night information (already learned) and once-per-game abilities.
   washerwoman: "med",
   librarian: "med",
@@ -189,6 +189,10 @@ export const SCAPEGOAT_CHANCE = 0.8;
 //   ability on any given night.
 export const WITCH_HUMAN_CHANCE = 0.5;
 export const SEAMSTRESS_NIGHT_CHANCE = 0.5;
+
+// Vote animation: how long (in ms) the clock hands point at the nominator
+// and nominee before the large hand starts counting votes.
+export const VOTE_COUNT_DELAY_MS = 1500;
 
 // Official ability text, shown on the script sheet. "*" means "not the first
 // night".
