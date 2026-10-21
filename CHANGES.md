@@ -2,6 +2,20 @@
 
 Newest first.
 
+## New Features: Votes Needed, Round Seats & Capitalised Day
+
+- Votes needed: the middle of the town square, under the clock tower, shows how many votes a nomination needs right now to mark someone for execution: half the living players (rounded up), or one more than the player already marked (or tied) got today. While a vote is counted, the tally counts towards that number ("3 / 5 needed").
+- While a vote is being counted, the line under the town square keeps showing how things stood before the vote, instead of giving away the result early.
+- Player tokens in the town square are always circles.
+- The status line is capitalised ("Day 1 — 10 alive", "Night 2 — 8 alive"), and at night it shows the night's number.
+
+## New Features: Town Square Size & Vote Icons
+
+- Raised hands and the skull now sit over the player's token, slightly see-through, instead of at its corner. A player with both shows them side by side.
+- A menu button (☰) to the left of the "Solo Clocktower" title opens a town square size setting: the current size (100% by default) with − / + buttons. Pressing the menu button again, or anywhere outside the popup, closes it. The browser remembers the last size. The default, step and limits are TOWN_SQUARE_SIZE, TOWN_SQUARE_SIZE_STEP, TOWN_SQUARE_SIZE_MIN and TOWN_SQUARE_SIZE_MAX in src/data.js. It never grows wider than the screen.
+- On a phone (e.g. an iPhone 16, 393px wide) the town square now fills the screen width: the circle is sized from the space actually available, and seat tokens narrow a little with many players so they don't overlap. Long names end in "…"; hover or long-press a seat to see the full one.
+- Seats no longer say "alive" under the player's name; dead players still show "DEAD".
+
 ## Improvements: Code Clean-up, Start Script & README
 
 - `npm start` now runs a small built-in Node server (serve.js) instead of `python3`, which usually isn't available on Windows. `npm run check` syntax-checks every file in src/ without a hand-kept list.

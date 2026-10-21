@@ -8,7 +8,30 @@
   </head>
   <body>
     <main>
-      <h1>Solo Clocktower</h1>
+      <header class="title-bar">
+        <div class="menu">
+          <button
+            id="size-settings"
+            type="button"
+            class="info-button"
+            title="Menu"
+            aria-label="Menu"
+            aria-expanded="false"
+            aria-controls="size-popup"
+          >
+            ☰
+          </button>
+          <div id="size-popup" class="count-popup size-popup" hidden>
+            <small>Town square size</small>
+            <div class="size-controls">
+              <button id="size-down" type="button" aria-label="Smaller">−</button>
+              <strong id="size-value"></strong>
+              <button id="size-up" type="button" aria-label="Larger">+</button>
+            </div>
+          </div>
+        </div>
+        <h1>Solo Clocktower</h1>
+      </header>
 
       <section id="setup">
         <label>Seats <select id="seats"></select></label>

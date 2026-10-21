@@ -7,6 +7,10 @@ import {
   ABILITIES,
   VOTE_COUNT_DELAY_MS,
   VOTE_TICK_MS,
+  TOWN_SQUARE_SIZE,
+  TOWN_SQUARE_SIZE_STEP,
+  TOWN_SQUARE_SIZE_MIN,
+  TOWN_SQUARE_SIZE_MAX,
 } from "./data.js";
 import { createState } from "./setup.js";
 import { Engine } from "./engine.js";
@@ -167,7 +171,7 @@ function circle() {
 
       return `
         <button
-          title="${esc(p.label)}"
+          title="${esc(`${p.label}: ${token}`)}"
           class="seat ${p.human ? "human" : ""} ${p.alive ? "" : "dead"} ${
             (s.pending ? nightPicks.includes(p.id) : p.id === selectedPlayerId)
               ? "selected"
@@ -192,19 +196,24 @@ function circle() {
             ${esc(p.label)}
           </small>
 
-          <br>
-
-          <small>
-            ${p.alive ? "alive" : "DEAD"}
-          </small>
+          ${p.alive ? "" : "<br><small>DEAD</small>"}
         </button>
       `;
     })
     .join("");
 
+  // Under the clock tower: the votes a nomination needs now (as things stood
+  // before the vote, while one is being counted).
+  const needed = voteAnim ? voteAnim.before.needed : e.votesNeeded();
+
   $("circle").insertAdjacentHTML(
     "beforeend",
-    `<button
+    `${
+      s.phase === "day" && !s.winner
+        ? `<span class="votes-needed">${needed} votes needed</span>`
+        : ""
+    }
+    <button
       id="clocktower"
       type="button"
       class="clocktower"
@@ -276,7 +285,9 @@ async function runVote(fn) {
     return;
   }
 
+  // The mark and votes needed before this vote, shown until it's counted.
   const previousBlock = s.block?.nomineeId ?? null;
+  const before = { block: s.block && { ...s.block }, needed: e.votesNeeded() };
   let result;
 
   try {
@@ -294,7 +305,7 @@ async function runVote(fn) {
     return;
   }
 
-  voteAnim = { previousBlock, revealed: new Set() };
+  voteAnim = { previousBlock, before, revealed: new Set() };
   render();
 
   const c = $("circle");
@@ -311,7 +322,7 @@ async function runVote(fn) {
 
   // The large hand's swing between seats takes most of each tick.
   minute.style.transitionDuration = `${Math.round(VOTE_TICK_MS * 0.8)}ms`;
-  tally.textContent = `0 / ${result.threshold}`;
+  tally.textContent = `0 / ${result.needed} needed`;
   c.classList.add("voting");
 
   // Let the hands fade in (0.4s), then pause before counting starts.
@@ -341,7 +352,7 @@ async function runVote(fn) {
     if (record?.counted) {
       voteAnim.revealed.add(p.id);
       votes++;
-      tally.textContent = `${votes} / ${result.threshold}`;
+      tally.textContent = `${votes} / ${result.needed} needed`;
       seat?.querySelector(".vote-hand")?.classList.add("counted");
     }
   }
@@ -834,7 +845,9 @@ function render() {
   // The winner is only shown in the Final reveal.
   $("status").textContent = s.winner
     ? "Game Over!"
-    : `${s.phase} ${s.day || s.night} — ${e.alive().length} alive`;
+    : s.phase === "night"
+      ? `Night ${s.night} — ${e.alive().length} alive`
+      : `Day ${s.day} — ${e.alive().length} alive`;
 
   $("selected-player").textContent = t ? `Selected: ${t.label}` : "";
 
@@ -872,12 +885,18 @@ function render() {
   $("request-nomination").hidden = false;
   $("request-nomination").disabled = blocked;
   $("pass").disabled = !!voteAnim;
+  // While a vote is being counted, this shows how things stood before it.
+  const block = voteAnim ? voteAnim.before.block : s.block;
+  const marked = block?.nomineeId ? e.player(block.nomineeId) : null;
+
   $("block-status").textContent =
-    s.phase === "day" && e.marked()
-      ? `Marked for execution: ${e.marked().label} (${s.block.count} votes). End the day to execute them.`
-      : s.phase === "day" && s.block
-        ? `Tied at ${s.block.count} votes: nobody is marked for execution.`
-        : "";
+    s.phase !== "day"
+      ? ""
+      : marked
+        ? `Marked for execution: ${marked.label} (${block.count} votes). End the day to execute them.`
+        : block
+          ? `Tied at ${block.count} votes: nobody is marked for execution.`
+          : "";
   $("slay").hidden = !(h.shown === "slayer" && !s.slayerUsed && h.alive);
   $("artist-controls").hidden = !(
     h.shown === "artist" &&
@@ -935,6 +954,48 @@ function toggleCountInfo() {
   btn.setAttribute("aria-expanded", String(!box.hidden));
 }
 
+// ── Town square size ─────────────────────────────────────────
+
+// The browser remembers the size (if it can store it; the default otherwise).
+let squareSize = TOWN_SQUARE_SIZE;
+
+try {
+  squareSize = Number(localStorage.getItem("townSquareSize")) || squareSize;
+} catch {}
+
+function setSquareSize(size) {
+  // Rounded so repeated steps of 0.1 don't drift (0.30000000000000004...).
+  squareSize = Math.min(
+    TOWN_SQUARE_SIZE_MAX,
+    Math.max(TOWN_SQUARE_SIZE_MIN, Math.round(size * 100) / 100),
+  );
+
+  $("circle").style.setProperty("--scale", squareSize);
+  $("size-value").textContent = `${Math.round(squareSize * 100)}%`;
+  $("size-down").disabled = squareSize <= TOWN_SQUARE_SIZE_MIN;
+  $("size-up").disabled = squareSize >= TOWN_SQUARE_SIZE_MAX;
+
+  try {
+    localStorage.setItem("townSquareSize", String(squareSize));
+  } catch {}
+}
+
+function toggleSizeSettings(open = $("size-popup").hidden) {
+  $("size-popup").hidden = !open;
+  $("size-settings").setAttribute("aria-expanded", String(open));
+}
+
+// Pressing anywhere outside the popup closes it. (The menu button toggles it
+// itself.)
+document.addEventListener("click", (ev) => {
+  if (
+    !$("size-popup").hidden &&
+    !ev.target.closest("#size-popup, #size-settings")
+  ) {
+    toggleSizeSettings(false);
+  }
+});
+
 function resetGame() {
   s = null;
   e = null;
@@ -958,12 +1019,19 @@ function resetGame() {
 
   $("count-popup").hidden = true;
   $("count-info").setAttribute("aria-expanded", "false");
+
+  toggleSizeSettings(false);
 }
 
 // ── Event wiring ─────────────────────────────────────────────
 
 $("random-seed").onclick = randomSeed;
 $("count-info").onclick = toggleCountInfo;
+
+$("size-settings").onclick = () => toggleSizeSettings();
+$("size-down").onclick = () => setSquareSize(squareSize - TOWN_SQUARE_SIZE_STEP);
+$("size-up").onclick = () => setSquareSize(squareSize + TOWN_SQUARE_SIZE_STEP);
+setSquareSize(squareSize);
 
 $("seats").onchange = () => {
   if (!$("count-popup").hidden) {

@@ -2634,8 +2634,11 @@ test("a later nomination only takes the mark with more votes; a tie leaves nobod
   };
 
   // 6 votes (the human always votes): marked.
+  assert.equal(e.votesNeeded(), 5);
   voteFor(6);
-  assert.equal(e.requestNomination(npcs[0].id).marked, true);
+  assert.equal(e.requestNomination(npcs[0].id).needed, 5);
+  assert.equal(e.votesNeeded(), 7); // more than the 6 the mark has
+  assert.equal(e.marked(), npcs[0]);
   assert.equal(e.marked(), npcs[0]);
 
   // 5 votes: enough, but fewer than 6; the mark stays.
@@ -2649,7 +2652,8 @@ test("a later nomination only takes the mark with more votes; a tie leaves nobod
   assert.equal(e.marked(), null);
   assert.equal(s.block.count, 6);
 
-  // Still 6: no better than the tie.
+  // Still 6: no better than the tie (7 needed).
+  assert.equal(e.votesNeeded(), 7);
   assert.equal(e.requestNomination(npcs[3].id).marked, false);
   assert.equal(e.marked(), null);
 

@@ -42,12 +42,12 @@ input {
   padding: 70px 65px;
 }
 
-/* The circle grows by 40px per seat (--n is set from app.js), but never
-   past the space left for it: the screen width minus the page, section and
-   town-square padding. */
+/* The circle grows by 40px per seat (--n is set from app.js), scaled by the
+   size chosen from the menu (--scale), but never past the space left for it:
+   the screen width minus the page, section and town-square padding. */
 .circle {
   --size: min(
-    clamp(300px, calc(var(--n, 10) * 40px + 120px), 720px),
+    clamp(300px, calc(var(--n, 10) * 40px + 120px), 720px) * var(--scale, 1),
     calc(100vw - 210px)
   );
   width: var(--size);
@@ -64,8 +64,15 @@ input {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 105px;
-  min-height: 72px;
+  /* Always a circle: the width sets the size, the height follows. */
+  width: 88px;
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  overflow: hidden;
   transform: translate(-50%, -50%) rotate(var(--a))
     translateY(calc(var(--size) * -0.4)) rotate(calc(var(--a) * -1));
   border: 2px solid #888;
@@ -81,6 +88,7 @@ input {
 
 .token {
   display: block;
+  max-width: 100%;
   color: #f0cf83;
   font-weight: 800;
 }
@@ -99,11 +107,26 @@ input {
   background: #3b3428;
 }
 
-.vote-hand {
+/* Raised hands and the skull sit over the token, slightly see-through (side
+   by side when a player has both). */
+.vote-hand,
+.skull {
   position: absolute;
-  right: -9px;
-  top: -18px;
-  font-size: 1.7rem;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 2.4rem;
+  line-height: 1;
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.seat:has(.skull) .vote-hand {
+  left: 30%;
+}
+
+.seat:has(.vote-hand) .skull {
+  left: 70%;
 }
 
 .unknown {
@@ -355,21 +378,42 @@ input {
     padding: 10px;
   }
 
+  /* On a phone the town square uses the full width (e.g. an iPhone 16's
+     393px screen): no side padding, and the circle is capped by the width
+     actually left for it (100cqw), not a guess from the screen width. */
   .town-square-wrap {
-    padding: 48px 38px;
+    padding: 52px 0 12px;
+    container-type: inline-size;
   }
 
   .circle {
     --size: min(
-      clamp(220px, calc(var(--n, 10) * 30px + 80px), 470px),
-      calc(100vw - 130px)
+      clamp(220px, calc(var(--n, 10) * 30px + 80px), 470px) * var(--scale, 1),
+      100cqw
     );
   }
 
+  /* Seats narrow a little with many players, so they don't pile up. */
   .seat {
-    width: 66px;
-    min-height: 55px;
+    width: clamp(50px, calc(var(--size) * 2.4 / var(--n, 10)), 62px);
+    padding: 2px;
     font-size: 0.68rem;
+  }
+
+  .votes-needed {
+    font-size: 0.65rem;
+  }
+
+  .token {
+    font-size: 0.62rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .vote-hand,
+  .skull {
+    font-size: 1.6rem;
   }
 
   .cols {
@@ -402,6 +446,73 @@ input {
   right: 18px;
   top: 18px;
   z-index: 5;
+}
+
+/* The menu to the left of the title (town square size). */
+.title-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0.67em 0;
+}
+
+.title-bar h1 {
+  margin: 0;
+}
+
+.menu {
+  position: relative;
+}
+
+#size-settings {
+  padding: 0;
+  font-family: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.size-popup {
+  right: auto;
+  left: 0;
+  z-index: 10;
+  min-width: 170px;
+}
+
+.count-popup.size-popup small {
+  margin: 0 0 8px;
+}
+
+.size-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.size-popup .size-controls strong {
+  display: inline-block;
+  min-width: 3.5em;
+  font-size: 1.2rem;
+  letter-spacing: 0;
+}
+
+.size-controls button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  line-height: 1;
+  border-radius: 50%;
+  border-color: #b69455;
+  background: #2a313d;
+  color: #f0cf83;
+  font-size: 1.2rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.size-controls button:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .info-button {
@@ -618,8 +729,23 @@ input {
   opacity: 1;
 }
 
-.circle.voting .clocktower {
+.circle.voting .clocktower,
+.circle.voting .votes-needed {
   opacity: 0;
+  pointer-events: none;
+}
+
+/* The votes needed to mark someone, just under the clock tower. */
+.votes-needed {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + max(24px, var(--size) * 0.075) + 4px);
+  transform: translateX(-50%);
+  color: #f0cf83;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: opacity 0.4s;
   pointer-events: none;
 }
 
@@ -673,15 +799,7 @@ input {
 
 /* A vote that was raised but didn't count (e.g. a Butler's). */
 .vote-hand.not-counted {
-  opacity: 0.4;
-}
-
-/* The player marked for execution. */
-.skull {
-  position: absolute;
-  left: -10px;
-  top: -18px;
-  font-size: 1.6rem;
+  opacity: 0.3;
 }
 
 #block-status {

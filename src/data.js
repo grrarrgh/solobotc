@@ -218,6 +218,15 @@ export const VOTE_COUNT_DELAY_MS = 1500;
 // counts votes. (A voter's hand goes up just before the clock hand arrives.)
 export const VOTE_TICK_MS = 450;
 
+// Town square size, set from the menu (☰) by the title (as a fraction of
+// the normal size). The −/+ buttons step it by TOWN_SQUARE_SIZE_STEP, between
+// TOWN_SQUARE_SIZE_MIN and TOWN_SQUARE_SIZE_MAX. (It never grows past the
+// width of the screen.) The browser remembers the last size used.
+export const TOWN_SQUARE_SIZE = 1;
+export const TOWN_SQUARE_SIZE_STEP = 0.1;
+export const TOWN_SQUARE_SIZE_MIN = 0.6;
+export const TOWN_SQUARE_SIZE_MAX = 1.5;
+
 // Chance an NPC Juggler guesses a player's claimed character; otherwise they
 // guess a random character on the script.
 export const JUGGLER_CLAIM_GUESS_CHANCE = 0.5;

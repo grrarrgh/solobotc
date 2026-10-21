@@ -1054,6 +1054,7 @@ export class Engine {
       nomineeId: id,
       count: 0,
       threshold: 0,
+      needed: 0,
       marked: false,
       records: [],
     };
@@ -1078,6 +1079,7 @@ export class Engine {
       }
     }
 
+    const needed = this.votesNeeded();
     const records = this.votes(n);
     const count = records.filter((x) => x.counted).length;
     const threshold = Math.ceil(this.alive().length / 2);
@@ -1101,7 +1103,7 @@ export class Engine {
           ? `a tie${leader ? ` with ${leader.label}` : ""}, so nobody is marked`
           : `fewer than the ${previous.count} votes to beat`;
 
-    const result = { ...base, count, threshold, marked, records };
+    const result = { ...base, count, threshold, needed, marked, records };
 
     s.lastVote = result;
 
@@ -1121,6 +1123,18 @@ export class Engine {
   }
 
   // The player currently marked for execution, if any.
+  // The votes a nomination needs now to mark the nominee for execution: half
+  // the living players (rounded up), and more than any earlier nominee got
+  // today. (Exactly that many is a tie, so nobody is marked.)
+  votesNeeded() {
+    const s = this.s;
+
+    return Math.max(
+      Math.ceil(this.alive().length / 2),
+      (s.block?.count ?? 0) + 1,
+    );
+  }
+
   marked() {
     const id = this.s.block?.nomineeId;
 

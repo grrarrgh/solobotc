@@ -113,3 +113,21 @@ test("game over: the status says Game Over!, and the logs collapse", () => {
   assert.match(app, /\$\("public-panel"\)\.open = false/);
   assert.match(app, /\$\("reveal-panel"\)\.open = false/);
 });
+
+test("raised hands and the skull overlay the token, see-through", () => {
+  assert.match(css, /\.vote-hand,\s*\.skull \{[^}]*transform: translate\(-50%, -50%\)[^}]*opacity: 0\.65/);
+});
+
+test("a menu by the title opens the town square size popup with − / + buttons", () => {
+  assert.match(html, /<div class="menu">\s*<button\s+id="size-settings"[^>]*>\s*☰[\s\S]*?<\/div>\s*<\/div>\s*<h1>Solo Clocktower<\/h1>/);
+  assert.match(html, /id="size-popup"[\s\S]*?id="size-down"[\s\S]*?id="size-value"[\s\S]*?id="size-up"/);
+  assert.match(app, /setSquareSize\(squareSize \+ TOWN_SQUARE_SIZE_STEP\)/);
+  assert.match(css, /var\(--scale, 1\)/);
+});
+
+test("seats are round, and the votes needed show under the clock tower", () => {
+  assert.match(css, /\.seat \{[^}]*aspect-ratio: 1/);
+  assert.match(app, /class="votes-needed">\$\{needed\} votes needed/);
+  assert.match(app, /\$\{votes\} \/ \$\{result\.needed\} needed/);
+  assert.match(css, /\.circle\.voting \.votes-needed/);
+});
