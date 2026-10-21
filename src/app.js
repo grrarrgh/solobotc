@@ -3,6 +3,7 @@ import {
   name,
   team,
   COUNTS,
+  DEFAULT_SEATS,
   ARTIST_QUESTIONS,
   ABILITIES,
   VOTE_COUNT_DELAY_MS,
@@ -1132,12 +1133,11 @@ $("pass").onclick = () => {
   }
 };
 
-$("seats").innerHTML = Array.from(
-  { length: 11 },
-  (_, i) => `<option>${i + 5}</option>`,
-).join("");
+$("seats").innerHTML = Object.keys(COUNTS)
+  .map((n) => `<option>${n}</option>`)
+  .join("");
 
-$("seats").value = 10;
+$("seats").value = DEFAULT_SEATS;
 
 $("artist-question").innerHTML = Object.entries(ARTIST_QUESTIONS)
   .map(([k, v]) => `<option value="${k}">Is this player ${esc(v)}?</option>`)

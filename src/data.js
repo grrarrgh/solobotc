@@ -336,11 +336,11 @@ export const ARTIST_QUESTIONS = {
   townsfolk: "a Townsfolk",
 };
 
+// The number of seats selected on the setup screen when the page opens.
+export const DEFAULT_SEATS = 12;
+
 // seats: [townsfolk, outsiders, minions, demons]
 export const COUNTS = {
-  5: [3, 0, 1, 1],
-  6: [3, 1, 1, 1],
-  7: [5, 0, 1, 1],
   8: [5, 1, 1, 1],
   9: [5, 2, 1, 1],
   10: [7, 0, 2, 1],
