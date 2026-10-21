@@ -84,16 +84,26 @@ let selectedPlayerId = null;
 // Players picked in the town square while the Storyteller has woken you.
 let nightPicks = [];
 
+// Script files are re-checked with the server on every load ("no-cache"), so
+// newly added or edited scripts show up without the browser using a stale
+// copy (python's http.server sends no caching headers).
+const getJson = (url) =>
+  fetch(url, { cache: "no-cache" }).then((r) => {
+    if (!r.ok) {
+      throw Error(`Couldn't load ${decodeURIComponent(url)} (${r.status}).`);
+    }
+
+    return r.json();
+  });
+
 async function load() {
   try {
-    const files = await fetch("scripts/index.json").then((r) => r.json());
+    const files = await getJson("scripts/index.json");
 
     scripts = await Promise.all(
       files.map(async (f) => ({
         file: f,
-        raw: await fetch(`scripts/${encodeURIComponent(f)}`).then((r) =>
-          r.json(),
-        ),
+        raw: await getJson(`scripts/${encodeURIComponent(f)}`),
       })),
     );
 
