@@ -118,6 +118,12 @@ input {
   text-align: center;
 }
 
+/* End day: always reachable during the day. */
+.day-controls {
+  margin: 8px auto 0;
+  text-align: center;
+}
+
 /* The Storyteller has woken you: pick players in the town square. */
 .night-choice {
   max-width: 650px;

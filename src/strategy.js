@@ -1,11 +1,15 @@
 import {
+  ROLES,
   name,
   team,
+  alignment,
   ARTIST_QUESTIONS,
   FIRST_NIGHT_INFO,
   ONGOING_INFO,
-  DEMON_INFO_KILL_CHANCE,
+  DEMON_KILL_PRIORITY,
+  KILL_PRIORITY_CHANCE,
   DEMON_STAR_PASS_CHANCE,
+  GAMBLER_WILD_GUESS_CHANCE,
   SCAPEGOAT_CHANCE,
   SLAYER_SHOOT_AFTER_DAY,
   SLAYER_START_CHANCE,
@@ -13,6 +17,45 @@ import {
 } from "./data.js";
 import { ability, bluffInfo, scapegoat } from "./storyteller.js";
 import { pick, sample } from "./util.js";
+
+const ROLE_BY_NAME = new Map(Object.keys(ROLES).map((id) => [name(id), id]));
+
+// Whether a piece of information makes its owner trust ("trust") or suspect
+// ("suspicious") the players it names, or says nothing either way (null).
+function infoStance(m) {
+  const t = m.text;
+
+  switch (m.role) {
+    case "fortuneteller":
+      return /: YES for/.test(t) ? "suspicious" : "trust";
+    case "empath":
+      return /number: 0\./.test(t) ? "trust" : "suspicious";
+    case "investigator":
+      return "suspicious";
+    case "washerwoman":
+    case "grandmother":
+    case "monk":
+    case "butler":
+    case "gambler":
+      return "trust";
+    case "artist": {
+      const yes = /: YES\.$/.test(t);
+
+      if (/ is (evil|the Demon|a Minion):/.test(t)) {
+        return yes ? "suspicious" : "trust";
+      }
+
+      return / is a Townsfolk:/.test(t) ? (yes ? "trust" : "suspicious") : null;
+    }
+    case "ravenkeeper": {
+      const seen = ROLE_BY_NAME.get(t.match(/ is (.+)\.$/)?.[1]);
+
+      return seen && alignment(seen) === "evil" ? "suspicious" : "trust";
+    }
+    default:
+      return null;
+  }
+}
 
 export class SimpleStrategy {
   // Good NPCs point at evil players, unless drunk or poisoned (50% wrong).
@@ -74,13 +117,74 @@ export class SimpleStrategy {
     return target
       ? {
           targetId: target.id,
-          text: `I heard ${target.label} is suspicious`,
+          text: `I'm suspicious of ${target.label}.`,
         }
       : null;
   }
 
+  // An NPC's closing remark when asked, one of:
+  // - "nothing": a good NPC with no information has nothing to add;
+  // - "trust" / "suspicious" of a player, from the NPC's own information
+  //   where it names someone (so a Drunk's or a bluffer's wrong information
+  //   gives a wrong opinion);
+  // - otherwise, "suspicious" of their general suspect (see suspicion()).
+  opinion(s, p) {
+    const nothing = { type: "nothing", text: "I have nothing else to add." };
+
+    if (p.alignment === "good" && !p.memories.length) {
+      return nothing;
+    }
+
+    const fromInfo = this.infoOpinion(s, p);
+
+    if (fromInfo) {
+      return fromInfo;
+    }
+
+    const sus = this.suspicion(s, p);
+
+    return sus ? { type: "suspicious", ...sus } : nothing;
+  }
+
+  // Trust or suspicion from the latest piece of information that names a
+  // living NPC. Evil NPCs trust their teammates and accuse the scapegoat.
+  infoOpinion(s, p) {
+    const goat = p.alignment === "evil" ? scapegoat(s) : null;
+
+    for (const m of [...p.memories].reverse()) {
+      const type = infoStance(m);
+      const named = (m.targets ?? [])
+        .map((id) => s.players.find((x) => x.id === id))
+        .filter((x) => x?.alive && !x.human && x !== p);
+
+      if (!type || !named.length) {
+        continue;
+      }
+
+      const preferred =
+        p.alignment === "evil"
+          ? named.filter((x) =>
+              type === "trust" ? x.alignment === "evil" : x === goat,
+            )
+          : [];
+      const target = pick(preferred.length ? preferred : named, s.r);
+      const when = m.day ? `Day ${m.day}` : `Night ${m.night}`;
+
+      return {
+        type,
+        targetId: target.id,
+        text: `${type === "trust" ? "I trust" : "I'm suspicious of"} ${
+          target.label
+        }, because of what I learned on ${when}.`,
+      };
+    }
+
+    return null;
+  }
+
   // Good NPCs share what they learned; evil NPCs share their bluffed info.
-  // Each night's (or day's) information goes on its own line.
+  // Each night's (or day's) information goes on its own line, followed by
+  // their opinion.
   ask(s, p) {
     const details = p.memories.length
       ? p.memories
@@ -88,13 +192,7 @@ export class SimpleStrategy {
           .join("\n")
       : "I have no stored information.";
 
-    const suspicion = this.suspicion(s, p);
-
-    return [
-      `I claim ${name(p.claim)}.`,
-      details,
-      suspicion ? `${suspicion.text}.` : "",
-    ]
+    return [`I claim ${name(p.claim)}.`, details, this.opinion(s, p).text]
       .filter(Boolean)
       .join("\n");
   }
@@ -122,12 +220,15 @@ export class SimpleStrategy {
     );
   }
 
-  // The Demon kills with purpose (see DEMON_* in data.js):
+  // The Demon kills with purpose (see DEMON_* and KILL_PRIORITY_* in data.js):
   // - after being nominated (and surviving), it may kill itself so a Minion
   //   takes over;
-  // - otherwise it attacks a good NPC, never a teammate, skipping public
-  //   Soldier and Mayor claims, and preferring public information claimers
-  //   (ongoing ones first).
+  // - otherwise it works down its kill priorities: good NPCs by the
+  //   character they've publicly claimed, its own Minions by their true
+  //   character, raised to their public bluff's level if that bluff is
+  //   "med" or "high" (killing a "confirmed" info role makes good cover). A
+  //   Minion it avoids stays avoided. If no priority fires, it attacks a good
+  //   NPC it isn't avoiding; with no good NPC left, any random NPC.
   demon(s, p) {
     const minion = s.players.some(
       (x) => x.alive && team(x.role) === "minion",
@@ -137,30 +238,43 @@ export class SimpleStrategy {
       return p;
     }
 
-    const good = s.players.filter(
-      (x) => x.alive && !x.human && x.alignment === "good",
-    );
-    const safe = good.filter(
-      (x) => !(x.claimKnown && ["soldier", "mayor"].includes(x.claim)),
-    );
-    const targets = safe.length ? safe : good;
-    const voices = targets.filter(
-      (x) =>
-        x.claimKnown &&
-        (FIRST_NIGHT_INFO.includes(x.claim) || ONGOING_INFO.includes(x.claim)),
-    );
-    const ongoing = voices.filter((x) => ONGOING_INFO.includes(x.claim));
+    const npcs = s.players.filter((x) => x.alive && !x.human && x.id !== p.id);
+    const claimLevel = (x) =>
+      x.claimKnown ? (DEMON_KILL_PRIORITY[x.claim] ?? "low") : null;
+    const rank = ["avoid", "low", "med", "high"];
 
-    if (voices.length && s.r() < DEMON_INFO_KILL_CHANCE) {
-      return pick(ongoing.length ? ongoing : voices, s.r);
+    const level = (x) => {
+      if (x.alignment !== "evil") {
+        return claimLevel(x);
+      }
+
+      const own = DEMON_KILL_PRIORITY[x.role] ?? "avoid";
+      const bluff = claimLevel(x);
+
+      return own !== "avoid" && ["med", "high"].includes(bluff) &&
+        rank.indexOf(bluff) > rank.indexOf(own)
+        ? bluff
+        : own;
+    };
+    const notAvoided = npcs.filter((x) => level(x) !== "avoid");
+
+    for (const tier of ["high", "med", "low"]) {
+      const found = notAvoided.filter((x) => level(x) === tier);
+
+      if (found.length && s.r() < KILL_PRIORITY_CHANCE[tier]) {
+        return pick(found, s.r);
+      }
     }
 
+    const good = npcs.filter((x) => x.alignment === "good");
+
     return (
-      pick(targets, s.r) ??
       pick(
-        s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
+        good.filter((x) => level(x) !== "avoid"),
         s.r,
-      )
+      ) ??
+      pick(good, s.r) ??
+      pick(npcs, s.r)
     );
   }
 
@@ -220,14 +334,22 @@ export class SimpleStrategy {
     );
   }
 
-  // A Gambler guesses another living player is the character they claim.
+  // A Gambler guesses another living player is the character they claim, or
+  // (at GAMBLER_WILD_GUESS_CHANCE) takes a wild guess at any character on the
+  // script. Either can be wrong, and a wrong guess kills a working Gambler.
   gamble(s, p) {
     const target = pick(
       s.players.filter((x) => x.alive && x.id !== p.id),
       s.r,
     );
 
-    return target ? { target, role: target.claim } : null;
+    if (!target) {
+      return null;
+    }
+
+    const wild = s.r() < GAMBLER_WILD_GUESS_CHANCE;
+
+    return { target, role: wild ? pick(s.script.ids, s.r) : target.claim };
   }
 
   // An Artist asks "Is any of these 1–3 players <evil / the Demon / a Minion

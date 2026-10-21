@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 import {
+  DEMON_KILL_PRIORITY,
   FORBIDDEN_HUMAN,
   FIRST_NIGHT_INFO,
   ONGOING_INFO,
@@ -164,11 +165,20 @@ function askedState(kind) {
     role(s.players[1], "drunk", "good");
   }
 
+  // Information that names nobody, so the NPC falls back on their general
+  // suspicion rather than saying they have nothing to add.
+  s.players[1].memories.push({
+    night: 1,
+    role: "chef",
+    text: "Chef number: 1.",
+    targets: [],
+  });
+
   return s;
 }
 
 function suspicionTarget(s, response) {
-  const label = response.match(/I heard (Player \d+) is suspicious/)[1];
+  const label = response.match(/I'm suspicious of (Player \d+)\./)[1];
 
   return s.players.find((p) => p.label === label);
 }
@@ -185,7 +195,7 @@ test("NPC suspicion statements obey truth, lie, status, and target constraints",
     assert.ok(target);
     assert.equal(target.human, false);
     assert.notEqual(target.id, speaker.id);
-    assert.match(response, /I heard Player \d+ is suspicious/);
+    assert.match(response, /I'm suspicious of Player \d+\./);
 
     if (kind === "good") {
       assert.equal(target.alignment, "evil");
@@ -1079,7 +1089,10 @@ test("Minions share the Demon's bluffs only at the configured chance", () => {
   for (let seed = 0; seed < 50; seed++) {
     const always = createState(ecp, 12, seed, { minionBluffChance: 1 });
     const never = createState(ecp, 12, seed, { minionBluffChance: 0 });
-    const minions = (s) => s.players.filter((p) => team(p.role) === "minion");
+    // The Spy always knows the bluffs and claims something else (tested
+    // separately), so only the other Minions follow the chance.
+    const minions = (s) =>
+      s.players.filter((p) => team(p.role) === "minion" && p.role !== "spy");
 
     for (const p of minions(always)) {
       assert.deepEqual(p.bluffs, always.demonBluffs);
@@ -1614,7 +1627,7 @@ test("an evil Empath bluffer keeps their number until a neighbour dies", () => {
 
 // ── Purposeful Demon kills & a shared scapegoat ──────────────
 
-test("the Demon never attacks teammates and skips public Soldier/Mayor claims", () => {
+test("the Demon skips public Soldier/Mayor claims when no priority fires", () => {
   for (let i = 0; i < 50; i++) {
     const s = base(`demon-target-${i}`);
     const strat = new SimpleStrategy();
@@ -1622,6 +1635,7 @@ test("the Demon never attacks teammates and skips public Soldier/Mayor claims", 
 
     chef.claimKnown = true;
     chef.claim = "soldier";
+    s.r = () => 0.99; // no kill-priority chance fires
 
     // Only the Butler is a good NPC without a Soldier/Mayor claim.
     assert.equal(strat.demon(s, imp), butler);
@@ -1645,7 +1659,7 @@ test("the Demon prefers public information claimers, ongoing ones first", () => 
   empath.claimKnown = true;
   empath.claim = "empath";
 
-  s.r = () => 0; // always within DEMON_INFO_KILL_CHANCE
+  s.r = () => 0; // every kill-priority chance fires
 
   assert.equal(strat.demon(s, imp), empath);
 
@@ -1750,4 +1764,181 @@ test("the debug log shows who the evil team is framing", () => {
   const goat = s.players.find((x) => x.id === s.scapegoat);
 
   assert.ok(e.debugLog().includes(`Evil team is framing: ${goat.label}`));
+});
+
+// ── Opinions, kill priorities, Gambler ───────────────────────
+
+const memory = (role, text, targets, night = 1) => ({
+  night,
+  role,
+  text,
+  targets: targets.map((p) => p.id),
+});
+
+test("a good NPC with no information has nothing else to add", () => {
+  const s = base("opinion-nothing");
+  const e = new Engine(s);
+
+  assert.ok(e.ask(s.players[1].id).endsWith("\nI have nothing else to add."));
+});
+
+test("NPCs trust or suspect players named by their own information", () => {
+  const s = base("opinion-info");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron, imp] = s.players;
+
+  chef.memories.push(
+    memory("fortuneteller", "Fortune Teller: NO for X and Y.", [butler, baron]),
+  );
+
+  const trust = strat.opinion(s, chef);
+
+  assert.equal(trust.type, "trust");
+  assert.ok([butler.id, baron.id].includes(trust.targetId));
+  assert.match(trust.text, /^I trust Player \d+, because of what I learned on Night 1\.$/);
+
+  chef.memories.push(memory("empath", "Empath number: 1.", [butler, imp], 2));
+
+  const sus = strat.opinion(s, chef);
+
+  assert.equal(sus.type, "suspicious");
+  assert.ok([butler.id, imp.id].includes(sus.targetId));
+  assert.match(sus.text, /^I'm suspicious of Player \d+, because of what I learned on Night 2\.$/);
+});
+
+test("evil NPCs' bluffed information vouches for teammates and accuses the scapegoat", () => {
+  const s = base("opinion-evil");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron, imp] = s.players;
+
+  // A Washerwoman "confirming" the Demon: trust the Demon, not the other.
+  baron.memories.push(
+    memory("washerwoman", "One of X and Y is Empath.", [imp, chef]),
+  );
+
+  for (let i = 0; i < 20; i++) {
+    assert.equal(strat.opinion(s, baron).targetId, imp.id);
+  }
+
+  // A framing Fortune Teller YES: suspicious of the scapegoat.
+  s.scapegoat = butler.id;
+  baron.memories.push(
+    memory("fortuneteller", "Fortune Teller: YES for X and Y.", [chef, butler], 2),
+  );
+
+  for (let i = 0; i < 20; i++) {
+    const o = strat.opinion(s, baron);
+
+    assert.equal(o.type, "suspicious");
+    assert.equal(o.targetId, butler.id);
+  }
+});
+
+test("the Demon works down its kill priorities for claimed characters", () => {
+  const s = base("kill-priority");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, , imp] = s.players;
+
+  s.r = () => 0; // every priority level's chance fires
+
+  chef.claimKnown = true;
+  butler.claimKnown = true;
+  chef.claim = "chef"; // med
+  butler.claim = "monk"; // high
+
+  assert.equal(strat.demon(s, imp), butler);
+
+  butler.claim = "saint"; // low
+
+  assert.equal(strat.demon(s, imp), chef);
+
+  // An avoided claim is passed over for anyone else.
+  chef.claim = "fool"; // avoid
+
+  assert.equal(strat.demon(s, imp), butler);
+
+  // With every chance missing, it attacks any good NPC it isn't avoiding.
+  s.r = () => 0.99;
+
+  assert.equal(strat.demon(s, imp), butler);
+});
+
+test("an NPC Gambler can die by their own ability", () => {
+  const strat = new SimpleStrategy();
+  const { s, e } = nightTwo("gambler-wild", strat);
+  const gambler = s.players[1];
+
+  role(gambler, "gambler", "good");
+
+  // A wild guess (within GAMBLER_WILD_GUESS_CHANCE) at the first character
+  // on the script, about the first other player: "You are the Washerwoman"
+  // for the human Mayor, which is wrong.
+  s.r = () => 0;
+
+  e.night();
+
+  assert.equal(gambler.alive, false);
+  assert.equal(gambler.death, "gambler");
+});
+
+test("the Demon can target its own Minions, by their kill priority", () => {
+  const s = base("kill-minion");
+  const strat = new SimpleStrategy();
+  const [, , , baron, imp] = s.players;
+  const saved = DEMON_KILL_PRIORITY.baron;
+
+  s.r = () => 0; // every kill-priority chance fires
+
+  try {
+    DEMON_KILL_PRIORITY.baron = "high";
+    assert.equal(strat.demon(s, imp), baron);
+
+    // An avoided Minion is never picked while a good NPC is available.
+    DEMON_KILL_PRIORITY.baron = "avoid";
+    assert.notEqual(strat.demon(s, imp), baron);
+  } finally {
+    DEMON_KILL_PRIORITY.baron = saved;
+  }
+});
+
+test("with no good NPC left, the Demon attacks any random NPC", () => {
+  const s = base("kill-no-good");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron, imp] = s.players;
+
+  chef.alive = false;
+  butler.alive = false;
+  s.r = () => 0.99; // no kill-priority chance fires
+
+  // Only the Baron is left (the Demon never attacks the human).
+  assert.equal(strat.demon(s, imp), baron);
+});
+
+test("a Minion's public med/high bluff raises their kill priority", () => {
+  const s = base("kill-minion-bluff");
+  const strat = new SimpleStrategy();
+  const [, chef, , baron, imp] = s.players;
+
+  s.r = () => 0; // every kill-priority chance fires
+
+  // The Chef is a public "med" claim; the Baron (true level "low") publicly
+  // claims the Empath, a "high" character, so they are killed first.
+  chef.claimKnown = true;
+  chef.claim = "chef";
+  baron.claimKnown = true;
+  baron.claim = "empath";
+
+  assert.equal(strat.demon(s, imp), baron);
+
+  // A private bluff doesn't count: the public "med" Chef goes first.
+  baron.claimKnown = false;
+
+  assert.equal(strat.demon(s, imp), chef);
+
+  // A Minion the Demon avoids stays avoided, whatever they claim.
+  role(baron, "poisoner", "evil");
+  baron.claimKnown = true;
+  baron.claim = "empath";
+
+  assert.equal(strat.demon(s, imp), chef);
 });

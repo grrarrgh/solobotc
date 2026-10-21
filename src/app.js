@@ -470,6 +470,7 @@ function render() {
   renderNightChoice();
 
   $("actions").hidden = !!s.winner || !t || !!s.pending;
+  $("day-controls").hidden = !!s.winner || !!s.pending || s.phase !== "day";
   $("ask").disabled = !t || talk.already || !talk.remaining;
   // Dead players can't nominate, but can always ask an NPC to; so can anyone
   // nominating a known Virgin (only a Townsfolk nominator triggers her).
@@ -546,6 +547,7 @@ function resetGame() {
   nightPicks = [];
 
   $("night-choice").hidden = true;
+  $("day-controls").hidden = true;
 
   $("game").hidden = true;
   $("setup").hidden = false;

@@ -56,14 +56,67 @@ export const SLAYER_SHOOT_AFTER_DAY = 2;
 export const SLAYER_START_CHANCE = 0.2;
 export const SLAYER_CHANCE_STEP = 0.2;
 
-// How the Demon picks its nightly kill. It never attacks evil teammates, and
-// avoids NPCs who have publicly claimed Soldier or Mayor.
-// DEMON_INFO_KILL_CHANCE: chance it goes after a good NPC who has publicly
-//   claimed an information role (ongoing ones first), when there is one.
-// DEMON_STAR_PASS_CHANCE: chance it kills itself to pass the Demon to a
-//   Minion, on a night after it was nominated and survived.
-export const DEMON_INFO_KILL_CHANCE = 0.75;
+// How the Demon picks its nightly kill. It "finds" a good player's character
+// when they have publicly claimed it, and always knows its own Minions'
+// characters. It checks the priority levels from high to low: at each level
+// with someone to kill, it attacks one of them at that level's chance, else
+// moves down a level. "avoid" characters are never attacked while anyone else
+// is available. If no level fires, it attacks any good NPC it isn't avoiding;
+// with no good NPC left to attack, any random NPC.
+export const KILL_PRIORITY_CHANCE = {
+  avoid: 0,
+  low: 0.25,
+  med: 0.5,
+  high: 0.75,
+};
+
+// Kill priority for each character (unlisted good characters: "low"; unlisted
+// Minions: "avoid").
+export const DEMON_KILL_PRIORITY = {
+  // Ongoing information and protection: the biggest threats.
+  empath: "high",
+  fortuneteller: "high",
+  undertaker: "high",
+  monk: "high",
+  // First-night information (already learned) and once-per-game abilities.
+  washerwoman: "med",
+  librarian: "med",
+  investigator: "med",
+  chef: "med",
+  clockmaker: "med",
+  grandmother: "med",
+  slayer: "med",
+  artist: "med",
+  // Little to gain.
+  ravenkeeper: "low", // learns a character when killed at night
+  virgin: "low",
+  gambler: "low",
+  butler: "low",
+  recluse: "low",
+  saint: "low",
+  // Killing these wastes the night (or backfires).
+  soldier: "avoid",
+  mayor: "avoid",
+  fool: "avoid",
+  moonchild: "avoid",
+  // The Demon's own Minions (by true character). Killing one can make the
+  // Demon look good; the useful ones are avoided.
+  baron: "low", // no ability left after setup
+  spy: "low",
+  assassin: "low",
+  poisoner: "avoid",
+  scarletwoman: "avoid", // the Demon's backup
+  devilsadvocate: "avoid",
+};
+
+// DEMON_STAR_PASS_CHANCE: chance the Demon kills itself to pass the Demon to
+// a Minion, on a night after it was nominated and survived.
 export const DEMON_STAR_PASS_CHANCE = 0.75;
+
+// Chance an NPC Gambler makes a wild guess (a random character on the
+// script) instead of guessing the character their target claims. A wrong
+// guess kills a working Gambler.
+export const GAMBLER_WILD_GUESS_CHANCE = 0.25;
 
 // Chance that an evil NPC's suspicion (and Slayer, Moonchild and Artist
 // targets) points at the evil team's shared scapegoat, when one is alive.

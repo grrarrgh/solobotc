@@ -72,3 +72,11 @@ test("a Request nomination button is wired to the engine", () => {
   assert.match(html, /id="request-nomination"[^>]*>Request nomination</);
   assert.match(app, /e\.requestNomination\(selectedPlayerId\)/);
 });
+
+test("End day is always reachable, not hidden in the selected-player panel", () => {
+  const actions = html.match(/<section id="actions"[\s\S]*?<\/section>/)[0];
+
+  assert.match(html, /id="day-controls"[\s\S]*?id="pass"/);
+  assert.doesNotMatch(actions, /id="pass"/);
+  assert.match(app, /\$\("day-controls"\)\.hidden/);
+});
