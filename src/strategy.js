@@ -12,6 +12,7 @@ import {
   GAMBLER_WILD_GUESS_CHANCE,
   SCAPEGOAT_CHANCE,
   WITCH_HUMAN_CHANCE,
+  JUGGLER_CLAIM_GUESS_CHANCE,
   SEAMSTRESS_NIGHT_CHANCE,
   SLAYER_SHOOT_AFTER_DAY,
   SLAYER_START_CHANCE,
@@ -140,6 +141,16 @@ export class SimpleStrategy {
   // - otherwise, "suspicious" of their general suspect (see suspicion()).
   opinion(s, p) {
     const nothing = { type: "nothing", text: "I have nothing else to add." };
+    const twin = this.twinOf(s, p);
+
+    // While both twins live, each suspects the other above all else.
+    if (twin) {
+      return {
+        type: "suspicious",
+        targetId: twin.id,
+        text: `I'm suspicious of ${twin.label}, my evil twin.`,
+      };
+    }
 
     if (p.alignment === "good" && !p.memories.length) {
       return nothing;
@@ -154,6 +165,15 @@ export class SimpleStrategy {
     const sus = this.suspicion(s, p);
 
     return sus ? { type: "suspicious", ...sus } : nothing;
+  }
+
+  // The living other twin of an Evil Twin pair p belongs to, if any.
+  twinOf(s, p) {
+    const t = s.twins;
+    const id = t?.evilId === p.id ? t.goodId : t?.goodId === p.id ? t.evilId : null;
+    const twin = id && s.players.find((x) => x.id === id);
+
+    return twin?.alive ? twin : null;
   }
 
   // Trust or suspicion from the latest piece of information that names a
@@ -212,8 +232,12 @@ export class SimpleStrategy {
         })
       : this.opinion(s, p);
 
+    // Both twins insist they're the good one.
+    const twin = !mad && this.twinOf(s, p);
+
     return [
       `I claim ${name(mad ? mad.role : p.claim)}.`,
+      twin && `${twin.label} is my twin, and I am the good twin.`,
       details,
       opinion.text,
     ]
@@ -528,11 +552,18 @@ export class SimpleStrategy {
     return pick(fresh.length ? fresh : good, s.r);
   }
 
-  // The Juggler guesses up to 5 living players' characters: what they claim.
+  // The Juggler guesses up to 5 living players' characters: what they claim
+  // (at JUGGLER_CLAIM_GUESS_CHANCE), otherwise any character on the script.
   juggle(s, p) {
     return sample(this.others(s, p), 5, s.r).map((x) => ({
       id: x.id,
-      role: x.claim,
+      role:
+        s.r() < JUGGLER_CLAIM_GUESS_CHANCE
+          ? x.claim
+          : pick(
+              s.script.ids.filter((id) => id !== x.claim),
+              s.r,
+            ),
     }));
   }
 
@@ -609,7 +640,9 @@ export class SimpleStrategy {
       pick(
         s.script.ids.filter(
           (id) =>
-            alignment(id) === "good" && id !== "drunk" && !own.includes(id),
+            alignment(id) === "good" &&
+            !["drunk", "mutant"].includes(id) &&
+            !own.includes(id),
         ),
         s.r,
       );

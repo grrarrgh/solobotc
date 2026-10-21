@@ -194,6 +194,14 @@ export const SEAMSTRESS_NIGHT_CHANCE = 0.5;
 // and nominee before the large hand starts counting votes.
 export const VOTE_COUNT_DELAY_MS = 1500;
 
+// Vote animation: how long (in ms) the large hand takes per seat as it
+// counts votes. (A voter's hand goes up just before the clock hand arrives.)
+export const VOTE_TICK_MS = 450;
+
+// Chance an NPC Juggler guesses a player's claimed character; otherwise they
+// guess a random character on the script.
+export const JUGGLER_CLAIM_GUESS_CHANCE = 0.5;
+
 // Official ability text, shown on the script sheet. "*" means "not the first
 // night".
 export const ABILITIES = {

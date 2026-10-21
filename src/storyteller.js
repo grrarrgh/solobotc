@@ -382,7 +382,7 @@ export function savantInfo(s, p, mode) {
     day: s.day,
     night: s.night,
     role: "savant",
-    text: `Savant: one of these is true: "${said[0]}" / "${said[1]}"`,
+    text: `Savant: one of these is true:\n"${said[0]}"\n"${said[1]}"`,
     targets: [],
     trigger: "day",
     functioning: mode === "truth",

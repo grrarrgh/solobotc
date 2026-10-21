@@ -1,3 +1,11 @@
+## Bug Fixes: Twins, Juggler, Mutant, Log Layout & Vote Speed
+
+- Twins: while both twins live, each is suspicious of the other ("I'm suspicious of Player X, my evil twin."), above any other opinion. Once the other twin dies, they form a new opinion from their information. When asked, each twin says "Player X is my twin, and I am the good twin.", and on Day 1 each NPC twin says so publicly in the Public Log.
+- Juggler: guesses a player's claimed character only at JUGGLER_CLAIM_GUESS_CHANCE (in src/data.js, default 50%), otherwise a random character on the script, so their guesses are no longer always right. Every NPC Juggler juggles on their first day as the Juggler (Day 1, or the day after they become one), once.
+- Mutant: nobody claims the Mutant. It's never one of the Demon's (or the Spy's) bluffs or a Cerenovus madness, and a player turned into the Mutant by the Pit-Hag or Barber claims a Townsfolk that isn't in play instead.
+- Information on its own line: in the logs, information now starts on a new line after "Player X claimed Y:" and "You received:", and each of the Savant's two statements is on its own line.
+- Vote animation: the time the large hand takes per seat is set by VOTE_TICK_MS (in src/data.js, default 450 ms); the hand's swing and the raised hands scale with it.
+
 ## New Features: Improved Nomination Phase
 
 - Nominations no longer execute anyone straight away. If at least half the living players vote, and that's more votes than any nomination so far today, the nominee is marked for execution with a skull on their seat. A later nomination takes the mark only with more votes. Following the official rules, a tie with the highest count so far leaves nobody marked, and a later nomination must beat that count.

@@ -6,6 +6,7 @@ import {
   ARTIST_QUESTIONS,
   ABILITIES,
   VOTE_COUNT_DELAY_MS,
+  VOTE_TICK_MS,
 } from "./data.js";
 import { createState } from "./setup.js";
 import { Engine } from "./engine.js";
@@ -306,6 +307,9 @@ async function runVote(fn) {
 
   aim(hour, seatAngle(result.nominatorId), true);
   aim(minute, angle, true);
+
+  // The large hand's swing between seats takes most of each tick.
+  minute.style.transitionDuration = `${Math.round(VOTE_TICK_MS * 0.8)}ms`;
   tally.textContent = `0 / ${result.threshold}`;
   c.classList.add("voting");
 
@@ -324,13 +328,13 @@ async function runVote(fn) {
         `<span class="vote-hand ${record.counted ? "" : "not-counted"}">✋</span>`,
       );
 
-      await sleep(250);
+      await sleep(Math.round(VOTE_TICK_MS * 0.55));
     }
 
     angle += 360 / n;
     aim(minute, angle);
 
-    await sleep(450);
+    await sleep(VOTE_TICK_MS);
 
     // ...and is counted as it passes over them.
     if (record?.counted) {

@@ -155,6 +155,7 @@ export function createState(
       vigor: false, // a Minion killed by the Vigormortis keeps their ability
       gained: null, // the ability a Philosopher gained
       seamUsed: false,
+      juggled: false,
       savantDay: 0,
       mad: null, // { role, day, previous } from the Cerenovus
       memories: [],
@@ -173,7 +174,11 @@ export function createState(
   // never doubles up with anyone.
   const tokens = new Set(players.map((p) => p.shown));
   const notInPlay = script.ids.filter(
-    (x) => alignment(x) === "good" && x !== "drunk" && !tokens.has(x),
+    (x) =>
+      alignment(x) === "good" &&
+      x !== "drunk" &&
+      x !== "mutant" &&
+      !tokens.has(x),
   );
   const demonBluffs = sample(notInPlay, 3, r);
   const spyOptions = notInPlay.filter((x) => !demonBluffs.includes(x));

@@ -151,7 +151,7 @@ test("the exact information delivered to a poisoned Human is logged every night 
   assert.equal(human.memories.length, 2);
 
   for (const info of human.memories) {
-    const exact = `Day ${info.night} — Night ${info.night}: You received: ${info.text}`;
+    const exact = `Day ${info.night} — Night ${info.night}: You received:\n${info.text}`;
 
     assert.ok(s.publicLog.includes(exact));
     assert.ok(s.privateLog.includes(`Night ${info.night}: ${info.text}`));
@@ -2331,7 +2331,7 @@ test("the human Savant visits the Storyteller once a day", () => {
   const e = new Engine(s);
   const text = e.savant();
 
-  assert.match(text, /^Savant: one of these is true: ".+" \/ ".+"$/);
+  assert.match(text, /^Savant: one of these is true:\n".+"\n".+"$/);
   assert.throws(() => e.savant(), /Savant unavailable/);
 });
 
@@ -2676,4 +2676,132 @@ test("each player can nominate only once per day, and requests use NPCs who have
   e.requestNomination(butler.id);
 
   assert.throws(() => e.requestNomination(baron.id), /Nobody is able/);
+});
+
+// ── Twins, Juggler, Mutant ───────────────────────────────────
+
+test("the twins each claim to be the good twin and suspect each other, until one dies", () => {
+  const s = base("twins-talk");
+  const [, chef, butler, twin] = s.players;
+
+  role(twin, "eviltwin", "evil");
+  s.twins = { evilId: twin.id, goodId: chef.id };
+
+  const strat = new SimpleStrategy();
+
+  for (const [p, other] of [
+    [chef, twin],
+    [twin, chef],
+  ]) {
+    const lines = strat.ask(s, p).split("\n");
+
+    assert.equal(lines[1], `${other.label} is my twin, and I am the good twin.`);
+    assert.equal(lines.at(-1), `I'm suspicious of ${other.label}, my evil twin.`);
+  }
+
+  // With the Evil Twin dead, the good twin's opinion comes from their info.
+  twin.alive = false;
+  chef.memories.push({
+    night: 2,
+    role: "empath",
+    text: "Empath number: 0.",
+    targets: [butler.id],
+  });
+
+  const after = strat.ask(s, chef);
+
+  assert.ok(!after.includes("my twin"));
+  assert.ok(after.endsWith(`I trust ${butler.label}, because of what I learned on Night 2.`));
+});
+
+test("NPC twins say publicly on Day 1 that they are the good twin", () => {
+  const s = bluffNight("twins-public");
+  const chef = s.players[1];
+  const twin = s.players[3];
+
+  role(twin, "eviltwin", "evil");
+  s.twins = { evilId: twin.id, goodId: chef.id };
+
+  new Engine(s).start();
+
+  for (const [p, other] of [
+    [twin, chef],
+    [chef, twin],
+  ]) {
+    assert.ok(
+      s.publicLog.includes(
+        `Day 1 — ${p.label} says ${other.label} is their twin, and that they are the good twin.`,
+      ),
+    );
+  }
+});
+
+test("the Juggler's guesses aren't always the claimed characters", () => {
+  const s = base("juggle-random");
+  const strat = new SimpleStrategy();
+  const juggler = s.players[1];
+
+  s.r = () => 0.99; // never within JUGGLER_CLAIM_GUESS_CHANCE
+
+  for (const g of strat.juggle(s, juggler)) {
+    assert.notEqual(g.role, s.players.find((x) => x.id === g.id).claim);
+  }
+});
+
+test("nobody claims the Mutant: not bluffs, madness, or a new Mutant", () => {
+  for (let seed = 0; seed < 200; seed++) {
+    const s = createState(sv, 10, seed);
+
+    assert.ok(!s.demonBluffs.includes("mutant"));
+    assert.ok(s.players.every((p) => p.claim !== "mutant"));
+  }
+
+  const s = base("mutant-claims", sv);
+  const strat = new SimpleStrategy();
+  const [, chef, , cerenovus] = s.players;
+
+  role(cerenovus, "cerenovus", "evil");
+
+  for (let i = 0; i < 50; i++) {
+    assert.notEqual(strat.cerenovus(s, cerenovus).role, "mutant");
+  }
+
+  // Turned into the Mutant by the Pit-Hag: claims a Townsfolk instead.
+  role(s.players[2], "pithag", "evil");
+  strat.pithag = () => ({ target: chef, role: "mutant" });
+  strat.cerenovus = () => null;
+  strat.demon = () => null;
+  s.phase = "night";
+  s.night = 2;
+
+  new Engine(s, strat).night();
+
+  assert.equal(chef.role, "mutant");
+  assert.equal(team(chef.claim), "townsfolk");
+});
+
+test("a Juggler always juggles on their first day, and only once", () => {
+  const s = bluffNight("juggle-day1");
+  const [, juggler, chef] = s.players;
+
+  role(juggler, "juggler", "good");
+
+  const strat = new SimpleStrategy();
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+  const juggles = () =>
+    s.publicLog.filter((x) => x.includes("claims Juggler and guesses")).length;
+
+  e.start();
+
+  assert.equal(juggles(), 1);
+  assert.equal(juggler.juggled, true);
+
+  // Someone who becomes the Juggler later juggles on their first day as one.
+  role(chef, "juggler", "good");
+  e.endDay();
+
+  assert.equal(juggles(), 2);
+  assert.equal(chef.juggled, true);
 });

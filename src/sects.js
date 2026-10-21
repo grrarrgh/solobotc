@@ -325,11 +325,34 @@ export const sectsAndViolets = {
     );
 
     if (effective) {
-      // They learn their new character, and claim it.
+      // They learn their new character, and claim it (a Mutant claims a
+      // Townsfolk instead).
       target.role = role;
       target.shown = role;
-      target.claim = role;
+      target.claim = this.claimFor(target);
     }
+  },
+
+  // What a player who just learned their (new) character claims: that
+  // character, except that a Mutant claims a Townsfolk not in play.
+  claimFor(p) {
+    const s = this.s;
+
+    if (p.role !== "mutant") {
+      return p.role;
+    }
+
+    const used = new Set(s.players.flatMap((x) => [x.role, x.shown, x.claim]));
+    const townsfolk = s.script.ids.filter((id) => team(id) === "townsfolk");
+
+    return (
+      pick(
+        townsfolk.filter((id) => !used.has(id)),
+        s.r,
+      ) ??
+      pick(townsfolk, s.r) ??
+      p.claim
+    );
   },
 
   // ── Demon variants ─────────────────────────────────────────
@@ -479,10 +502,37 @@ export const sectsAndViolets = {
 
   // ── Dawn and day ───────────────────────────────────────────
 
-  // At dawn: Savants visit the Storyteller, and on Day 1 Jugglers juggle.
+  // At dawn: Savants visit the Storyteller, Jugglers juggle (on their first
+  // day), and on Day 1 the twins speak up.
   sectsDawn() {
     this.npcSavants();
     this.npcJugglers();
+    this.twinsAnnounce();
+  },
+
+  // On Day 1, each NPC twin says publicly that the other is their twin and
+  // that they are the good one.
+  twinsAnnounce() {
+    const s = this.s;
+    const t = s.twins;
+
+    if (s.day !== 1 || !t) {
+      return;
+    }
+
+    for (const [id, otherId] of [
+      [t.evilId, t.goodId],
+      [t.goodId, t.evilId],
+    ]) {
+      const p = this.player(id);
+      const other = this.player(otherId);
+
+      if (!p.human && p.alive) {
+        s.publicLog.push(
+          `Day ${s.day} — ${p.label} says ${other.label} is their twin, and that they are the good twin.`,
+        );
+      }
+    }
   },
 
   // NPC Savants (and evil Savant bluffers) visit the Storyteller each day.
@@ -538,14 +588,13 @@ export const sectsAndViolets = {
   npcJugglers() {
     const s = this.s;
 
-    if (s.day !== 1) {
-      return;
-    }
-
+    // Each Juggler juggles once, on their first day as the Juggler (Day 1,
+    // unless they became the Juggler later).
     for (const p of s.players.filter(
       (x) =>
         !x.human &&
         x.alive &&
+        !x.juggled &&
         (ability(x) === "juggler" ||
           (x.alignment === "evil" && x.claim === "juggler")),
     )) {
@@ -555,6 +604,7 @@ export const sectsAndViolets = {
         continue;
       }
 
+      p.juggled = true;
       p.claimKnown = true;
       p.juggle = { night: s.day + 1, guesses };
 
@@ -632,7 +682,7 @@ export const sectsAndViolets = {
 
     for (const x of [a, b]) {
       x.shown = x.role;
-      x.claim = x.role;
+      x.claim = this.claimFor(x);
       x.gained = null;
     }
 

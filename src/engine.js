@@ -111,11 +111,11 @@ export class Engine {
     // Info carries a `day` when it was learned during the day (the Artist).
     if (p.human && info.day) {
       this.s.privateLog.push(`Day ${info.day}: ${info.text}`);
-      this.s.publicLog.push(`Day ${info.day} — You received: ${info.text}`);
+      this.s.publicLog.push(`Day ${info.day} — You received:\n${info.text}`);
     } else if (p.human) {
       this.s.privateLog.push(`Night ${info.night}: ${info.text}`);
       this.s.publicLog.push(
-        `Day ${info.night} — Night ${info.night}: You received: ${info.text}`,
+        `Day ${info.night} — Night ${info.night}: You received:\n${info.text}`,
       );
     }
   }
@@ -822,12 +822,12 @@ export class Engine {
     });
 
     s.publicLog.push(
-      `Day ${s.day} — ${p.label} claimed ${name(p.claim)}: ${response}`,
+      `Day ${s.day} — ${p.label} claimed ${name(p.claim)}:\n${response}`,
     );
 
     this.audit(
       "conversation",
-      `${p.label} claimed ${name(p.claim)}: ${response}`,
+      `${p.label} claimed ${name(p.claim)}:\n${response}`,
       { target: id },
     );
 
