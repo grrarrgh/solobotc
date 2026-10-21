@@ -41,6 +41,8 @@
         <!-- Always available during the day, with or without a selection. -->
         <div id="day-controls" class="day-controls" hidden>
           <button id="pass" type="button">End day</button>
+          <button id="savant" type="button" hidden>Visit the Storyteller</button>
+          <p id="day-answer"></p>
         </div>
 
         <!-- Shown when the Storyteller wakes you for a night choice. -->
@@ -48,6 +50,7 @@
           <h3 id="night-prompt"></h3>
           <p id="night-picks"></p>
           <button id="night-select" type="button">Select</button>
+          <button id="night-skip" type="button" hidden>Not tonight</button>
           <p id="night-error"></p>
         </section>
 

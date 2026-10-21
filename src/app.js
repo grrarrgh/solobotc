@@ -245,6 +245,7 @@ function renderNightChoice() {
     : `Click ${p.count} player${p.count > 1 ? "s" : ""} in the town square.`;
 
   $("night-select").disabled = nightPicks.length !== p.count;
+  $("night-skip").hidden = !p.optional;
 }
 
 // ── Script sheet ─────────────────────────────────────────────
@@ -471,6 +472,11 @@ function render() {
 
   $("actions").hidden = !!s.winner || !t || !!s.pending;
   $("day-controls").hidden = !!s.winner || !!s.pending || s.phase !== "day";
+  $("savant").hidden = !(
+    h.shown === "savant" &&
+    h.alive &&
+    h.savantDay !== s.day
+  );
   $("ask").disabled = !t || talk.already || !talk.remaining;
   // Dead players can't nominate, but can always ask an NPC to; so can anyone
   // nominating a known Virgin (only a Townsfolk nominator triggers her).
@@ -548,6 +554,7 @@ function resetGame() {
 
   $("night-choice").hidden = true;
   $("day-controls").hidden = true;
+  $("day-answer").textContent = "";
 
   $("game").hidden = true;
   $("setup").hidden = false;
@@ -649,10 +656,31 @@ $("night-select").onclick = () => {
   }
 };
 
+// Skipping an optional night ability (the Seamstress).
+$("night-skip").onclick = () => {
+  try {
+    e.choose([]);
+    nightPicks = [];
+    render();
+  } catch (err) {
+    $("night-error").textContent = err.message;
+  }
+};
+
+$("savant").onclick = () => {
+  try {
+    $("day-answer").innerHTML = linkRoles(e.savant());
+    render();
+  } catch (err) {
+    $("day-answer").textContent = err.message;
+  }
+};
+
 $("pass").onclick = () => {
   try {
     e.endDay();
     selectedPlayerId = null;
+    $("day-answer").textContent = "";
     render();
   } catch (err) {
     $("answer").textContent = err.message;

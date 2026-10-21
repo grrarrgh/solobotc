@@ -38,8 +38,8 @@ const role = (p, id, alignment) =>
   });
 
 // A 5-player Day 1 with known roles: Mayor (you), Chef, Butler, Baron, Imp.
-function base(seed = "feature-test") {
-  const s = createState(script, 5, seed);
+function base(seed = "feature-test", raw = script) {
+  const s = createState(raw, 5, seed);
 
   s.phase = "day";
   s.night = 1;
@@ -1941,4 +1941,613 @@ test("a Minion's public med/high bluff raises their kill priority", () => {
   baron.claim = "empath";
 
   assert.equal(strat.demon(s, imp), chef);
+});
+
+// ── Sects & Violets ──────────────────────────────────────────
+
+const sv = JSON.parse(
+  fs.readFileSync(
+    new URL("../scripts/Sects and Violets_1_0_0.json", import.meta.url),
+  ),
+);
+
+// Plays a whole game with simple moves (talk, nominate, end the day), making
+// any night choices for the human, and returns the final state.
+function playOut(raw, seats, seed) {
+  const s = createState(raw, seats, seed);
+  const e = new Engine(s);
+  const expected =
+    /No conversation slots|Already asked|Nobody is able|Already nominated|Savant unavailable/;
+  const attempt = (fn) => {
+    try {
+      fn();
+    } catch (err) {
+      if (!expected.test(err.message)) {
+        throw err;
+      }
+    }
+  };
+
+  e.start();
+
+  for (let turn = 0; turn < 40 && !s.winner; turn++) {
+    settle(e);
+
+    if (s.winner) {
+      break;
+    }
+
+    for (const p of s.players.filter((x) => !x.human).slice(0, 2)) {
+      attempt(() => e.ask(p.id));
+    }
+
+    if (e.human().shown === "savant" && e.human().alive) {
+      attempt(() => e.savant());
+    }
+
+    const target = s.players.find(
+      (x) => x.alive && !x.human && !e.nominatedToday(x.id),
+    );
+
+    if (turn % 2 && target) {
+      attempt(() =>
+        e.human().alive ? e.nominate(target.id) : e.requestNomination(target.id),
+      );
+    } else if (s.phase === "day") {
+      e.endDay();
+    }
+  }
+
+  return { s, e };
+}
+
+test("whole games play out on every script without errors", () => {
+  for (const raw of [script, ecp, sv]) {
+    for (const seats of [5, 7, 10, 13, 15]) {
+      for (let seed = 0; seed < 16; seed++) {
+        const { s, e } = playOut(raw, seats, `play-${seats}-${seed}`);
+
+        assert.ok([null, "good", "evil"].includes(s.winner));
+        assert.ok(s.players.every((p) => ["good", "evil"].includes(p.alignment)));
+        assert.ok(e.debugLog().length > 0);
+      }
+    }
+  }
+});
+
+test("Sects & Violets loads with its name and 25 characters", () => {
+  const s = createState(sv, 10, "sv");
+
+  assert.equal(s.script.meta.name, "Sects & Violets");
+  assert.equal(s.script.ids.length, 25);
+});
+
+test("the Fang Gu adds an Outsider and the Vigormortis removes one", () => {
+  const seen = new Set();
+
+  for (let seed = 0; seed < 200; seed++) {
+    const s = createState(sv, 8, seed); // normally 1 Outsider
+    const demon = s.players.find((p) => team(p.role) === "demon").role;
+    const outsiders = s.players.filter((p) => team(p.role) === "outsider").length;
+    const expected = { fanggu: 2, vigormortis: 0 }[demon] ?? 1;
+
+    seen.add(demon);
+    assert.equal(outsiders, expected, `${demon} (seed ${seed})`);
+  }
+
+  assert.ok(seen.has("fanggu") && seen.has("vigormortis"));
+});
+
+test("the Mutant claims a Townsfolk that isn't in play", () => {
+  let mutants = 0;
+
+  for (let seed = 0; seed < 300; seed++) {
+    const s = createState(sv, 10, seed);
+    const tokens = new Set(s.players.map((p) => p.shown));
+
+    for (const p of s.players.filter((x) => x.role === "mutant")) {
+      mutants++;
+      assert.equal(team(p.claim), "townsfolk");
+      assert.ok(!tokens.has(p.claim), p.claim);
+    }
+  }
+
+  assert.ok(mutants > 0);
+});
+
+test("the Vortox makes Townsfolk information false, and wins on a day with no execution", () => {
+  const s = bluffNight("vortox");
+  const chef = s.players[1];
+
+  role(s.players[4], "vortox", "evil");
+  role(s.players[3], "baron", "evil");
+
+  const e = new Engine(s);
+
+  e.start();
+
+  // Baron and Vortox sit together: the true Chef number is 1.
+  assert.notEqual(chef.memories[0].text, "Chef number: 1.");
+  assert.equal(chef.memories[0].functioning, false);
+
+  e.endDay();
+
+  assert.equal(s.winner, "evil");
+});
+
+test("the No Dashii poisons its nearest Townsfolk on each side", () => {
+  const strat = new SimpleStrategy();
+  const { s, e } = nightTwo("nodashii", strat);
+  const [human, chef, butler] = s.players;
+
+  role(s.players[4], "nodashii", "evil");
+
+  e.night();
+
+  // Clockwise of the No Dashii is the human Mayor; anticlockwise, past the
+  // Baron and the Butler (not Townsfolk), the Chef.
+  assert.equal(human.poisoned, true);
+  assert.equal(chef.poisoned, true);
+  assert.equal(butler.poisoned, false);
+});
+
+test("the first Outsider a Fang Gu kills becomes the Fang Gu instead", () => {
+  const strat = new SimpleStrategy();
+  const { s, e } = nightTwo("fanggu", strat);
+  const butler = s.players[2];
+  const fang = s.players[4];
+
+  role(fang, "fanggu", "evil");
+  strat.demon = () => butler;
+
+  e.night();
+
+  assert.equal(fang.alive, false);
+  assert.equal(butler.alive, true);
+  assert.equal(butler.role, "fanggu");
+  assert.equal(butler.alignment, "evil");
+  assert.equal(s.winner, null);
+});
+
+test("a Minion the Vigormortis kills keeps their ability and poisons a Townsfolk neighbour", () => {
+  const strat = new SimpleStrategy();
+  const { s, e } = nightTwo("vigormortis", strat);
+  const [human, chef, , baron] = s.players;
+
+  role(s.players[4], "vigormortis", "evil");
+  strat.demon = () => baron;
+
+  e.night();
+
+  assert.equal(baron.alive, false);
+  assert.equal(baron.vigor, true);
+  assert.equal(s.lastingPoison.length, 1);
+
+  const poisoned = s.players.find((x) => x.id === s.lastingPoison[0].id);
+
+  assert.ok([human, chef].includes(poisoned));
+
+  // Still poisoned the next night.
+  strat.demon = () => null;
+  e.endDay();
+
+  assert.equal(poisoned.poisoned, true);
+});
+
+test("a Snake Charmer who picks the Demon swaps with them", () => {
+  const s = bluffNight("snake");
+  const charmer = s.players[1];
+  const imp = s.players[4];
+
+  role(charmer, "snakecharmer", "good");
+
+  const strat = new SimpleStrategy();
+  strat.snake = () => imp;
+
+  new Engine(s, strat).start();
+
+  assert.equal(charmer.role, "imp");
+  assert.equal(charmer.alignment, "evil");
+  assert.equal(imp.role, "snakecharmer");
+  assert.equal(imp.alignment, "good");
+  assert.equal(imp.poisoned, true);
+  assert.equal(imp.lastingPoison, true);
+  assert.equal(s.winner, null);
+});
+
+test("a player the Witch cursed dies when they nominate", () => {
+  const s = bluffNight("witch");
+  const human = s.players[0];
+
+  role(s.players[3], "witch", "evil");
+
+  const strat = new SimpleStrategy();
+
+  strat.witch = () => human;
+  strat.vote = () => false;
+
+  const e = new Engine(s, strat);
+
+  e.start();
+
+  const result = e.nominate(s.players[1].id);
+
+  assert.equal(human.alive, false);
+  assert.equal(human.death, "witch");
+  assert.equal(result.executed, false);
+  assert.ok(result.records.length > 0);
+});
+
+test("the Evil Twin: good can't win while both live, and executing the good twin loses", () => {
+  const s = base("twins");
+  const [, chef, , twin, imp] = s.players;
+
+  role(twin, "eviltwin", "evil");
+  s.twins = { evilId: twin.id, goodId: chef.id };
+
+  const strat = new SimpleStrategy();
+
+  strat.vote = () => true;
+
+  const e = new Engine(s, strat);
+
+  // The Demon dies, but both twins live: no good win.
+  e.kill(imp, "slayer");
+  e.check();
+
+  assert.equal(s.winner, null);
+
+  // Executing the good twin wins it for evil.
+  e.nominate(chef.id);
+
+  assert.equal(chef.alive, false);
+  assert.equal(s.winner, "evil");
+});
+
+test("the good twin learns who their Evil Twin is", () => {
+  const s = bluffNight("twin-info");
+  const human = s.players[0];
+  const twin = s.players[3];
+
+  role(twin, "eviltwin", "evil");
+  s.twins = { evilId: twin.id, goodId: human.id };
+
+  new Engine(s).start();
+
+  assert.ok(
+    s.privateLog.includes(`Night 1: Evil Twin: ${twin.label} is your Evil Twin.`),
+  );
+});
+
+test("a dying Klutz who picks an evil player loses the game for good", () => {
+  const s = base("klutz");
+  const klutz = s.players[2];
+  const imp = s.players[4];
+
+  role(klutz, "klutz", "good");
+
+  const strat = new SimpleStrategy();
+  strat.klutz = () => imp;
+
+  new Engine(s, strat).kill(klutz, "demon");
+
+  assert.equal(s.winner, "evil");
+  assert.ok(s.publicLog.includes(`${klutz.label} claims Klutz and chooses ${imp.label}.`));
+});
+
+test("a dying Sweetheart makes someone drunk from now on", () => {
+  const s = base("sweetheart");
+  const sweetheart = s.players[2];
+
+  role(sweetheart, "sweetheart", "good");
+
+  new Engine(s).kill(sweetheart, "demon");
+
+  const drunk = s.players.filter((p) => p.drunkFrom === "sweetheart");
+
+  assert.equal(drunk.length, 1);
+  assert.equal(drunk[0].alignment, "good");
+});
+
+test("a dying Barber lets the Demon swap two players' characters", () => {
+  const s = base("barber");
+  const [, chef, barber, baron] = s.players;
+
+  role(barber, "barber", "good");
+
+  const strat = new SimpleStrategy();
+  strat.barber = () => [chef, baron];
+
+  new Engine(s, strat).kill(barber, "execution");
+
+  assert.equal(chef.role, "baron");
+  assert.equal(baron.role, "chef");
+  assert.equal(chef.claim, "baron");
+});
+
+test("a human Dreamer picks a player and learns 1 good and 1 evil character, 1 correct", () => {
+  const { s, human, e } = humanNight("human-dreamer", "dreamer");
+  const imp = s.players[4];
+
+  e.start();
+
+  assert.equal(s.pending.count, 1);
+
+  e.choose([imp.id]);
+
+  const text = human.memories[0].text;
+
+  assert.match(text, new RegExp(`^Dreamer: ${imp.label} is the .+ or the .+\\.$`));
+  assert.ok(text.includes("the Imp"), text);
+});
+
+test("a human Seamstress can skip, then use their ability once", () => {
+  const { s, human, strat, e } = humanNight("human-seamstress", "seamstress");
+  const [, chef, , , imp] = s.players;
+
+  e.start();
+
+  assert.equal(s.pending.optional, true);
+
+  e.choose([]);
+
+  assert.equal(s.phase, "day");
+  assert.equal(human.seamUsed, false);
+
+  strat.demon = () => null;
+  e.endDay();
+  e.choose([chef.id, imp.id]);
+
+  assert.equal(human.seamUsed, true);
+  assert.equal(
+    human.memories.at(-1).text,
+    `Seamstress: ${chef.label} and ${imp.label} are different alignments.`,
+  );
+
+  // Used up: not woken again.
+  e.endDay();
+
+  assert.equal(s.pending, null);
+});
+
+test("the human Savant visits the Storyteller once a day", () => {
+  const s = base("savant");
+  const human = s.players[0];
+
+  role(human, "savant", "good");
+
+  const e = new Engine(s);
+  const text = e.savant();
+
+  assert.match(text, /^Savant: one of these is true: ".+" \/ ".+"$/);
+  assert.throws(() => e.savant(), /Savant unavailable/);
+});
+
+test("the Oracle, Flowergirl and Town Crier learn about the dead and the day", () => {
+  const strat = new SimpleStrategy();
+  const s = base("oracle-day");
+  const [, oracle, crier, baron, imp] = s.players;
+  const flowergirl = s.players[0];
+
+  role(oracle, "oracle", "good");
+  role(crier, "towncrier", "good");
+  role(flowergirl, "flowergirl", "good");
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  // During Day 1, the Demon voted, the Baron nominated, and then died.
+  s.dayVoters = [imp.id];
+  s.dayNominators = [baron.id];
+  baron.alive = false;
+
+  e.endDay();
+
+  assert.equal(oracle.memories[0].text, "Oracle: 1 dead player is evil.");
+  assert.equal(crier.memories[0].text, "Town Crier: a Minion nominated today.");
+  assert.equal(
+    flowergirl.memories[0].text,
+    "Flowergirl: a Demon voted today.",
+  );
+});
+
+test("the Mathematician counts abilities that worked abnormally", () => {
+  const strat = new SimpleStrategy();
+  const { s, e } = nightTwo("mathematician", strat);
+  const [, math, butler] = s.players;
+
+  role(math, "mathematician", "good");
+  role(s.players[3], "poisoner", "evil");
+  strat.poison = () => butler;
+
+  e.night();
+
+  assert.equal(math.memories[0].text, "Mathematician number: 1.");
+});
+
+test("an NPC Philosopher gains an ability; a character in play is made drunk", () => {
+  const s = bluffNight("philosopher");
+  const [, philosopher, butler] = s.players;
+
+  role(philosopher, "philosopher", "good");
+
+  const strat = new SimpleStrategy();
+  strat.philosopher = () => "butler";
+
+  new Engine(s, strat).start();
+
+  assert.equal(philosopher.gained, "butler");
+  assert.equal(butler.drunkFrom, "philosopher");
+  assert.ok(
+    philosopher.memories.some(
+      (m) => m.text === "Philosopher: gained the Butler ability.",
+    ),
+  );
+});
+
+test("the Pit-Hag turns a good NPC into a new character", () => {
+  const strat = new SimpleStrategy();
+  const { s, e } = nightTwo("pithag", strat);
+  const chef = s.players[1];
+
+  role(s.players[3], "pithag", "evil");
+  strat.pithag = () => ({ target: chef, role: "sweetheart" });
+
+  e.night();
+
+  assert.equal(chef.role, "sweetheart");
+  assert.equal(chef.claim, "sweetheart");
+});
+
+test("a player the Cerenovus made mad claims that character for a day", () => {
+  const s = bluffNight("cerenovus");
+  const chef = s.players[1];
+
+  role(s.players[3], "cerenovus", "evil");
+
+  const strat = new SimpleStrategy();
+
+  strat.cerenovus = () => ({ target: chef, role: "mayor" });
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  e.start();
+
+  // The Mayor has no night information to make up.
+  assert.equal(
+    e.ask(chef.id),
+    "I claim Mayor.\nI have no stored information.\nI have nothing else to add.",
+  );
+  assert.equal(chef.claim, "mayor");
+
+  strat.cerenovus = () => null;
+  e.endDay();
+
+  assert.equal(chef.claim, "chef");
+});
+
+test("an NPC Juggler guesses publicly on Day 1 and learns how many were right", () => {
+  const s = bluffNight("juggler");
+  const [, juggler, butler, , imp] = s.players;
+
+  role(juggler, "juggler", "good");
+
+  const strat = new SimpleStrategy();
+
+  strat.juggle = () => [
+    { id: butler.id, role: "butler" },
+    { id: imp.id, role: "chef" },
+  ];
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  e.start();
+
+  assert.ok(
+    s.publicLog.includes(
+      `Day 1 — ${juggler.label} claims Juggler and guesses: ${butler.label} is the Butler, ${imp.label} is the Chef.`,
+    ),
+  );
+
+  e.endDay();
+
+  assert.equal(
+    juggler.memories.at(-1).text,
+    "Juggler: 1 of my 2 guesses was correct.",
+  );
+});
+
+test("a Sage killed by the Demon learns it is 1 of 2 players", () => {
+  const s = base("sage");
+  const sage = s.players[1];
+  const imp = s.players[4];
+
+  role(sage, "sage", "good");
+
+  new Engine(s).kill(sage, "demon");
+
+  assert.ok(sage.memories[0].text.startsWith("Sage: the Demon is "));
+  assert.ok(sage.memories[0].targets.includes(imp.id));
+});
+
+test("information treats every Sects & Violets Demon as the Demon", () => {
+  const s = base("any-demon");
+  const demon = s.players[4];
+
+  for (const id of ["fanggu", "vigormortis", "nodashii", "vortox"]) {
+    role(demon, id, "evil");
+
+    assert.match(artistInfo(s, demon, "demon", "truth").text, /: YES\.$/);
+  }
+});
+
+test("a mad NPC makes up information to match their mad character", () => {
+  const s = bluffNight("mad-empath");
+  const chef = s.players[1];
+
+  role(s.players[3], "cerenovus", "evil");
+
+  const strat = new SimpleStrategy();
+
+  // Mad about being the Empath on Day 2.
+  strat.cerenovus = () =>
+    s.night === 2 ? { target: chef, role: "empath" } : null;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  e.start();
+  e.endDay();
+
+  const lines = e.ask(chef.id).split("\n");
+
+  assert.equal(lines[0], "I claim Empath.");
+  assert.match(lines[1], /^Night 1: Empath number: [0-2]\.$/);
+  assert.match(lines[2], /^Night 2: Empath number: [0-2]\.$/);
+  assert.match(
+    lines[3],
+    /^I( trust|'m suspicious of) Player \d+, because of what I learned on Night \d\.$/,
+  );
+
+  // Their real information is untouched, and returns with their claim.
+  assert.ok(!chef.memories.some((m) => m.role === "empath"));
+});
+
+test("the Cerenovus picks like the Demon, and the madness is another good character", () => {
+  const s = base("cerenovus-pick");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, cerenovus] = s.players;
+
+  role(cerenovus, "cerenovus", "evil");
+  chef.claimKnown = true;
+  chef.claim = "empath"; // a "high" kill priority
+  butler.claimKnown = true;
+  butler.claim = "saint"; // "low"
+
+  s.r = () => 0; // every priority chance fires
+
+  assert.equal(strat.cerenovus(s, cerenovus).target, chef);
+
+  // The madness is always a good character other than who they are.
+  role(chef, "drunk", "good");
+  chef.shown = "empath";
+  chef.claim = "empath";
+  chef.claimKnown = true;
+
+  for (let i = 0; i < 50; i++) {
+    s.r = Math.random;
+
+    const { target, role: mad } = strat.cerenovus(s, cerenovus);
+
+    assert.equal(target.alignment, "good");
+    assert.notEqual(mad, "drunk");
+    assert.ok(![target.role, target.shown, target.claim].includes(mad), mad);
+    assert.equal(
+      ["townsfolk", "outsider"].includes(team(mad)),
+      true,
+      mad,
+    );
+  }
 });

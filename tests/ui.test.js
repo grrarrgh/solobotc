@@ -80,3 +80,10 @@ test("End day is always reachable, not hidden in the selected-player panel", () 
   assert.doesNotMatch(actions, /id="pass"/);
   assert.match(app, /\$\("day-controls"\)\.hidden/);
 });
+
+test("Sects & Violets controls: Seamstress skip and Savant visit", () => {
+  assert.match(html, /id="night-skip"[^>]*>Not tonight</);
+  assert.match(html, /id="savant"[^>]*>Visit the Storyteller</);
+  assert.match(app, /e\.choose\(\[\]\)/);
+  assert.match(app, /e\.savant\(\)/);
+});

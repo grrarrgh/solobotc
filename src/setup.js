@@ -5,6 +5,7 @@ import {
   FIRST_NIGHT_INFO,
   ONGOING_INFO,
   MINION_BLUFF_CHANCE,
+  OUTSIDER_MODIFIERS,
   team,
   alignment,
   name,
@@ -66,20 +67,26 @@ export function createState(
   const r = rng(seed),
     pool = (t) => script.ids.filter((id) => team(id) === t);
 
-  // Draw roles; the Baron swaps two townsfolk for two outsiders.
+  // Draw roles. Some characters change the Outsider count (the Baron +2,
+  // the Fang Gu +1, the Vigormortis -1), trading Townsfolk for Outsiders.
   let [t, o, m] = base;
   const mins = sample(pool("minion"), m, r);
-  if (mins.includes("baron")) {
-    t -= 2;
-    o += 2;
-  }
+  const demons = sample(pool("demon"), 1, r);
+  const shift = [...mins, ...demons].reduce(
+    (n, id) => n + (OUTSIDER_MODIFIERS[id] ?? 0),
+    0,
+  );
+  const outsiders = Math.min(Math.max(0, o + shift), pool("outsider").length);
+
+  t -= outsiders - o;
+  o = outsiders;
 
   let roles = shuffle(
     [
       ...drawTownsfolk(pool("townsfolk"), t, r),
       ...sample(pool("outsider"), o, r),
       ...mins,
-      ...sample(pool("demon"), 1, r),
+      ...demons,
     ],
     r,
   );
@@ -142,6 +149,14 @@ export function createState(
       assassinUsed: false,
       foolUsed: false,
       grandchild: null,
+      // Sects & Violets.
+      drunkFrom: null, // drunk from now on (Sweetheart, Philosopher)
+      lastingPoison: null, // poisoned from now on (Snake Charmer)
+      vigor: false, // a Minion killed by the Vigormortis keeps their ability
+      gained: null, // the ability a Philosopher gained
+      seamUsed: false,
+      savantDay: 0,
+      mad: null, // { role, day, previous } from the Cerenovus
       memories: [],
       talks: [],
       death: null,
@@ -198,6 +213,31 @@ export function createState(
     taken.add(p.bluff);
   }
 
+  // The Mutant is "mad" that they're not an Outsider: they claim a Townsfolk
+  // that isn't in play (and that no evil player is claiming).
+  for (const p of players.filter((x) => x.role === "mutant" && !x.human)) {
+    p.claim =
+      pick(
+        pool("townsfolk").filter((x) => !tokens.has(x) && !taken.has(x)),
+        r,
+      ) ?? p.claim;
+  }
+
+  // The Evil Twin is paired with a good player; they know each other. The
+  // Evil Twin claims their good twin's character.
+  const evilTwin = players.find((x) => x.role === "eviltwin");
+  const goodTwin =
+    evilTwin &&
+    pick(
+      players.filter((x) => x.alignment === "good"),
+      r,
+    );
+
+  if (goodTwin) {
+    evilTwin.claim = goodTwin.claim;
+    evilTwin.bluff = goodTwin.claim;
+  }
+
   // Fortune Teller red herring.
   const red = pick(
     players.filter((x) => x.alignment === "good"),
@@ -234,6 +274,15 @@ export function createState(
     moonCurse: null,
     advocate: null,
     scapegoat: null,
+    // Sects & Violets.
+    twins: goodTwin ? { evilId: evilTwin.id, goodId: goodTwin.id } : null,
+    fangGuJumped: false,
+    lastingPoison: [], // { id, by } poisoned while `by` lives (Vigormortis)
+    witched: null, // { targetId, day, effective }
+    juggle: null, // { byId, night, guesses: [{ id, role }] }
+    executedToday: false,
+    dayVoters: [],
+    dayNominators: [],
     pending: null,
     humanChoice: null,
   };
@@ -256,6 +305,15 @@ export function createState(
       demonBluffs.map(name).join(", ") || "none"
     }. ${demon ? `${demon.label} bluffs as ${name(demon.claim)}.` : ""}`.trim(),
   );
+
+  if (goodTwin) {
+    setupLog(
+      "eviltwin",
+      `${evilTwin.label} (Evil Twin) is paired with ${goodTwin.label} (${name(
+        goodTwin.role,
+      )}) and claims ${name(evilTwin.claim)}.`,
+    );
+  }
 
   for (const p of evil.filter((x) => team(x.role) === "minion")) {
     setupLog(

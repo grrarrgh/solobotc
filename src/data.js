@@ -18,19 +18,45 @@ export const ROLES = {
   gambler: ["Gambler", "townsfolk"],
   artist: ["Artist", "townsfolk"],
   fool: ["Fool", "townsfolk"],
+  dreamer: ["Dreamer", "townsfolk"],
+  snakecharmer: ["Snake Charmer", "townsfolk"],
+  mathematician: ["Mathematician", "townsfolk"],
+  flowergirl: ["Flowergirl", "townsfolk"],
+  towncrier: ["Town Crier", "townsfolk"],
+  oracle: ["Oracle", "townsfolk"],
+  savant: ["Savant", "townsfolk"],
+  seamstress: ["Seamstress", "townsfolk"],
+  philosopher: ["Philosopher", "townsfolk"],
+  juggler: ["Juggler", "townsfolk"],
+  sage: ["Sage", "townsfolk"],
   butler: ["Butler", "outsider"],
   drunk: ["Drunk", "outsider"],
   recluse: ["Recluse", "outsider"],
   saint: ["Saint", "outsider"],
   moonchild: ["Moonchild", "outsider"],
+  mutant: ["Mutant", "outsider"],
+  sweetheart: ["Sweetheart", "outsider"],
+  barber: ["Barber", "outsider"],
+  klutz: ["Klutz", "outsider"],
   poisoner: ["Poisoner", "minion"],
   spy: ["Spy", "minion"],
   scarletwoman: ["Scarlet Woman", "minion"],
   baron: ["Baron", "minion"],
   assassin: ["Assassin", "minion"],
   devilsadvocate: ["Devil's Advocate", "minion"],
+  eviltwin: ["Evil Twin", "minion"],
+  witch: ["Witch", "minion"],
+  cerenovus: ["Cerenovus", "minion"],
+  pithag: ["Pit-Hag", "minion"],
   imp: ["Imp", "demon"],
+  fanggu: ["Fang Gu", "demon"],
+  vigormortis: ["Vigormortis", "demon"],
+  nodashii: ["No Dashii", "demon"],
+  vortox: ["Vortox", "demon"],
 };
+
+// Characters that change the number of Outsiders dealt at setup.
+export const OUTSIDER_MODIFIERS = { baron: 2, fanggu: 1, vigormortis: -1 };
 
 // Townsfolk who learn something on the first night only, and those who keep
 // learning on later nights. Setup deals at least two of each when it can.
@@ -42,7 +68,16 @@ export const FIRST_NIGHT_INFO = [
   "clockmaker",
   "grandmother",
 ];
-export const ONGOING_INFO = ["empath", "fortuneteller", "undertaker"];
+export const ONGOING_INFO = [
+  "empath",
+  "fortuneteller",
+  "undertaker",
+  "dreamer",
+  "mathematician",
+  "flowergirl",
+  "towncrier",
+  "oracle",
+];
 
 // Chance (0–1) that each Minion also learns the Demon's three bluffs.
 // Adjust here: 0 = Minions never know them, 1 = they always do.
@@ -78,6 +113,7 @@ export const DEMON_KILL_PRIORITY = {
   fortuneteller: "high",
   undertaker: "high",
   monk: "high",
+  
   // First-night information (already learned) and once-per-game abilities.
   washerwoman: "med",
   librarian: "med",
@@ -87,6 +123,7 @@ export const DEMON_KILL_PRIORITY = {
   grandmother: "med",
   slayer: "med",
   artist: "med",
+
   // Little to gain.
   ravenkeeper: "low", // learns a character when killed at night
   virgin: "low",
@@ -94,11 +131,30 @@ export const DEMON_KILL_PRIORITY = {
   butler: "low",
   recluse: "low",
   saint: "low",
+
   // Killing these wastes the night (or backfires).
   soldier: "avoid",
   mayor: "avoid",
   fool: "avoid",
   moonchild: "avoid",
+
+  // Sects & Violets.
+  dreamer: "high",
+  oracle: "high",
+  savant: "high",
+  snakecharmer: "high", // could swap with the Demon
+  mathematician: "med",
+  flowergirl: "med",
+  towncrier: "med",
+  seamstress: "med",
+  philosopher: "med",
+  juggler: "med",
+  sweetheart: "med", // dying makes someone drunk
+  barber: "med", // dying lets the Demon swap two characters
+  mutant: "low",
+  sage: "avoid", // learns the Demon is 1 of 2 players
+  klutz: "avoid", // might pick an evil player... or might not
+
   // The Demon's own Minions (by true character). Killing one can make the
   // Demon look good; the useful ones are avoided.
   baron: "low", // no ability left after setup
@@ -107,6 +163,10 @@ export const DEMON_KILL_PRIORITY = {
   poisoner: "avoid",
   scarletwoman: "avoid", // the Demon's backup
   devilsadvocate: "avoid",
+  eviltwin: "avoid",
+  witch: "avoid",
+  cerenovus: "avoid",
+  pithag: "avoid",
 };
 
 // DEMON_STAR_PASS_CHANCE: chance the Demon kills itself to pass the Demon to
@@ -121,6 +181,14 @@ export const GAMBLER_WILD_GUESS_CHANCE = 0.25;
 // Chance that an evil NPC's suspicion (and Slayer, Moonchild and Artist
 // targets) points at the evil team's shared scapegoat, when one is alive.
 export const SCAPEGOAT_CHANCE = 0.8;
+
+// Sects & Violets NPC behaviour.
+// WITCH_HUMAN_CHANCE: chance the Witch curses the human (the player most
+//   likely to nominate) rather than a random good NPC.
+// SEAMSTRESS_NIGHT_CHANCE: chance an NPC Seamstress uses their once-per-game
+//   ability on any given night.
+export const WITCH_HUMAN_CHANCE = 0.5;
+export const SEAMSTRESS_NIGHT_CHANCE = 0.5;
 
 // Official ability text, shown on the script sheet. "*" means "not the first
 // night".
@@ -176,6 +244,46 @@ export const ABILITIES = {
   devilsadvocate:
     "Each night, choose a living player (different to last night): if executed tomorrow, they don't die.",
   imp: "Each night*, choose a player: they die. If you kill yourself this way, a Minion becomes the Imp.",
+  dreamer:
+    "Each night, choose a player (not yourself or Travellers): you learn 1 good & 1 evil character, 1 of which is correct.",
+  snakecharmer:
+    "Each night, choose an alive player: a chosen Demon swaps characters & alignments with you & is then poisoned.",
+  mathematician:
+    "Each night, you learn how many players' abilities worked abnormally (since dawn) due to another character's ability.",
+  flowergirl: "Each night*, you learn if a Demon voted today.",
+  towncrier: "Each night*, you learn if a Minion nominated today.",
+  oracle: "Each night*, you learn how many dead players are evil.",
+  savant:
+    "Each day, you may visit the Storyteller to learn 2 things in private: 1 is true & 1 is false.",
+  seamstress:
+    "Once per game, at night, choose 2 players (not yourself): you learn if they are the same alignment.",
+  philosopher:
+    "Once per game, at night, choose a good character: gain that ability. If this character is in play, they are drunk.",
+  juggler:
+    "On your 1st day, publicly guess up to 5 players' characters. That night, you learn how many you got correct.",
+  sage: "If the Demon kills you, you learn that it is 1 of 2 players.",
+  mutant: 'If you are "mad" about being an Outsider, you might be executed.',
+  sweetheart: "When you die, 1 player is drunk from now on.",
+  barber:
+    "If you died today or tonight, the Demon may choose 2 players (not another Demon) to swap characters.",
+  klutz:
+    "When you learn that you died, publicly choose 1 alive player: if they are evil, your team loses.",
+  eviltwin:
+    "You & an opposing player know each other. If the good player is executed, evil wins. Good can't win if you both live.",
+  witch:
+    "Each night, choose a player: if they nominate tomorrow, they die. If just 3 players live, you lose this ability.",
+  cerenovus:
+    'Each night, choose a player & a good character: they are "mad" they are this character tomorrow, or might be executed.',
+  pithag:
+    "Each night*, choose a player & a character they become (if not-in-play). If a Demon is made, deaths tonight are arbitrary.",
+  fanggu:
+    "Each night*, choose a player: they die. The 1st Outsider this kills becomes an evil Fang Gu & you die instead. [+1 Outsider]",
+  vigormortis:
+    "Each night*, choose a player: they die. Minions you kill keep their ability & poison 1 Townsfolk neighbour. [−1 Outsider]",
+  nodashii:
+    "Each night*, choose a player: they die. Your 2 Townsfolk neighbours are poisoned.",
+  vortox:
+    "Each night*, choose a player: they die. Townsfolk abilities yield false info. Each day, if no-one is executed, evil wins.",
 };
 
 // Yes/no questions an Artist can ask the Storyteller about a player.
@@ -213,6 +321,15 @@ export const FORBIDDEN_HUMAN = new Set([
   "moonchild",
   "mayor",
   "saint",
+  // Sects & Violets: these need a character choice or public guesses the UI
+  // doesn't offer, a night death the human never faces, or (the Snake
+  // Charmer) could turn the human evil.
+  "snakecharmer",
+  "philosopher",
+  "juggler",
+  "sage",
+  "mutant",
+  "klutz",
 ]);
 
 export const name = (id) => ROLES[id]?.[0] ?? id;

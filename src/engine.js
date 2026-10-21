@@ -8,10 +8,14 @@ import {
   butlerInfo,
   gamblerInfo,
   artistInfo,
+  isDemon,
+  isDrunk,
+  infoMode,
 } from "./storyteller.js";
 import { SimpleStrategy } from "./strategy.js";
 import { pick } from "./util.js";
 import { formatLog } from "./log.js";
+import { sectsAndViolets } from "./sects.js";
 
 const KEY_MOMENT_TYPES = new Set([
   "poison",
@@ -26,13 +30,19 @@ const KEY_MOMENT_TYPES = new Set([
   "moonchild",
   "assassin",
   "advocate",
+  "snakecharmer",
+  "witch",
+  "pithag",
+  "barber",
+  "klutz",
+  "sweetheart",
+  "philosopher",
+  "vigormortis",
   "game_over",
 ]);
 
-// How the Storyteller answers a good Artist: a Drunk is told the wrong answer,
-// a poisoned Artist a random one.
-const artistMode = (p) =>
-  p.role === "drunk" ? "lie" : works(p) ? "truth" : "random";
+// Minions keep acting after death if the Vigormortis killed them.
+const acts = (x) => x.alive || x.vigor;
 
 export class Engine {
   constructor(s, strat = new SimpleStrategy()) {
@@ -133,6 +143,8 @@ export class Engine {
       x.poisoned = false;
     });
 
+    this.lastingEffects();
+
     s.pending = this.wakeHuman();
 
     if (s.pending) {
@@ -170,6 +182,17 @@ export class Engine {
         prompt:
           "Choose your master: tomorrow, your vote only counts if they vote too.",
       },
+      dreamer: {
+        count: 1,
+        prompt:
+          "Choose a player: you learn 1 good and 1 evil character, 1 of which is correct.",
+      },
+      seamstress: !h.seamUsed && {
+        count: 2,
+        optional: true,
+        prompt:
+          "Once per game: choose 2 players to learn if they are the same alignment, or skip tonight.",
+      },
     }[role];
 
     if (!h.alive || !wake || candidates.length < wake.count) {
@@ -188,6 +211,19 @@ export class Engine {
 
     if (!p) {
       throw Error("Nothing to choose.");
+    }
+
+    if (p.optional && !picked.length) {
+      s.pending = null;
+      s.humanChoice = { role: p.role, night: s.night, players: [] };
+
+      this.audit(
+        "choice",
+        `${this.human().label} chose not to use their ability tonight.`,
+      );
+
+      this.resolveNight();
+      return;
     }
 
     if (
@@ -219,7 +255,7 @@ export class Engine {
   // The rest of the night, in night order, then dawn.
   resolveNight() {
     const s = this.s;
-    const poisoner = s.players.find((x) => x.alive && x.role === "poisoner");
+    const poisoner = s.players.find((x) => acts(x) && x.role === "poisoner");
 
     if (poisoner) {
       const t = this.strat.poison(s);
@@ -240,6 +276,7 @@ export class Engine {
       }
     }
 
+    this.sectsDusk();
     this.advocate();
 
     if (s.night > 1) {
@@ -295,6 +332,7 @@ export class Engine {
       }
     }
 
+    this.sectsInfo();
     this.butlers();
     this.bluffs();
     this.snapshot();
@@ -304,6 +342,11 @@ export class Engine {
     s.talkDay = s.day;
     s.talked = [];
     s.nominated = [];
+    s.dayVoters = [];
+    s.dayNominators = [];
+    s.executedToday = false;
+
+    this.applyMadness();
 
     s.publicLog.push(
       `Day ${s.day}: ${this.alive().length} alive; talk to ${this.talkLimit()} distinct players.`,
@@ -313,6 +356,7 @@ export class Engine {
 
     this.npcShots();
     this.npcArtists();
+    this.sectsDawn();
   }
 
   // The strategy used for p's night info: for the human, the Fortune Teller's
@@ -327,6 +371,7 @@ export class Engine {
 
     const strat = Object.create(this.strat);
     strat.ft = () => picks;
+    strat.dream = () => picks[0];
 
     return strat;
   }
@@ -363,7 +408,7 @@ export class Engine {
   advocate() {
     const s = this.s;
     const lastId = s.advocate?.targetId ?? null;
-    const da = s.players.find((x) => x.alive && x.role === "devilsadvocate");
+    const da = s.players.find((x) => acts(x) && x.role === "devilsadvocate");
 
     s.advocate = null;
 
@@ -449,7 +494,7 @@ export class Engine {
   assassin() {
     const s = this.s;
     const a = s.players.find(
-      (x) => x.alive && x.role === "assassin" && !x.assassinUsed,
+      (x) => acts(x) && x.role === "assassin" && !x.assassinUsed,
     );
 
     if (!a) {
@@ -532,7 +577,7 @@ export class Engine {
       if (p.alignment === "good") {
         this.remember(
           p,
-          artistInfo(s, ask.targets, ask.question, artistMode(p)),
+          artistInfo(s, ask.targets, ask.question, infoMode(s, p)),
         );
       } else {
         const spy = p.role === "spy" && works(p);
@@ -575,7 +620,7 @@ export class Engine {
 
   demon() {
     const s = this.s;
-    const d = s.players.find((x) => x.alive && x.role === "imp");
+    const d = s.players.find((x) => x.alive && isDemon(x));
 
     if (!d) {
       this.finish("good", "No Demon remains.");
@@ -644,8 +689,14 @@ export class Engine {
     );
 
     if (outcome !== "blocked") {
+      if (this.fangGuJump(d, t)) {
+        this.check();
+        return;
+      }
+
       if (this.kill(t, "demon")) {
         this.grandmother(t);
+        this.vigormortisKill(d, t);
       }
 
       if (t === d) {
@@ -729,6 +780,8 @@ export class Engine {
       this.moonchild(p);
     }
 
+    this.sectsDeath(p, cause);
+
     return true;
   }
 
@@ -793,6 +846,10 @@ export class Engine {
       }
 
       intents.set(v.id, attempted);
+
+      if (attempted && !s.dayVoters.includes(v.id)) {
+        s.dayVoters.push(v.id);
+      }
 
       return {
         playerId: v.id,
@@ -892,6 +949,21 @@ export class Engine {
     const id = n.id;
 
     s.nominated.push(id);
+    s.dayNominators.push(nominator.id);
+
+    // A nominator cursed by the Witch dies; the nomination still goes ahead
+    // unless that ended the game.
+    this.witchCurse(nominator);
+
+    if (s.winner) {
+      return {
+        nomineeId: id,
+        count: 0,
+        threshold: 0,
+        executed: false,
+        records: [],
+      };
+    }
 
     // A working Virgin's first nomination executes a Townsfolk nominator.
     if (n.role === "virgin" && !n.virginUsed) {
@@ -935,6 +1007,7 @@ export class Engine {
       const before = this.alive().length;
 
       s.lastExecution = id;
+      s.executedToday = true;
 
       // The Devil's Advocate's pick (or a Fool) is executed but doesn't die.
       const advocated = this.advocated(n);
@@ -949,11 +1022,12 @@ export class Engine {
 
       const died = !advocated && this.kill(n, "execution");
 
+      // (goodTwinExecuted() ends the game if the good twin was executed.)
       if (died && n.role === "saint") {
         this.finish("evil", "Saint executed.");
-      } else if (died && n.role === "imp") {
+      } else if (died && isDemon(n)) {
         this.successor(n, before, false);
-      } else if (died) {
+      } else if (died && !this.goodTwinExecuted(n)) {
         this.check();
       }
 
@@ -973,6 +1047,7 @@ export class Engine {
 
     s.lastExecution = by.id;
     s.lastVote = null;
+    s.executedToday = true;
 
     this.audit(
       "virgin",
@@ -1012,6 +1087,10 @@ export class Engine {
     }
 
     this.audit("end_day", `You ended Day ${this.s.day}.`);
+
+    if (this.vortoxDay()) {
+      return;
+    }
 
     if (
       this.alive().length === 3 &&
@@ -1074,7 +1153,7 @@ export class Engine {
 
     h.artistUsed = true;
 
-    const info = artistInfo(s, t, question, artistMode(h));
+    const info = artistInfo(s, t, question, infoMode(s, h));
 
     this.remember(h, info);
 
@@ -1087,13 +1166,13 @@ export class Engine {
     if (
       ability(p) === "slayer" &&
       works(p) &&
-      (t.role === "imp" || t.role === "recluse")
+      (isDemon(t) || t.role === "recluse")
     ) {
       const before = this.alive().length;
 
       this.kill(t, "slayer");
 
-      if (t.role === "imp") {
+      if (isDemon(t)) {
         this.successor(t, before, false);
       } else {
         this.check();
@@ -1154,24 +1233,25 @@ export class Engine {
   // ── Demon succession & game end ───────────────────────────
 
   // The Scarlet Woman takes over if 5+ players were alive; on an Imp
-  // self-kill, any living minion can take over instead.
+  // self-kill, any living minion can take over instead. The new Demon is the
+  // same character as the old one.
   successor(dead, before, self) {
     let next =
       before >= 5
         ? this.s.players.find((x) => x.alive && x.role === "scarletwoman")
         : null;
 
-    if (!next && self) {
+    if (!next && self && dead.role === "imp") {
       next = this.s.players.find(
         (x) => x.alive && team(x.role) === "minion",
       );
     }
 
     if (next) {
-      next.role = "imp";
+      next.role = dead.role;
       next.alignment = "evil";
 
-      this.audit("succession", `${next.label} became Imp.`, {
+      this.audit("succession", `${next.label} became ${name(dead.role)}.`, {
         playerId: next.id,
         previousDemonId: dead.id,
       });
@@ -1181,7 +1261,7 @@ export class Engine {
   }
 
   check() {
-    if (!this.s.players.some((x) => x.alive && x.role === "imp")) {
+    if (!this.s.players.some((x) => x.alive && isDemon(x))) {
       this.finish("good", "No Demon remains.");
     } else if (this.alive().length <= 2) {
       this.finish("evil", "Two alive remain.");
@@ -1189,6 +1269,18 @@ export class Engine {
   }
 
   finish(winner, reason) {
+    if (this.s.winner) {
+      return;
+    }
+
+    if (winner === "good" && this.twinsBlockGood()) {
+      this.audit(
+        "eviltwin",
+        `Good would win (${reason}), but can't while both twins live.`,
+      );
+      return;
+    }
+
     this.s.winner = winner;
     this.s.reason = reason;
     this.s.phase = "over";
@@ -1215,7 +1307,7 @@ export class Engine {
       claim: p.claim,
       alignment: p.alignment,
       alive: p.alive,
-      drunk: p.role === "drunk",
+      drunk: isDrunk(p),
       poisoned: p.poisoned,
       protected: p.protected,
       info: p.memories
@@ -1254,3 +1346,6 @@ export class Engine {
     };
   }
 }
+
+// Sects & Violets characters (see sects.js).
+Object.assign(Engine.prototype, sectsAndViolets);

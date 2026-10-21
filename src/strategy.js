@@ -11,11 +11,19 @@ import {
   DEMON_STAR_PASS_CHANCE,
   GAMBLER_WILD_GUESS_CHANCE,
   SCAPEGOAT_CHANCE,
+  WITCH_HUMAN_CHANCE,
+  SEAMSTRESS_NIGHT_CHANCE,
   SLAYER_SHOOT_AFTER_DAY,
   SLAYER_START_CHANCE,
   SLAYER_CHANCE_STEP,
 } from "./data.js";
-import { ability, bluffInfo, scapegoat } from "./storyteller.js";
+import {
+  ability,
+  bluffInfo,
+  scapegoat,
+  isDrunk,
+  isDemon,
+} from "./storyteller.js";
 import { pick, sample } from "./util.js";
 
 const ROLE_BY_NAME = new Map(Object.keys(ROLES).map((id) => [name(id), id]));
@@ -31,6 +39,8 @@ function infoStance(m) {
     case "empath":
       return /number: 0\./.test(t) ? "trust" : "suspicious";
     case "investigator":
+    case "sage":
+    case "eviltwin":
       return "suspicious";
     case "washerwoman":
     case "grandmother":
@@ -75,7 +85,7 @@ export class SimpleStrategy {
       }
 
       candidates = falseTargets;
-    } else if (p.role === "drunk" || p.poisoned) {
+    } else if (isDrunk(p) || p.poisoned) {
       const wrong = s.r() < 0.5;
 
       candidates =
@@ -155,7 +165,7 @@ export class SimpleStrategy {
       const type = infoStance(m);
       const named = (m.targets ?? [])
         .map((id) => s.players.find((x) => x.id === id))
-        .filter((x) => x?.alive && !x.human && x !== p);
+        .filter((x) => x?.alive && !x.human && x.id !== p.id);
 
       if (!type || !named.length) {
         continue;
@@ -185,14 +195,28 @@ export class SimpleStrategy {
   // Good NPCs share what they learned; evil NPCs share their bluffed info.
   // Each night's (or day's) information goes on its own line, followed by
   // their opinion.
+  //
+  // An NPC the Cerenovus made "mad" claims that character instead, with
+  // made-up information to match (and an opinion drawn from it).
   ask(s, p) {
-    const details = p.memories.length
-      ? p.memories
+    const mad = p.mad?.day === s.day ? p.mad : null;
+    const memories = mad ? (mad.memories ?? []) : p.memories;
+    const details = memories.length
+      ? memories
           .map((x) => `${x.day ? `Day ${x.day}` : `Night ${x.night}`}: ${x.text}`)
           .join("\n")
       : "I have no stored information.";
+    const opinion = mad
+      ? (this.infoOpinion(s, { ...p, memories }) ?? {
+          text: "I have nothing else to add.",
+        })
+      : this.opinion(s, p);
 
-    return [`I claim ${name(p.claim)}.`, details, this.opinion(s, p).text]
+    return [
+      `I claim ${name(mad ? mad.role : p.claim)}.`,
+      details,
+      opinion.text,
+    ]
       .filter(Boolean)
       .join("\n");
   }
@@ -234,47 +258,68 @@ export class SimpleStrategy {
       (x) => x.alive && team(x.role) === "minion",
     );
 
-    if (minion && s.nominated.includes(p.id) && s.r() < DEMON_STAR_PASS_CHANCE) {
+    if (
+      p.role === "imp" &&
+      minion &&
+      s.nominated.includes(p.id) &&
+      s.r() < DEMON_STAR_PASS_CHANCE
+    ) {
       return p;
     }
 
-    const npcs = s.players.filter((x) => x.alive && !x.human && x.id !== p.id);
-    const claimLevel = (x) =>
-      x.claimKnown ? (DEMON_KILL_PRIORITY[x.claim] ?? "low") : null;
+    return this.byPriority(
+      s,
+      s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
+    );
+  }
+
+  // A player's kill priority (DEMON_KILL_PRIORITY in data.js): good players by
+  // the character they've publicly claimed (null if unknown); evil players by
+  // their true character, raised to a public "med"/"high" bluff's level
+  // unless their own level is "avoid".
+  priorityLevel(x) {
+    const claimLevel = x.claimKnown
+      ? (DEMON_KILL_PRIORITY[x.claim] ?? "low")
+      : null;
+
+    if (x.alignment !== "evil") {
+      return claimLevel;
+    }
+
     const rank = ["avoid", "low", "med", "high"];
+    const own = DEMON_KILL_PRIORITY[x.role] ?? "avoid";
 
-    const level = (x) => {
-      if (x.alignment !== "evil") {
-        return claimLevel(x);
-      }
+    return own !== "avoid" &&
+      ["med", "high"].includes(claimLevel) &&
+      rank.indexOf(claimLevel) > rank.indexOf(own)
+      ? claimLevel
+      : own;
+  }
 
-      const own = DEMON_KILL_PRIORITY[x.role] ?? "avoid";
-      const bluff = claimLevel(x);
-
-      return own !== "avoid" && ["med", "high"].includes(bluff) &&
-        rank.indexOf(bluff) > rank.indexOf(own)
-        ? bluff
-        : own;
-    };
-    const notAvoided = npcs.filter((x) => level(x) !== "avoid");
+  // Picks from `pool` by priority, as the Demon does: check each level from
+  // high to low at its KILL_PRIORITY_CHANCE, never choosing "avoid" while
+  // anyone else is available; if no level fires, a good player who isn't
+  // avoided, then any good player, then anyone.
+  byPriority(s, pool) {
+    const notAvoided = pool.filter((x) => this.priorityLevel(x) !== "avoid");
 
     for (const tier of ["high", "med", "low"]) {
-      const found = notAvoided.filter((x) => level(x) === tier);
+      const found = notAvoided.filter((x) => this.priorityLevel(x) === tier);
 
       if (found.length && s.r() < KILL_PRIORITY_CHANCE[tier]) {
         return pick(found, s.r);
       }
     }
 
-    const good = npcs.filter((x) => x.alignment === "good");
+    const good = pool.filter((x) => x.alignment === "good");
 
     return (
       pick(
-        good.filter((x) => level(x) !== "avoid"),
+        good.filter((x) => this.priorityLevel(x) !== "avoid"),
         s.r,
       ) ??
       pick(good, s.r) ??
-      pick(npcs, s.r)
+      pick(pool, s.r)
     );
   }
 
@@ -428,6 +473,164 @@ export class SimpleStrategy {
 
     return pick(evil.length ? evil : pool, s.r);
   }
+
+  // ── Sects & Violets ────────────────────────────────────────
+
+  // Living NPCs other than p.
+  others(s, p) {
+    return s.players.filter((x) => x.alive && !x.human && x.id !== p.id);
+  }
+
+  // The Dreamer looks into someone they suspect.
+  dream(s, p) {
+    return this.suspect(s, p, this.others(s, p)) ?? pick(this.others(s, p), s.r);
+  }
+
+  // The Snake Charmer charms someone they suspect (hoping for the Demon).
+  snake(s, p) {
+    return this.suspect(s, p, this.others(s, p));
+  }
+
+  // The Seamstress (once per game, on a night of their choosing) compares
+  // someone they suspect with another player.
+  seamstress(s, p) {
+    if (s.r() >= SEAMSTRESS_NIGHT_CHANCE) {
+      return null;
+    }
+
+    const a = this.suspect(s, p, this.others(s, p));
+    const b = pick(
+      this.others(s, p).filter((x) => x !== a),
+      s.r,
+    );
+
+    return a && b ? [a, b] : null;
+  }
+
+  // The Philosopher gains an ongoing information ability not in play (so
+  // nobody is made drunk), or else any other good character.
+  philosopher(s, p) {
+    const inPlay = new Set(s.players.map((x) => x.role));
+    const good = s.script.ids.filter(
+      (id) => alignment(id) === "good" && id !== "philosopher",
+    );
+    const fresh = good.filter(
+      (id) => ONGOING_INFO.includes(id) && !inPlay.has(id),
+    );
+
+    return pick(fresh.length ? fresh : good, s.r);
+  }
+
+  // The Juggler guesses up to 5 living players' characters: what they claim.
+  juggle(s, p) {
+    return sample(this.others(s, p), 5, s.r).map((x) => ({
+      id: x.id,
+      role: x.claim,
+    }));
+  }
+
+  // A dying Klutz picks someone they trust (or, failing that, anyone).
+  klutz(s, p) {
+    const o = this.infoOpinion(s, p);
+    const trusted =
+      o?.type === "trust" ? s.players.find((x) => x.id === o.targetId) : null;
+
+    return trusted?.alive
+      ? trusted
+      : pick(
+          s.players.filter((x) => x.alive && x.id !== p.id),
+          s.r,
+        );
+  }
+
+  // The Storyteller's pick for who a dying Sweetheart makes drunk: a good
+  // player, ideally one with information.
+  sweetheart(s, p) {
+    const good = s.players.filter(
+      (x) => x.alive && x !== p && x.alignment === "good" && !isDrunk(x),
+    );
+    const info = good.filter(
+      (x) =>
+        FIRST_NIGHT_INFO.includes(ability(x)) ||
+        ONGOING_INFO.includes(ability(x)),
+    );
+
+    return pick(info.length ? info : good, s.r);
+  }
+
+  // After the Barber dies, the Demon swaps two good NPCs' characters.
+  barber(s) {
+    const good = s.players.filter(
+      (x) =>
+        x.alive &&
+        !x.human &&
+        x.alignment === "good" &&
+        !isDrunk(x) &&
+        !isDemon(x),
+    );
+
+    return good.length >= 2 ? sample(good, 2, s.r) : null;
+  }
+
+  // The Witch curses the human (the likeliest nominator) or a good NPC.
+  witch(s, p) {
+    const human = s.players.find((x) => x.human && x.alive);
+
+    if (human && s.r() < WITCH_HUMAN_CHANCE) {
+      return human;
+    }
+
+    return pick(
+      this.others(s, p).filter((x) => x.alignment === "good"),
+      s.r,
+    );
+  }
+
+  // The Cerenovus makes a good NPC "mad" about another good character.
+  // The Cerenovus picks a good NPC the way the Demon picks its kills, and
+  // makes them mad about a good character that isn't who they are (their
+  // true character, the one they think they are, or their claim; never the
+  // Drunk).
+  cerenovus(s, p) {
+    const target = this.byPriority(
+      s,
+      this.others(s, p).filter((x) => x.alignment === "good"),
+    );
+    const own = target && [target.role, ability(target), target.claim];
+    const role =
+      target &&
+      pick(
+        s.script.ids.filter(
+          (id) =>
+            alignment(id) === "good" && id !== "drunk" && !own.includes(id),
+        ),
+        s.r,
+      );
+
+    return target && role ? { target, role } : null;
+  }
+
+  // The Pit-Hag turns a good NPC (preferring public information claimers)
+  // into an Outsider that isn't in play.
+  pithag(s, p) {
+    const tokens = new Set(s.players.flatMap((x) => [x.role, x.shown]));
+    const role = pick(
+      s.script.ids.filter((id) => team(id) === "outsider" && !tokens.has(id)),
+      s.r,
+    );
+    const good = this.others(s, p).filter(
+      (x) => x.alignment === "good" && !isDrunk(x),
+    );
+    const voices = good.filter(
+      (x) =>
+        x.claimKnown &&
+        (FIRST_NIGHT_INFO.includes(x.claim) || ONGOING_INFO.includes(x.claim)),
+    );
+    const target = pick(voices.length ? voices : good, s.r);
+
+    return target && role ? { target, role } : null;
+  }
+
 
   // Night info an evil NPC reports for their bluff (true only for the Spy).
   bluff(s, p) {
