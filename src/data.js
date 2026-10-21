@@ -187,7 +187,7 @@ export const SCAPEGOAT_CHANCE = 0.8;
 //   likely to nominate) rather than a random good NPC.
 // SEAMSTRESS_NIGHT_CHANCE: chance an NPC Seamstress uses their once-per-game
 //   ability on any given night.
-export const WITCH_HUMAN_CHANCE = 0.5;
+export const WITCH_HUMAN_CHANCE = 0.2;
 export const SEAMSTRESS_NIGHT_CHANCE = 0.5;
 
 // PITHAG_EVIL_CHANCE: chance the Pit-Hag changes an evil teammate into a
@@ -197,6 +197,11 @@ export const SEAMSTRESS_NIGHT_CHANCE = 0.5;
 //   (about a good character not in play) instead of a good NPC.
 export const PITHAG_EVIL_CHANCE = 0.25;
 export const CERENOVUS_EVIL_CHANCE = 0.2;
+
+// When the Pit-Hag makes a Demon, that night's death is random instead of
+// the Demon's kill: any living NPC except the Demon. This is the chance
+// that nobody dies that night instead.
+export const PITHAG_NO_DEATH_CHANCE = 0.3;
 
 // Vote animation: how long (in ms) the clock hands point at the nominator
 // and nominee before the large hand starts counting votes.

@@ -643,6 +643,11 @@ export class Engine {
       return;
     }
 
+    // The Pit-Hag made a Demon tonight: a random death instead.
+    if (this.arbitraryDeath()) {
+      return;
+    }
+
     let t = this.strat.demon(s, d);
 
     if (!t || t.human || !t.alive) {

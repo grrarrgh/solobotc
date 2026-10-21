@@ -1,4 +1,4 @@
-import { name, team } from "./data.js";
+import { name, team, PITHAG_NO_DEATH_CHANCE } from "./data.js";
 import {
   ability,
   works,
@@ -372,10 +372,13 @@ export const sectsAndViolets = {
         target.claim = this.claimFor(target);
       }
 
+      // Deaths tonight are arbitrary (see arbitraryDeath()).
       if (demon) {
+        s.arbitraryNight = s.night;
+
         this.audit(
           "pithag",
-          `A Demon was made (${target.label} is now the ${name(role)}): deaths tonight are the Storyteller's choice.`,
+          `A Demon was made (${target.label} is now the ${name(role)}): tonight's death is random.`,
           { playerId: target.id, role },
         );
       }
@@ -405,6 +408,35 @@ export const sectsAndViolets = {
   },
 
   // ── Demon variants ─────────────────────────────────────────
+
+  // On a night the Pit-Hag made a Demon, the Demon doesn't choose: a random
+  // living NPC other than the Demon dies (never the human, as with any night
+  // death), or (at PITHAG_NO_DEATH_CHANCE) nobody does. Returns whether this
+  // replaced the Demon's kill.
+  arbitraryDeath() {
+    const s = this.s;
+
+    if (s.arbitraryNight !== s.night) {
+      return false;
+    }
+
+    const pool = s.players.filter((x) => x.alive && !x.human && !isDemon(x));
+    const t = s.r() < PITHAG_NO_DEATH_CHANCE ? null : pick(pool, s.r);
+
+    this.audit(
+      "pithag",
+      t
+        ? `Random death (a Demon was made): ${t.label}.`
+        : "Random death (a Demon was made): nobody died.",
+      { targetId: t?.id ?? null },
+    );
+
+    if (t && this.kill(t, "pithag")) {
+      this.check();
+    }
+
+    return true;
+  },
 
   // The first Outsider a Fang Gu kills becomes an evil Fang Gu instead, and
   // the old Fang Gu dies. Returns whether that happened.

@@ -2,7 +2,7 @@
 
 - Public announcements: at dawn, any living NPC whose claim changed overnight says so in the Public Log: "Player 2 now claims to be the Mayor." (made mad, or no longer mad: both read the same, so madness stays hidden), or "Player 4 says they woke up as the Klutz." (changed by the Pit-Hag, Barber or Snake Charmer).
 - Mad NPCs share only made-up information for the character they're mad about; once the madness ends, they go back to their real information (or, for evil players, their bluffed information).
-- Pit-Hag and the evil team: at PITHAG_EVIL_CHANCE (in src/data.js, default 25%) the Pit-Hag changes an evil teammate into a not-in-play character of the same kind instead: a Minion into another Minion, or the Demon into another Demon (never the Evil Twin). Evil players changed this way keep their bluff, so nothing is announced. Making a Demon is noted in log.txt.
+- Pit-Hag and the evil team: at PITHAG_EVIL_CHANCE (in src/data.js, default 25%) the Pit-Hag changes an evil teammate into a not-in-play character of the same kind instead: a Minion into another Minion, or the Demon into another Demon (never the Evil Twin). Evil players changed this way keep their bluff, so nothing is announced. When the Pit-Hag makes a Demon, that night's death is random instead of the Demon's choice: any living NPC except the Demon dies (never the human), or, at PITHAG_NO_DEATH_CHANCE (default 30%), nobody does. This is noted in log.txt.
 - Cerenovus and the evil team: at CERENOVUS_EVIL_CHANCE (default 20%) the Cerenovus makes an evil teammate mad about a good character that isn't in play, giving them a fresh claim for a day; once the madness ends they return to their previous bluff.
 
 ## Bug Fixes: Dead Claims, Unused Abilities, Evil Bluffs & Clock Hands

@@ -3065,3 +3065,32 @@ test("the Cerenovus can make an evil teammate mad; afterwards they return to the
 
   assert.equal(imp.claim, "empath");
 });
+
+test("when the Pit-Hag makes a Demon, the night's death is random (never the Demon), or nobody", () => {
+  const outcomes = new Set();
+
+  for (let i = 0; i < 40; i++) {
+    const strat = new SimpleStrategy();
+    const { s, e } = nightTwo(`pithag-random-${i}`, strat);
+    const demon = s.players[4];
+    const chosen = s.players[1];
+
+    role(s.players[3], "pithag", "evil");
+    role(demon, "vortox", "evil");
+    strat.pithag = () => ({ target: demon, role: "nodashii" });
+    strat.demon = () => chosen; // ignored: tonight's death is random
+
+    e.night();
+
+    const dead = s.players.filter((p) => !p.alive);
+
+    assert.ok(demon.alive);
+    assert.ok(s.players[0].alive); // never the human
+    assert.ok(dead.length <= 1);
+    assert.ok(dead.every((p) => p.death === "pithag"));
+    outcomes.add(dead.length ? "death" : "none");
+  }
+
+  // Both a random death and no death happen across the runs.
+  assert.deepEqual([...outcomes].sort(), ["death", "none"]);
+});

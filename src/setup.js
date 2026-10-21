@@ -297,6 +297,7 @@ export function createState(
     fangGuJumped: false,
     lastingPoison: [], // { id, by } poisoned while `by` lives (Vigormortis)
     witched: null, // { targetId, day, effective }
+    arbitraryNight: null, // a night the Pit-Hag made a Demon
     juggle: null, // { byId, night, guesses: [{ id, role }] }
     executedToday: false,
     dayVoters: [],
