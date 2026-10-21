@@ -3629,3 +3629,30 @@ test("a misinformed Chef reports fewer evil pairs where possible", () => {
   // Baron and Imp sit together: 1 pair, so the lie is 0.
   assert.equal(nightInfo(s, p, new SimpleStrategy()).text, "Chef number: 0.");
 });
+
+test("a dying Klutz picks a player they believe is good", () => {
+  const s = base("klutz-picks", sv);
+  const strat = new SimpleStrategy();
+  const [human, klutz, butler, baron, imp] = s.players;
+
+  role(klutz, "klutz", "good");
+  klutz.alive = false;
+
+  // Vouched for Player 3 and the Baron; then a YES on the Baron and the Imp.
+  klutz.memories = [
+    { night: 1, role: "washerwoman", text: "One of them is the Chef.", targets: [butler.id, baron.id] },
+    { night: 2, role: "fortuneteller", text: "Fortune Teller: YES for them.", targets: [baron.id, imp.id] },
+  ];
+
+  for (let i = 0; i < 50; i++) {
+    assert.equal(strat.klutz(s, klutz), butler);
+  }
+
+  // Nobody vouched for: anyone but their suspects.
+  klutz.memories = [klutz.memories[1]];
+  klutz.suspicion = { targetId: butler.id, day: 1 };
+
+  for (let i = 0; i < 50; i++) {
+    assert.equal(strat.klutz(s, klutz), human);
+  }
+});

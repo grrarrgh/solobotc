@@ -2,6 +2,10 @@
 
 Newest first.
 
+## Bug Fix: Klutz Picks
+
+- A dying Klutz now picks a player they believe is good: someone their information vouches for, as long as nothing else they know makes them suspect that player. Failing that, they pick someone they have no reason to suspect: no information against them, not their current suspect, not their twin. Before, without a trusted player they picked at random, sometimes someone they'd said they suspected. An evil Klutz bluffer picks a good player.
+
 ## New Feature: Misinformation Helps the Evil Team
 
 - Poisoned players now hear false information, the same as a Drunk, instead of random answers. This covers night information and the Artist, Seamstress, Sage, Savant and Juggler.

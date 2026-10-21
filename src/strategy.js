@@ -739,18 +739,44 @@ export class SimpleStrategy {
     }));
   }
 
-  // A dying Klutz picks someone they trust (or, failing that, anyone).
+  // A dying Klutz picks a player they believe is good: one their information
+  // vouches for and nothing makes them suspect; else anyone they have no
+  // reason to suspect (no information against them, not their suspect or
+  // their twin); else anyone. An evil Klutz bluffer (no effect) picks a good
+  // player, as a real one would seem to.
   klutz(s, p) {
-    const o = this.infoOpinion(s, p);
-    const trusted =
-      o?.type === "trust" ? byId(s, o.targetId) : null;
+    const living = s.players.filter((x) => x.alive && x.id !== p.id);
 
-    return trusted?.alive
-      ? trusted
-      : pick(
-          s.players.filter((x) => x.alive && x.id !== p.id),
+    if (p.alignment === "evil") {
+      return (
+        pick(
+          living.filter((x) => x.alignment === "good"),
           s.r,
-        );
+        ) ?? pick(living, s.r)
+      );
+    }
+
+    const trusted = new Set();
+    const suspected = new Set(
+      [p.suspicion?.targetId, s.twins && this.twinOf(s, p)?.id].filter(Boolean),
+    );
+
+    for (const m of p.memories) {
+      const type = infoStance(m);
+
+      for (const id of type ? (m.targets ?? []) : []) {
+        (type === "trust" ? trusted : suspected).add(id);
+      }
+    }
+
+    const believed = living.filter(
+      (x) => trusted.has(x.id) && !suspected.has(x.id),
+    );
+    const unsuspected = living.filter((x) => !suspected.has(x.id));
+
+    return (
+      pick(believed, s.r) ?? pick(unsuspected, s.r) ?? pick(living, s.r)
+    );
   }
 
   // The Storyteller's pick for who a dying Sweetheart makes drunk: a good
