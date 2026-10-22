@@ -5,7 +5,7 @@ import {
   PUBLIC_INFO_MIN_SEATS,
   PUBLIC_INFO_CHANCE,
 } from "./data.js";
-import { speak, heard } from "./strategy.js";
+import { speak, heard, untwinned } from "./strategy.js";
 import {
   ability,
   works,
@@ -118,6 +118,8 @@ export const sectsAndViolets = {
         continue;
       }
 
+      this.woke(p);
+
       const effective = works(p);
       const holder = s.players.find((x) => x !== p && x.role === role);
 
@@ -159,6 +161,9 @@ export const sectsAndViolets = {
       if (!t) {
         continue;
       }
+
+      this.woke(c);
+      this.chose(c, t);
 
       const swap = isDemon(t) && works(c);
 
@@ -237,6 +242,9 @@ export const sectsAndViolets = {
       return;
     }
 
+    this.woke(w);
+    this.chose(w, t);
+
     const effective = works(w);
 
     s.witched = { targetId: t.id, day: s.night, effective };
@@ -281,6 +289,9 @@ export const sectsAndViolets = {
     if (!choice) {
       return;
     }
+
+    this.woke(c);
+    this.chose(c, choice.target);
 
     const effective = works(c);
 
@@ -432,6 +443,9 @@ export const sectsAndViolets = {
       return;
     }
 
+    this.woke(h);
+    this.chose(h, choice.target);
+
     const effective = works(h);
     const { target, role } = choice;
 
@@ -503,7 +517,10 @@ export const sectsAndViolets = {
       return false;
     }
 
-    const pool = s.players.filter((x) => x.alive && !x.human && !isDemon(x));
+    const pool = untwinned(
+      s,
+      s.players.filter((x) => x.alive && !x.human && !isDemon(x)),
+    );
     let t = s.r() < PITHAG_NO_DEATH_CHANCE ? null : pick(pool, s.r);
 
     // "If you die at night, another player might die instead": the Mayor.

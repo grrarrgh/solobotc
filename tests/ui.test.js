@@ -65,7 +65,7 @@ test("the Storyteller log has no list numbers", () => {
 test("night choices have a Select panel wired to the engine", () => {
   assert.match(html, /id="night-choice"/);
   assert.match(html, /id="night-select"[^>]*>Select</);
-  assert.match(app, /e\.choose\(nightPicks\)/);
+  assert.match(app, /e\.choose\(\s*nightPicks/);
 });
 
 test("a Request nomination button is wired to the engine", () => {
@@ -145,4 +145,16 @@ test("Reset sits at the bottom of the Final reveal and collapses with it", () =>
     html,
     /<details id="reveal-panel"[\s\S]*?id="reset"[\s\S]*?<\/details>/,
   );
+});
+
+test("Bad Moon Rising controls: Courtier characters, Professor's dead picks, Gossip statements", () => {
+  assert.match(html, /id="night-character"/);
+  assert.match(html, /id="gossip-controls"[\s\S]*?id="gossip-question"[\s\S]*?id="gossip-say"/);
+  assert.match(app, /e\.gossip\(selectedPlayerId/);
+  assert.match(app, /s\.pending\?\.characters \? \$\("night-character"\)\.value/);
+  assert.match(app, /p\.alive === Boolean\(s\.pending\.dead\)/);
+});
+
+test("dead players can be nominated from the town square", () => {
+  assert.match(app, /const blocked = !t \|\| e\.nominatedToday/);
 });

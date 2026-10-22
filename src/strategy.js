@@ -27,6 +27,9 @@ import {
   EVIDENCE_WEIGHT,
   EVIDENCE_TO_SUSPECT,
   HUMAN_POISON_CHANCE,
+  GOSSIP_CHANCE,
+  PO_CHARGE_CHANCE,
+  LUNATIC_FOLLOW_CHANCE,
 } from "./data.js";
 import {
   ability,
@@ -41,6 +44,10 @@ import { byId, pick, sample } from "./util.js";
 // One of the Evil Twin pair (good or evil).
 export const isTwin = (s, x) =>
   Boolean(s.twins) && [s.twins.evilId, s.twins.goodId].includes(x.id);
+
+// `pool` without either twin. Nothing harmful ever targets a twin: no kill,
+// poison, drunkenness, curse, madness or change of character.
+export const untwinned = (s, pool) => pool.filter((x) => !isTwin(s, x));
 
 // How an NPC says a piece of their information out loud: in their own
 // words, without repeating their character's name ("Snake Charmer: chose
@@ -63,7 +70,7 @@ export function speak(text) {
 
   const said = rest
     .slice(2)
-    .replace(/^(chose|protected|guessed|asked|gained) /, "I $1 ")
+    .replace(/^(chose|protected|guessed|asked|gained|said) /, "I $1 ")
     .replace(/^your /, "my ")
     .replace(/ is your /, " is my ");
 
@@ -86,12 +93,21 @@ function infoStance(m) {
     case "sage":
     case "eviltwin":
       return "suspicious";
+    case "exorcist":
+      return "suspicious";
     case "washerwoman":
     case "grandmother":
     case "monk":
     case "butler":
     case "gambler":
+    case "innkeeper":
       return "trust";
+    case "gossip":
+      return / is (evil|the Demon|a Minion)\.$/.test(t)
+        ? "suspicious"
+        : / is a Townsfolk\.$/.test(t)
+          ? "trust"
+          : null;
     case "artist": {
       const yes = /: YES\.$/.test(t);
 
@@ -417,6 +433,8 @@ export class SimpleStrategy {
       philosopher: p.gained ?? p.bluffGained,
       virgin: p.virginUsed,
       fool: p.foolUsed,
+      courtier: p.courtierUsed,
+      professor: p.professorUsed,
     };
 
     return p.alive && p.claim in used && !used[p.claim]
@@ -660,7 +678,10 @@ export class SimpleStrategy {
   // night. The human is picked at HUMAN_POISON_CHANCE (not two nights
   // running), and can also be picked like anyone else.
   poison(s, p = null) {
-    const good = s.players.filter((x) => x.alive && x.alignment === "good");
+    const good = untwinned(
+      s,
+      s.players.filter((x) => x.alive && x.alignment === "good"),
+    );
     const roles =
       s.night === 1 ? [...FIRST_NIGHT_INFO, ...ONGOING_INFO] : ONGOING_INFO;
     const info = good.filter((x) => roles.includes(ability(x)));
@@ -700,7 +721,14 @@ export class SimpleStrategy {
   //   "med" or "high" (killing a "confirmed" info role makes good cover). A
   //   Minion it avoids stays avoided. If no priority fires, it attacks a good
   //   NPC it isn't avoiding; with no good NPC left, any random NPC.
-  demon(s, p) {
+  //
+  // `exclude`: players it can't pick (already chosen tonight, or the Pukka's
+  // last victim). It steers clear of players its attack bounced off before
+  // (while it has anyone else to pick) and goes after whoever protected
+  // them (the Monk, Innkeeper or Tea Lady), keeps the Lunatic alive as a decoy, kills who the
+  // Lunatic chose at LUNATIC_FOLLOW_CHANCE (so they keep believing), and
+  // goes after an Exorcist who has found it.
+  demon(s, p, exclude = []) {
     const minion = s.players.some(
       (x) => x.alive && team(x.role) === "minion",
     );
@@ -724,11 +752,68 @@ export class SimpleStrategy {
         : undefined;
 
     // Neither twin is ever the Demon's kill.
-    return this.byPriority(
-      s,
-      this.others(s, p).filter((x) => !isTwin(s, x)),
-      level,
+    const pool = this.others(s, p).filter(
+      (x) => !isTwin(s, x) && !exclude.includes(x),
     );
+    const decoys = pool.filter(
+      (x) => x.role !== "lunatic" && !p.foiled?.includes(x.id),
+    );
+    const options = decoys.length ? decoys : pool;
+    const lunaticPick = options.find((x) => x.id === s.lunaticPick);
+    const exorcist = options.find((x) => x.id === p.exorcistId);
+    const protector = pick(
+      options.filter((x) => p.protectors?.includes(x.id)),
+      s.r,
+    );
+
+    if (protector) {
+      return protector;
+    }
+
+    if (lunaticPick && s.r() < LUNATIC_FOLLOW_CHANCE) {
+      return lunaticPick;
+    }
+
+    if (exorcist && s.r() < KILL_PRIORITY_CHANCE.high) {
+      return exorcist;
+    }
+
+    return this.byPriority(s, options, level);
+  }
+
+  // Everyone the Demon attacks tonight: the Shabaloth 2 players; the Po
+  // nobody (at PO_CHARGE_CHANCE), or 3 players after a night of nobody;
+  // every other Demon 1.
+  demonTargets(s, p) {
+    const more = (n) => {
+      const picks = [];
+
+      for (let i = 0; i < n; i++) {
+        const t = this.demon(s, p, picks);
+
+        if (t && t !== p) {
+          picks.push(t);
+        } else if (!picks.length) {
+          return [t];
+        }
+      }
+
+      return picks;
+    };
+
+    if (p.role === "shabaloth") {
+      return more(2);
+    }
+
+    if (p.role === "po") {
+      if (p.poCharged) {
+        return more(3);
+      }
+
+      return s.r() < PO_CHARGE_CHANCE ? [] : more(1);
+    }
+
+    return [this.demon(s, p)];
   }
 
   // A player's kill priority (DEMON_KILL_PRIORITY in data.js): good players by
@@ -907,13 +992,9 @@ export class SimpleStrategy {
     return pick(firstNight.length ? firstNight : townsfolk, s.r);
   }
 
-  // A dying Moonchild curses a living NPC they suspect.
+  // A dying Moonchild curses a living NPC they suspect (never a twin).
   moonchild(s, p) {
-    return this.suspect(
-      s,
-      p,
-      this.others(s, p),
-    );
+    return this.suspect(s, p, untwinned(s, this.others(s, p)));
   }
 
   // The Assassin spends their one kill (timed by ONCE_PER_GAME.assassin) on a
@@ -924,7 +1005,10 @@ export class SimpleStrategy {
     }
 
     return pick(
-      s.players.filter((x) => x.alive && !x.human && x.alignment === "good"),
+      untwinned(
+        s,
+        s.players.filter((x) => x.alive && !x.human && x.alignment === "good"),
+      ),
       s.r,
     );
   }
@@ -1083,8 +1167,11 @@ export class SimpleStrategy {
   // The Storyteller's pick for who a dying Sweetheart makes drunk: a good
   // player, ideally one with information.
   sweetheart(s, p) {
-    const good = s.players.filter(
-      (x) => x.alive && x !== p && x.alignment === "good" && !isDrunk(x),
+    const good = untwinned(
+      s,
+      s.players.filter(
+        (x) => x.alive && x !== p && x.alignment === "good" && !isDrunk(x),
+      ),
     );
     const info = good.filter(
       (x) =>
@@ -1103,7 +1190,8 @@ export class SimpleStrategy {
         !x.human &&
         x.alignment === "good" &&
         !isDrunk(x) &&
-        !isDemon(x),
+        !isDemon(x) &&
+        !isTwin(s, x),
     );
 
     return good.length >= 2 ? sample(good, 2, s.r) : null;
@@ -1116,11 +1204,20 @@ export class SimpleStrategy {
     const humanLast = p.lastPicks?.witch?.includes(human?.id);
 
     // (Never a Day 1 curse on the human.)
-    if (human && !humanLast && s.night > 1 && s.r() < WITCH_HUMAN_CHANCE) {
+    if (
+      human &&
+      !humanLast &&
+      !isTwin(s, human) &&
+      s.night > 1 &&
+      s.r() < WITCH_HUMAN_CHANCE
+    ) {
       return this.noted(p, "witch", human);
     }
 
-    const good = this.others(s, p).filter((x) => x.alignment === "good");
+    const good = untwinned(
+      s,
+      this.others(s, p).filter((x) => x.alignment === "good"),
+    );
 
     return this.noted(p, "witch", pick(this.fresh(p, "witch", good), s.r));
   }
@@ -1135,7 +1232,8 @@ export class SimpleStrategy {
   // good character that isn't in play: a fresh bluff for a day, after which
   // they go back to their old one.
   cerenovus(s, p) {
-    const teammates = this.others(s, p).filter((x) => x.alignment === "evil");
+    const others = untwinned(s, this.others(s, p));
+    const teammates = others.filter((x) => x.alignment === "evil");
     const evil = teammates.length && s.r() < CERENOVUS_EVIL_CHANCE;
     const target = this.noted(
       p,
@@ -1147,7 +1245,7 @@ export class SimpleStrategy {
             this.fresh(
               p,
               "cerenovus",
-              this.others(s, p).filter((x) => x.alignment === "good"),
+              others.filter((x) => x.alignment === "good"),
             ),
           ),
     );
@@ -1181,7 +1279,9 @@ export class SimpleStrategy {
 
     if (s.r() < PITHAG_EVIL_CHANCE) {
       const choices = s.players
-        .filter((x) => x.alive && !x.human && x.alignment === "evil")
+        .filter(
+          (x) => x.alive && !x.human && x.alignment === "evil" && !isTwin(s, x),
+        )
         .map((t) => ({
           target: t,
           roles: s.script.ids.filter(
@@ -1203,7 +1303,7 @@ export class SimpleStrategy {
       s.script.ids.filter((id) => team(id) === "outsider" && !tokens.has(id)),
       s.r,
     );
-    const good = this.others(s, p).filter(
+    const good = untwinned(s, this.others(s, p)).filter(
       (x) => x.alignment === "good" && !isDrunk(x),
     );
     const voices = good.filter(
@@ -1218,6 +1318,116 @@ export class SimpleStrategy {
     );
 
     return target && role ? { target, role } : null;
+  }
+
+  // ── Bad Moon Rising ─────────────────────────────────────────
+
+  // The Sailor drinks with another living player (never a twin).
+  sailor(s, p) {
+    return this.noted(
+      p,
+      "sailor",
+      pick(this.fresh(p, "sailor", untwinned(s, this.pickable(s, p))), s.r),
+    );
+  }
+
+  // The Chambermaid asks about 2 other living players.
+  chambermaid(s, p) {
+    const pool = this.fresh(p, "chambermaid", this.pickable(s, p));
+    const pair =
+      pool.length >= 2 ? sample(pool, 2, s.r) : sample(this.pickable(s, p), 2, s.r);
+
+    return pair.length === 2 ? this.noted(p, "chambermaid", pair) : null;
+  }
+
+  // The Exorcist chooses someone they suspect, never last night's pick (nor
+  // a twin).
+  exorcist(s, p) {
+    const last = p.lastPicks?.exorcist ?? [];
+    const pool = untwinned(s, this.pickable(s, p)).filter(
+      (x) => !last.includes(x.id),
+    );
+
+    return this.noted(
+      p,
+      "exorcist",
+      this.suspect(s, p, pool.filter((x) => !x.human)) ?? pick(pool, s.r),
+    );
+  }
+
+  // The Innkeeper protects 2 other living players (never a twin: one of
+  // them is made drunk).
+  innkeeper(s, p) {
+    const all = untwinned(s, this.pickable(s, p));
+    const pool = this.fresh(p, "innkeeper", all);
+    const pair = pool.length >= 2 ? sample(pool, 2, s.r) : sample(all, 2, s.r);
+
+    return pair.length === 2 ? this.noted(p, "innkeeper", pair) : null;
+  }
+
+  // The Courtier (once per game, timed by ONCE_PER_GAME.courtier) guesses
+  // the Demon's character, hoping to make it drunk.
+  courtier(s, p) {
+    if (!this.onceReady(s, "courtier", s.night)) {
+      return null;
+    }
+
+    return pick(
+      s.script.ids.filter((id) => team(id) === "demon"),
+      s.r,
+    );
+  }
+
+  // The Professor (once per game, timed by ONCE_PER_GAME.professor) brings
+  // back a dead player who claimed a Townsfolk, preferring information
+  // characters. A Professor bluffer never does (it wouldn't work).
+  professor(s, p) {
+    const dead = s.players.filter(
+      (x) =>
+        !x.alive &&
+        !x.undead &&
+        !x.human &&
+        x.claimKnown &&
+        team(x.claim) === "townsfolk",
+    );
+    const info = dead.filter(
+      (x) => FIRST_NIGHT_INFO.includes(x.claim) || ONGOING_INFO.includes(x.claim),
+    );
+
+    if (p.alignment === "evil" || !dead.length) {
+      return null;
+    }
+
+    return this.onceReady(s, "professor", s.night)
+      ? pick(info.length ? info : dead, s.r)
+      : null;
+  }
+
+  // A Gossip (at GOSSIP_CHANCE each day) says in public that someone they
+  // suspect is the Demon, a Minion or evil.
+  gossip(s, p) {
+    if (s.r() >= GOSSIP_CHANCE) {
+      return null;
+    }
+
+    const target = this.suspect(s, p, this.others(s, p));
+
+    return target
+      ? { target, question: pick(["demon", "minion", "evil"], s.r) }
+      : null;
+  }
+
+  // The Godfather kills a good NPC, the way the Demon picks.
+  godfather(s, p) {
+    return this.byPriority(
+      s,
+      untwinned(s, this.others(s, p)).filter((x) => x.alignment === "good"),
+    );
+  }
+
+  // The Lunatic "kills" like a Demon: any other NPC but a twin, by priority.
+  lunatic(s, p) {
+    return this.byPriority(s, untwinned(s, this.others(s, p)));
   }
 
   // Night info an evil NPC reports for their bluff (true only for the Spy).

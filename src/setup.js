@@ -73,14 +73,16 @@ export function createState(
     pool = (t) => script.ids.filter((id) => team(id) === t);
 
   // Draw roles. Some characters change the Outsider count (the Baron +2,
-  // the Fang Gu +1, the Vigormortis -1), trading Townsfolk for Outsiders.
+  // the Fang Gu +1, the Vigormortis -1, the Godfather -1 or +1), trading
+  // Townsfolk for Outsiders.
   let [t, o, m] = base;
   const mins = sample(pool("minion"), m, r);
   const demons = sample(pool("demon"), 1, r);
-  const shift = [...mins, ...demons].reduce(
-    (n, id) => n + (OUTSIDER_MODIFIERS[id] ?? 0),
-    0,
-  );
+  const shift = [...mins, ...demons].reduce((n, id) => {
+    const k = OUTSIDER_MODIFIERS[id] ?? 0;
+
+    return n + (Array.isArray(k) ? pick(k, r) : k);
+  }, 0);
   const outsiders = Math.min(Math.max(0, o + shift), pool("outsider").length);
 
   t -= outsiders - o;
@@ -132,8 +134,16 @@ export function createState(
     return k < 0 ? "chef" : unusedTF.splice(k, 1)[0];
   };
 
+  // The Lunatic is shown the Demon in play, so they can't tell they aren't.
+  const demonToken = demons[0] ?? pool("demon")[0] ?? "imp";
+
   const players = roles.map((role, i) => {
-    const shown = role === "drunk" ? drunkToken(i === 0) : role;
+    const shown =
+      role === "drunk"
+        ? drunkToken(i === 0)
+        : role === "lunatic"
+          ? demonToken
+          : role;
     return {
       id: `p${i + 1}`,
       seat: i + 1,
@@ -172,6 +182,15 @@ export function createState(
       memories: [],
       talks: [],
       death: null,
+      // Bad Moon Rising.
+      drunkTonight: false, // drunk until dusk (Sailor, Innkeeper, Goon...)
+      drunkTill: 0, // drunk through this night and the next day (Courtier)
+      safeNight: 0, // can't die on this night (Innkeeper)
+      courtierUsed: false,
+      professorUsed: false,
+      gossipDay: 0,
+      undead: false, // a Zombuul that died once: registers as dead
+      zombuulUsed: false,
     };
   });
 
@@ -183,9 +202,14 @@ export function createState(
   // The Spy sees the Grimoire, so always knows the bluffs, and claims a
   // character that is neither in play nor one of the Demon's bluffs, so it
   // never doubles up with anyone.
+  // (Neither shown nor dealt: the Lunatic is shown the Demon.)
   const tokens = new Set(players.map((p) => p.shown));
   const notInPlay = script.ids.filter(
-    (x) => alignment(x) === "good" && x !== "drunk" && !tokens.has(x),
+    (x) =>
+      alignment(x) === "good" &&
+      x !== "drunk" &&
+      !tokens.has(x) &&
+      !roles.includes(x),
   );
   const demonBluffs = sample(notInPlay, 3, r);
   const spyOptions = notInPlay.filter((x) => !demonBluffs.includes(x));
@@ -236,6 +260,18 @@ export function createState(
     taken.add(p.claim);
   }
 
+  // The Lunatic thinks they're the Demon, so they bluff like one: a good
+  // character that isn't in play (and that nobody evil is claiming).
+  for (const p of players.filter((x) => x.role === "lunatic" && !x.human)) {
+    p.claim =
+      pick(
+        notInPlay.filter((x) => !taken.has(x)),
+        r,
+      ) ?? p.claim;
+    p.bluff = p.claim;
+    taken.add(p.claim);
+  }
+
   // The Mutant is "mad" that they're not an Outsider: they claim a Townsfolk
   // that isn't in play (and that no evil player is claiming).
   for (const p of players.filter((x) => x.role === "mutant" && !x.human)) {
@@ -268,7 +304,7 @@ export function createState(
   )?.id;
 
   const s = {
-    version: "2.3.1",
+    version: "2.4.0",
     script,
     seats,
     seed: String(seed),
@@ -312,6 +348,17 @@ export function createState(
     voteHistory: [], // { day, nominatorId, nomineeId, voterIds }
     nightDeaths: [], // announced at dawn
     dawnLearn: [], // "when you learn that you died", at dawn
+    // Bad Moon Rising.
+    woke: [], // who woke tonight due to their ability (the Chambermaid)
+    sailorPending: [], // { sailorId, targetId }: who's drunk isn't decided yet
+    diedToday: false, // anyone died today (the Zombuul)
+    outsiderDiedToday: false, // an Outsider died today (the Godfather)
+    gossip: [], // { byId, day, truth }: public statements made by a Gossip
+    pukka: null, // { targetId }: poisoned by the Pukka, dies next night
+    shabaloth: [], // ids the Shabaloth chose last night
+    minstrelUntil: 0, // everyone else is drunk through this night (Minstrel)
+    mastermindDay: null, // the extra day after the Demon was executed
+    revived: [], // brought back to life tonight, announced at dawn
     block: null, // { nomineeId, count }: marked for execution today
     pending: null,
     humanChoice: null,

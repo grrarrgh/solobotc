@@ -17,6 +17,7 @@ import { SimpleStrategy, isTwin } from "./strategy.js";
 import { byId, pick } from "./util.js";
 import { formatLog } from "./log.js";
 import { sectsAndViolets } from "./sects.js";
+import { badMoonRising } from "./bmr.js";
 
 const KEY_MOMENT_TYPES = new Set([
   "poison",
@@ -40,11 +41,31 @@ const KEY_MOMENT_TYPES = new Set([
   "sweetheart",
   "philosopher",
   "vigormortis",
+  "sailor",
+  "innkeeper",
+  "exorcist",
+  "courtier",
+  "professor",
+  "gossip",
+  "minstrel",
+  "pacifist",
+  "tinker",
+  "goon",
+  "lunatic",
+  "godfather",
+  "mastermind",
+  "zombuul",
+  "pukka",
+  "shabaloth",
+  "po",
   "game_over",
 ]);
 
 // Minions keep acting after death if the Vigormortis killed them.
 const acts = (x) => x.alive || x.vigor;
+
+// Really alive: living, or a Zombuul that only registers as dead.
+const living = (x) => x.alive || x.undead;
 
 export class Engine {
   constructor(s, strat = new SimpleStrategy()) {
@@ -145,10 +166,14 @@ export class Engine {
     s.players.forEach((x) => {
       x.protected = false;
       x.poisoned = false;
+      x.drunkTonight = false;
       x.dusk = { role: x.role, claim: x.claim };
     });
+    s.woke = [];
+    s.sailorPending = [];
 
     this.lastingEffects();
+    this.bmrLasting();
     this.barberNight();
 
     s.pending = this.wakeHuman();
@@ -172,6 +197,7 @@ export class Engine {
     const h = this.human();
     const role = ability(h);
     const candidates = s.players.filter((x) => x.alive && !x.human);
+    const dead = s.players.filter((x) => !x.alive && !x.human);
 
     const wake = {
       monk:
@@ -199,17 +225,58 @@ export class Engine {
         prompt:
           "Once per game: choose 2 players to learn if they are the same alignment, or skip tonight.",
       },
+      sailor: {
+        count: 1,
+        prompt:
+          "Choose a player: either you or they are drunk until dusk. You can't die.",
+      },
+      chambermaid: {
+        count: 2,
+        prompt:
+          "Choose 2 players: you learn how many of them woke tonight due to their ability.",
+      },
+      exorcist: s.night > 1 && {
+        count: 1,
+        exclude: h.lastPicks?.exorcist ?? [],
+        prompt:
+          "Choose a player (not last night's): if they are the Demon, it doesn't wake tonight.",
+      },
+      innkeeper: s.night > 1 && {
+        count: 2,
+        prompt:
+          "Choose 2 players: they can't die tonight, but 1 of them is drunk until dusk.",
+      },
+      courtier: !h.courtierUsed && {
+        count: 0,
+        characters: s.script.ids,
+        optional: true,
+        prompt:
+          "Once per game: choose a character to make drunk for 3 nights and 3 days, or skip tonight.",
+      },
+      professor: s.night > 1 &&
+        !h.professorUsed && {
+          count: 1,
+          dead: true,
+          optional: true,
+          prompt:
+            "Once per game: choose a dead player to resurrect if they are a Townsfolk, or skip tonight.",
+        },
     }[role];
 
-    if (!h.alive || !wake || candidates.length < wake.count) {
+    const pool = (wake?.dead ? dead : candidates).filter(
+      (x) => !wake?.exclude?.includes(x.id),
+    );
+
+    if (!h.alive || !wake || pool.length < Math.max(1, wake.count)) {
       return null;
     }
 
     return { role, night: s.night, ...wake };
   }
 
-  // The human's night choice: `ids` are the players they selected.
-  choose(ids) {
+  // The human's night choice: `ids` are the players they selected (or, for
+  // the Courtier, `character` is the character they chose).
+  choose(ids, character = null) {
     const s = this.s;
     const p = s.pending;
 
@@ -217,6 +284,24 @@ export class Engine {
 
     if (!p) {
       throw Error("Nothing to choose.");
+    }
+
+    if (p.characters && character) {
+      if (!p.characters.includes(character)) {
+        throw Error("Choose a character on the script.");
+      }
+
+      s.pending = null;
+      s.humanChoice = { role: p.role, night: s.night, players: [], character };
+
+      this.audit(
+        "choice",
+        `${this.human().label} chose the ${name(character)}.`,
+        { role: character },
+      );
+
+      this.resolveNight();
+      return;
     }
 
     if (p.optional && !picked.length) {
@@ -232,11 +317,23 @@ export class Engine {
       return;
     }
 
+    if (p.characters) {
+      throw Error("Choose a character.");
+    }
+
     if (
       picked.length !== p.count ||
-      picked.some((x) => !x?.alive || x.human)
+      picked.some((x) => !x || x.alive === Boolean(p.dead) || x.human)
     ) {
-      throw Error(`Select ${p.count} living player${p.count > 1 ? "s" : ""}.`);
+      throw Error(
+        `Select ${p.count} ${p.dead ? "dead" : "living"} player${
+          p.count > 1 ? "s" : ""
+        }.`,
+      );
+    }
+
+    if (picked.some((x) => p.exclude?.includes(x.id))) {
+      throw Error("You chose that player last night.");
     }
 
     s.pending = null;
@@ -267,6 +364,11 @@ export class Engine {
       const t = this.strat.poison(s, poisoner);
 
       if (t) {
+        this.woke(poisoner);
+        this.chose(poisoner, t);
+      }
+
+      if (t && works(poisoner)) {
         t.poisoned = true;
         s.poisoned = t.id;
 
@@ -282,8 +384,13 @@ export class Engine {
       }
     }
 
+    this.bmrDusk();
     this.sectsDusk();
     this.advocate();
+
+    if (s.night === 1) {
+      this.bmrFirstNight();
+    }
 
     if (s.night > 1) {
       for (const m of s.players.filter(
@@ -292,10 +399,14 @@ export class Engine {
         const t = this.humanPicks(m)?.[0] ?? this.strat.monk(s, m);
 
         if (t) {
+          this.woke(m);
+          this.chose(m, t);
+
           const effective = works(m);
 
           if (effective) {
             t.protected = true;
+            t.protectedBy = m.id;
           }
 
           this.audit(
@@ -316,6 +427,7 @@ export class Engine {
 
       this.gamblers();
       this.resolveMoonCurse();
+      this.exorcists();
 
       if (!s.winner) {
         this.demon();
@@ -324,22 +436,32 @@ export class Engine {
       if (!s.winner) {
         this.assassin();
       }
+
+      if (!s.winner) {
+        this.bmrNight();
+      }
     }
 
     if (s.winner) {
       return;
     }
 
+    // Any Sailor choice still open is decided now.
+    this.sailorResolve();
+
     for (const p of s.players) {
       const info = nightInfo(s, p, this.strategyFor(p));
 
       if (info) {
+        this.woke(p);
         this.remember(p, info);
       }
     }
 
     this.sectsInfo();
     this.butlers();
+    // (Last: she learns about everyone who woke tonight.)
+    this.chambermaids();
     this.bluffs();
     this.snapshot();
 
@@ -351,6 +473,9 @@ export class Engine {
     s.dayVoters = [];
     s.dayNominators = [];
     s.executedToday = false;
+    s.lastExecution = null;
+    s.diedToday = false;
+    s.outsiderDiedToday = false;
     s.block = null;
     s.lastVote = null;
 
@@ -373,6 +498,7 @@ export class Engine {
     this.npcShots();
     this.npcArtists();
     this.sectsDawn();
+    this.bmrDawn();
   }
 
   // The strategy used for p's night info: for the human, the Fortune Teller's
@@ -405,6 +531,7 @@ export class Engine {
         continue;
       }
 
+      this.woke(b);
       b.master = t.id;
 
       this.audit(
@@ -438,6 +565,9 @@ export class Engine {
       return;
     }
 
+    this.woke(da);
+    this.chose(da, t);
+
     const effective = works(da);
 
     s.advocate = { targetId: t.id, day: s.night, effective };
@@ -470,6 +600,9 @@ export class Engine {
       if (!guess) {
         continue;
       }
+
+      this.woke(g);
+      this.chose(g, guess.target);
 
       const wrong = guess.target.role !== guess.role;
       const dies = wrong && works(g);
@@ -517,11 +650,16 @@ export class Engine {
       return;
     }
 
+    // The Assassin wakes each night until they use their ability.
+    this.woke(a);
+
     const t = this.strat.assassin(s, a);
 
     if (!t) {
       return;
     }
+
+    this.chose(a, t);
 
     const effective = works(a);
 
@@ -610,8 +748,11 @@ export class Engine {
   bluffs() {
     const s = this.s;
 
+    // (The Lunatic, who thinks they're the Demon, bluffs too.)
     for (const p of s.players) {
-      if (p.human || !p.alive || p.alignment !== "evil") {
+      const bluffer = p.alignment === "evil" || p.role === "lunatic";
+
+      if (p.human || !p.alive || !bluffer) {
         continue;
       }
 
@@ -647,10 +788,14 @@ export class Engine {
 
   demon() {
     const s = this.s;
-    const d = s.players.find((x) => x.alive && isDemon(x));
+    const d = s.players.find((x) => living(x) && isDemon(x));
 
+    // (On the Mastermind's extra day, the game goes on without a Demon.)
     if (!d) {
-      this.finish("good", "No Demon remains.");
+      if (!s.mastermindDay) {
+        this.finish("good", "No Demon remains.");
+      }
+
       return;
     }
 
@@ -659,7 +804,57 @@ export class Engine {
       return;
     }
 
-    let t = this.strat.demon(s, d);
+    this.lunatics();
+
+    if (this.demonSleeps(d)) {
+      return;
+    }
+
+    this.woke(d);
+
+    if (d.role === "pukka") {
+      this.pukka(d);
+      return;
+    }
+
+    if (this.sinkKill(d)) {
+      return;
+    }
+
+    if (d.role === "shabaloth") {
+      this.regurgitate(d);
+    }
+
+    const targets = this.strat.demonTargets(s, d);
+
+    // The Po may choose no-one, to choose 3 players tomorrow night.
+    if (d.role === "po") {
+      d.poCharged = !targets.length;
+
+      if (!targets.length) {
+        this.audit(
+          "po",
+          `${d.label} (Po) chose no-one: tomorrow night they choose 3 players.`,
+          { actorId: d.id },
+        );
+      }
+    }
+
+    for (const t of targets) {
+      if (!s.winner) {
+        this.attack(d, t);
+      }
+    }
+
+    if (d.role === "shabaloth") {
+      s.shabaloth = targets.filter(Boolean).map((x) => x.id);
+    }
+  }
+
+  // The Demon attacks t: `chosen` tonight (false for the Pukka's victim from
+  // last night, who dies now), described by `verb` in the log.
+  attack(d, t, { chosen = true, verb = "chose" } = {}) {
+    const s = this.s;
 
     if (!t || t.human || !t.alive) {
       this.audit(
@@ -678,15 +873,37 @@ export class Engine {
     const before = this.alive().length;
     const original = t;
 
+    this.sailorResolve({ demon: d, victim: t });
+
+    if (chosen) {
+      this.chose(d, t);
+    }
+
     let outcome = "killed";
     let detail = "";
+    let guard = null;
+    // Blocked by the Soldier, Sailor, Tea Lady or Innkeeper: the Demon avoids
+    // that player from now on, and goes after whoever protected them (see
+    // strategy demon()).
+    let foiled = false;
+    let protector = null;
 
-    if (t.role === "soldier" && works(t)) {
+    if (!works(d)) {
+      outcome = "blocked";
+      detail = "the attack failed (the Demon is drunk or poisoned)";
+    } else if (t.role === "soldier" && works(t)) {
       outcome = "blocked";
       detail = "blocked by the Soldier ability";
+      foiled = true;
     } else if (t.protected) {
       outcome = "blocked";
       detail = "blocked by Monk protection";
+      protector = t.protectedBy;
+    } else if ((guard = this.guard(t, "demon"))) {
+      outcome = "blocked";
+      detail = `blocked: ${guard.text}`;
+      foiled = true;
+      protector = guard.by;
     } else if (t.role === "mayor" && works(t)) {
       // (Never onto the human, the Demon or either twin.)
       const alt = pick(
@@ -705,7 +922,20 @@ export class Engine {
         t = alt;
         outcome = "redirected";
         detail = `redirected to ${t.label}`;
+
+        if ((guard = this.cantDie(t, "demon"))) {
+          outcome = "blocked";
+          detail = `redirected to ${t.label}, but ${guard}`;
+        }
       }
+    }
+
+    if (foiled) {
+      d.foiled = [...new Set([...(d.foiled ?? []), original.id])];
+    }
+
+    if (protector) {
+      d.protectors = [...new Set([...(d.protectors ?? []), protector])];
     }
 
     if (outcome !== "blocked" && this.foolSaves(t, "demon")) {
@@ -717,7 +947,7 @@ export class Engine {
 
     this.audit(
       "demon",
-      `${d.label} (${name(d.role)}) chose ${original.label}; attack ${result}.`,
+      `${d.label} (${name(d.role)}) ${verb} ${original.label}; attack ${result}.`,
       {
         actorId: d.id,
         targetId: original.id,
@@ -764,6 +994,20 @@ export class Engine {
   // Returns whether p actually died.
   kill(p, cause) {
     if (!p?.alive) {
+      // A Zombuul that registers as dead can still die for good.
+      return Boolean(p?.undead) && this.zombuulDies(p, cause);
+    }
+
+    this.sailorResolve({ victim: p });
+
+    const guard = this.cantDie(p, cause);
+
+    if (guard) {
+      this.audit("death", `${p.label} would have died (${cause}): ${guard}.`, {
+        playerId: p.id,
+        cause,
+      });
+
       return false;
     }
 
@@ -778,6 +1022,10 @@ export class Engine {
 
       return false;
     }
+
+    // (The Zombuul's first death only looks real.)
+    this.zombuulLives(p);
+    this.dayDeath(p);
 
     p.alive = false;
     p.death = cause;
@@ -1014,13 +1262,15 @@ export class Engine {
     return this.s.nominated.includes(id);
   }
 
-  // The living NPC that can be nominated right now, or an error.
+  // The NPC that can be nominated right now, or an error. (Dead players can
+  // be nominated too: executing one does nothing, unless it's a Zombuul
+  // that only registers as dead.)
   nominee(id) {
     const s = this.s;
     const n = this.player(id);
 
-    if (s.phase !== "day" || s.winner || !n?.alive || n.human) {
-      throw Error("Choose a living NPC.");
+    if (s.phase !== "day" || s.winner || !n || n.human) {
+      throw Error("Choose an NPC.");
     }
 
     if (this.nominatedToday(id)) {
@@ -1183,12 +1433,17 @@ export class Engine {
     return id ? this.player(id) : null;
   }
 
-  // Executes p at the end of the day.
+  // Executes p at the end of the day. (Executing a dead player still counts
+  // as an execution, for the Vortox, but they don't die again, so the
+  // Undertaker learns nothing.)
   execute(p) {
     const s = this.s;
     const before = this.alive().length;
 
-    s.lastExecution = p.id;
+    if (living(p)) {
+      s.lastExecution = p.id;
+    }
+
     s.executedToday = true;
 
     s.publicLog.push(`Day ${s.day} — ${p.label} is executed.`);
@@ -1205,13 +1460,19 @@ export class Engine {
       );
     }
 
-    const died = !advocated && this.kill(p, "execution");
+    // ...and so can a good player while the Pacifist lives.
+    const spared = !advocated && p.alive && this.pacifistSaves(p);
+    const died = !advocated && !spared && this.kill(p, "execution");
+
+    if (died) {
+      this.minstrel(p);
+    }
 
     // (goodTwinExecuted() ends the game if the good twin was executed.)
     if (died && p.role === "saint") {
       this.finish("evil", "Saint executed.");
     } else if (died && isDemon(p)) {
-      this.successor(p, before, false);
+      this.successor(p, before, false, true);
     } else if (died && !this.goodTwinExecuted(p)) {
       this.check();
     }
@@ -1267,7 +1528,7 @@ export class Engine {
 
     s.block = null;
 
-    if (p?.alive) {
+    if (p) {
       this.execute(p);
     } else if (this.vortoxDay()) {
       return;
@@ -1278,6 +1539,8 @@ export class Engine {
     ) {
       this.finish("good", "Mayor final-three victory.");
     }
+
+    this.mastermindEnd(p);
 
     if (!s.winner) {
       s.night++;
@@ -1415,8 +1678,15 @@ export class Engine {
 
   // The Scarlet Woman takes over if 5+ players were alive; on an Imp
   // self-kill, any living minion can take over instead. The new Demon is the
-  // same character as the old one.
-  successor(dead, before, self) {
+  // same character as the old one. With no successor, good wins, unless the
+  // Demon was `executed` while the Mastermind lives.
+  successor(dead, before, self, executed = false) {
+    // A Zombuul that only registers as dead isn't dead.
+    if (dead.undead) {
+      this.check();
+      return;
+    }
+
     let next =
       before >= 5
         ? this.s.players.find((x) => x.alive && x.role === "scarletwoman")
@@ -1436,15 +1706,23 @@ export class Engine {
         playerId: next.id,
         previousDemonId: dead.id,
       });
-    } else {
+    } else if (!(executed && this.mastermindContinues())) {
       this.finish("good", "Demon died.");
     }
   }
 
+  // A Zombuul that registers as dead still counts as alive here. On the
+  // Mastermind's extra day, only the day's execution decides the game.
   check() {
-    if (!this.s.players.some((x) => x.alive && isDemon(x))) {
+    const alive = this.s.players.filter(living);
+
+    if (this.s.mastermindDay) {
+      return;
+    }
+
+    if (!alive.some(isDemon)) {
       this.finish("good", "No Demon remains.");
-    } else if (this.alive().length <= 2) {
+    } else if (alive.length <= 2) {
       this.finish("evil", "Two alive remain.");
     }
   }
@@ -1533,5 +1811,5 @@ export class Engine {
   }
 }
 
-// Sects & Violets characters (see sects.js).
-Object.assign(Engine.prototype, sectsAndViolets);
+// Sects & Violets and Bad Moon Rising characters (see sects.js and bmr.js).
+Object.assign(Engine.prototype, sectsAndViolets, badMoonRising);

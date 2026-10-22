@@ -29,6 +29,16 @@ export const ROLES = {
   philosopher: ["Philosopher", "townsfolk"],
   juggler: ["Juggler", "townsfolk"],
   sage: ["Sage", "townsfolk"],
+  sailor: ["Sailor", "townsfolk"],
+  chambermaid: ["Chambermaid", "townsfolk"],
+  exorcist: ["Exorcist", "townsfolk"],
+  innkeeper: ["Innkeeper", "townsfolk"],
+  gossip: ["Gossip", "townsfolk"],
+  courtier: ["Courtier", "townsfolk"],
+  professor: ["Professor", "townsfolk"],
+  minstrel: ["Minstrel", "townsfolk"],
+  tealady: ["Tea Lady", "townsfolk"],
+  pacifist: ["Pacifist", "townsfolk"],
   butler: ["Butler", "outsider"],
   drunk: ["Drunk", "outsider"],
   recluse: ["Recluse", "outsider"],
@@ -38,6 +48,9 @@ export const ROLES = {
   sweetheart: ["Sweetheart", "outsider"],
   barber: ["Barber", "outsider"],
   klutz: ["Klutz", "outsider"],
+  tinker: ["Tinker", "outsider"],
+  goon: ["Goon", "outsider"],
+  lunatic: ["Lunatic", "outsider"],
   poisoner: ["Poisoner", "minion"],
   spy: ["Spy", "minion"],
   scarletwoman: ["Scarlet Woman", "minion"],
@@ -48,15 +61,27 @@ export const ROLES = {
   witch: ["Witch", "minion"],
   cerenovus: ["Cerenovus", "minion"],
   pithag: ["Pit-Hag", "minion"],
+  godfather: ["Godfather", "minion"],
+  mastermind: ["Mastermind", "minion"],
   imp: ["Imp", "demon"],
   fanggu: ["Fang Gu", "demon"],
   vigormortis: ["Vigormortis", "demon"],
   nodashii: ["No Dashii", "demon"],
   vortox: ["Vortox", "demon"],
+  zombuul: ["Zombuul", "demon"],
+  pukka: ["Pukka", "demon"],
+  shabaloth: ["Shabaloth", "demon"],
+  po: ["Po", "demon"],
 };
 
-// Characters that change the number of Outsiders dealt at setup.
-export const OUTSIDER_MODIFIERS = { baron: 2, fanggu: 1, vigormortis: -1 };
+// Characters that change the number of Outsiders dealt at setup. (A list is
+// a choice: the Godfather deals 1 fewer or 1 more, at random.)
+export const OUTSIDER_MODIFIERS = {
+  baron: 2,
+  fanggu: 1,
+  vigormortis: -1,
+  godfather: [-1, 1],
+};
 
 // Townsfolk who learn something on the first night only, and those who keep
 // learning on later nights. Setup deals at least two of each when it can.
@@ -77,6 +102,7 @@ export const ONGOING_INFO = [
   "flowergirl",
   "towncrier",
   "oracle",
+  "chambermaid",
 ];
 
 // Chance (0–1) that each Minion also learns the Demon's three bluffs.
@@ -95,6 +121,8 @@ export const ONCE_PER_GAME = {
   seamstress: { AFTER_DAY: 1, START_CHANCE: 0.5, STEP_CHANCE: 0.25 }, // night
   philosopher: { AFTER_DAY: 1, START_CHANCE: 1, STEP_CHANCE: 0 }, // night
   assassin: { AFTER_DAY: 2, START_CHANCE: 0.3, STEP_CHANCE: 0.15 }, // night
+  courtier: { AFTER_DAY: 1, START_CHANCE: 0.4, STEP_CHANCE: 0.2 }, // night
+  professor: { AFTER_DAY: 2, START_CHANCE: 0.5, STEP_CHANCE: 0.25 }, // night
 };
 
 // How the Demon picks its nightly kill. It "finds" a good player's character
@@ -161,6 +189,21 @@ export const DEMON_KILL_PRIORITY = {
   sage: "avoid", // learns the Demon is 1 of 2 players
   klutz: "avoid", // might pick an evil player... or might not
 
+  // Bad Moon Rising.
+  chambermaid: "high",
+  exorcist: "high", // could stop the Demon waking
+  innkeeper: "high", // protects 2 players a night
+  professor: "high", // could bring back an information Townsfolk
+  courtier: "med", // could make the Demon drunk
+  gossip: "med",
+  tealady: "med", // her good neighbours can't die
+  minstrel: "low",
+  pacifist: "low",
+  tinker: "low",
+  lunatic: "low",
+  sailor: "avoid", // can't die
+  goon: "avoid", // makes the Demon drunk (and joins its team)
+
   // The Demon's own Minions (by true character). Killing one can make the
   // Demon look good; the useful ones are avoided.
   baron: "low", // no ability left after setup
@@ -173,6 +216,8 @@ export const DEMON_KILL_PRIORITY = {
   witch: "avoid",
   cerenovus: "avoid",
   pithag: "avoid",
+  godfather: "avoid",
+  mastermind: "avoid",
 };
 
 // DEMON_STAR_PASS_CHANCE: chance the Demon kills itself to pass the Demon to
@@ -259,6 +304,52 @@ export const CERENOVUS_EVIL_CHANCE = 0.2;
 // the Demon's kill: any living NPC except the Demon. This is the chance
 // that nobody dies that night instead.
 export const PITHAG_NO_DEATH_CHANCE = 0.3;
+
+// Bad Moon Rising Storyteller choices.
+// The Sailor: the Storyteller decides who is drunk (the Sailor or the player
+// they chose) when it first matters: an attack on either of them, their
+// pick using an ability, or dawn. When the choice decides whether an attack
+// kills, the Storyteller favours good: a good victim lives, an evil one
+// dies. Otherwise:
+// SAILOR_DRUNK_SELF_CHANCE: chance the Sailor (rather than the player they
+//   chose) is drunk until dusk.
+// SAILOR_LATE_ALIVE, SAILOR_LATE_DRUNK_CHANCE: with fewer than
+//   SAILOR_LATE_ALIVE players alive, the Sailor is drunk at this chance
+//   whatever is at stake, so their ability usually fails.
+// PACIFIST_SAVE_CHANCE: chance an executed good player doesn't die while a
+//   working Pacifist lives.
+// TINKER_DEATH_CHANCE: each night, the chance a working Tinker dies.
+// SHABALOTH_REGURGITATE_CHANCE: each night, the chance a dead player the
+//   Shabaloth chose last night comes back to life.
+export const SAILOR_DRUNK_SELF_CHANCE = 0.3;
+export const SAILOR_LATE_ALIVE = 6;
+export const SAILOR_LATE_DRUNK_CHANCE = 0.7;
+export const PACIFIST_SAVE_CHANCE = 0.5;
+export const TINKER_DEATH_CHANCE = 0.1;
+export const SHABALOTH_REGURGITATE_CHANCE = 0.25;
+
+// Bad Moon Rising NPC behaviour.
+// GOSSIP_CHANCE: each day, the chance an NPC Gossip (or Gossip bluffer)
+//   makes a public statement.
+// PO_CHARGE_CHANCE: each night, the chance the Po chooses no-one, to kill 3
+//   the next night.
+// LUNATIC_FOLLOW_CHANCE: the Demon learns who the Lunatic chose to "kill";
+//   the chance it kills them, so the Lunatic keeps believing.
+export const GOSSIP_CHANCE = 0.4;
+
+// Sinking a kill: on a night when an evil player is publicly claiming one
+// of PROTECTION_ROLES, the chance the Demon kills nobody, so the claimed
+// protection looks like it worked.
+export const PROTECTION_ROLES = [
+  "monk",
+  "soldier",
+  "sailor",
+  "innkeeper",
+  "tealady",
+];
+export const SINK_KILL_CHANCE = 0.2;
+export const PO_CHARGE_CHANCE = 0.25;
+export const LUNATIC_FOLLOW_CHANCE = 0.5;
 
 // Vote animation: how long (in ms) the clock hands point at the nominator
 // and nominee before the large hand starts counting votes.
@@ -375,6 +466,40 @@ export const ABILITIES = {
     "Each night*, choose a player: they die. Your 2 Townsfolk neighbours are poisoned.",
   vortox:
     "Each night*, choose a player: they die. Townsfolk abilities yield false info. Each day, if no-one is executed, evil wins.",
+  sailor:
+    "Each night, choose an alive player: either you or they are drunk until dusk. You can't die.",
+  chambermaid:
+    "Each night, choose 2 alive players (not yourself): you learn how many woke tonight due to their ability.",
+  exorcist:
+    "Each night*, choose a player (different to last night): the Demon, if chosen, learns who you are then doesn't wake tonight.",
+  innkeeper:
+    "Each night*, choose 2 players: they can't die tonight, but 1 is drunk until dusk.",
+  gossip:
+    "Each day, you may make a public statement. Tonight, if it was true, a player dies.",
+  courtier:
+    "Once per game, at night, choose a character: they are drunk for 3 nights & 3 days.",
+  professor:
+    "Once per game, at night*, choose a dead player: if they are a Townsfolk, they are resurrected.",
+  minstrel:
+    "When a Minion dies by execution, all other players (except Travellers) are drunk until dusk tomorrow.",
+  tealady: "If both your alive neighbours are good, they can't die.",
+  pacifist: "Executed good players might not die.",
+  tinker: "You might die at any time.",
+  goon:
+    "Each night, the 1st player to choose you with their ability is drunk until dusk. You become their alignment.",
+  lunatic:
+    "You think you are a Demon, but you are not. The Demon knows who you are & who you choose at night.",
+  godfather:
+    "You start knowing which Outsiders are in play. If 1 died today, choose a player tonight: they die. [−1 or +1 Outsider]",
+  mastermind:
+    "If the Demon dies by execution (ending the game), play for 1 more day. If a player is then executed, their team loses.",
+  zombuul:
+    "Each night*, if no-one died today, choose a player: they die. The 1st time you die, you live but register as dead.",
+  pukka:
+    "Each night, choose a player: they are poisoned. The previously poisoned player dies then becomes healthy.",
+  shabaloth:
+    "Each night*, choose 2 players: they die. A dead player you chose last night might be regurgitated.",
+  po: "Each night*, you may choose a player: they die. If your last choice was no-one, choose 3 players tonight.",
 };
 
 // Yes/no questions an Artist can ask the Storyteller about a player.
@@ -462,6 +587,11 @@ export const FORBIDDEN_HUMAN = new Set([
   "sage",
   "mutant",
   "klutz",
+  // Bad Moon Rising: the Tinker's death and the Goon's and Lunatic's
+  // alignment tricks don't fit a human who is always good.
+  "tinker",
+  "goon",
+  "lunatic",
 ]);
 
 export const name = (id) => ROLES[id]?.[0] ?? id;

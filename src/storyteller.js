@@ -9,9 +9,11 @@ import {
 } from "./data.js";
 import { byId, pick, sample, shuffle } from "./util.js";
 
-// Drunk: the Drunk themselves, or anyone made drunk "from now on" (by a
-// Sweetheart's death or a Philosopher choosing their character).
-export const isDrunk = (p) => p.role === "drunk" || Boolean(p.drunkFrom);
+// Drunk: the Drunk themselves, anyone made drunk "from now on" (by a
+// Sweetheart's death or a Philosopher choosing their character), and anyone
+// drunk until dusk (the Sailor, Innkeeper, Goon, Courtier or Minstrel).
+export const isDrunk = (p) =>
+  p.role === "drunk" || Boolean(p.drunkFrom) || Boolean(p.drunkTonight);
 
 export const isDemon = (p) => team(p.role) === "demon";
 
@@ -20,9 +22,10 @@ export const isDemon = (p) => team(p.role) === "demon";
 export const ability = (p) =>
   p.role === "drunk" ? p.shown : (p.gained ?? p.role);
 
-// Dead players have no ability, except Minions the Vigormortis killed.
+// Dead players have no ability, except Minions the Vigormortis killed and a
+// Zombuul that only registers as dead.
 export const works = (p) =>
-  (p.alive || p.vigor) && !isDrunk(p) && !p.poisoned;
+  (p.alive || p.vigor || p.undead) && !isDrunk(p) && !p.poisoned;
 
 // The Vortox makes every Townsfolk's information false.
 export const vortoxActive = (s) =>
@@ -95,7 +98,9 @@ export const gamblerInfo = (s, t, guess) => ({
   functioning: true,
 });
 
-const artistTruth = (t, q) =>
+// Whether "t is <evil / the Demon / a Minion / ...>" is true (as t
+// registers): an Artist's question, or a Gossip's statement.
+export const artistTruth = (t, q) =>
   q === "evil" ? evil(t) : q === "demon" ? isDemon(t) : team(t.role) === q;
 
 const listLabels = (ts) =>
@@ -436,6 +441,53 @@ export const snakeInfo = (s, t) => ({
   text: `Snake Charmer: chose ${t.label}.`,
   targets: [t.id],
   trigger: "normal",
+  functioning: true,
+});
+
+// ── Bad Moon Rising information ─────────────────────────────
+
+// The Chambermaid: how many of two players woke tonight due to their
+// ability.
+export function chambermaidInfo(s, a, b, mode) {
+  const n = [a, b].filter((x) => (s.woke ?? []).includes(x.id)).length;
+  const said =
+    mode === "truth"
+      ? n
+      : mode === "lie"
+        ? wrongNumber(s, n)
+        : pick([0, 1, 2], s.r);
+
+  return {
+    night: s.night,
+    role: "chambermaid",
+    text: `Chambermaid: ${said} of ${a.label} and ${b.label} woke tonight.`,
+    targets: [a.id, b.id],
+    trigger: "normal",
+    functioning: mode === "truth",
+  };
+}
+
+// What a player who chose other players (or a character) remembers about
+// their choice: the Sailor, Exorcist, Innkeeper, Courtier and Professor.
+export const choiceInfo = (s, role, verb, ts) => ({
+  night: s.night,
+  role,
+  text: `${name(role)}: ${verb} ${
+    typeof ts === "string" ? `the ${name(ts)}` : listLabels(ts)
+  }.`,
+  targets: typeof ts === "string" ? [] : ts.map((x) => x.id),
+  trigger: "normal",
+  functioning: true,
+});
+
+// A Gossip's public statement, as they remember it.
+export const gossipInfo = (s, t, q) => ({
+  day: s.day,
+  night: s.night,
+  role: "gossip",
+  text: `Gossip: said ${t.label} is ${ARTIST_QUESTIONS[q]}.`,
+  targets: [t.id],
+  trigger: "day",
   functioning: true,
 });
 
@@ -1086,6 +1138,46 @@ export function bluffInfo(s, p, strat) {
     const t = s.night > 1 ? strat.monk(s, p) : null;
 
     return t ? monkInfo(s, t) : null;
+  }
+
+  // Bad Moon Rising choices: an invented choice (and, for the Chambermaid, a
+  // number: true for the Spy).
+  if (role === "chambermaid") {
+    const picks = strat.chambermaid(s, p);
+
+    return picks
+      ? chambermaidInfo(s, picks[0], picks[1], spy ? "truth" : "lie")
+      : null;
+  }
+
+  if (role === "sailor") {
+    const t = strat.sailor(s, p);
+
+    return t ? choiceInfo(s, "sailor", "chose", [t]) : null;
+  }
+
+  if (role === "exorcist") {
+    const t = s.night > 1 ? strat.exorcist(s, p) : null;
+
+    return t ? choiceInfo(s, "exorcist", "chose", [t]) : null;
+  }
+
+  if (role === "innkeeper") {
+    const picks = s.night > 1 ? strat.innkeeper(s, p) : null;
+
+    return picks ? choiceInfo(s, "innkeeper", "protected", picks) : null;
+  }
+
+  if (role === "courtier") {
+    const id = !p.courtierUsed && strat.courtier(s, p);
+
+    if (!id) {
+      return null;
+    }
+
+    p.courtierUsed = true;
+
+    return choiceInfo(s, "courtier", "chose", id);
   }
 
   if (role === "butler") {

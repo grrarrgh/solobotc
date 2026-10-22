@@ -74,6 +74,7 @@
         <section id="night-choice" class="night-choice" hidden>
           <h3 id="night-prompt"></h3>
           <p id="night-picks"></p>
+          <select id="night-character" aria-label="Character" hidden></select>
           <button id="night-select" type="button">Select</button>
           <button id="night-skip" type="button" hidden>Not tonight</button>
           <p id="night-error"></p>
@@ -89,6 +90,10 @@
           <span id="artist-controls" hidden>
             <select id="artist-question"></select>
             <button id="artist-ask">Ask Storyteller</button>
+          </span>
+          <span id="gossip-controls" hidden>
+            <select id="gossip-question"></select>
+            <button id="gossip-say">Say in public</button>
           </span>
           <p id="answer"></p>
 

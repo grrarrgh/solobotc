@@ -12,10 +12,11 @@ import {
   ARTIST_QUESTIONS,
   name,
   team,
+  alignment,
 } from "../src/data.js";
 import { createState } from "../src/setup.js";
 import { Engine } from "../src/engine.js";
-import { SimpleStrategy, speak } from "../src/strategy.js";
+import { SimpleStrategy, speak, isTwin } from "../src/strategy.js";
 import {
   ravenInfo,
   artistInfo,
@@ -546,7 +547,11 @@ test("nominating a Virgin executes the Human and ends the day", () => {
   assert.equal(result.virgin, true);
   assert.equal(human.alive, false);
   assert.equal(virgin.alive, true);
-  assert.equal(s.lastExecution, human.id);
+  assert.ok(
+    s.audit.some((x) => x.type === "virgin" && x.data.actorId === human.id),
+  );
+  // (Cleared at dawn, so a later Undertaker doesn't learn about it again.)
+  assert.equal(s.lastExecution, null);
   assert.equal(s.day, 2);
   assert.equal(s.phase, "day");
   assert.ok(
@@ -1316,12 +1321,25 @@ test("the debug log lists the Demon's bluffs at setup", () => {
 // ── Human night choices ──────────────────────────────────────
 
 // If the Storyteller has woken the human, choose the first eligible players.
+// Makes the human's night choices: the first players they can pick (dead
+// ones for the Professor, not last night's for the Exorcist), or the first
+// character for the Courtier.
 function settle(e) {
   while (e.s.pending) {
+    const c = e.s.pending;
+
+    if (c.characters) {
+      e.choose([], c.characters[0]);
+      continue;
+    }
+
     e.choose(
       e.s.players
-        .filter((p) => p.alive && !p.human)
-        .slice(0, e.s.pending.count)
+        .filter(
+          (p) =>
+            p.alive !== Boolean(c.dead) && !p.human && !c.exclude?.includes(p.id),
+        )
+        .slice(0, c.count)
         .map((p) => p.id),
     );
   }
@@ -2227,8 +2245,14 @@ function playOut(raw, seats, seed) {
   return { s, e };
 }
 
+const bmr = JSON.parse(
+  fs.readFileSync(
+    new URL("../scripts/Bad Moon Rising_1_0_0.json", import.meta.url),
+  ),
+);
+
 test("whole games play out on every script without errors", () => {
-  for (const raw of [script, ecp, sv]) {
+  for (const raw of [script, ecp, sv, bmr]) {
     for (const seats of [8, 10, 12, 13, 15]) {
       for (let seed = 0; seed < 16; seed++) {
         const { s, e } = playOut(raw, seats, `play-${seats}-${seed}`);
@@ -4030,5 +4054,698 @@ test("player colours include no white", () => {
     const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
 
     assert.ok(Math.min(r, g, b) < 0xc0, `${c} is too close to white`);
+  }
+});
+
+// ── Bad Moon Rising ──────────────────────────────────────────
+
+// Night `night` of the base 5-player game on Bad Moon Rising, with `roles`
+// by seat (null keeps the base role: Mayor (you), Chef, Butler, Baron, Imp).
+// The Demon doesn't attack unless a test overrides strat.demon.
+function bmrNight(seed, roles = [], night = 2) {
+  const s = base(seed, bmr);
+
+  roles.forEach((id, i) => id && role(s.players[i], id, alignment(id)));
+
+  s.phase = "night";
+  s.night = night;
+  s.day = night - 1;
+
+  const strat = new SimpleStrategy();
+
+  strat.demon = () => null;
+  strat.butler = (st, b) => st.players.find((x) => x.alive && x !== b);
+
+  return { s, p: s.players, strat, e: new Engine(s, strat) };
+}
+
+// The same, during Day `day`, with every NPC voting yes.
+function bmrDay(seed, roles = [], day = 1) {
+  const g = bmrNight(seed, roles, day);
+
+  g.s.phase = "day";
+  g.s.day = day;
+  g.strat.vote = () => true;
+
+  return g;
+}
+
+test("Bad Moon Rising loads with its name and 25 characters", () => {
+  const s = createState(bmr, 10, "bmr");
+
+  assert.equal(s.script.meta.name, "Bad Moon Rising");
+  assert.equal(s.script.ids.length, 25);
+});
+
+test("the Godfather deals 1 fewer or 1 more Outsider", () => {
+  const seen = new Set();
+
+  for (let seed = 0; seed < 300; seed++) {
+    const s = createState(bmr, 8, seed); // normally 1 Outsider
+
+    if (s.players.some((p) => p.role === "godfather")) {
+      const n = s.players.filter((p) => team(p.role) === "outsider").length;
+
+      assert.ok([0, 2].includes(n), `seed ${seed}: ${n}`);
+      seen.add(n);
+    }
+  }
+
+  assert.deepEqual([...seen].sort(), [0, 2]);
+});
+
+test("the Lunatic is shown the Demon in play and bluffs a good character", () => {
+  let lunatics = 0;
+
+  for (let seed = 0; seed < 300; seed++) {
+    const s = createState(bmr, 12, seed);
+    const demon = s.players.find((p) => team(p.role) === "demon");
+    const human = s.players[0];
+
+    assert.ok(!["tinker", "goon", "lunatic"].includes(human.role));
+
+    for (const p of s.players.filter((x) => x.role === "lunatic")) {
+      lunatics++;
+      assert.equal(p.shown, demon.role);
+      assert.equal(p.alignment, "good");
+      assert.equal(alignment(p.claim), "good");
+      assert.ok(!s.players.some((x) => x.role === p.claim));
+    }
+  }
+
+  assert.ok(lunatics > 0);
+});
+
+// Night 2 of an 8-player Bad Moon Rising game (so the Sailor isn't in the
+// late game): You (Chef), Sailor, Butler, Godfather, Zombuul, then good
+// players. The Demon doesn't attack unless a test overrides strat.demon.
+function sailorNight(seed) {
+  const s = createState(bmr, 8, seed);
+  const roles = [
+    "chef",
+    "sailor",
+    "butler",
+    "godfather",
+    "zombuul",
+    "gossip",
+    "pacifist",
+    "minstrel",
+  ];
+
+  s.twins = null;
+  s.players.forEach((x, i) => role(x, roles[i], alignment(roles[i])));
+  s.phase = "night";
+  s.night = 2;
+  s.day = 1;
+
+  const strat = new SimpleStrategy();
+
+  strat.demon = () => null;
+  strat.butler = (st, b) => st.players.find((x) => x.alive && x !== b);
+
+  return { s, p: s.players, strat, e: new Engine(s, strat) };
+}
+
+test("the Storyteller's Sailor choice saves a good victim", () => {
+  for (let seed = 0; seed < 30; seed++) {
+    // The Demon attacks the Sailor: their pick is drunk, so they live.
+    const a = sailorNight(`sailor-a-${seed}`);
+
+    a.strat.sailor = () => a.p[2];
+    a.strat.demon = () => a.p[1];
+    a.e.night();
+    assert.equal(a.p[1].alive, true);
+    assert.equal(a.p[2].drunkTonight, true);
+
+    // The Sailor chose the Demon, who attacks a good player: the Demon is
+    // drunk, so they live.
+    const b = sailorNight(`sailor-b-${seed}`);
+
+    b.strat.sailor = () => b.p[4];
+    b.strat.demon = () => b.p[2];
+    b.e.night();
+    assert.equal(b.p[2].alive, true);
+    assert.equal(b.p[4].drunkTonight, true);
+
+    // ...but when it attacks its own Minion, the Sailor is drunk instead.
+    const c = sailorNight(`sailor-c-${seed}`);
+
+    c.strat.sailor = () => c.p[4];
+    c.strat.demon = () => c.p[3];
+    c.e.night();
+    assert.equal(c.p[3].alive, false);
+    assert.equal(c.p[1].drunkTonight, true);
+  }
+});
+
+test("with nothing at stake, either the Sailor or their pick is drunk", () => {
+  const seen = new Set();
+
+  for (let seed = 0; seed < 40; seed++) {
+    const { s, p, strat, e } = sailorNight(`sailor-d-${seed}`);
+
+    strat.sailor = () => p[2];
+    e.night();
+
+    const drunk = s.audit.find((x) => x.data?.drunkId !== undefined).data.drunkId;
+
+    seen.add(drunk);
+    assert.ok([p[1].id, p[2].id].includes(drunk));
+  }
+
+  assert.equal(seen.size, 2);
+});
+
+test("with fewer than 6 alive, the Sailor is drunk more often than not", () => {
+  let died = 0;
+
+  for (let seed = 0; seed < 60; seed++) {
+    const { p, strat, e } = bmrNight(`sailor-late-${seed}`, [null, "sailor"]);
+
+    strat.sailor = () => p[2];
+    strat.demon = () => p[1];
+    e.night();
+    died += p[1].alive ? 0 : 1;
+  }
+
+  assert.ok(died > 30 && died < 60, `${died} of 60`);
+});
+
+test("the Demon may sink a kill so an evil protection claim looks real", () => {
+  let sunk = 0;
+
+  for (let seed = 0; seed < 60; seed++) {
+    const { s, p, strat, e } = bmrNight(`sink-${seed}`);
+
+    // The Baron has publicly claimed the Monk.
+    p[3].claim = "monk";
+    p[3].claimKnown = true;
+    strat.demon = () => p[1];
+    e.night();
+
+    if (s.audit.some((x) => x.data?.outcome === "sunk")) {
+      sunk++;
+      assert.equal(p[1].alive, true);
+    } else {
+      assert.equal(p[1].alive, false);
+    }
+  }
+
+  assert.ok(sunk > 0 && sunk < 30, `${sunk} of 60`);
+
+  // Without a protection bluffer, the Demon never sinks a kill.
+  for (let seed = 0; seed < 30; seed++) {
+    const { s, p, strat, e } = bmrNight(`no-sink-${seed}`);
+
+    strat.demon = () => p[1];
+    e.night();
+    assert.ok(!s.audit.some((x) => x.data?.outcome === "sunk"));
+  }
+});
+
+test("the Innkeeper's 2 players can't die tonight, and 1 is drunk", () => {
+  const { s, p, strat, e } = bmrNight("innkeeper", [null, "innkeeper"]);
+
+  strat.innkeeper = () => [p[2], p[3]];
+  strat.demon = () => p[2];
+  e.night();
+
+  assert.equal(p[2].alive, true);
+  assert.equal([p[2], p[3]].filter((x) => x.drunkTonight).length, 1);
+  assert.ok(
+    s.audit.some((x) => /blocked: protected by the Innkeeper/.test(x.text)),
+  );
+});
+
+test("a Demon the Exorcist chooses learns who they are and doesn't wake", () => {
+  const { s, p, strat, e } = bmrNight("exorcist", [null, "exorcist"]);
+
+  strat.exorcist = () => p[4];
+  strat.demon = () => p[2];
+  e.night();
+
+  assert.equal(p[2].alive, true);
+  assert.equal(p[4].exorcistId, p[1].id);
+  assert.ok(s.audit.some((x) => /doesn't wake tonight/.test(x.text)));
+  assert.equal(p[1].memories.at(-1).text, `Exorcist: chose ${p[4].label}.`);
+});
+
+test("a human Exorcist can't choose last night's player", () => {
+  const { s, p, e } = bmrNight("exorcist-human", ["exorcist"]);
+
+  e.night();
+  assert.equal(s.pending.role, "exorcist");
+  e.choose([p[2].id]);
+  e.endDay();
+
+  assert.deepEqual(s.pending.exclude, [p[2].id]);
+  assert.throws(() => e.choose([p[2].id]), /last night/);
+  e.choose([p[3].id]);
+  assert.equal(s.phase, "day");
+});
+
+test("the Chambermaid learns how many of 2 players woke tonight", () => {
+  const { p, strat, e } = bmrNight("chambermaid", [null, "chambermaid"]);
+
+  // The Imp and the Butler wake on Night 2; the Baron doesn't.
+  strat.chambermaid = () => [p[4], p[3]];
+  e.night();
+
+  assert.equal(
+    p[1].memories.at(-1).text,
+    `Chambermaid: 1 of ${p[4].label} and ${p[3].label} woke tonight.`,
+  );
+
+  const g = bmrNight("chambermaid-2", [null, "chambermaid"]);
+
+  g.strat.chambermaid = () => [g.p[4], g.p[2]];
+  g.e.night();
+  assert.match(g.p[1].memories.at(-1).text, /Chambermaid: 2 of/);
+});
+
+test("a human Courtier makes the Demon drunk for 3 nights and 3 days", () => {
+  const { s, p, strat, e } = bmrNight("courtier", [
+    "courtier",
+    null,
+    null,
+    null,
+    "zombuul",
+  ]);
+
+  strat.demon = () => p[1];
+  e.night();
+  assert.ok(s.pending.characters.includes("zombuul"));
+  e.choose([], "zombuul");
+
+  // Nights 2, 3 and 4: the drunk Zombuul's attacks fail.
+  for (const night of [2, 3, 4]) {
+    assert.equal(s.night, night);
+    assert.equal(p[1].alive, true, `Night ${night}`);
+    assert.equal(s.pending, null); // used up
+    e.endDay();
+  }
+
+  assert.equal(s.night, 5);
+  assert.equal(p[1].alive, false);
+});
+
+test("a human Professor resurrects a dead Townsfolk, but not an Outsider", () => {
+  const { s, p, e } = bmrNight("professor", ["professor"]);
+
+  p[1].alive = false; // Chef
+  p[2].alive = false; // Butler
+  e.night();
+
+  assert.equal(s.pending.dead, true);
+  assert.throws(() => e.choose([p[3].id]), /dead/);
+  e.choose([p[1].id]);
+
+  assert.equal(p[1].alive, true);
+  assert.ok(s.publicLog.includes(`Day 2 — ${p[1].label} is alive again.`));
+
+  const g = bmrNight("professor-2", ["professor"]);
+
+  g.p[2].alive = false;
+  g.e.night();
+  g.e.choose([g.p[2].id]);
+  assert.equal(g.p[2].alive, false);
+});
+
+test("a human Gossip's true statement kills a player that night; a false one doesn't", () => {
+  const { s, p, e } = bmrDay("gossip", ["gossip"]);
+
+  e.gossip(p[4].id, "demon");
+  assert.throws(() => e.gossip(p[1].id, "demon"), /Gossip unavailable/);
+  assert.ok(
+    s.publicLog.includes(`Day 1 — You say: "${p[4].label} is the Demon."`),
+  );
+  e.endDay();
+
+  const died = p.filter((x) => x.death === "gossip");
+
+  assert.equal(died.length, 1);
+  assert.ok(!died[0].human && died[0] !== p[4]);
+
+  const g = bmrDay("gossip-2", ["gossip"]);
+
+  g.e.gossip(g.p[1].id, "demon");
+  g.e.endDay();
+  assert.equal(g.p.filter((x) => !x.alive).length, 0);
+});
+
+test("an NPC Gossip can die to their own statement; the human never does", () => {
+  const victims = { human: 0, npc: 0 };
+
+  for (let seed = 0; seed < 40; seed++) {
+    // Human Gossip.
+    const h = bmrDay(`gossip-self-${seed}`, ["gossip"]);
+
+    h.e.gossip(h.p[4].id, "demon");
+    h.e.endDay();
+    victims.human += h.p[0].alive ? 0 : 1;
+
+    // NPC Gossip (Player 2), whose statement is about the Imp.
+    const n = bmrDay(`gossip-npc-${seed}`, [null, "gossip"]);
+
+    n.strat.gossip = () => ({ target: n.p[4], question: "demon" });
+    n.e.bmrDawn();
+    n.e.endDay();
+    victims.npc += n.p[1].death === "gossip" ? 1 : 0;
+  }
+
+  assert.equal(victims.human, 0);
+  assert.ok(victims.npc > 0, "an NPC Gossip never died");
+});
+
+test("a Minion executed with the Minstrel alive makes everyone else drunk until dusk tomorrow", () => {
+  const { s, p, e } = bmrDay("minstrel", [null, "minstrel"]);
+
+  e.nominate(p[3].id); // Baron
+  e.endDay();
+
+  assert.equal(p[3].alive, false);
+  assert.equal(s.day, 2);
+  assert.ok(p.filter((x) => x !== p[1]).every((x) => x.drunkTonight));
+  assert.equal(p[1].drunkTonight, false);
+
+  e.endDay(); // Night 3: sober again.
+  assert.equal(p[2].drunkTonight, false);
+});
+
+test("the Tea Lady's neighbours can't die while both are good", () => {
+  const { p, strat, e } = bmrNight("tealady", [null, "tealady"]);
+
+  strat.demon = () => p[2];
+  e.night();
+  assert.equal(p[2].alive, true);
+
+  // With an evil neighbour, nobody is protected.
+  const g = bmrNight("tealady-2", [null, "tealady", "godfather"]);
+
+  g.strat.demon = () => g.p[2];
+  g.e.night();
+  assert.equal(g.p[2].alive, false);
+});
+
+test("the Pacifist may save an executed good player", () => {
+  const { s, p, e } = bmrDay("pacifist", [null, "pacifist"]);
+  const r = s.r;
+  let first = true;
+
+  e.nominate(p[2].id);
+  s.r = () => (first ? ((first = false), 0) : r());
+  e.endDay();
+
+  assert.equal(p[2].alive, true);
+  assert.ok(s.audit.some((x) => x.type === "pacifist"));
+});
+
+test("the first player to choose the Goon is drunk, and the Goon joins their team", () => {
+  const { p, strat, e } = bmrNight("goon", [null, "goon"]);
+
+  strat.demon = () => p[1];
+  e.night();
+
+  // The Imp is drunk, so its attack fails.
+  assert.equal(p[1].alive, true);
+  assert.equal(p[1].alignment, "evil");
+  assert.equal(p[4].drunkTonight, true);
+});
+
+test("the Demon learns who the Lunatic chose, and may kill them", () => {
+  const { s, p, strat, e } = bmrNight("lunatic", [null, "lunatic"]);
+
+  p[1].shown = "imp";
+  strat.lunatic = () => p[2];
+  e.night();
+
+  assert.equal(s.lunaticPick, p[2].id);
+  assert.equal(p[2].alive, true);
+  assert.ok(s.audit.some((x) => x.type === "lunatic"));
+
+  s.r = () => 0;
+  assert.equal(new SimpleStrategy().demon(s, p[4]), p[2]);
+});
+
+test("the Godfather kills the night after an Outsider died", () => {
+  const { p, strat, e } = bmrDay("godfather", [null, null, null, "godfather"]);
+
+  strat.godfather = () => p[1];
+  e.nominate(p[2].id); // Butler
+  e.endDay();
+
+  assert.equal(p[2].alive, false);
+  assert.equal(p[1].death, "godfather");
+});
+
+test("with the Mastermind alive, an executed Demon means 1 more day", () => {
+  const { s, p, e } = bmrDay("mastermind", [null, null, null, "mastermind"]);
+
+  e.nominate(p[4].id); // Imp
+  e.endDay();
+
+  assert.equal(s.winner, null);
+  assert.equal(s.mastermindDay, 2);
+  assert.equal(s.day, 2);
+
+  // Executing a good player now loses for good.
+  e.nominate(p[1].id);
+  e.endDay();
+  assert.equal(s.winner, "evil");
+
+  // With nobody executed on the extra day, good wins.
+  const g = bmrDay("mastermind-2", [null, null, null, "mastermind"]);
+
+  g.e.nominate(g.p[4].id);
+  g.e.endDay();
+  g.e.endDay();
+  assert.equal(g.s.winner, "good");
+});
+
+test("the Zombuul's first death is fake; executing it while 'dead' kills it", () => {
+  const { s, p, e } = bmrDay("zombuul", [null, null, null, null, "zombuul"]);
+  const z = p[4];
+
+  e.nominate(z.id);
+  e.endDay();
+
+  assert.equal(z.alive, false);
+  assert.equal(z.undead, true);
+  assert.equal(s.winner, null);
+  // Someone died today, so it doesn't wake tonight.
+  assert.ok(s.audit.some((x) => /Zombuul\) doesn't wake/.test(x.text)));
+
+  // No death on Day 2: it wakes on Night 3.
+  e.endDay();
+  assert.ok(s.audit.some((x) => x.group === "Night 3" && x.type === "demon"));
+
+  // Dead players can be nominated; this time it dies for good.
+  e.nominate(z.id);
+  e.endDay();
+  assert.equal(s.winner, "good");
+});
+
+test("a 'dead' Zombuul keeps the game going until it and 1 other are alive", () => {
+  const { s, p, e } = bmrDay("zombuul-2", [null, null, null, null, "zombuul"]);
+
+  p[2].alive = false;
+  p[3].alive = false;
+  p[4].alive = false;
+  p[4].undead = true;
+
+  e.check();
+  assert.equal(s.winner, null);
+
+  e.kill(p[1], "test");
+  e.check();
+  assert.equal(s.winner, "evil");
+});
+
+test("the Pukka poisons a player, who dies the next night", () => {
+  const { p, strat, e } = bmrNight("pukka", [null, null, null, null, "pukka"], 1);
+
+  strat.demon = () => p[1];
+  e.night();
+
+  assert.equal(p[1].poisoned, true);
+  assert.equal(p[1].alive, true);
+  // (Poisoned on Night 1, the Chef hears false information.)
+  assert.equal(p[1].memories[0].functioning, false);
+
+  strat.demon = () => p[2];
+  e.endDay();
+
+  assert.equal(p[1].alive, false);
+  assert.equal(p[2].poisoned, true);
+});
+
+test("the Shabaloth kills 2 players, and might regurgitate one", () => {
+  const { s, p, strat, e } = bmrNight("shabaloth", [
+    null,
+    null,
+    null,
+    null,
+    "shabaloth",
+  ]);
+
+  strat.demon = (st, d, exclude = []) =>
+    [p[1], p[2]].find((x) => !exclude.includes(x));
+  e.night();
+
+  assert.equal(p[1].alive, false);
+  assert.equal(p[2].alive, false);
+  assert.deepEqual(s.shabaloth, [p[1].id, p[2].id]);
+
+  s.r = () => 0;
+  e.regurgitate(p[4]);
+  assert.equal(p[1].alive || p[2].alive, true);
+});
+
+test("the Po may choose no-one, then kills 3 the next night", () => {
+  const { s, p, strat, e } = bmrNight("po", [null, null, null, null, "po"]);
+  const real = SimpleStrategy.prototype.demonTargets;
+
+  strat.demon = (st, d, exclude = []) =>
+    [p[1], p[2], p[3]].find((x) => !exclude.includes(x));
+  // Night 2: the Po charges.
+  strat.demonTargets = (st, d) => real.call(strat, { ...st, r: () => 0 }, d);
+  e.night();
+
+  assert.equal(p[4].poCharged, true);
+  assert.equal(p.filter((x) => !x.alive).length, 0);
+
+  strat.demonTargets = real;
+  e.endDay();
+
+  assert.deepEqual(
+    [p[1], p[2], p[3]].map((x) => x.alive),
+    [false, false, false],
+  );
+  assert.equal(s.winner, "evil");
+});
+
+test("dead players can be nominated, and executing one satisfies the Vortox", () => {
+  const s = base("dead-vortox");
+  const strat = new SimpleStrategy();
+  const e = new Engine(s, strat);
+
+  role(s.players[4], "vortox", "evil");
+  s.players[2].alive = false;
+  strat.vote = () => true;
+  strat.demon = () => null;
+
+  e.nominate(s.players[2].id);
+  assert.equal(e.marked(), s.players[2]);
+  e.endDay();
+
+  assert.equal(s.winner, null);
+  assert.equal(s.day, 2);
+  assert.equal(s.players[2].alive, false);
+});
+
+test("the Undertaker learns nothing from a dead player's execution, or a day without one", () => {
+  const s = base("dead-undertaker");
+  const strat = new SimpleStrategy();
+  const e = new Engine(s, strat);
+  const u = s.players[1];
+
+  // (Not the Mayor: 3 alive and no execution would win the game.)
+  role(s.players[0], "chef", "good");
+  role(u, "undertaker", "good");
+  s.players[2].alive = false;
+  strat.vote = () => true;
+  strat.demon = () => null;
+
+  e.nominate(s.players[2].id);
+  e.endDay();
+  assert.equal(u.memories.at(-1).text, "Nobody was executed.");
+
+  e.nominate(s.players[3].id); // Baron
+  e.endDay();
+  assert.equal(u.memories.at(-1).text, "Executed player was Baron.");
+
+  e.endDay();
+  assert.equal(u.memories.at(-1).text, "Nobody was executed.");
+});
+
+test("nothing harmful ever targets either twin", () => {
+  let checked = 0;
+
+  for (let seed = 0; seed < 60; seed++) {
+    const s = createState(sv, 12, `twins-${seed}`);
+    const strat = new SimpleStrategy();
+
+    if (!s.twins) {
+      continue;
+    }
+
+    s.night = 3;
+    s.day = 2;
+
+    const npcs = s.players.filter((x) => !x.human && !isTwin(s, x));
+    const evil = npcs.find((x) => x.alignment === "evil");
+    const good = npcs.find((x) => x.alignment === "good");
+    const demon = s.players.find((x) => team(x.role) === "demon");
+
+    if (!evil || !good || isTwin(s, demon)) {
+      continue;
+    }
+
+    const picks = [
+      strat.poison(s, evil),
+      strat.assassin(s, evil),
+      strat.witch(s, evil),
+      strat.cerenovus(s, evil)?.target,
+      strat.pithag(s, evil)?.target,
+      strat.godfather(s, evil),
+      strat.demon(s, demon),
+      strat.sweetheart(s, good),
+      strat.barber(s),
+      strat.moonchild(s, good),
+      strat.lunatic(s, good),
+      strat.sailor(s, good),
+      strat.innkeeper(s, good),
+      strat.exorcist(s, good),
+    ]
+      .flat()
+      .filter(Boolean);
+
+    checked++;
+
+    for (const x of picks) {
+      assert.ok(!isTwin(s, x), `seed ${seed}: ${x.label} is a twin`);
+    }
+  }
+
+  assert.ok(checked > 10);
+});
+
+test("a Demon that couldn't kill a protected player goes after their protector", () => {
+  // Monk, Innkeeper and Tea Lady (Player 2) each protect Player 3 on Night 2.
+  const setups = {
+    monk: (g) => {
+      g.strat.monk = () => g.p[2];
+    },
+    innkeeper: (g) => {
+      g.strat.innkeeper = () => [g.p[2], g.p[3]];
+    },
+    tealady: () => {},
+  };
+
+  for (const [id, setup] of Object.entries(setups)) {
+    const g = bmrNight(`protector-${id}`, [null, id]);
+
+    setup(g);
+    g.strat.demon = () => g.p[2];
+    g.e.night();
+
+    assert.equal(g.p[2].alive, true, id);
+    assert.deepEqual(g.p[4].protectors, [g.p[1].id], id);
+
+    // Night 3: the Demon chooses for itself, and picks the protector.
+    delete g.strat.demon;
+    g.e.endDay();
+
+    assert.equal(g.p[1].death, "demon", id);
   }
 });

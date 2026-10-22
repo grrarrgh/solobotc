@@ -448,10 +448,19 @@ async function runVote(fn) {
   render();
 }
 
-// Toggles a living player in or out of tonight's picks. Once the limit is
-// reached, a new pick replaces the oldest one.
+// Toggles a player in or out of tonight's picks: living players, or dead
+// ones for the Professor, and not one the choice excludes (the Exorcist's
+// pick last night). Once the limit is reached, a new pick replaces the
+// oldest one.
 function pickAtNight(id) {
-  if (!e.player(id)?.alive) {
+  const p = e.player(id);
+
+  if (
+    !p ||
+    !s.pending.count ||
+    p.alive === Boolean(s.pending.dead) ||
+    s.pending.exclude?.includes(id)
+  ) {
     return;
   }
 
@@ -480,11 +489,38 @@ function renderNightChoice() {
     p.role,
   )}). ${esc(p.prompt)}`;
 
-  $("night-picks").innerHTML = nightPicks.length
-    ? colourPlayers(`Selected: ${labels}`)
-    : `Click ${p.count} player${p.count > 1 ? "s" : ""} in the town square.`;
+  // The Courtier chooses a character instead of players.
+  const characters = $("night-character");
 
-  $("night-select").disabled = nightPicks.length !== p.count;
+  characters.hidden = !p.characters;
+
+  if (p.characters && characters.dataset.night !== `${p.night}`) {
+    characters.dataset.night = `${p.night}`;
+    characters.innerHTML = [
+      '<option value="">Choose a character</option>',
+      ...p.characters.map(
+        (id) => `<option value="${id}">${esc(name(id))}</option>`,
+      ),
+    ].join("");
+  }
+
+  const excluded = (p.exclude ?? []).map((id) => e.player(id).label);
+
+  $("night-picks").innerHTML = p.characters
+    ? ""
+    : nightPicks.length
+      ? colourPlayers(`Selected: ${labels}`)
+      : colourPlayers(
+          `Click ${p.count} ${p.dead ? "dead " : ""}player${
+            p.count > 1 ? "s" : ""
+          } in the town square.${
+            excluded.length ? ` (Not ${excluded.join(" or ")}.)` : ""
+          }`,
+        );
+
+  $("night-select").disabled = p.characters
+    ? !characters.value
+    : nightPicks.length !== p.count;
   $("night-skip").hidden = !p.optional;
 }
 
@@ -1065,7 +1101,8 @@ function render() {
   // Each player can nominate and be nominated once a day. You can always ask
   // an NPC to nominate instead (the only way once you're dead). Nothing can
   // be pressed while a vote is being counted.
-  const blocked = !t?.alive || e.nominatedToday(t.id) || !!voteAnim;
+  // Dead players can be nominated too.
+  const blocked = !t || e.nominatedToday(t.id) || !!voteAnim;
 
   $("nominate").hidden = !h.alive;
   $("nominate").disabled = blocked || s.dayNominators.includes(h.id);
@@ -1090,6 +1127,11 @@ function render() {
     h.shown === "artist" &&
     !h.artistUsed &&
     h.alive
+  );
+  $("gossip-controls").hidden = !(
+    h.shown === "gossip" &&
+    h.alive &&
+    h.gossipDay !== s.day
   );
 
   reveal();
@@ -1288,9 +1330,25 @@ $("artist-ask").onclick = () => {
   }
 };
 
+$("gossip-say").onclick = () => {
+  try {
+    $("answer").innerHTML = linkRoles(
+      e.gossip(selectedPlayerId, $("gossip-question").value),
+    );
+    render();
+  } catch (err) {
+    $("answer").textContent = err.message;
+  }
+};
+
+$("night-character").onchange = () => render();
+
 $("night-select").onclick = () => {
   try {
-    e.choose(nightPicks);
+    e.choose(
+      nightPicks,
+      s.pending?.characters ? $("night-character").value : null,
+    );
     nightPicks = [];
     render();
   } catch (err) {
@@ -1298,7 +1356,8 @@ $("night-select").onclick = () => {
   }
 };
 
-// Skipping an optional night ability (the Seamstress).
+// Skipping an optional night ability (the Seamstress, Courtier or
+// Professor).
 $("night-skip").onclick = () => {
   try {
     e.choose([]);
@@ -1337,6 +1396,10 @@ $("seats").value = DEFAULT_SEATS;
 
 $("artist-question").innerHTML = Object.entries(ARTIST_QUESTIONS)
   .map(([k, v]) => `<option value="${k}">Is this player ${esc(v)}?</option>`)
+  .join("");
+
+$("gossip-question").innerHTML = Object.entries(ARTIST_QUESTIONS)
+  .map(([k, v]) => `<option value="${k}">"This player is ${esc(v)}."</option>`)
   .join("");
 
 load();

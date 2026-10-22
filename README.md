@@ -25,7 +25,8 @@ picks a new one.
 - **Day:** click a player to **Ask** them what they claim and think,
   **Nominate** them, or **Request nomination** (ask someone else to nominate
   them).
-  Some characters add buttons (Slayer, Artist, Savant). Press **End day** to
+  Some characters add buttons (Slayer, Artist, Savant, Gossip). Dead players
+  can be nominated too. Press **End day** to
   execute whoever is marked for execution (💀) and go to night.
 - **Game over:** the **Final reveal** shows the Grimoire and a timeline of the
   whole game; **Download log.txt** saves it.
@@ -36,7 +37,8 @@ middle of the town square for the whole script.
 ## Scripts
 
 `scripts/` holds the scripts listed in `scripts/index.json`: Trouble Brewing,
-Everyone Can Play and Sects & Violets, in the official script-tool JSON format.
+Everyone Can Play, Sects & Violets and Bad Moon Rising, in the official
+script-tool JSON format.
 
 ## Tuning
 
@@ -57,6 +59,7 @@ comment explaining it. These include:
 | `src/setup.js` | Deals a new game from a script, seat count and seed |
 | `src/engine.js` | Runs nights, days, nominations, deaths and win checks |
 | `src/sects.js` | Sects & Violets characters (mixed into the engine) |
+| `src/bmr.js` | Bad Moon Rising characters (mixed into the engine) |
 | `src/storyteller.js` | What each character learns: true, false or bluffed |
 | `src/strategy.js` | How NPCs choose, vote, nominate, claim and suspect |
 | `src/log.js` | Formats the downloadable log |

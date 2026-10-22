@@ -2,6 +2,41 @@
 
 Newest first.
 
+## New Script: Bad Moon Rising
+
+- New script: Bad Moon Rising (scripts/Bad Moon Rising_1_0_0.json), with 19 new characters. The Grandmother, Gambler, Fool, Moonchild, Devil's Advocate and Assassin work as before.
+- Townsfolk:
+  - Sailor: each night chooses a player, and one of them is drunk until dusk. A sober Sailor can't die. The Storyteller decides who is drunk when it first matters: when either of them is attacked (or the Sailor chose the Demon and it attacks), when the Sailor's pick uses an ability, or at dawn. If the choice decides whether an attack kills, the Storyteller favours good: a good victim lives and an evil one dies. Otherwise the Sailor is drunk at SAILOR_DRUNK_SELF_CHANCE. With fewer than 6 players alive (SAILOR_LATE_ALIVE), the Sailor is drunk more often than not (SAILOR_LATE_DRUNK_CHANCE), so the ability usually fails.
+  - Chambermaid: each night chooses 2 players and learns how many woke tonight due to their ability. She wakes last, so she knows about everyone.
+  - Exorcist: from Night 2 chooses a player, not last night's. A chosen Demon learns who the Exorcist is and doesn't wake (no kill tonight). The Demon then goes after the Exorcist.
+  - Innkeeper: from Night 2, 2 players can't die tonight, and 1 of them is drunk until dusk.
+  - Gossip: each day may make a public statement ("Player X is the Demon / a Minion / evil..."). If it's true, a player dies that night: any NPC alive but the Demon, an NPC Gossip included (never you, even as the Gossip). NPC Gossips speak at GOSSIP_CHANCE each day.
+  - Courtier: once per game chooses a character; whoever has it is drunk for 3 nights and 3 days. NPC Courtiers guess the Demon.
+  - Professor: once per game, from Night 2, chooses a dead player; a Townsfolk comes back to life.
+  - Minstrel: when a Minion dies by execution, everyone else is drunk until dusk tomorrow.
+  - Tea Lady: while both her living neighbours are good, they can't die.
+  - Pacifist: an executed good player survives at PACIFIST_SAVE_CHANCE.
+- Outsiders:
+  - Tinker: dies at TINKER_DEATH_CHANCE each night.
+  - Goon: the first player each night to choose them is drunk until dusk, and the Goon joins their team.
+  - Lunatic: shown the Demon in play and bluffs like one. Each night they "kill" someone, with no effect. The Demon knows who they are, keeps them alive as a decoy, and kills their pick at LUNATIC_FOLLOW_CHANCE so they keep believing.
+- Minions:
+  - Godfather: deals 1 fewer or 1 more Outsider. Learns the Outsiders in play, and kills the night after an Outsider died.
+  - Mastermind: if the Demon is executed, play 1 more day. Execute a good player and evil wins; execute an evil player, or nobody, and good wins.
+- Demons:
+  - Zombuul: kills only after a day when nobody died. Its first death only looks real: it registers as dead (it can't nominate, it has a ghost vote) and the game goes on until it and one other player are alive. Execute it while it's "dead" to kill it.
+  - Pukka: poisons a player each night (from Night 1); last night's victim dies.
+  - Shabaloth: kills 2 players a night, and may bring back one it chose the night before (SHABALOTH_REGURGITATE_CHANCE).
+  - Po: may choose no-one (at PO_CHARGE_CHANCE), then kills 3 the next night.
+- You can be dealt any of the new Townsfolk. The Courtier picks a character from a drop-down at night; the Professor picks a dead player in the town square; the Gossip picks a player and says a statement in public. You're never dealt the Tinker, Goon or Lunatic.
+- Dead players can be nominated, on every script. Executing one does nothing, unless it's a Zombuul that only registers as dead. It still counts as the day's execution, so it stops the Vortox's win.
+- Demons whose attack fails on the Soldier, Sailor, Tea Lady or Innkeeper avoid that player afterwards. When a Monk, Innkeeper or Tea Lady saved the target, the Demon goes after them on later nights. A drunk or poisoned Demon's attack fails.
+- Sinking a kill: when an evil player has publicly claimed a protection character (Monk, Soldier, Sailor, Innkeeper or Tea Lady; PROTECTION_ROLES), the Demon may kill nobody that night (SINK_KILL_CHANCE), so the protection seems to have worked. A Po that does this has chosen no-one, so it kills 3 the next night.
+- Twins: no ability ever kills, poisons, makes drunk, curses, maddens or changes the character of either twin. Before, only the Demon's kill and the Mayor's bounce avoided them; now the Assassin, Poisoner, Witch, Cerenovus, Pit-Hag (and its random deaths), Moonchild, Sweetheart, Barber and the new characters do too.
+- Bug fixes:
+  - Undertaker: after a day with no execution they used to learn about the last executed player again. Now they learn "Nobody was executed." They also learn nothing when a dead player is executed (they didn't die by execution).
+  - Demon bluffs (and the Lunatic's) are never a character that's in play but shown as something else.
+
 ## New Features: Public Reasoning, Honest Votes, Your Notes, Claims Table & Misinformed Human
 
 - No more hidden giveaways: a good NPC's suspicion used to land on an evil player (sober good NPCs only ever suspected evil players), so you could read the answer off their opinions. Good NPCs now can't see alignments. They suspect players for reasons anyone could see, and say them ("I'm suspicious of Player 4: they claim the Chef, but I'm the Chef."):
