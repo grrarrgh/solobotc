@@ -638,11 +638,12 @@ function renderClaims() {
         ...info.map((x) => `<div>${linkRoles(x)}</div>`),
         a ? `<div class="claims-opinion">${linkRoles(a.opinion)}</div>` : "",
       ].join("");
-      const note = noteFor(p.id);
+      const { guess } = noteFor(p.id);
 
+      // Your Good / Evil mark colours the whole row.
       return `<tr data-id="${esc(p.id)}" class="${p.alive ? "" : "is-dead"} ${
         p.id === selectedPlayerId ? "is-selected" : ""
-      }">
+      } ${guess ? `guess-${guess}` : ""}">
           <td>${colourPlayers(p.label)}${
             p.alive ? "" : '<br><small class="claims-dead">DEAD</small>'
           }</td>
@@ -652,14 +653,6 @@ function renderClaims() {
               ? `${said}${a ? `<small class="claims-when">Asked on Day ${a.day}</small>` : ""}`
               : '<span class="unknown">Not asked yet</span>'
           }</td>
-          <td>${[
-            note.guess &&
-              `<span class="guess-tag guess-${note.guess}">${esc(note.guess)}</span>`,
-            note.role && `${roleLink(note.role)}?`,
-            note.text && esc(note.text),
-          ]
-            .filter(Boolean)
-            .join(" ")}</td>
         </tr>`;
     })
     .join("");
@@ -667,7 +660,7 @@ function renderClaims() {
   $("claims").innerHTML = `<div class="grimoire-wrap">
       <table class="grimoire claims">
         <thead>
-          <tr><th>Player</th><th>Claim</th><th>Said</th><th>Your notes</th></tr>
+          <tr><th>Player</th><th>Claim</th><th>Said</th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
@@ -717,6 +710,12 @@ function setNote(change) {
   }
 
   notes[selectedPlayerId] = { ...noteFor(selectedPlayerId), ...change };
+
+  // Good NPCs weigh your Good / Evil marks (see strategy evidence()).
+  if ("guess" in change) {
+    e.mark(selectedPlayerId, change.guess);
+  }
+
   render();
 }
 

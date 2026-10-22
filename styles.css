@@ -929,17 +929,33 @@ input {
   color: #999;
 }
 
-/* Player, Claim, Said, Your notes. */
+/* Your Good / Evil mark tints the whole row (selection and hover show
+   over it). */
+.claims tr.guess-good td {
+  background: rgba(100, 181, 246, 0.16);
+}
+
+.claims tr.guess-evil td {
+  background: rgba(239, 107, 114, 0.16);
+}
+
+.claims tbody tr.guess-good:hover td,
+.claims tbody tr.guess-evil:hover td {
+  background: #2a2f3a;
+}
+
+.claims tr.is-selected.guess-good td,
+.claims tr.is-selected.guess-evil td {
+  background: #3b3428;
+}
+
+/* Player, Claim, Said. */
 .claims th:nth-child(1) {
-  width: 18%;
+  width: 20%;
 }
 
 .claims th:nth-child(2) {
-  width: 17%;
-}
-
-.claims th:nth-child(4) {
-  width: 22%;
+  width: 20%;
 }
 
 .claims-opinion {
@@ -953,22 +969,6 @@ input {
   display: block;
   color: #999;
   font-size: 0.75rem;
-}
-
-.guess-tag {
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  border: 1px solid currentColor;
-}
-
-.guess-tag.guess-good {
-  color: #64b5f6;
-}
-
-.guess-tag.guess-evil {
-  color: #ef6b72;
 }
 
 .notes[hidden] {

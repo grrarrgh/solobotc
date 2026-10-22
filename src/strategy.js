@@ -26,6 +26,7 @@ import {
   EVIL_TEAMMATE_VOTE_CHANCE,
   EVIDENCE_WEIGHT,
   EVIDENCE_TO_SUSPECT,
+  GHOST_VOTE_ALIVE,
   HUMAN_POISON_CHANCE,
   GOSSIP_CHANCE,
   PO_CHARGE_CHANCE,
@@ -34,6 +35,7 @@ import {
 import {
   ability,
   bluffInfo,
+  steer,
   evilTwinInfo,
   scapegoat,
   isDrunk,
@@ -95,11 +97,13 @@ function infoStance(m) {
       return "suspicious";
     case "exorcist":
       return "suspicious";
+    // A Gambler who died guessing knows they were wrong.
+    case "gambler":
+      return /, and died\.$/.test(t) ? "suspicious" : "trust";
     case "washerwoman":
     case "grandmother":
     case "monk":
     case "butler":
-    case "gambler":
     case "innkeeper":
       return "trust";
     case "gossip":
@@ -132,6 +136,91 @@ function infoStance(m) {
 const publicClaim = (x) =>
   x.claimKnown && !x.human ? (x.publicClaim ?? x.claim) : null;
 
+const PAIR_ROLES = ["washerwoman", "librarian", "investigator"];
+
+// The characters a piece of information says a player is (or might be): a
+// Ravenkeeper's or Grandmother's one, a Dreamer's two, or the character one
+// of a Washerwoman's, Librarian's or Investigator's pair is.
+function namedCharacters(m) {
+  const get = (re) =>
+    (m.text.match(re)?.slice(1) ?? [])
+      .map((x) => ROLE_BY_NAME.get(x))
+      .filter(Boolean);
+
+  switch (m.role) {
+    case "ravenkeeper":
+      return get(/ is (.+)\.$/);
+    case "grandmother":
+      return get(/, the (.+)\.$/);
+    case "dreamer":
+      return get(/ is the (.+) or the (.+)\.$/);
+    case "washerwoman":
+    case "librarian":
+    case "investigator":
+      return get(/ is (?:the )?(.+)\.$/);
+    default:
+      return [];
+  }
+}
+
+// Whether piece of information m makes its owner trust ("trust") or suspect
+// ("suspicious") player t, or neither (null). Information that says what
+// character t is gets checked against t's public claim:
+// - a Ravenkeeper's or Grandmother's character: it matches (trust) or it
+//   doesn't (they're lying: suspicious);
+// - a Dreamer's two characters: neither is their claim (suspicious);
+// - a pair's character: t claims it (trust; for the Investigator's Minion,
+//   suspicious), the other player does (t is just the other one: neither),
+//   or neither does, though both have claimed (one is lying: suspicious).
+// Otherwise it's how infoStance() reads it.
+export function stanceOn(s, m, t) {
+  const roles = namedCharacters(m);
+  const claim = t && publicClaim(t);
+
+  if (!roles.length || !claim || !(m.targets ?? []).includes(t.id)) {
+    return infoStance(m);
+  }
+
+  if (PAIR_ROLES.includes(m.role)) {
+    const other = byId(
+      s,
+      m.targets.find((id) => id !== t.id),
+    );
+    const otherClaim = other && publicClaim(other);
+
+    if (roles.includes(claim)) {
+      return m.role === "investigator" ? "suspicious" : "trust";
+    }
+
+    if (roles.includes(otherClaim)) {
+      return null;
+    }
+
+    return otherClaim ? "suspicious" : infoStance(m);
+  }
+
+  if (m.role === "dreamer") {
+    return roles.includes(claim) ? null : "suspicious";
+  }
+
+  return roles.includes(claim) ? "trust" : "suspicious";
+}
+
+// What p's information m says against t's claim, as a reason to suspect
+// them (null if it doesn't contradict it).
+function contradiction(m, t) {
+  const roles = namedCharacters(m);
+  const claim = publicClaim(t);
+
+  if (!roles.length || !claim || roles.includes(claim) || PAIR_ROLES.includes(m.role)) {
+    return null;
+  }
+
+  return `my information says they're the ${roles
+    .map(name)
+    .join(" or the ")}, but they claim the ${name(claim)}`;
+}
+
 // Public evidence at least this strong outweighs a good NPC's own
 // information when they give their opinion (see opinion()).
 const STRONG_EVIDENCE = 3;
@@ -149,7 +238,7 @@ export function heard(s, p, memories, opinion = null) {
 
   for (const m of memories) {
     for (const id of m.targets ?? []) {
-      say(infoStance(m), id, "info");
+      say(stanceOn(s, m, byId(s, id)), id, "info");
     }
   }
 
@@ -211,12 +300,20 @@ export class SimpleStrategy {
     return pick(good, s.r);
   }
 
-  // A good NPC's suspect in `pool`: the player with the most evidence
+  // A good NPC's suspect in `pool`: anyone they know is lying; else the
+  // player with the most evidence
   // against them, if it's at least EVIDENCE_TO_SUSPECT (keeping their
   // current suspect on a tie), else their current hunch, else anyone they
   // don't trust.
   reasoned(s, p, pool) {
-    const trusted = this.trusted(p);
+    // Someone they know is lying (a Gambler who died guessing them).
+    const certain = pool.find((x) => x.id === p.certainSuspect);
+
+    if (certain) {
+      return certain;
+    }
+
+    const trusted = this.trusted(s, p);
     const open = pool.filter((x) => !trusted.has(x.id));
     const options = open.length ? open : pool;
     const scores = new Map(
@@ -277,11 +374,13 @@ export class SimpleStrategy {
   // ── Public reasoning ───────────────────────────────────────
 
   // The players p's own information vouches for.
-  trusted(p) {
+  trusted(s, p) {
     return new Set(
-      p.memories
-        .filter((m) => infoStance(m) === "trust")
-        .flatMap((m) => m.targets ?? []),
+      p.memories.flatMap((m) =>
+        (m.targets ?? []).filter(
+          (id) => stanceOn(s, m, byId(s, id)) === "trust",
+        ),
+      ),
     );
   }
 
@@ -315,6 +414,28 @@ export class SimpleStrategy {
       }
     }
 
+    // Your Good / Evil mark on them.
+    const mark = s.marks?.[t.id];
+
+    if (mark === "evil") {
+      add(W.markedEvil, "you think they're evil");
+    } else if (mark === "good") {
+      add(W.markedGood, "you think they're good");
+    }
+
+    // Their own information (saying why, when it contradicts t's claim).
+    const against = p.memories.find(
+      (m) =>
+        (m.targets ?? []).includes(t.id) && stanceOn(s, m, t) === "suspicious",
+    );
+
+    if (against) {
+      add(
+        W.myInfo,
+        contradiction(against, t) ?? "my information points at them",
+      );
+    }
+
     for (const st of heardAbout(s, t)) {
       const by = byId(s, st.byId);
       const trust = st.type === "trust";
@@ -345,7 +466,7 @@ export class SimpleStrategy {
       }
     }
 
-    const trusted = this.trusted(p);
+    const trusted = this.trusted(s, p);
 
     for (const v of s.voteHistory ?? []) {
       const n = byId(s, v.nomineeId);
@@ -475,22 +596,26 @@ export class SimpleStrategy {
     const goat = p.alignment === "evil" ? scapegoat(s) : null;
 
     for (const m of [...p.memories].reverse()) {
-      const type = infoStance(m);
       const named = (m.targets ?? [])
         .map((id) => byId(s, id))
-        .filter((x) => x?.alive && !x.human && x.id !== p.id);
+        .filter((x) => x?.alive && !x.human && x.id !== p.id)
+        .map((x) => ({ x, type: stanceOn(s, m, x) }))
+        .filter((o) => o.type);
 
-      if (!type || !named.length) {
+      if (!named.length) {
         continue;
       }
 
       const preferred =
         p.alignment === "evil"
-          ? named.filter((x) =>
-              type === "trust" ? x.alignment === "evil" : x === goat,
+          ? named.filter((o) =>
+              o.type === "trust" ? o.x.alignment === "evil" : o.x === goat,
             )
           : [];
-      const target = pick(preferred.length ? preferred : named, s.r);
+      const { x: target, type } = pick(
+        preferred.length ? preferred : named,
+        s.r,
+      );
       const when = m.day ? `Day ${m.day}` : `Night ${m.night}`;
 
       return {
@@ -575,9 +700,21 @@ export class SimpleStrategy {
   // outcome.
   //
   // Good NPCs vote by what they think of n (see the GOOD_VOTE_* settings in
-  // data.js). A dead good player has one vote left: they save it for a
-  // nominee they are suspicious of.
+  // data.js).
+  //
+  // A dead player (good or evil) has one vote left: they save it for the
+  // player they currently suspect, and don't spend it early (see
+  // GHOST_VOTE_ALIVE).
   vote(s, v, n, tally = null) {
+    if (!v.alive) {
+      const late =
+        s.players.filter((x) => x.alive).length <= GHOST_VOTE_ALIVE;
+      const decisive =
+        tally && tally.yes < tally.needed && tally.yes + 1 >= tally.needed;
+
+      return (late || decisive) && this.suspicion(s, v)?.targetId === n.id;
+    }
+
     if (v.alignment === "evil") {
       if (n.alignment !== "evil") {
         return s.r() < EVIL_VOTE_CHANCE;
@@ -592,15 +729,11 @@ export class SimpleStrategy {
     const o = this.opinion(s, v);
     const about = o.targetId === n.id ? o.type : null;
 
-    if (!v.alive) {
-      return about === "suspicious";
-    }
-
     if (about === "suspicious") {
       return s.r() < GOOD_VOTE_MAX;
     }
 
-    if (about === "trust" || this.trusted(v).has(n.id)) {
+    if (about === "trust" || this.trusted(s, v).has(n.id)) {
       return s.r() < GOOD_VOTE_MIN;
     }
 
@@ -1147,10 +1280,12 @@ export class SimpleStrategy {
     );
 
     for (const m of p.memories) {
-      const type = infoStance(m);
+      for (const id of m.targets ?? []) {
+        const type = stanceOn(s, m, byId(s, id));
 
-      for (const id of type ? (m.targets ?? []) : []) {
-        (type === "trust" ? trusted : suspected).add(id);
+        if (type) {
+          (type === "trust" ? trusted : suspected).add(id);
+        }
       }
     }
 
@@ -1179,7 +1314,13 @@ export class SimpleStrategy {
         ONGOING_INFO.includes(ability(x)),
     );
 
-    return pick(info.length ? info : good, s.r);
+    // (Unless the Storyteller is helping good: then anyone but them.)
+    return pick(
+      steer(s, info.length ? info : good, (x) =>
+        info.includes(x) ? "evil" : "good",
+      ),
+      s.r,
+    );
   }
 
   // After the Barber dies, the Demon swaps two good NPCs' characters.

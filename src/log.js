@@ -31,7 +31,9 @@ function stateLines(players) {
       `  ${pad(p.seat, 3)}${pad(p.label, 11)}${pad(role, 28)}${pad(
         `claims ${name(p.claim)}`,
         24,
-      )}${pad(p.alignment, 6)}${flags}`,
+      )}${pad(p.alignment, 6)}${pad(flags, 30)}${
+        p.suspects ? `suspects ${p.suspects}` : ""
+      }`.trimEnd(),
     );
 
     for (const info of p.info) {
@@ -85,6 +87,10 @@ export function formatLog(s) {
 
       if (goat) {
         lines.push(`  Evil team is framing: ${goat.label}`);
+      }
+
+      if (e.data.lean) {
+        lines.push(`  Storyteller is helping: ${e.data.lean}`);
       }
 
       continue;

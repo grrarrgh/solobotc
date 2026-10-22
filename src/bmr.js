@@ -17,6 +17,9 @@ import {
   works,
   isDemon,
   infoMode,
+  lean,
+  steer,
+  killHelps,
   artistTruth,
   chambermaidInfo,
   choiceInfo,
@@ -316,8 +319,19 @@ export const badMoonRising = {
       }
     }
 
+    // Nothing at stake: the Storyteller may still lean (a drunk evil pick
+    // helps good; a drunk good pick helps evil; the Sailor spares them).
+    const options2 = steer(s, [sailor, target], (x) =>
+      x === target ? killHelps(target) : target.alignment,
+    );
+
     return {
-      drunk: s.r() < SAILOR_DRUNK_SELF_CHANCE ? sailor : target,
+      drunk:
+        options2.length < 2
+          ? options2[0]
+          : s.r() < SAILOR_DRUNK_SELF_CHANCE
+            ? sailor
+            : target,
       why: "",
     };
   },
@@ -666,7 +680,14 @@ export const badMoonRising = {
 
     const t = pick(dead, s.r);
 
-    if (t && works(d) && s.r() < SHABALOTH_REGURGITATE_CHANCE) {
+    const side = lean(s);
+    const chance = !side
+      ? SHABALOTH_REGURGITATE_CHANCE
+      : t?.alignment === side
+        ? 1
+        : 0;
+
+    if (t && works(d) && s.r() < chance) {
       this.revive(t, "shabaloth");
     }
   },
@@ -731,9 +752,13 @@ export const badMoonRising = {
       }
 
       const t = pick(
-        untwinned(
+        steer(
           s,
-          s.players.filter((x) => x.alive && !x.human && !isDemon(x)),
+          untwinned(
+            s,
+            s.players.filter((x) => x.alive && !x.human && !isDemon(x)),
+          ),
+          killHelps,
         ),
         s.r,
       );
@@ -803,7 +828,8 @@ export const badMoonRising = {
       (x) =>
         x.alive && !x.human && x.role === "tinker" && works(x) && !isTwin(s, x),
     )) {
-      if (s.winner || s.r() >= TINKER_DEATH_CHANCE) {
+      // (Never while the Storyteller is helping good.)
+      if (s.winner || lean(s) === "good" || s.r() >= TINKER_DEATH_CHANCE) {
         continue;
       }
 
@@ -975,7 +1001,7 @@ export const badMoonRising = {
     const saves =
       p.alignment === "good" &&
       s.players.some((x) => x.alive && ability(x) === "pacifist" && works(x)) &&
-      s.r() < PACIFIST_SAVE_CHANCE;
+      s.r() < ({ good: 1, evil: 0 }[lean(s)] ?? PACIFIST_SAVE_CHANCE);
 
     if (saves) {
       this.audit(

@@ -345,6 +345,7 @@ export function createState(
     dayVoters: [],
     dayNominators: [],
     statements: [], // { byId, day, type, targetId, source }: said in public
+    marks: {}, // your Good / Evil marks on players, by id
     voteHistory: [], // { day, nominatorId, nomineeId, voterIds }
     nightDeaths: [], // announced at dawn
     dawnLearn: [], // "when you learn that you died", at dawn

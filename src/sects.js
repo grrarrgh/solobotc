@@ -13,6 +13,8 @@ import {
   isDrunk,
   infoMode,
   vortoxActive,
+  steer,
+  killHelps,
   seamstressInfo,
   sageInfo,
   jugglerInfo,
@@ -521,7 +523,8 @@ export const sectsAndViolets = {
       s,
       s.players.filter((x) => x.alive && !x.human && !isDemon(x)),
     );
-    let t = s.r() < PITHAG_NO_DEATH_CHANCE ? null : pick(pool, s.r);
+    let t =
+      s.r() < PITHAG_NO_DEATH_CHANCE ? null : pick(steer(s, pool, killHelps), s.r);
 
     // "If you die at night, another player might die instead": the Mayor.
     if (t?.role === "mayor" && works(t)) {

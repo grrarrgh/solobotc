@@ -23,6 +23,7 @@ import {
   savantInfo,
   nightInfo,
   infoMode,
+  lean,
 } from "../src/storyteller.js";
 import { shuffle, sample, rng } from "../src/util.js";
 
@@ -883,7 +884,21 @@ test("a Gambler who guesses wrong dies; a right guess is safe", () => {
   assert.equal(right.alive, true);
   assert.equal(
     wrong.memories[0].text,
-    `Gambler: guessed ${s.players[4].label} is the Chef.`,
+    `Gambler: guessed ${s.players[4].label} is the Chef, and died.`,
+  );
+  assert.equal(
+    right.memories[0].text,
+    `Gambler: guessed ${s.players[4].label} is the Imp.`,
+  );
+
+  // The dead Gambler suspects them for certain, and says so in the morning.
+  assert.equal(wrong.certainSuspect, s.players[4].id);
+  assert.equal(new SimpleStrategy().suspicion(s, wrong).targetId, s.players[4].id);
+  assert.ok(
+    s.publicLog.includes(
+      `Day 2 — ${wrong.label} says: "I was the Gambler. I guessed ${s.players[4].label} is the Chef, and died."`,
+    ),
+    s.publicLog.join("\n"),
   );
 });
 
@@ -3593,15 +3608,20 @@ test("false information isn't obviously false", () => {
   assert.equal(oracle.memories.at(-1).text, "Oracle: 0 dead players are evil.");
 });
 
-test("dead good NPCs save their vote for someone they suspect", () => {
+test("dead NPCs save their vote for the player they suspect", () => {
   const s = base("ghost-votes");
   const strat = new SimpleStrategy();
-  const [, chef, butler, baron] = s.players;
+  const [, chef, butler, baron, imp] = s.players;
 
   chef.alive = false;
 
-  // No opinion: they keep their vote.
-  assert.equal(strat.vote(s, chef, butler), false);
+  // With nothing to go on, only for their hunch.
+  for (const n of [butler, baron, imp]) {
+    assert.equal(
+      strat.vote(s, chef, n),
+      strat.suspicion(s, chef).targetId === n.id,
+    );
+  }
 
   // Suspicious of the Baron (from their own information): they vote.
   chef.memories.push({
@@ -4748,4 +4768,235 @@ test("a Demon that couldn't kill a protected player goes after their protector",
 
     assert.equal(g.p[1].death, "demon", id);
   }
+});
+
+test("your Good / Evil marks count as evidence for good NPCs", () => {
+  const s = base("marks");
+  const e = new Engine(s, new SimpleStrategy());
+  const strat = new SimpleStrategy();
+  const [, chef, butler] = s.players;
+
+  assert.equal(strat.evidence(s, chef, butler).score, 0);
+
+  e.mark(butler.id, "evil");
+  assert.equal(strat.evidence(s, chef, butler).score, 1);
+  assert.deepEqual(strat.evidence(s, chef, butler).reasons, [
+    "you think they're evil",
+  ]);
+
+  e.mark(butler.id, "good");
+  assert.equal(strat.evidence(s, chef, butler).score, -1);
+
+  e.mark(butler.id, "");
+  assert.equal(strat.evidence(s, chef, butler).score, 0);
+});
+
+test("the log's player tables show who each NPC suspects", () => {
+  const s = createState(script, 10, "suspects-log");
+  const e = new Engine(s);
+
+  e.start();
+  settle(e);
+
+  assert.match(e.debugLog(), /suspects Player \d+/);
+  assert.ok(s.players.filter((p) => !p.human).every((p) => p.suspicion));
+});
+
+test("the Storyteller leans towards a final 3 of you, 1 good and 1 evil", () => {
+  // 3 evil of 10. (Not a Zombuul, which steers for a final 2.)
+  const game = () => {
+    const g = createState(bmr, 10, "lean");
+
+    g.players.find((p) => team(p.role) === "demon").role = "pukka";
+
+    return g;
+  };
+  const s = game();
+
+  assert.equal(lean(s), null);
+
+  // 6 alive with 3 evil: evil is ahead (the path has 2), so help good.
+  s.players
+    .filter((p) => p.alignment === "good" && !p.human)
+    .slice(0, 4)
+    .forEach((p) => (p.alive = false));
+  assert.equal(lean(s), "good");
+
+  // 6 alive with only the Demon left: good is ahead, so help evil.
+  const t = game();
+
+  t.players
+    .filter((p) => team(p.role) === "minion")
+    .forEach((p) => (p.alive = false));
+  t.players
+    .filter((p) => p.alignment === "good" && !p.human)
+    .slice(0, 2)
+    .forEach((p) => (p.alive = false));
+  assert.equal(lean(t), "evil");
+
+  // Once you're dead it still steers, for a final 3 with at least 1 good
+  // player: 6 alive with just the Demon is still behind (the band is 1.9
+  // to 2.4 evil).
+  t.players[0].alive = false;
+  t.players.find((p) => !p.alive && p.alignment === "good").alive = true;
+  assert.equal(t.players.filter((p) => p.alive).length, 6);
+  assert.equal(lean(t), "evil");
+
+  // 3 evil of 7 alive: too many while you live, fine once you're dead.
+  const u = game();
+
+  u.players
+    .filter((p) => p.alignment === "good" && !p.human)
+    .slice(0, 3)
+    .forEach((p) => (p.alive = false));
+  assert.equal(u.players.filter((p) => p.alive).length, 7);
+  assert.equal(lean(u), "good");
+  u.players[0].alive = false;
+  u.players.find((p) => !p.alive && !p.human).alive = true;
+  assert.equal(lean(u), null);
+});
+
+test("with a Zombuul, the Storyteller steers down to a final 2", () => {
+  const s = createState(bmr, 10, "lean-zombuul");
+  const demon = s.players.find((p) => team(p.role) === "demon");
+  const minion = s.players.find((p) => team(p.role) === "minion");
+
+  // You, the Demon and a Minion left.
+  s.players
+    .filter((p) => !p.human && p !== demon && p !== minion)
+    .forEach((p) => (p.alive = false));
+
+  // Any other Demon: 3 alive is the end of the path, so no steering.
+  demon.role = "pukka";
+  assert.equal(lean(s), null);
+
+  // A Zombuul can go on to a final 2, so 2 evil of 3 is too many.
+  demon.role = "zombuul";
+  assert.equal(lean(s), "good");
+
+  // A Zombuul registering as dead still counts as evil; with 2 shown alive
+  // (you and the Minion), that's the end of its path.
+  demon.alive = false;
+  demon.undead = true;
+  assert.equal(lean(s), null);
+});
+
+test("while helping good, a Gossip's statement kills an evil player", () => {
+  for (let seed = 0; seed < 20; seed++) {
+    const { s, p, e } = bmrDay(`lean-gossip-${seed}`, ["gossip"]);
+
+    // 3 evil of 5 alive, from 2 evil at the start: the path to a final 3
+    // has 2 now, so evil is ahead.
+    role(p[2], "godfather", "evil");
+    s.players.forEach((x) => (x.startRole = "chef"));
+    s.players[3].startRole = "godfather";
+    s.players[4].startRole = "imp";
+    assert.equal(lean(s), "good");
+
+    e.gossip(p[4].id, "demon");
+    e.endDay();
+
+    const died = p.find((x) => x.death === "gossip");
+
+    assert.equal(died?.alignment, "evil", `seed ${seed}`);
+  }
+});
+
+test("information that contradicts a player's claim makes its owner suspect them", () => {
+  const s = base("contradiction");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron] = s.players;
+  const claims = (x, id) =>
+    Object.assign(x, { claim: id, claimKnown: true, publicClaim: id });
+
+  claims(butler, "butler");
+  claims(baron, "librarian");
+
+  // A Ravenkeeper's character.
+  chef.memories = [
+    {
+      night: 2,
+      role: "ravenkeeper",
+      text: `${butler.label} is Empath.`,
+      targets: [butler.id],
+    },
+  ];
+
+  const why = strat.evidence(s, chef, butler);
+
+  assert.equal(why.score, 2);
+  assert.deepEqual(why.reasons, [
+    "my information says they're the Empath, but they claim the Butler",
+  ]);
+
+  chef.memories[0].text = `${butler.label} is Butler.`;
+  assert.ok(strat.trusted(s, chef).has(butler.id));
+
+  // A Grandmother's grandchild.
+  chef.memories = [
+    {
+      night: 1,
+      role: "grandmother",
+      text: `Grandmother: your grandchild is ${butler.label}, the Chef.`,
+      targets: [butler.id],
+    },
+  ];
+  assert.equal(strat.evidence(s, chef, butler).score, 2);
+
+  // A Dreamer's two characters, neither of them their claim.
+  chef.memories = [
+    {
+      night: 1,
+      role: "dreamer",
+      text: `Dreamer: ${butler.label} is the Chef or the Imp.`,
+      targets: [butler.id],
+    },
+  ];
+  assert.equal(strat.evidence(s, chef, butler).score, 2);
+
+  // A Washerwoman's pair where neither claims the character: one is lying.
+  chef.memories = [
+    {
+      night: 1,
+      role: "washerwoman",
+      text: `One of ${butler.label} and ${baron.label} is Empath.`,
+      targets: [butler.id, baron.id],
+    },
+  ];
+  assert.equal(strat.evidence(s, chef, butler).score, 2);
+  assert.equal(strat.evidence(s, chef, baron).score, 2);
+
+  // ...and where one of them claims it: they're trusted.
+  claims(baron, "empath");
+  assert.ok(strat.trusted(s, chef).has(baron.id));
+  assert.ok(!strat.trusted(s, chef).has(butler.id));
+  assert.equal(strat.evidence(s, chef, butler).score, 0);
+});
+
+test("dead players keep their ghost vote until late, unless it's decisive", () => {
+  const s = createState(script, 10, "ghost-late");
+  const strat = new SimpleStrategy();
+  const [, dead, suspect] = s.players.filter(
+    (x) => !x.human && x.alignment === "good",
+  );
+
+  dead.alive = false;
+  dead.certainSuspect = suspect.id;
+
+  // 9 alive: they save it...
+  assert.equal(strat.vote(s, dead, suspect, { yes: 1, needed: 5 }), false);
+  // ...unless their vote marks the nominee.
+  assert.equal(strat.vote(s, dead, suspect, { yes: 4, needed: 5 }), true);
+
+  // With 5 alive, they spend it on their suspect (only).
+  s.players
+    .filter((x) => x.alive && x !== suspect && !x.human)
+    .slice(0, 4)
+    .forEach((x) => (x.alive = false));
+  assert.equal(s.players.filter((x) => x.alive).length, 5);
+  assert.equal(strat.vote(s, dead, suspect, { yes: 0, needed: 3 }), true);
+
+  const other = s.players.find((x) => x.alive && !x.human && x !== suspect);
+
+  assert.equal(strat.vote(s, dead, other, { yes: 0, needed: 3 }), false);
 });

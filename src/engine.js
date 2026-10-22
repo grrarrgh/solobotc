@@ -12,8 +12,11 @@ import {
   isDrunk,
   infoMode,
   philosopherInfo,
+  steer,
+  killHelps,
+  lean,
 } from "./storyteller.js";
-import { SimpleStrategy, isTwin } from "./strategy.js";
+import { SimpleStrategy, isTwin, heard, speak } from "./strategy.js";
 import { byId, pick } from "./util.js";
 import { formatLog } from "./log.js";
 import { sectsAndViolets } from "./sects.js";
@@ -463,6 +466,7 @@ export class Engine {
     // (Last: she learns about everyone who woke tonight.)
     this.chambermaids();
     this.bluffs();
+    this.refreshSuspicions();
     this.snapshot();
 
     s.day = s.night;
@@ -615,13 +619,40 @@ export class Engine {
         { actorId: g.id, targetId: guess.target.id, guess: guess.role, wrong },
       );
 
-      this.remember(g, gamblerInfo(s, guess.target, guess.role));
+      // A Gambler who dies knows they guessed wrong: they suspect that
+      // player for certain, and say so in the morning (see gamblerReveal()).
+      const died = dies && this.kill(g, "gambler");
 
-      if (dies) {
-        this.kill(g, "gambler");
+      this.remember(g, gamblerInfo(s, guess.target, guess.role, died));
+
+      if (died) {
+        g.certainSuspect = guess.target.id;
+        g.suspicion = { targetId: guess.target.id, day: s.day };
         this.check();
       }
     }
+  }
+
+  // A Gambler who died guessing wrong says so publicly, so the town can
+  // weigh it: "I was the Gambler. I guessed X is the Y, and died."
+  gamblerReveal(p) {
+    const s = this.s;
+    const m = p.memories.findLast(
+      (x) => x.role === "gambler" && /, and died\.$/.test(x.text),
+    );
+
+    if (p.human || !m || p.gambleRevealed) {
+      return;
+    }
+
+    p.gambleRevealed = true;
+    this.claimPublicly(p);
+    heard(s, p, [m]);
+
+    const said = ` says: "I was the Gambler. ${speak(m.text)}"`;
+
+    s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
+    this.audit("gambler", `${p.label}${said}`, { playerId: p.id });
   }
 
   // Last night's (or today's) Moonchild choice dies tonight if good.
@@ -907,13 +938,17 @@ export class Engine {
     } else if (t.role === "mayor" && works(t)) {
       // (Never onto the human, the Demon or either twin.)
       const alt = pick(
-        s.players.filter(
-          (x) =>
-            x.alive &&
-            !x.human &&
-            x.id !== t.id &&
-            x.id !== d.id &&
-            !isTwin(s, x),
+        steer(
+          s,
+          s.players.filter(
+            (x) =>
+              x.alive &&
+              !x.human &&
+              x.id !== t.id &&
+              x.id !== d.id &&
+              !isTwin(s, x),
+          ),
+          killHelps,
         ),
         s.r,
       );
@@ -1107,6 +1142,7 @@ export class Engine {
     }
 
     this.klutzDeath(p);
+    this.gamblerReveal(p);
   }
 
   // At dawn: who died in the night (and the human learns if it was them),
@@ -1192,6 +1228,18 @@ export class Engine {
     );
 
     return response;
+  }
+
+  // Your Good / Evil mark on a player ("good", "evil", or "" to clear it).
+  // Good NPCs weigh it like your stated view (see strategy evidence()).
+  mark(id, guess) {
+    const marks = (this.s.marks ??= {});
+
+    if (guess === "good" || guess === "evil") {
+      marks[id] = guess;
+    } else {
+      delete marks[id];
+    }
   }
 
   // Everyone's vote on nominee n, in seat order. Good players decide first,
@@ -1769,6 +1817,7 @@ export class Engine {
       drunk: isDrunk(p),
       poisoned: p.poisoned,
       protected: p.protected,
+      suspects: p.human ? null : (this.player(p.suspicion?.targetId)?.label ?? null),
       info: p.memories
         .filter((m) => !m.day && m.night === s.night)
         .map((m) => m.text),
@@ -1777,9 +1826,17 @@ export class Engine {
     this.audit(
       "state",
       "Player states",
-      { players, scapegoat: s.scapegoat ?? null },
+      { players, scapegoat: s.scapegoat ?? null, lean: lean(s) },
       group,
     );
+  }
+
+  // Every NPC, alive or dead, reconsiders who they suspect (for the log,
+  // and a dead player's ghost vote).
+  refreshSuspicions() {
+    for (const p of this.s.players.filter((x) => !x.human)) {
+      this.strat.suspicion(this.s, p);
+    }
   }
 
   // The whole game as human-readable text (downloaded as log.txt).

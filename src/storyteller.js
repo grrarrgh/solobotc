@@ -3,6 +3,7 @@ import {
   ARTIST_QUESTIONS,
   FIRST_NIGHT_INFO,
   ONGOING_INFO,
+  FINAL_THREE_MARGIN,
   name,
   team,
   alignment,
@@ -30,6 +31,62 @@ export const works = (p) =>
 // The Vortox makes every Townsfolk's information false.
 export const vortoxActive = (s) =>
   s.players.some((x) => x.alive && x.role === "vortox" && !x.poisoned);
+
+// The team the Storyteller's choices help right now ("good" or "evil"), or
+// null. It steers for a close finish:
+// - a final 3 of the human, 1 good NPC and 1 evil player;
+// - once the human is dead (they still have a vote), a final 3 with at
+//   least 1 good player: 1 or 2 evil;
+// - with a Zombuul, a final 2 instead (shown alive; a Zombuul that only
+//   registers as dead keeps the game going).
+// The evil team (counting a "dead" Zombuul) should shrink in step with the
+// players shown alive, from its starting size to that final number;
+// FINAL_THREE_MARGIN above that band, help good; that far below it, help
+// evil.
+export function lean(s) {
+  const n0 = s.players.length;
+  const e0 = s.players.filter((x) => alignment(x.startRole) === "evil").length;
+  const n = s.players.filter((x) => x.alive).length;
+  const e = s.players.filter(
+    (x) => (x.alive || x.undead) && x.alignment === "evil",
+  ).length;
+  const human = s.players.find((x) => x.human);
+  const zombuul = s.players.some(
+    (x) => x.role === "zombuul" && (x.alive || x.undead),
+  );
+  const end = zombuul ? 2 : 3;
+
+  if (n <= end || n0 <= end) {
+    return null;
+  }
+
+  // How far along the path the game is (1 at the start, 0 at the end), and
+  // the band of evil players allowed there: exactly 1 at the end while the
+  // human lives, otherwise up to all but 1.
+  const t = (n - end) / (n0 - end);
+  const last = human?.alive ? 1 : end - 1;
+  const low = 1 + (e0 - 1) * t;
+  const high = last + (e0 - last) * t;
+
+  return e > high + FINAL_THREE_MARGIN
+    ? "good"
+    : e < low - FINAL_THREE_MARGIN
+      ? "evil"
+      : null;
+}
+
+// The part of `pool` the Storyteller would rather pick: those whose pick
+// helps (by `helps(x)`: "good", "evil" or null) the team lean() names; all
+// of `pool` if none do, or there's no lean.
+export function steer(s, pool, helps) {
+  const side = lean(s);
+  const better = side ? pool.filter((x) => helps(x) === side) : [];
+
+  return better.length ? better : pool;
+}
+
+// Which team a player's death helps.
+export const killHelps = (x) => (x.alignment === "evil" ? "good" : "evil");
 
 // How a player registers to information abilities.
 const evil = (p) =>
@@ -88,11 +145,14 @@ export const butlerInfo = (s, t) => ({
   functioning: true,
 });
 
-// What a Gambler remembers about their guess (they never learn if it was right).
-export const gamblerInfo = (s, t, guess) => ({
+// What a Gambler remembers about their guess. They never learn if it was
+// right, but they know a wrong guess when it kills them.
+export const gamblerInfo = (s, t, guess, died = false) => ({
   night: s.night,
   role: "gambler",
-  text: `Gambler: guessed ${t.label} is the ${name(guess)}.`,
+  text: `Gambler: guessed ${t.label} is the ${name(guess)}${
+    died ? ", and died" : ""
+  }.`,
   targets: [t.id],
   trigger: "normal",
   functioning: true,
@@ -261,16 +321,26 @@ const oracleText = (n) =>
 // evil team as the evil team's own bluffs) for the Drunk (or anyone made
 // drunk), anyone poisoned, and Townsfolk under the Vortox; "random" if dead
 // (unless `deadOk`); otherwise "truth".
+//
+// While the Storyteller is helping good (see lean()), a drunk or poisoned
+// good player's information is just random rather than a lie that frames
+// good players. (The Vortox's false information is always false.)
 export function infoMode(s, p, deadOk = false) {
-  if (isDrunk(p) || (team(p.role) === "townsfolk" && vortoxActive(s))) {
+  const misled = lean(s) === "good" && p.alignment === "good" ? "random" : "lie";
+
+  if (team(p.role) === "townsfolk" && vortoxActive(s)) {
     return "lie";
+  }
+
+  if (isDrunk(p)) {
+    return misled;
   }
 
   if (!(deadOk || p.alive || p.vigor)) {
     return "random";
   }
 
-  return p.poisoned ? "lie" : "truth";
+  return p.poisoned ? misled : "truth";
 }
 
 // The Seamstress: are these two players the same alignment?
@@ -296,7 +366,7 @@ export function sageInfo(s, p, mode) {
   const others = nameable(s, p).filter((x) => x !== d);
   const pair =
     mode === "truth" && d
-      ? [d, pick(others, s.r)]
+      ? [d, pick(steer(s, others, killHelps), s.r)]
       : mode === "lie" || !d
         ? sample(others, 2, s.r)
         : sample(nameable(s, p), 2, s.r);
@@ -505,8 +575,15 @@ function trueInfo(s, p, role, strat) {
       return { targets: [], text: "No matching character is in play." };
     }
 
+    // The other player: for an Investigator, an evil one helps good (and a
+    // good one helps evil); for a Washerwoman or Librarian, the reverse.
     const fake = pick(
-      nameable(s, p).filter((x) => x.id !== real.id),
+      steer(
+        s,
+        nameable(s, p).filter((x) => x.id !== real.id),
+        (x) =>
+          role === "investigator" ? killHelps(x) : x.alignment,
+      ),
       s.r,
     );
 

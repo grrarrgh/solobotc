@@ -158,3 +158,11 @@ test("Bad Moon Rising controls: Courtier characters, Professor's dead picks, Gos
 test("dead players can be nominated from the town square", () => {
   assert.match(app, /const blocked = !t \|\| e\.nominatedToday/);
 });
+
+test("the Claims table has no notes column; your Good / Evil mark colours the row", () => {
+  assert.doesNotMatch(app, /<th>Your notes<\/th>/);
+  assert.match(app, /guess \? `guess-\$\{guess\}` : ""/);
+  assert.match(css, /\.claims tr\.guess-good td/);
+  assert.match(css, /\.claims tr\.guess-evil td/);
+  assert.match(app, /e\.mark\(selectedPlayerId, change\.guess\)/);
+});

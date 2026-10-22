@@ -248,6 +248,10 @@ export const SCAPEGOAT_CHANCE = 0.8;
 // EVIL_TEAMMATE_VOTE_CHANCE: an evil NPC's chance to vote for a teammate,
 //   which they only do when their vote can't change the outcome (the
 //   nominee already has the votes needed, or can't reach them).
+// GHOST_VOTE_ALIVE: a dead player keeps their one ghost vote until this
+//   many players (or fewer) are alive, unless it's the vote that would
+//   mark the nominee; then they spend it on the player they suspect.
+export const GHOST_VOTE_ALIVE = 5;
 export const GOOD_VOTE_CHANCE = 0.5;
 export const GOOD_VOTE_EVIDENCE_STEP = 0.15;
 export const GOOD_VOTE_MIN = 0.1;
@@ -271,6 +275,9 @@ export const EVIDENCE_WEIGHT = {
   nominatedTrusted: 1.5, // nominated a player I trust
   votedTrusted: 0.5, // voted for a player I trust
   nominatedNightDeath: 1, // nominated a player who later died in the night
+  myInfo: 2, // my own information points at them
+  markedEvil: 1, // you've marked them Evil (in your notes)
+  markedGood: -1, // you've marked them Good
 };
 
 // The evidence a good NPC needs before it changes who they suspect (less,
@@ -304,6 +311,20 @@ export const CERENOVUS_EVIL_CHANCE = 0.2;
 // the Demon's kill: any living NPC except the Demon. This is the chance
 // that nobody dies that night instead.
 export const PITHAG_NO_DEATH_CHANCE = 0.3;
+
+// The Storyteller steers for a final 3 of the human, 1 good NPC and 1 evil
+// player: the evil team should shrink from its starting size to 1 as the
+// town shrinks to 3 (see lean() in src/storyteller.js). Once the human is
+// dead, the final 3 only needs 1 good player (so 1 or 2 evil); with a
+// Zombuul, it's a final 2. When evil is more than FINAL_THREE_MARGIN players
+// ahead of that path, the Storyteller's choices help good; that far behind,
+// they help evil. Those choices: which
+// other player a Washerwoman, Librarian, Investigator or Sage sees; whether
+// a drunk or poisoned player's information frames good players or is just
+// random; who the Gossip, Pit-Hag and Mayor's bounce kill; Pacifist saves,
+// Tinker deaths, Shabaloth regurgitation, the Sweetheart's drunk and the
+// Sailor's drunk when no kill is at stake.
+export const FINAL_THREE_MARGIN = 0.5;
 
 // Bad Moon Rising Storyteller choices.
 // The Sailor: the Storyteller decides who is drunk (the Sailor or the player

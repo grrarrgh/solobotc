@@ -2,6 +2,25 @@
 
 Newest first.
 
+## Bug Fixes: Suspicions, Ghost Votes, Gambler, Contradicted Claims, Claims Table & Final 3
+
+- log.txt: each night's player table shows who every NPC suspects, and whether the Storyteller is helping good or evil (see below).
+- Suspicions: every NPC, dead or alive, rethinks who they suspect each night. A player's own information now counts as evidence (EVIDENCE_WEIGHT.myInfo), so their suspect follows it.
+- Contradicted claims: information that says what character someone is now gets checked against their public claim. If it doesn't match, its owner suspects them and says why ("my information says they're the Empath, but they claim the Butler"). This covers:
+  - Ravenkeeper and Grandmother: a different character than they claim.
+  - Dreamer: neither character is their claim.
+  - Washerwoman, Librarian and Investigator: neither player in the pair claims the character, so one of them is lying.
+  When it matches, they're trusted. Before, NPCs went only by the kind of information (an Investigator's pair is suspicious, a Grandmother's grandchild is trusted...), whatever anyone claimed.
+- Ghost votes: a dead player (good or evil) keeps their vote until 5 or fewer players are alive (GHOST_VOTE_ALIVE), unless theirs is the vote that marks the nominee. Then they spend it only on the player they suspect. Before, dead good players voted for anyone they suspected, at any time, and dead evil players for most good nominees.
+- Gambler: a Gambler who dies from a wrong guess knows it. They suspect that player for certain, and say so the next morning ("I was the Gambler. I guessed Player 4 is the Chef, and died."), so the town can weigh it.
+- Claims table: the Your notes column is gone. Marking a player Good or Evil tints their whole row blue or red.
+- Your marks count: good NPCs weigh your Good or Evil mark on a player like your stated view: Evil adds to suspicion (EVIDENCE_WEIGHT.markedEvil), Good adds to trust (markedGood). It shows in their reasons as "you think they're evil".
+- Final 3: the Storyteller steers for a final 3 of you, 1 good NPC and 1 evil player. Each night it checks the evil team against a path from its starting size down to 1 at 3 alive. If evil is ahead by more than FINAL_THREE_MARGIN, its choices help good; if behind, they help evil. Once you're dead it keeps steering (you still have a vote), for a final 3 with at least 1 good player (1 or 2 evil). With a Zombuul it steers for a final 2 shown alive, since a "dead" Zombuul keeps the game going. The Storyteller's choices that lean:
+  - Which other player a Washerwoman, Librarian, Investigator or Sage sees.
+  - Whether a drunk or poisoned good player's information frames good players (as before) or is just random.
+  - Who the Gossip, the Pit-Hag's random death and the Mayor's bounce kill.
+  - Pacifist saves, Tinker deaths, Shabaloth regurgitation, who the Sweetheart makes drunk, and the Sailor's drunk when no kill is at stake.
+
 ## New Script: Bad Moon Rising
 
 - New script: Bad Moon Rising (scripts/Bad Moon Rising_1_0_0.json), with 19 new characters. The Grandmother, Gambler, Fool, Moonchild, Devil's Advocate and Assassin work as before.
