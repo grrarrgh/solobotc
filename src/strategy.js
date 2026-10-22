@@ -32,6 +32,34 @@ import { byId, pick, sample } from "./util.js";
 export const isTwin = (s, x) =>
   Boolean(s.twins) && [s.twins.evilId, s.twins.goodId].includes(x.id);
 
+// How an NPC says a piece of their information out loud: in their own
+// words, without repeating their character's name ("Snake Charmer: chose
+// Player 3." becomes "I chose Player 3."; "Chef number: 0." becomes "My
+// number is 0.").
+export function speak(text) {
+  const prefix = Object.keys(ROLES)
+    .map(name)
+    .find((n) => text.startsWith(`${n}: `) || text.startsWith(`${n} number: `));
+
+  if (!prefix) {
+    return text;
+  }
+
+  const rest = text.slice(prefix.length);
+
+  if (rest.startsWith(" number: ")) {
+    return `My number is ${rest.slice(" number: ".length)}`;
+  }
+
+  const said = rest
+    .slice(2)
+    .replace(/^(chose|protected|guessed|asked|gained) /, "I $1 ")
+    .replace(/^your /, "my ")
+    .replace(/ is your /, " is my ");
+
+  return said.charAt(0).toUpperCase() + said.slice(1);
+}
+
 const ROLE_BY_NAME = new Map(Object.keys(ROLES).map((id) => [name(id), id]));
 
 // Whether a piece of information makes its owner trust ("trust") or suspect
@@ -278,7 +306,10 @@ export class SimpleStrategy {
         : p.memories;
     const details = memories.length
       ? memories
-          .map((x) => `${x.day ? `Day ${x.day}` : `Night ${x.night}`}: ${x.text}`)
+          .map(
+            (x) =>
+              `${x.day ? `Day ${x.day}` : `Night ${x.night}`}: ${speak(x.text)}`,
+          )
           .join("\n")
       : "I have no stored information.";
     const opinion = mad
@@ -290,8 +321,22 @@ export class SimpleStrategy {
     // Both twins insist they're the good one.
     const twin = !mad && this.twinOf(s, p);
 
+    // A good NPC who woke up as a new character says so (once).
+    const changes =
+      !mad && p.alignment === "good"
+        ? (p.changes ?? []).filter((c) => !c.told)
+        : [];
+
+    for (const c of changes) {
+      c.told = true;
+    }
+
     return [
       `I claim ${name(mad ? mad.role : p.claim)}.`,
+      ...changes.map(
+        (c) =>
+          `I woke up as the ${name(c.to)} on Night ${c.night}; before that I was the ${name(c.from)}.`,
+      ),
       twin && `${twin.label} is my twin, and I am the good twin.`,
       details,
       !mad && this.unusedAbility(copy ? copy.twin : p),
@@ -660,8 +705,16 @@ export class SimpleStrategy {
 
   // The Snake Charmer charms someone they suspect (hoping for the Demon),
   // not last night's pick.
+  // The Snake Charmer never picks the Demon; with nobody else to pick, they
+  // pick themselves.
   snake(s, p) {
-    const pool = this.fresh(p, "snake", this.others(s, p));
+    const valid = this.others(s, p).filter((x) => !isDemon(x));
+
+    if (!valid.length) {
+      return this.noted(p, "snake", p);
+    }
+
+    const pool = this.fresh(p, "snake", valid);
 
     return this.noted(p, "snake", this.suspect(s, p, pool) ?? pick(pool, s.r));
   }
@@ -814,7 +867,8 @@ export class SimpleStrategy {
     const human = s.players.find((x) => x.human && x.alive);
     const humanLast = p.lastPicks?.witch?.includes(human?.id);
 
-    if (human && !humanLast && s.r() < WITCH_HUMAN_CHANCE) {
+    // (Never a Day 1 curse on the human.)
+    if (human && !humanLast && s.night > 1 && s.r() < WITCH_HUMAN_CHANCE) {
       return this.noted(p, "witch", human);
     }
 

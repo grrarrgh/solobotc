@@ -337,8 +337,8 @@ export const ARTIST_QUESTIONS = {
 };
 
 // Each seat's colour for player names in the town square and the public log,
-// in seat order (seat 1 is you). No reds or blues: those mark evil and good
-// characters.
+// in seat order (seat 1 is you). No reds or blues (they mark evil and good
+// characters), and no white.
 export const PLAYER_COLOURS = [
   "#f2c14e", // gold
   "#8bd450", // lime
@@ -350,12 +350,32 @@ export const PLAYER_COLOURS = [
   "#5ed6c0", // turquoise
   "#c49a6c", // tan
   "#b6eab0", // pale green
-  "#e6e6e6", // silver
+  "#e070f0", // fuchsia
   "#ffcf99", // peach
   "#9fbf3b", // moss
   "#fff07a", // lemon
   "#d6a8e0", // lilac
 ];
+
+// In bigger games (PUBLIC_INFO_MIN_SEATS or more seats), NPCs with
+// first-night information, or information from an ability that's now spent,
+// may say it publicly the morning they get it (evil bluffers share their
+// bluffed information the same way). The chance for each character:
+export const PUBLIC_INFO_MIN_SEATS = 13;
+export const PUBLIC_INFO_CHANCE = {
+  // First night.
+  washerwoman: 0.5,
+  librarian: 0.5,
+  investigator: 0.4,
+  chef: 0.6,
+  clockmaker: 0.6,
+  grandmother: 0.4,
+  // Spent abilities.
+  seamstress: 0.5,
+  juggler: 0.6,
+  ravenkeeper: 0.7,
+  sage: 0.8,
+};
 
 // The number of seats selected on the setup screen when the page opens.
 export const DEFAULT_SEATS = 12;

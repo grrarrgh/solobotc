@@ -140,12 +140,16 @@ export class Engine {
     s.phase = "night";
     s.humanChoice = null;
 
+    // Each player's character and claim at nightfall, so a change in the
+    // night can be announced at dawn (see announceClaims()).
     s.players.forEach((x) => {
       x.protected = false;
       x.poisoned = false;
+      x.dusk = { role: x.role, claim: x.claim };
     });
 
     this.lastingEffects();
+    this.barberNight();
 
     s.pending = this.wakeHuman();
 
@@ -365,6 +369,7 @@ export class Engine {
       return;
     }
 
+    this.shareInfo();
     this.npcShots();
     this.npcArtists();
     this.sectsDawn();
@@ -927,12 +932,12 @@ export class Engine {
     });
 
     s.publicLog.push(
-      `Day ${s.day} — ${p.label} claimed ${name(p.claim)}:\n${response}`,
+      `Day ${s.day} — ${p.label}\n${response}`,
     );
 
     this.audit(
       "conversation",
-      `${p.label} claimed ${name(p.claim)}:\n${response}`,
+      `${p.label}\n${response}`,
       { target: id },
     );
 

@@ -2,6 +2,17 @@
 
 Newest first.
 
+## Bug Fixes: Witch, Snake Charmer, Character Changes, Public Info & Conversations
+
+- Witch: never curses the human for Day 1.
+- Snake Charmer: NPC Snake Charmers never pick the Demon. With nobody else left to pick, they pick themselves.
+- Character changes: every good NPC whose character changed in the night says so the next morning, with what they were before ("Player X says they woke up as the Sweetheart; they were the Chef."), even if they'd never claimed in public. Evil players say nothing about a change.
+- Barber: swaps happen at night. If the Barber is executed, the Demon swaps two players that night; if the Barber dies at night, the swap is immediate. Either way the swapped players wake up as their new characters and announce it the next morning.
+- When you first talk to a good NPC after their character changed, they tell you ("I woke up as the Sweetheart on Night 2; before that I was the Chef.").
+- Public information in big games: in games of PUBLIC_INFO_MIN_SEATS (13) or more seats, NPCs with first-night information (Washerwoman, Librarian, Investigator, Chef, Clockmaker, Grandmother) or a spent ability (Seamstress, Juggler, Ravenkeeper, Sage) may say it publicly the morning they get it. The chance for each character is in PUBLIC_INFO_CHANCE in src/data.js. Evil bluffers share their bluffed information the same way.
+- Conversations: the public log heads a conversation with just the player's name, and NPCs say their information in their own words without repeating their character ("Night 1: I chose Player 3." instead of "Night 1: Snake Charmer: chose Player 3."; "My number is 0." instead of "Chef number: 0.").
+- Player colours: the silver (near-white) colour is replaced with fuchsia.
+
 ## Bug Fix: Klutz Picks
 
 - A dying Klutz now picks a player they believe is good: someone their information vouches for, as long as nothing else they know makes them suspect that player. Failing that, they pick someone they have no reason to suspect: no information against them, not their current suspect, not their twin. Before, without a trusted player they picked at random, sometimes someone they'd said they suspected. An evil Klutz bluffer picks a good player.

@@ -1,4 +1,11 @@
-import { name, team, PITHAG_NO_DEATH_CHANCE } from "./data.js";
+import {
+  name,
+  team,
+  PITHAG_NO_DEATH_CHANCE,
+  PUBLIC_INFO_MIN_SEATS,
+  PUBLIC_INFO_CHANCE,
+} from "./data.js";
+import { speak } from "./strategy.js";
 import {
   ability,
   works,
@@ -298,14 +305,46 @@ export const sectsAndViolets = {
   //   Y" (their real character, an evil player's bluff, or the new madness);
   // - newly mad: "now claims to be the X" (the madness isn't given away);
   // - changed by the Pit-Hag, Barber or Snake Charmer: "woke up as the X".
+  //
+  // Every good NPC whose character changed in the night says so, and what
+  // they were before, whether or not they'd claimed in public. (Evil players
+  // say nothing about a change: it wouldn't help them.)
   announceClaims() {
     const s = this.s;
 
     for (const p of s.players) {
       const before = p.publicClaim;
       const wasMad = p.wasMad;
+      const dusk = p.dusk;
 
       p.wasMad = null;
+      p.dusk = null;
+
+      if (
+        !p.human &&
+        p.alive &&
+        p.alignment === "good" &&
+        dusk &&
+        dusk.role !== p.role &&
+        dusk.claim !== p.claim
+      ) {
+        const said = ` says they woke up as the ${name(
+          p.claim,
+        )}; they were the ${name(dusk.claim)}.`;
+
+        p.changes = [
+          ...(p.changes ?? []),
+          { night: s.night, from: dusk.claim, to: p.claim, told: false },
+        ];
+        this.claimPublicly(p);
+        s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
+        this.audit("claim", `${p.label}${said}`, {
+          playerId: p.id,
+          from: dusk.claim,
+          to: p.claim,
+        });
+        continue;
+      }
 
       if (p.human || !p.alive || !before || before === p.claim) {
         continue;
@@ -327,6 +366,43 @@ export const sectsAndViolets = {
         from: before,
         to: p.claim,
       });
+    }
+  },
+
+  // In bigger games (PUBLIC_INFO_MIN_SEATS+), an NPC with first-night (or
+  // spent) information may share it in public the morning they get it, at
+  // PUBLIC_INFO_CHANCE for their character. Evil bluffers share their bluffed
+  // information the same way. Sharing it reveals their claim.
+  shareInfo() {
+    const s = this.s;
+
+    if (s.players.length < PUBLIC_INFO_MIN_SEATS) {
+      return;
+    }
+
+    for (const p of s.players) {
+      const news = p.memories.filter(
+        (m) =>
+          m.night === s.night && !m.day && PUBLIC_INFO_CHANCE[m.role] !== undefined,
+      );
+
+      if (p.human || p.mad?.day === s.day || !news.length) {
+        continue;
+      }
+
+      const m = news.at(-1);
+
+      if (s.r() >= PUBLIC_INFO_CHANCE[m.role]) {
+        continue;
+      }
+
+      const said = ` says: "I am the ${name(p.claim)}. Night ${m.night}: ${speak(
+        m.text,
+      )}"`;
+
+      this.claimPublicly(p);
+      s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
+      this.audit("share", `${p.label}${said}`, { playerId: p.id });
     }
   },
 
@@ -757,9 +833,15 @@ export const sectsAndViolets = {
       }
     }
 
-    // The Barber: the Demon may swap two players' characters.
+    // The Barber: the Demon may swap two players' characters. Swaps happen
+    // at night: straight away for a night death, or that night for a death
+    // in the day (see barberNight()).
     if (p.role === "barber" && sober) {
-      this.barberSwap(p);
+      if (s.phase === "night") {
+        this.barberSwap(p);
+      } else {
+        s.barberPending = p.id;
+      }
     }
 
     // The Vigormortis dies: the dead Minions it kept going lose their
@@ -802,6 +884,18 @@ export const sectsAndViolets = {
       (p.role === "klutz" || (p.alignment === "evil" && p.claim === "klutz"))
     ) {
       this.klutz(p, p.role === "klutz" && sober);
+    }
+  },
+
+  // The night after a Barber died in the day, the Demon makes their swap.
+  barberNight() {
+    const s = this.s;
+    const p = s.barberPending && this.player(s.barberPending);
+
+    s.barberPending = null;
+
+    if (p) {
+      this.barberSwap(p);
     }
   },
 

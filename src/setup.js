@@ -297,6 +297,7 @@ export function createState(
     lastingPoison: [], // { id, by } poisoned while `by` lives (Vigormortis)
     witched: null, // { targetId, day, effective }
     arbitraryNight: null, // a night the Pit-Hag made a Demon
+    barberPending: null, // a Barber executed today: the Demon swaps tonight
     juggle: null, // { byId, night, guesses: [{ id, role }] }
     executedToday: false,
     dayVoters: [],

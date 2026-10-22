@@ -4,6 +4,7 @@ import fs from "node:fs";
 
 import {
   COUNTS,
+  PLAYER_COLOURS,
   DEMON_KILL_PRIORITY,
   FORBIDDEN_HUMAN,
   FIRST_NIGHT_INFO,
@@ -14,7 +15,7 @@ import {
 } from "../src/data.js";
 import { createState } from "../src/setup.js";
 import { Engine } from "../src/engine.js";
-import { SimpleStrategy } from "../src/strategy.js";
+import { SimpleStrategy, speak } from "../src/strategy.js";
 import {
   ravenInfo,
   artistInfo,
@@ -314,7 +315,7 @@ test("NPC Monks report who they protected when asked", () => {
 
   const response = e.ask(monk.id);
 
-  assert.ok(response.includes(`Night 2: Monk: protected ${target.label} from the Demon.`));
+  assert.ok(response.includes(`Night 2: I protected ${target.label} from the Demon.`));
 });
 
 test("evil NPCs bluffing a choosing role report an invented choice", () => {
@@ -340,7 +341,7 @@ test("evil NPCs bluffing a choosing role report an invented choice", () => {
   const response = e.ask(baron.id);
 
   assert.ok(response.startsWith("I claim Monk."));
-  assert.ok(response.includes(`Night 2: Monk: protected ${target.label} from the Demon.`));
+  assert.ok(response.includes(`Night 2: I protected ${target.label} from the Demon.`));
   assert.ok(s.audit.some((x) => x.type === "bluff"));
 });
 
@@ -532,7 +533,7 @@ test("the Spy bluffs with true information; other evil NPCs lie", () => {
   assert.equal(chef.memories[0].text, "Chef number: 0.");
   assert.equal(spy.memories[0].text, "Chef number: 0.");
   assert.notEqual(imp.memories[0].text, "Chef number: 0.");
-  assert.ok(e.ask(imp.id).includes(`Night 1: ${imp.memories[0].text}`));
+  assert.ok(e.ask(imp.id).includes(`Night 1: ${speak(imp.memories[0].text)}`));
 });
 
 test("a poisoned Spy's bluff is not guaranteed to be true", () => {
@@ -897,7 +898,7 @@ test("NPC Artists ask at dawn; evil Artist bluffers lie about the answer", () =>
   const yes = `Artist: asked if ${imp.label} is the Demon: YES.`;
 
   assert.equal(artist.memories[0].text, yes);
-  assert.ok(e.ask(artist.id).includes(`Day 1: ${yes}`));
+  assert.ok(e.ask(artist.id).includes(`Day 1: ${speak(yes)}`));
   assert.equal(
     baron.memories[0].text,
     `Artist: asked if ${imp.label} is the Demon: NO.`,
@@ -1000,8 +1001,8 @@ test("the Monk lists each night's protection on its own line", () => {
   const lines = e.ask(monk.id).split("\n");
 
   assert.equal(lines[0], "I claim Monk.");
-  assert.equal(lines[1], `Night 2: Monk: protected ${s.players[2].label} from the Demon.`);
-  assert.equal(lines[2], `Night 3: Monk: protected ${s.players[3].label} from the Demon.`);
+  assert.equal(lines[1], `Night 2: I protected ${s.players[2].label} from the Demon.`);
+  assert.equal(lines[2], `Night 3: I protected ${s.players[3].label} from the Demon.`);
 });
 
 test("night choices never pick dead players", () => {
@@ -2281,7 +2282,7 @@ test("a dying Sweetheart makes someone drunk from now on", () => {
   assert.equal(drunk[0].alignment, "good");
 });
 
-test("a dying Barber lets the Demon swap two players' characters", () => {
+test("an executed Barber's swap happens that night", () => {
   const s = base("barber");
   const [, chef, barber, baron] = s.players;
 
@@ -2290,11 +2291,38 @@ test("a dying Barber lets the Demon swap two players' characters", () => {
   const strat = new SimpleStrategy();
   strat.barber = () => [chef, baron];
 
-  new Engine(s, strat).kill(barber, "execution");
+  const e = new Engine(s, strat);
+
+  e.kill(barber, "execution");
+
+  // Nothing yet in the day...
+  assert.equal(chef.role, "chef");
+  assert.equal(s.barberPending, barber.id);
+
+  // ...then the Demon swaps them that night.
+  e.night();
 
   assert.equal(chef.role, "baron");
   assert.equal(baron.role, "chef");
   assert.equal(chef.claim, "baron");
+  assert.equal(s.barberPending, null);
+});
+
+test("a Barber who dies at night is swapped straight away", () => {
+  const s = base("barber-night");
+  const [, chef, barber, baron] = s.players;
+
+  role(barber, "barber", "good");
+
+  const strat = new SimpleStrategy();
+  strat.barber = () => [chef, baron];
+
+  s.phase = "night";
+  new Engine(s, strat).kill(barber, "demon");
+
+  assert.equal(chef.role, "baron");
+  assert.equal(baron.role, "chef");
+  assert.equal(s.barberPending, null);
 });
 
 test("a human Dreamer picks a player and learns 1 good and 1 evil character, 1 correct", () => {
@@ -2536,8 +2564,8 @@ test("a mad NPC makes up information to match their mad character", () => {
   const lines = e.ask(chef.id).split("\n");
 
   assert.equal(lines[0], "I claim Empath.");
-  assert.match(lines[1], /^Night 1: Empath number: [0-2]\.$/);
-  assert.match(lines[2], /^Night 2: Empath number: [0-2]\.$/);
+  assert.match(lines[1], /^Night 1: My number is [0-2]\.$/);
+  assert.match(lines[2], /^Night 2: My number is [0-2]\.$/);
   assert.match(
     lines[3],
     /^I( trust|'m suspicious of) Player \d+, because of what I learned on Night \d\.$/,
@@ -2998,7 +3026,7 @@ test("NPCs announce madness changes, but only to a claim they made in public", (
       `Day 3 — ${chef.label}: "Yesterday the Cerenovus made me mad as the Mayor, I am actually the Chef."`,
     ),
   );
-  assert.ok(e.ask(chef.id).includes("Night 1: Chef number:"));
+  assert.ok(e.ask(chef.id).includes("Night 1: My number is"));
 });
 
 test("a mad NPC who never claimed in public says nothing when the madness ends", () => {
@@ -3035,7 +3063,9 @@ test("a good NPC changed by the Pit-Hag announces their new character", () => {
   e.night();
 
   assert.ok(
-    s.publicLog.includes(`Day 2 — ${chef.label} says they woke up as the Sweetheart.`),
+    s.publicLog.includes(
+      `Day 2 — ${chef.label} says they woke up as the Sweetheart; they were the Chef.`,
+    ),
   );
 });
 
@@ -3106,7 +3136,7 @@ test("the Cerenovus can make an evil teammate mad; afterwards they return to the
   e.start();
 
   assert.equal(imp.claim, "fortuneteller");
-  assert.match(e.ask(imp.id), /^I claim Fortune Teller\.\nNight 1: Fortune Teller: (YES|NO)/);
+  assert.match(e.ask(imp.id), /^I claim Fortune Teller\.\nNight 1: (YES|NO)/);
 
   e.endDay();
 
@@ -3442,7 +3472,7 @@ test("the Evil Twin's answers mirror the good twin's word for word", () => {
       .replaceAll("\u0000", evil.label);
 
   assert.equal(strat.ask(s, evil), swap(strat.ask(s, good)));
-  assert.match(strat.ask(s, evil), /Chef: 1 pair of evil players\./);
+  assert.match(strat.ask(s, evil), /Night 1: 1 pair of evil players\./);
 });
 
 test("the Demon never kills either twin, nor does the Mayor's bounce land on one", () => {
@@ -3654,5 +3684,157 @@ test("a dying Klutz picks a player they believe is good", () => {
 
   for (let i = 0; i < 50; i++) {
     assert.equal(strat.klutz(s, klutz), human);
+  }
+});
+
+// ── Witch, Snake Charmer, character changes, public info, conversations ──
+
+test("the Witch never curses the human for Day 1", () => {
+  const s = base("witch-day-one", sv);
+  const strat = new SimpleStrategy();
+  const witch = s.players[3];
+  const human = s.players[0];
+
+  role(witch, "witch", "evil");
+
+  s.night = 1;
+  for (let i = 0; i < 200; i++) {
+    witch.lastPicks = {};
+    assert.notEqual(strat.witch(s, witch), human);
+  }
+
+  // From Night 2 the human can be cursed again.
+  s.night = 2;
+  let cursed = false;
+  for (let i = 0; i < 200 && !cursed; i++) {
+    witch.lastPicks = {};
+    cursed = strat.witch(s, witch) === human;
+  }
+  assert.ok(cursed);
+});
+
+test("the Snake Charmer never picks the Demon, and picks themselves if nobody else is left", () => {
+  const s = base("snake-picks", sv);
+  const strat = new SimpleStrategy();
+  const [, charmer, butler, baron, imp] = s.players;
+
+  role(charmer, "snakecharmer", "good");
+
+  for (let i = 0; i < 100; i++) {
+    charmer.lastPicks = {};
+    assert.notEqual(strat.snake(s, charmer), imp);
+  }
+
+  butler.alive = false;
+  baron.alive = false;
+
+  assert.equal(strat.snake(s, charmer), charmer);
+});
+
+test("a good NPC who changed character in the night announces it at dawn", () => {
+  const s = base("woke-changed", sv);
+  const e = new Engine(s, new SimpleStrategy());
+  const [, chef, , baron] = s.players;
+
+  role(chef, "chef", "good");
+  chef.claimKnown = false;
+  chef.publicClaim = null;
+  chef.dusk = { role: "chef", claim: "chef" };
+  chef.role = chef.shown = chef.claim = "sweetheart";
+
+  // An evil player whose character changed says nothing.
+  baron.dusk = { role: "baron", claim: "baron" };
+  baron.role = "poisoner";
+
+  e.announceClaims();
+
+  assert.ok(
+    s.publicLog.includes(
+      `Day 1 — ${chef.label} says they woke up as the Sweetheart; they were the Chef.`,
+    ),
+    s.publicLog.join("\n"),
+  );
+  assert.ok(!s.publicLog.some((x) => x.includes(`${baron.label} says`)));
+  assert.equal(chef.claimKnown, true);
+});
+
+test("asked for the first time since, a changed good NPC says what they were before", () => {
+  const s = base("asked-changed", sv);
+  const strat = new SimpleStrategy();
+  const chef = s.players[1];
+
+  role(chef, "sweetheart", "good");
+  chef.changes = [{ night: 2, from: "chef", to: "sweetheart", told: false }];
+
+  const line = "I woke up as the Sweetheart on Night 2; before that I was the Chef.";
+
+  assert.ok(strat.ask(s, chef).includes(line));
+  assert.ok(!strat.ask(s, chef).includes(line)); // only once
+});
+
+test("in 13+ seat games, NPCs may share first-night information in public that morning", () => {
+  const s = createState(script, 13, "share-info");
+  const e = new Engine(s, new SimpleStrategy());
+  const chef = s.players[1];
+
+  role(chef, "chef", "good");
+  chef.memories = [{ night: 1, role: "chef", text: "Chef number: 1.", targets: [] }];
+  s.night = 1;
+  s.day = 1;
+  s.r = () => 0; // always within the chance
+
+  e.shareInfo();
+
+  assert.ok(
+    s.publicLog.includes(
+      `Day 1 — ${chef.label} says: "I am the Chef. Night 1: My number is 1."`,
+    ),
+    s.publicLog.join("\n"),
+  );
+
+  // Smaller games: nobody shares.
+  const small = base("share-small");
+  const smallChef = small.players[1];
+
+  smallChef.memories = [{ night: 1, role: "chef", text: "Chef number: 1.", targets: [] }];
+  small.r = () => 0;
+  new Engine(small, new SimpleStrategy()).shareInfo();
+
+  assert.ok(!small.publicLog.some((x) => x.includes("says:")));
+});
+
+test("NPCs say their information in their own words, without repeating their character", () => {
+  assert.equal(speak("Snake Charmer: chose Player 3."), "I chose Player 3.");
+  assert.equal(speak("Chef number: 0."), "My number is 0.");
+  assert.equal(speak("Monk: protected Player 2 from the Demon."), "I protected Player 2 from the Demon.");
+  assert.equal(
+    speak("Grandmother: your grandchild is Player 4, the Chef."),
+    "My grandchild is Player 4, the Chef.",
+  );
+  assert.equal(speak("Fortune Teller: NO for Player 2 and Player 3."), "NO for Player 2 and Player 3.");
+  assert.equal(speak("One of Player 2 and Player 3 is Chef."), "One of Player 2 and Player 3 is Chef.");
+});
+
+test("a conversation in the public log is headed by the player alone", () => {
+  const s = base("conversation-header");
+  const e = new Engine(s, new SimpleStrategy());
+  const chef = s.players[1];
+
+  chef.memories = [{ night: 1, role: "chef", text: "Chef number: 0.", targets: [] }];
+  e.ask(chef.id);
+
+  assert.ok(
+    s.publicLog.some((x) =>
+      x.startsWith(`Day 1 — ${chef.label}\nI claim Chef.\nNight 1: My number is 0.`),
+    ),
+    s.publicLog.join("\n"),
+  );
+});
+
+test("player colours include no white", () => {
+  for (const c of PLAYER_COLOURS) {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+
+    assert.ok(Math.min(r, g, b) < 0xc0, `${c} is too close to white`);
   }
 });
