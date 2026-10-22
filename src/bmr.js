@@ -1109,12 +1109,16 @@ export const badMoonRising = {
   // Whether a working Pacifist saves an executed good player.
   pacifistSaves(p) {
     const s = this.s;
+    const pacifist = s.players.some(
+      (x) => x.alive && ability(x) === "pacifist" && works(x),
+    );
     const saves =
       p.alignment === "good" &&
-      s.players.some((x) => x.alive && ability(x) === "pacifist" && works(x)) &&
+      pacifist &&
       s.r() < ({ good: 1, evil: 0 }[lean(s)] ?? PACIFIST_SAVE_CHANCE);
 
-    if (lean(s) && p.alignment === "good") {
+    // (Only a working Pacifist gives the Storyteller this choice.)
+    if (pacifist && lean(s) && p.alignment === "good") {
       leanNote(
         s,
         `the Pacifist ${saves ? "saves" : "doesn't save"} ${p.label}.`,

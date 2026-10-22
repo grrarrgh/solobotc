@@ -27,7 +27,8 @@ function table(headers, rows) {
 }
 
 // The player states as a table (one row per player: their character, claim,
-// team, state, once-per-game ability, who they suspect and why), then the
+// team, state, once-per-game ability, who they suspect, how strongly (their
+// evidence score) and why), then the
 // information each received that night.
 function stateLines(players) {
   const rows = players.map((p) => [
@@ -45,6 +46,8 @@ function stateLines(players) {
       .join(", "),
     p.used === true ? "used" : p.used === false ? "unused" : "",
     p.suspects ?? "",
+    // The evidence behind it (EVIDENCE_WEIGHT in data.js), to 1 decimal.
+    p.suspects ? String(Math.round((p.score ?? 0) * 10) / 10) : "",
     p.suspects ? (p.why?.length ? p.why.join("; ") : "a hunch") : "",
   ]);
   const info = players.flatMap((p) =>
@@ -62,6 +65,7 @@ function stateLines(players) {
         "State",
         "Ability",
         "Suspects",
+        "Score",
         "Why",
       ],
       rows,

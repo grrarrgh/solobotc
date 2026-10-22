@@ -9,12 +9,18 @@ import {
   FORBIDDEN_HUMAN,
   FIRST_NIGHT_INFO,
   ONGOING_INFO,
+  FIRST_NIGHT_INFO_SHARE,
+  ONGOING_INFO_SHARE,
+  EVIDENCE_WEIGHT,
+  HUMAN_NOMINATION_BONUS,
+  GOOD_VOTE_CHANCE,
+  GOOD_VOTE_EVIDENCE_STEP,
   ARTIST_QUESTIONS,
   name,
   team,
   alignment,
 } from "../src/data.js";
-import { createState } from "../src/setup.js";
+import { createState, infoTarget } from "../src/setup.js";
 import { Engine } from "../src/engine.js";
 import { SimpleStrategy, speak, isTwin } from "../src/strategy.js";
 import {
@@ -1231,8 +1237,11 @@ test("the debug log records every night's player states and all interactions", (
   assert.ok(log.indexOf("=== Day 1") < log.indexOf("=== Night 2"));
 });
 
-test("setup deals two first-night and two ongoing information Townsfolk when it can", () => {
-  for (const raw of [script, ecp]) {
+test("setup deals its share of first-night and ongoing information Townsfolk", () => {
+  for (const raw of [script, ecp, sv, bmr, op]) {
+    const ids = createState(raw, 8, "ids").script.ids;
+    const onScript = (list) => ids.filter((id) => list.includes(id)).length;
+
     for (const seats of Object.keys(COUNTS).map(Number)) {
       for (let seed = 0; seed < 30; seed++) {
         const tf = createState(raw, seats, seed)
@@ -1240,16 +1249,28 @@ test("setup deals two first-night and two ongoing information Townsfolk when it 
           .filter((id) => team(id) === "townsfolk");
         const first = tf.filter((id) => FIRST_NIGHT_INFO.includes(id)).length;
         const ongoing = tf.filter((id) => ONGOING_INFO.includes(id)).length;
+        const want = infoTarget(tf.length);
+        const at = `${raw[0].name ?? "TB"} ${seats}/${seed}: ${tf}`;
 
-        if (tf.length >= 4) {
-          assert.ok(first >= 2 && ongoing >= 2, `${seats}/${seed}: ${tf}`);
-        } else {
-          // Too few Townsfolk slots: every one is an information role.
-          assert.equal(first + ongoing, tf.length, `${seats}/${seed}: ${tf}`);
-        }
+        // At least the share, as far as the script allows.
+        assert.ok(
+          first >= Math.min(want.first, onScript(FIRST_NIGHT_INFO)),
+          at,
+        );
+        assert.ok(
+          ongoing >= Math.min(want.ongoing, onScript(ONGOING_INFO)),
+          at,
+        );
       }
     }
   }
+
+  // The share scales with the number of Townsfolk.
+  assert.deepEqual(infoTarget(5), {
+    first: Math.round(5 * FIRST_NIGHT_INFO_SHARE),
+    ongoing: Math.round(5 * ONGOING_INFO_SHARE),
+  });
+  assert.ok(infoTarget(9).first >= infoTarget(5).first);
 });
 
 test("the Demon gets three bluffs that are not in play and claims one", () => {
@@ -4763,17 +4784,57 @@ test("your Good / Evil marks count as evidence for good NPCs", () => {
 
   assert.equal(strat.evidence(s, chef, butler).score, 0);
 
+  // (Your marks count a little extra: humanTrusted.)
+  const W = EVIDENCE_WEIGHT;
+
   e.mark(butler.id, "evil");
-  assert.equal(strat.evidence(s, chef, butler).score, 1);
+  assert.equal(strat.evidence(s, chef, butler).score, W.markedEvil + W.humanTrusted);
   assert.deepEqual(strat.evidence(s, chef, butler).reasons, [
     "you think they're evil",
   ]);
 
   e.mark(butler.id, "good");
-  assert.equal(strat.evidence(s, chef, butler).score, -1);
+  assert.equal(strat.evidence(s, chef, butler).score, W.markedGood - W.humanTrusted);
 
   e.mark(butler.id, "");
   assert.equal(strat.evidence(s, chef, butler).score, 0);
+});
+
+test("good NPCs give your nominations a little extra trust (humanTrusted)", () => {
+  const s = base("human-trusted");
+  const strat = new SimpleStrategy();
+  const [human, chef, butler, baron] = s.players;
+  const W = EVIDENCE_WEIGHT;
+  // Whether the Chef votes for the Butler when s.r() rolls `roll`.
+  const votes = (nominator, roll) => {
+    s.r = () => roll;
+    return strat.vote(s, chef, butler, { yes: 0, needed: 3, nominator });
+  };
+
+  strat.opinion = () => ({ type: "nothing" });
+
+  // Someone else's nomination: the plain chance. Yours: plus
+  // HUMAN_NOMINATION_BONUS, and humanTrusted as evidence.
+  const theirs = GOOD_VOTE_CHANCE;
+  const yours =
+    GOOD_VOTE_CHANCE +
+    HUMAN_NOMINATION_BONUS +
+    GOOD_VOTE_EVIDENCE_STEP * W.humanTrusted;
+
+  assert.equal(votes(baron, theirs - 0.01), true);
+  assert.equal(votes(baron, theirs + 0.01), false);
+  assert.equal(votes(human, yours - 0.01), true);
+  assert.equal(votes(human, yours + 0.01), false);
+
+  // Afterwards: "you nominated them" counts towards suspicion.
+  s.voteHistory = [
+    { day: 1, nominatorId: human.id, nomineeId: butler.id, voterIds: [] },
+  ];
+
+  const why = strat.evidence(s, chef, butler);
+
+  assert.deepEqual(why.reasons, ["you nominated them"]);
+  assert.equal(why.score, W.humanTrusted);
 });
 
 test("the log's player tables show who each NPC suspects", () => {
@@ -4783,8 +4844,8 @@ test("the log's player tables show who each NPC suspects", () => {
   e.start();
   settle(e);
 
-  assert.match(e.debugLog(), /\| Suspects +\| Why/);
-  assert.match(e.debugLog(), /\| Player \d+ +\| (a hunch|.*them)/);
+  assert.match(e.debugLog(), /\| Suspects +\| Score +\| Why/);
+  assert.match(e.debugLog(), /\| Player \d+ +\| -?\d+(\.\d)? +\| (a hunch|.*them)/);
   assert.ok(s.players.filter((p) => !p.human).every((p) => p.suspicion));
 });
 
@@ -5684,4 +5745,49 @@ test("a misinformed Noble sees any 3 players", () => {
 
   // Not always 0 (or always 2): any mix.
   assert.ok(counts.size >= 2, [...counts].join(","));
+});
+
+test("the Storyteller's Pacifist note only appears with a working Pacifist", () => {
+  const { s, p, e } = bmrDay("no-pacifist");
+
+  // Evil is behind (the Baron turned good: only the Imp left of the 2 evil
+  // players the game started with), so the Storyteller leans evil.
+  role(p[3], "chef", "good");
+  p[3].startRole = "baron";
+  assert.equal(lean(s), "evil");
+
+  e.nominate(p[2].id);
+  e.endDay();
+
+  assert.equal(p[2].alive, false);
+  assert.ok(!s.audit.some((x) => /Pacifist/.test(x.text)));
+});
+
+test("a reason found more than once is given once, saying how often", () => {
+  const s = base("merged-reasons");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron] = s.players;
+
+  // The Chef trusts the Baron; the Butler voted for the Baron twice.
+  chef.memories = [
+    {
+      night: 1,
+      role: "washerwoman",
+      text: `One of ${baron.label} and ${butler.label} is Chef.`,
+      targets: [baron.id],
+    },
+  ];
+  s.voteHistory = [1, 2].map((day) => ({
+    day,
+    nominatorId: s.players[0].id,
+    nomineeId: baron.id,
+    voterIds: [butler.id],
+  }));
+
+  const why = strat.evidence(s, chef, butler);
+
+  assert.equal(why.score, 1);
+  assert.deepEqual(why.reasons, [
+    `they voted for ${baron.label}, whom I trust (twice)`,
+  ]);
 });

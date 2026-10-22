@@ -2,6 +2,29 @@
 
 Newest first.
 
+## New Feature: Good NPCs Trust You a Little More
+
+- EVIDENCE_WEIGHT.humanTrusted (0.5, in src/data.js): good NPCs give your view a little extra weight, so it's easier to sway votes your way.
+  - Your marks: marking a player Evil counts humanTrusted on top of markedEvil; Good takes it off (markedGood).
+  - Your nominations: good NPCs count them as evidence against the nominee: during that vote (on top of HUMAN_NOMINATION_BONUS, a good NPC's chance to vote yes rises by GOOD_VOTE_EVIDENCE_STEP × humanTrusted), and afterwards, in who they suspect ("you nominated them").
+
+## Bug Fix: Marks on Dead Players
+
+- Town square: your Good / Evil mark (the dashed blue or red ring) on a dead player is no longer greyed out with their seat. The seat still fades; the ring keeps its colour.
+
+## New Feature: Suspicion Score in the Log
+
+- log.txt: the player table has a Score column after Suspects: the evidence behind each NPC's suspicion (the EVIDENCE_WEIGHT values of their reasons added up; 0 for a hunch).
+- Suspicion reasons: the same reason found more than once (two votes for the same player, say) is given once, saying how often: "they voted for Player 4, whom I trust (twice)". It still counts each time.
+
+## New Feature: Information Townsfolk Share
+
+- How many information Townsfolk are dealt is now a setting, as a share of the Townsfolk slots, so it works at any seat count: FIRST_NIGHT_INFO_SHARE and ONGOING_INFO_SHARE in src/data.js (0.3 each). Each is rounded to the nearest whole number: at 0.3, 5 or 7 Townsfolk get at least 2 of each, and 9 get at least 3. Before, it was a fixed 2 of each. Setup still alternates between the two groups until each has its share (as far as the script has them), then fills the rest at random. Only Townsfolk count.
+
+## Bug Fix: Pacifist Log Note
+
+- log.txt: "Storyteller (evil): the Pacifist doesn't save Player 12." appeared when a good player was executed while the Storyteller was leaning, even with no Pacifist in play. It now appears only when a working Pacifist is alive (who could have saved them). Only the log line was wrong: without a Pacifist, nobody was ever saved.
+
 ## New Script: Onion Pies
 
 - New script: Onion Pies (scripts/Onion Pies_1_0_0.json), with 5 new characters. The rest (Trouble Brewing's) work as before.

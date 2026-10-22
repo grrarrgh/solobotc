@@ -1890,6 +1890,7 @@ export class Engine {
       protected: p.protected,
       suspects: p.human ? null : (this.player(p.suspicion?.targetId)?.label ?? null),
       why: p.human ? [] : (p.suspicion?.reasons ?? []),
+      score: p.human ? null : (p.suspicion?.score ?? null),
       used: abilityUsed(p, ability(p)),
       info: p.memories
         .filter((m) => !m.day && m.night === s.night)

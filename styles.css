@@ -104,7 +104,15 @@ input {
   border-color: #e4b95e;
 }
 
-.dead {
+/* A dead player's seat fades to grey, but your Good / Evil mark around it
+   (its outline) stays in full colour: the fading is on the seat's border,
+   background and contents, not the seat itself. */
+.seat.dead {
+  border-color: rgba(136, 136, 136, 0.4);
+  background: rgba(41, 46, 56, 0.4);
+}
+
+.seat.dead > * {
   opacity: 0.4;
   filter: grayscale(1);
 }

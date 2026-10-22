@@ -174,3 +174,10 @@ test("all you can note about a player is a Good / Evil mark", () => {
   assert.doesNotMatch(html, /id="note-role"|id="note-text"|Your notes/);
   assert.doesNotMatch(app, /note-role|note-text|noteFor/);
 });
+
+test("a dead player's seat fades, but your Good / Evil mark around it doesn't", () => {
+  // The fading is on the seat's border, background and contents, so the
+  // outline (your mark) keeps its colour.
+  assert.match(css, /\.seat\.dead > \* \{\s*opacity: 0\.4;\s*filter: grayscale\(1\);/);
+  assert.doesNotMatch(css, /(^|\n)\.dead \{[^}]*(opacity|filter)/);
+});

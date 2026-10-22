@@ -4,6 +4,8 @@ import {
   FORBIDDEN_HUMAN,
   FIRST_NIGHT_INFO,
   ONGOING_INFO,
+  FIRST_NIGHT_INFO_SHARE,
+  ONGOING_INFO_SHARE,
   MINION_BLUFF_CHANCE,
   OUTSIDER_MODIFIERS,
   HUMAN_DRUNK_CHANCE,
@@ -13,24 +15,43 @@ import {
 } from "./data.js";
 import { rng, pick, sample, shuffle } from "./util.js";
 
-// Draws n Townsfolk, alternating first-night and ongoing information roles
-// until there are two of each (or no Townsfolk slots left), then fills the
-// rest at random.
-function drawTownsfolk(pool, n, r) {
-  const first = shuffle(
-    pool.filter((x) => FIRST_NIGHT_INFO.includes(x)),
-    r,
-  );
-  const ongoing = shuffle(
-    pool.filter((x) => ONGOING_INFO.includes(x)),
-    r,
-  );
-  const picked = [];
+// The number of each kind of information Townsfolk to deal among n
+// Townsfolk (see FIRST_NIGHT_INFO_SHARE and ONGOING_INFO_SHARE).
+export const infoTarget = (n) => ({
+  first: Math.round(n * FIRST_NIGHT_INFO_SHARE),
+  ongoing: Math.round(n * ONGOING_INFO_SHARE),
+});
 
-  for (let k = 0; k < 2; k++) {
-    for (const group of [first, ongoing]) {
-      if (picked.length < n && group.length) {
-        picked.push(group.shift());
+// Draws n Townsfolk, alternating first-night and ongoing information roles
+// until each has its share (or the script runs out, or no Townsfolk slots
+// are left), then fills the rest at random.
+function drawTownsfolk(pool, n, r) {
+  const target = infoTarget(n);
+  const groups = [
+    {
+      left: shuffle(
+        pool.filter((x) => FIRST_NIGHT_INFO.includes(x)),
+        r,
+      ),
+      want: target.first,
+    },
+    {
+      left: shuffle(
+        pool.filter((x) => ONGOING_INFO.includes(x)),
+        r,
+      ),
+      want: target.ongoing,
+    },
+  ];
+  const picked = [];
+  const open = () =>
+    picked.length < n && groups.some((g) => g.want > 0 && g.left.length);
+
+  while (open()) {
+    for (const g of groups) {
+      if (picked.length < n && g.want > 0 && g.left.length) {
+        picked.push(g.left.shift());
+        g.want--;
       }
     }
   }

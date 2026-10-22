@@ -290,6 +290,29 @@ export function heard(s, p, memories, opinion = null) {
   }
 }
 
+// The same reason found more than once (say, two votes for the same player)
+// becomes one, weighing their total, saying how often: "... (twice)".
+function merged(found) {
+  const byText = new Map();
+
+  for (const x of found) {
+    const m = byText.get(x.text);
+
+    byText.set(
+      x.text,
+      m ? { ...m, weight: m.weight + x.weight, n: m.n + 1 } : { ...x, n: 1 },
+    );
+  }
+
+  return [...byText.values()].map((x) => ({
+    weight: x.weight,
+    text:
+      x.n === 1
+        ? x.text
+        : `${x.text} (${x.n === 2 ? "twice" : `${x.n} times`})`,
+  }));
+}
+
 // What's been said in public about t: each speaker's information about t
 // (once per speaker and stance), and each speaker's latest opinion if it
 // was about t.
@@ -411,7 +434,12 @@ export class SimpleStrategy {
       return null;
     }
 
-    p.suspicion = { targetId: target.id, day: s.day, reasons: why.reasons };
+    p.suspicion = {
+      targetId: target.id,
+      day: s.day,
+      score: why.score,
+      reasons: why.reasons,
+    };
 
     return {
       targetId: target.id,
@@ -480,10 +508,11 @@ export class SimpleStrategy {
     // Your Good / Evil mark on them.
     const mark = s.marks?.[t.id];
 
+    // (Your marks count a little extra: see humanTrusted.)
     if (mark === "evil") {
-      add(W.markedEvil, "you think they're evil");
+      add(W.markedEvil + W.humanTrusted, "you think they're evil");
     } else if (mark === "good") {
-      add(W.markedGood, "you think they're good");
+      add(W.markedGood - W.humanTrusted, "you think they're good");
     }
 
     // Their own information (saying why, when it contradicts t's claim).
@@ -557,6 +586,11 @@ export class SimpleStrategy {
     for (const v of s.voteHistory ?? []) {
       const n = byId(s, v.nomineeId);
 
+      // You nominated them (see humanTrusted).
+      if (n === t && byId(s, v.nominatorId)?.human) {
+        add(W.humanTrusted, "you nominated them");
+      }
+
       if (!n || n === t) {
         continue;
       }
@@ -570,8 +604,7 @@ export class SimpleStrategy {
 
     return {
       score: found.reduce((n, x) => n + x.weight, 0),
-      reasons: found
-        .filter((x) => x.weight > 0)
+      reasons: merged(found.filter((x) => x.weight > 0))
         .sort((a, b) => b.weight - a.weight)
         .slice(0, 2)
         .map((x) => x.text),
@@ -822,10 +855,15 @@ export class SimpleStrategy {
       return s.r() < GOOD_VOTE_MIN;
     }
 
+    // Your nomination counts as evidence too (humanTrusted), on top of
+    // HUMAN_NOMINATION_BONUS.
+    const yours = tally?.nominator?.human;
     const chance =
       GOOD_VOTE_CHANCE +
-      GOOD_VOTE_EVIDENCE_STEP * this.evidence(s, v, n).score +
-      (tally?.nominator?.human ? HUMAN_NOMINATION_BONUS : 0);
+      GOOD_VOTE_EVIDENCE_STEP *
+        (this.evidence(s, v, n).score +
+          (yours ? EVIDENCE_WEIGHT.humanTrusted : 0)) +
+      (yours ? HUMAN_NOMINATION_BONUS : 0);
 
     return s.r() < Math.min(GOOD_VOTE_MAX, Math.max(GOOD_VOTE_MIN, chance));
   }

@@ -89,7 +89,8 @@ export const OUTSIDER_MODIFIERS = {
 };
 
 // Townsfolk who learn something on the first night only, and those who keep
-// learning on later nights. Setup deals at least two of each when it can.
+// learning on later nights. Setup deals at least a share of each (see
+// FIRST_NIGHT_INFO_SHARE and ONGOING_INFO_SHARE below) when it can.
 export const FIRST_NIGHT_INFO = [
   "noble",
   "washerwoman",
@@ -110,6 +111,16 @@ export const ONGOING_INFO = [
   "oracle",
   "chambermaid",
 ];
+
+// How many of the Townsfolk dealt are information characters: at least this
+// share (0–1) of the Townsfolk slots for each group, rounded to the nearest
+// whole number, when the script has enough of them. Setup alternates
+// between the groups until each has its share, then fills the rest of the
+// Townsfolk slots at random (which may add more). E.g. at 0.3, 7 Townsfolk
+// get at least 2 of each (0.3 × 7 = 2.1), and 9 Townsfolk at least 3.
+// (Outsiders, Minions and the Demon aren't counted.)
+export const FIRST_NIGHT_INFO_SHARE = 0.3;
+export const ONGOING_INFO_SHARE = 0.3;
 
 // Chance (0–1) that each Minion also learns the Demon's three bluffs.
 // Adjust here: 0 = Minions never know them, 1 = they always do.
@@ -290,6 +301,12 @@ export const EVIDENCE_WEIGHT = {
   myInfo: 2, // my own information points at them
   markedEvil: 1, // you've marked them Evil (in your notes)
   markedGood: -1, // you've marked them Good
+  // How much good NPCs trust you: added to your marks
+  // Other values:
+  //   0: turns it off.
+  //   Above 1: your marks outweigh most public evidence.
+  //   Above 2: your nomination alone (2 or more) would be enough for an NPC to suspect that player, since they need 1.
+  humanTrusted: 0.5,
   vouchedByLiar: 2, // vouched for by a player shown to have lied (Professor)
   accusedByLiar: -0.5, // accused by a player shown to have lied
 };
