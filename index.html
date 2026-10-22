@@ -97,22 +97,14 @@
           </span>
           <p id="answer"></p>
 
-          <!-- Your own notes on the selected player (only you see them). -->
-          <div id="notes" class="notes">
-            <span class="notes-label">Your notes:</span>
-            <span class="note-guess" role="group" aria-label="Your guess">
+          <!-- Your Good / Evil mark on the selected player. -->
+          <div id="mark" class="mark">
+            <span class="mark-label">Your mark:</span>
+            <span class="mark-guess" role="group" aria-label="Your mark">
               <button type="button" data-guess="good">Good</button>
               <button type="button" data-guess="evil">Evil</button>
               <button type="button" data-guess="">?</button>
             </span>
-            <select id="note-role" aria-label="Character you think they are"></select>
-            <input
-              id="note-text"
-              type="text"
-              maxlength="80"
-              placeholder="Note"
-              aria-label="Note"
-            />
           </div>
         </section>
 

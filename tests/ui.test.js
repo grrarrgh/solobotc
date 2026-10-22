@@ -164,5 +164,11 @@ test("the Claims table has no notes column; your Good / Evil mark colours the ro
   assert.match(app, /guess \? `guess-\$\{guess\}` : ""/);
   assert.match(css, /\.claims tr\.guess-good td/);
   assert.match(css, /\.claims tr\.guess-evil td/);
-  assert.match(app, /e\.mark\(selectedPlayerId, change\.guess\)/);
+  assert.match(app, /e\.mark\(selectedPlayerId, guess\)/);
+});
+
+test("all you can note about a player is a Good / Evil mark", () => {
+  assert.match(html, /id="mark"[\s\S]*?data-guess="good"[\s\S]*?data-guess="evil"/);
+  assert.doesNotMatch(html, /id="note-role"|id="note-text"|Your notes/);
+  assert.doesNotMatch(app, /note-role|note-text|noteFor/);
 });

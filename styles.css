@@ -855,9 +855,9 @@ input {
   font-weight: 700;
 }
 
-/* ── Your notes & the Claims table ───────────────────────── */
+/* ── Your marks & the Claims table ───────────────────────── */
 
-/* Your guess rings a seat: blue (good) or red (evil), dashed so it isn't
+/* Your mark rings a seat: blue (good) or red (evil), dashed so it isn't
    mistaken for anything the game tells you. */
 .seat.guess-good {
   outline: 3px dashed #64b5f6;
@@ -869,17 +869,7 @@ input {
   outline-offset: 2px;
 }
 
-/* The character you think a player is, under their name. */
-.note-role {
-  font-size: 0.62rem;
-  font-style: italic;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.notes {
+.mark {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -890,27 +880,22 @@ input {
   border-top: 1px solid #343a45;
 }
 
-.notes-label {
+.mark-label {
   color: #bbb;
   margin-right: 4px;
 }
 
-.note-guess button[aria-pressed="true"] {
+.mark-guess button[aria-pressed="true"] {
   background: #3b3428;
   border-color: #dfb85f;
 }
 
-.note-guess button[data-guess="good"][aria-pressed="true"] {
+.mark-guess button[data-guess="good"][aria-pressed="true"] {
   color: #64b5f6;
 }
 
-.note-guess button[data-guess="evil"][aria-pressed="true"] {
+.mark-guess button[data-guess="evil"][aria-pressed="true"] {
   color: #ef6b72;
-}
-
-#note-text {
-  flex: 1 1 140px;
-  min-width: 0;
 }
 
 .claims tbody tr {
@@ -971,7 +956,7 @@ input {
   font-size: 0.75rem;
 }
 
-.notes[hidden] {
+.mark[hidden] {
   display: none;
 }
 

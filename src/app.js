@@ -128,11 +128,11 @@ let s;
 let e;
 let selectedPlayerId = null;
 
-// Your notes on each player, by id: { guess: "good" | "evil" | "", role,
-// text }. Only you see them; they're cleared with Reset.
-let notes = {};
+// Your mark on each player, by id: "good" or "evil" (unmarked players
+// aren't listed). Cleared with Reset.
+let marks = {};
 
-const noteFor = (id) => notes[id] ?? { guess: "", role: "", text: "" };
+const markFor = (id) => marks[id] ?? "";
 
 // Players picked in the town square while the Storyteller has woken you.
 let nightPicks = [];
@@ -185,8 +185,7 @@ function start() {
     e.start();
 
     selectedPlayerId = null;
-    notes = {};
-    noteRoleOptions();
+    marks = {};
 
     $("setup").hidden = true;
     $("game").hidden = false;
@@ -216,20 +215,13 @@ function circle() {
   $("circle").innerHTML = s.players
     .map((p, i) => {
       const token = p.human || p.claimKnown ? name(p.claim) : "Unknown";
-      const note = noteFor(p.id);
-      const noted = [
-        note.guess,
-        note.role && `${name(note.role)}?`,
-        note.text,
-      ].filter(Boolean);
+      const mark = markFor(p.id);
 
       return `
         <button
-          title="${esc(
-            `${p.label}: ${token}${noted.length ? ` (your notes: ${noted.join(", ")})` : ""}`,
-          )}"
+          title="${esc(`${p.label}: ${token}${mark ? ` (you marked them ${mark})` : ""}`)}"
           class="seat ${p.human ? "human" : ""} ${p.alive ? "" : "dead"} ${
-            note.guess ? `guess-${note.guess}` : ""
+            mark ? `guess-${mark}` : ""
           } ${
             (s.pending ? nightPicks.includes(p.id) : p.id === selectedPlayerId)
               ? "selected"
@@ -255,14 +247,6 @@ function circle() {
           <small class="player-name" style="color:${playerColour(p)}">
             ${esc(p.label)}
           </small>
-
-          ${
-            note.role
-              ? `<small class="note-role role-${alignment(note.role)}">${esc(
-                  name(note.role),
-                )}?</small>`
-              : ""
-          }
 
           ${p.alive ? "" : "<br><small>DEAD</small>"}
         </button>
@@ -638,7 +622,7 @@ function renderClaims() {
         ...info.map((x) => `<div>${linkRoles(x)}</div>`),
         a ? `<div class="claims-opinion">${linkRoles(a.opinion)}</div>` : "",
       ].join("");
-      const { guess } = noteFor(p.id);
+      const guess = markFor(p.id);
 
       // Your Good / Evil mark colours the whole row.
       return `<tr data-id="${esc(p.id)}" class="${p.alive ? "" : "is-dead"} ${
@@ -681,57 +665,34 @@ function renderClaims() {
     });
 }
 
-// The notes controls show the selected player's notes. (The note text box
-// is left alone while you're typing in it.)
-function renderNotes(t) {
-  const note = t ? noteFor(t.id) : null;
-
-  $("notes").hidden = !t;
+// The Good / Evil / ? buttons show your mark on the selected player.
+function renderMark(t) {
+  $("mark").hidden = !t;
 
   if (!t) {
     return;
   }
 
-  document.querySelectorAll("#notes [data-guess]").forEach((b) => {
-    b.setAttribute("aria-pressed", String(b.dataset.guess === note.guess));
+  document.querySelectorAll("#mark [data-guess]").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.dataset.guess === markFor(t.id)));
   });
-
-  $("note-role").value = note.role;
-
-  if (document.activeElement !== $("note-text")) {
-    $("note-text").value = note.text;
-  }
 }
 
-// Changes the selected player's notes and redraws.
-function setNote(change) {
+// Marks the selected player Good or Evil ("" clears it) and redraws. Good
+// NPCs weigh your marks (see strategy evidence()).
+function setMark(guess) {
   if (!selectedPlayerId) {
     return;
   }
 
-  notes[selectedPlayerId] = { ...noteFor(selectedPlayerId), ...change };
-
-  // Good NPCs weigh your Good / Evil marks (see strategy evidence()).
-  if ("guess" in change) {
-    e.mark(selectedPlayerId, change.guess);
+  if (guess) {
+    marks[selectedPlayerId] = guess;
+  } else {
+    delete marks[selectedPlayerId];
   }
 
+  e.mark(selectedPlayerId, guess);
   render();
-}
-
-// The character choices for notes: the script's characters, by team.
-function noteRoleOptions() {
-  $("note-role").innerHTML = `<option value="">Character?</option>${TEAMS.map(
-    ([key, label]) => {
-      const ids = s.script.ids.filter((id) => team(id) === key);
-
-      return ids.length
-        ? `<optgroup label="${esc(label)}">${ids
-            .map((id) => `<option value="${esc(id)}">${esc(name(id))}</option>`)
-            .join("")}</optgroup>`
-        : "";
-    },
-  ).join("")}`;
 }
 
 // ── Final reveal ─────────────────────────────────────────────
@@ -1086,7 +1047,7 @@ function render() {
 
   renderPublic();
   renderClaims();
-  renderNotes(t);
+  renderMark(t);
   renderNightChoice();
 
   $("actions").hidden = !!s.winner || !t || !!s.pending;
@@ -1229,7 +1190,7 @@ function resetGame() {
   s = null;
   e = null;
   selectedPlayerId = null;
-  notes = {};
+  marks = {};
   nightPicks = [];
   shownGameOver = false;
 
@@ -1296,13 +1257,10 @@ $("ask").onclick = () => {
   }
 };
 
-// Your notes on the selected player.
-document.querySelectorAll("#notes [data-guess]").forEach((b) => {
-  b.onclick = () => setNote({ guess: b.dataset.guess });
+// Your Good / Evil mark on the selected player.
+document.querySelectorAll("#mark [data-guess]").forEach((b) => {
+  b.onclick = () => setMark(b.dataset.guess);
 });
-
-$("note-role").onchange = () => setNote({ role: $("note-role").value });
-$("note-text").oninput = () => setNote({ text: $("note-text").value.trim() });
 
 $("nominate").onclick = () => runVote(() => e.nominate(selectedPlayerId));
 

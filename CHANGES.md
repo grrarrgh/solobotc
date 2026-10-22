@@ -4,6 +4,8 @@ Newest first.
 
 ## Bug Fixes: Log Table, Twins, Repeat Picks & Protectors
 
+- Your marks: all you can note about a player is Good, Evil or ? (clear). The character guess and the free-text note are gone, from the controls and from the town square.
+
 - log.txt: each night's player states are a proper table, with columns for Player, Character, Claims, Team, State, Ability (used / unused), Suspects and Why. There's no seat number column. The night's information is listed under the table.
 - Twins: both twins now look alike to the town until public information tells them apart.
   - When the Evil Twin repeats their twin's "X is your Evil Twin" word for word, it now points at the good twin. Before, only the good twin's accusation counted publicly.
