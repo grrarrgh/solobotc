@@ -16,6 +16,7 @@ import {
   TOWN_SQUARE_SIZE_MAX,
 } from "./data.js";
 import { createState } from "./setup.js";
+import { ability } from "./storyteller.js";
 import { Engine } from "./engine.js";
 import { byId } from "./util.js";
 
@@ -993,7 +994,7 @@ function render() {
   $("actions").hidden = !!s.winner || !t || !!s.pending;
   $("day-controls").hidden = !!s.winner || !!s.pending || s.phase !== "day";
   $("savant").hidden = !(
-    h.shown === "savant" &&
+    ability(h) === "savant" &&
     h.alive &&
     h.savantDay !== s.day
   );
@@ -1022,14 +1023,18 @@ function render() {
           ? `Tied at ${block.count} votes: nobody is marked for execution.`
           : "",
   );
-  $("slay").hidden = !(h.shown === "slayer" && !s.slayerUsed && h.alive);
+  $("slay").hidden = !(
+    ability(h) === "slayer" &&
+    !s.slayerUsed &&
+    h.alive
+  );
   $("artist-controls").hidden = !(
-    h.shown === "artist" &&
+    ability(h) === "artist" &&
     !h.artistUsed &&
     h.alive
   );
   $("gossip-controls").hidden = !(
-    h.shown === "gossip" &&
+    ability(h) === "gossip" &&
     h.alive &&
     h.gossipDay !== s.day
   );

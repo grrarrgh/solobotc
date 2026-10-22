@@ -2,6 +2,17 @@
 
 Newest first.
 
+## New Script: Onion Pies
+
+- New script: Onion Pies (scripts/Onion Pies_1_0_0.json), with 5 new characters. The rest (Trouble Brewing's) work as before.
+  - Noble: starts knowing 3 players, exactly 1 of them evil. A misinformed Noble sees any 3 players (any number of them evil). An evil player bluffing the Noble names 3 good players, the evil team's scapegoat among them.
+  - Pixie: starts knowing a Townsfolk in play. An NPC Pixie is "mad" about being it: from Day 1 they claim it, with made-up information to match. When its holder dies, they gain its ability (if sober). You're never dealt the Pixie.
+  - Cannibal: has the ability of the last player who died by execution. If that player was evil, they get a good ability instead (the one the executee claimed), and are poisoned until a good player dies by execution. Executing a player who's already dead gives them nothing. You can be the Cannibal: you're told whose ability you have, and your night choices and day buttons (Slay, Artist, Savant, Gossip) follow it.
+  - Ogre: on their first night, an NPC Ogre chooses a player they don't suspect and becomes their alignment, even if drunk or poisoned. They don't know which, so they play on as good. You're never dealt the Ogre.
+  - Marionette: a Minion who thinks they're a good character. They're shown a Townsfolk that isn't in play (like the Drunk), sit next to the Demon, and the Demon knows who they are. They're evil (for every win and every piece of information), but play as good: they claim their Townsfolk, suspect on the evidence and vote like a good player. Their "information" is false, in the way that helps evil. The evil team treats them as a teammate.
+    - The Demon may tell them who they are: from Night 2, when evil is losing (the Storyteller is helping evil) or at least 30% of the living good NPCs suspect the Demon (MARIONETTE_HEAT), at 50% a night (MARIONETTE_REVEAL_CHANCE). From then on they draw suspicion away from the Demon. They keep claiming their Townsfolk, but every morning they publicly spread misleading information: their latest (false) information, or else an accusation of a good player. Their information frames good players (a Noble's names the evil team's scapegoat). They also play for evil: accusing good players and voting like the evil team.
+- log.txt: the Marionette's information is marked "(misinformation: they are the Marionette)"; the setup lists who the Marionette is.
+
 ## Bug Fixes: Gossip, Claims Section, Executions & Suspicion Reasons
 
 - log.txt: information that isn't working says why, and who caused it: "Chef number: 0. (misinformation: poisoned by Player 4, the Poisoner)". This covers the Drunk, the Poisoner, Pukka, No Dashii, Vigormortis, Snake Charmer swaps, Sailor, Innkeeper, Goon, Courtier, Minstrel, Sweetheart, Philosopher and the Vortox. It appears in the Storyteller entries and the night's information under the player table; you never see it during play.

@@ -30,6 +30,7 @@ import { byId, pick } from "./util.js";
 import { formatLog } from "./log.js";
 import { sectsAndViolets } from "./sects.js";
 import { badMoonRising } from "./bmr.js";
+import { onionPies } from "./onion.js";
 
 const KEY_MOMENT_TYPES = new Set([
   "poison",
@@ -70,6 +71,10 @@ const KEY_MOMENT_TYPES = new Set([
   "pukka",
   "shabaloth",
   "po",
+  "ogre",
+  "pixie",
+  "cannibal",
+  "marionette",
   "game_over",
 ]);
 
@@ -200,6 +205,7 @@ export class Engine {
 
     this.lastingEffects();
     this.bmrLasting();
+    this.onionLasting();
     this.barberNight();
 
     s.pending = this.wakeHuman();
@@ -412,6 +418,7 @@ export class Engine {
     }
 
     this.bmrDusk();
+    this.ogres();
     this.sectsDusk();
     this.advocate();
 
@@ -527,6 +534,8 @@ export class Engine {
     this.npcArtists();
     this.sectsDawn();
     this.bmrDawn();
+    this.pixieMadness();
+    this.marionetteDawn();
   }
 
   // The strategy used for p's night info: for the human, the Fortune Teller's
@@ -803,9 +812,12 @@ export class Engine {
   bluffs() {
     const s = this.s;
 
-    // (The Lunatic, who thinks they're the Demon, bluffs too.)
+    // (The Lunatic, who thinks they're the Demon, bluffs too; the Marionette
+    // and an evil Ogre, who think they're good, don't.)
     for (const p of s.players) {
-      const bluffer = p.alignment === "evil" || p.role === "lunatic";
+      const bluffer =
+        (p.alignment === "evil" || p.role === "lunatic") &&
+        !["marionette", "ogre"].includes(p.role);
 
       if (p.human || !p.alive || !bluffer) {
         continue;
@@ -866,6 +878,7 @@ export class Engine {
     }
 
     this.woke(d);
+    this.marionetteReveal(d);
 
     if (d.role === "pukka") {
       this.pukka(d);
@@ -1145,6 +1158,7 @@ export class Engine {
     }
 
     this.sectsDeath(p, cause);
+    this.pixieGains(p);
 
     // "When you learn that you died" (Moonchild, Klutz): at night, that's in
     // the morning.
@@ -1564,6 +1578,7 @@ export class Engine {
 
     if (died) {
       this.minstrel(p);
+      this.cannibals(p);
     }
 
     // (goodTwinExecuted() ends the game if the good twin was executed.)
@@ -1928,5 +1943,6 @@ export class Engine {
   }
 }
 
-// Sects & Violets and Bad Moon Rising characters (see sects.js and bmr.js).
-Object.assign(Engine.prototype, sectsAndViolets, badMoonRising);
+// Sects & Violets, Bad Moon Rising and Onion Pies characters (see sects.js,
+// bmr.js and onion.js).
+Object.assign(Engine.prototype, sectsAndViolets, badMoonRising, onionPies);

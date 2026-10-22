@@ -5415,3 +5415,273 @@ test("misinformation in the log says who caused it (never shown to you)", () => 
 
   assert.equal(info.misinfo, `drunk until dusk by ${g.p[2].label}, the Sailor`);
 });
+
+// ── Onion Pies ───────────────────────────────────────────────
+
+const op = JSON.parse(
+  fs.readFileSync(new URL("../scripts/Onion Pies_1_0_0.json", import.meta.url)),
+);
+
+test("Onion Pies loads, and plays whole games without errors", () => {
+  const s = createState(op, 10, "op");
+
+  assert.equal(s.script.meta.name, "Onion Pies");
+  assert.equal(s.script.ids.length, 24);
+
+  for (const seats of [8, 10, 12, 13, 15]) {
+    for (let seed = 0; seed < 16; seed++) {
+      const { s: g, e } = playOut(op, seats, `op-${seats}-${seed}`);
+
+      assert.ok([null, "good", "evil"].includes(g.winner));
+      assert.ok(e.debugLog().length > 0);
+    }
+  }
+});
+
+// A 5-player Onion Pies game (the base roles: Mayor (you), Chef, Butler,
+// Baron, Imp), with `roles` by seat, on Night `night`.
+function opNight(seed, roles = [], night = 1) {
+  const s = base(seed, op);
+
+  roles.forEach((id, i) => id && role(s.players[i], id, alignment(id)));
+  s.phase = "night";
+  s.night = night;
+  s.day = night - 1;
+
+  const strat = new SimpleStrategy();
+
+  strat.demon = () => null;
+
+  return { s, p: s.players, strat, e: new Engine(s, strat) };
+}
+
+test("the Marionette sits next to the Demon, thinks they're good, and hears false information", () => {
+  let seen = 0;
+
+  for (let seed = 0; seed < 400; seed++) {
+    const s = createState(op, 10, seed);
+    const m = s.players.find((p) => p.role === "marionette");
+
+    if (!m) {
+      continue;
+    }
+
+    seen++;
+
+    const n = s.players.length;
+    const i = s.players.indexOf(m);
+    const near = [s.players[(i + n - 1) % n], s.players[(i + 1) % n]];
+
+    assert.ok(near.some((x) => team(x.role) === "demon"), `seed ${seed}`);
+    assert.equal(m.alignment, "evil");
+    assert.equal(team(m.shown), "townsfolk");
+    assert.equal(m.claim, m.shown);
+    assert.ok(!s.players.some((x) => x !== m && x.role === m.shown));
+    assert.deepEqual(m.bluffs, []);
+    assert.ok(!m.human);
+  }
+
+  assert.ok(seen > 0);
+
+  // Their (Chef) information is false, and the log says why.
+  const { p, e } = opNight("marionette-info", [null, "marionette"]);
+
+  p[1].shown = "chef";
+  p[1].claim = "chef";
+  e.night();
+
+  assert.equal(p[1].memories[0].functioning, false);
+  assert.match(p[1].memories[0].misinfo, /they are the Marionette/);
+
+  // They play as good: they suspect on the evidence, and don't bluff.
+  assert.ok(!e.s.audit.some((x) => x.type === "bluff" && x.data.playerId === p[1].id));
+});
+
+test("the Noble learns 3 players, exactly 1 of them evil", () => {
+  for (let seed = 0; seed < 30; seed++) {
+    const { s, p, e } = opNight(`noble-${seed}`, [null, "noble"]);
+
+    e.night();
+
+    const info = p[1].memories[0];
+    const named = info.targets.map((id) => s.players.find((x) => x.id === id));
+
+    assert.match(info.text, /^Noble: one of .+ is evil\.$/);
+    assert.equal(named.length, 3);
+    assert.equal(named.filter((x) => x.alignment === "evil").length, 1);
+  }
+});
+
+test("a mad Pixie claims their Townsfolk, and gains its ability when its holder dies", () => {
+  // (You're the Saint, so the Empath is the only other Townsfolk.)
+  const { s, p, e } = opNight("pixie", ["saint", "pixie", "empath"]);
+
+  e.night();
+
+  assert.equal(p[1].memories[0].text, "Pixie: the Empath is in play.");
+  assert.equal(p[1].pixieMad, true);
+  assert.equal(p[1].claim, "empath");
+
+  // When asked, they claim the Empath (with made-up information).
+  assert.match(e.ask(p[1].id), /^I claim Empath\./);
+
+  // The Empath dies: the Pixie gains the Empath ability.
+  e.kill(p[2], "execution");
+  assert.equal(p[1].gained, "empath");
+  assert.ok(s.audit.some((x) => x.type === "pixie" && /gains the Empath/.test(x.text)));
+});
+
+test("the Cannibal gains the ability of the last player who died by execution", () => {
+  const { s, p, strat, e } = opNight("cannibal", [null, "cannibal", "monk"]);
+
+  e.night();
+  s.phase = "day";
+  strat.vote = () => true;
+
+  // A good executee: the Monk ability, working.
+  e.nominate(p[2].id);
+  e.endDay();
+  assert.equal(p[1].gained, "monk");
+  assert.equal(p[1].cannibalPoison, null);
+
+  // An evil executee: a (fake) good ability, poisoned...
+  e.nominate(p[3].id); // Baron
+  e.endDay();
+  assert.notEqual(p[1].gained, "baron");
+  assert.equal(alignment(p[1].gained), "good");
+  assert.equal(p[1].poisoned, true);
+  assert.match(p[1].poisonedBy, /eating .*the Baron/);
+});
+
+test("a Cannibal's poison from an evil executee ends when a good player is executed", () => {
+  const { s, p, e } = opNight("cannibal-2", [null, "cannibal"]);
+  const [, c, butler, baron] = p;
+
+  s.phase = "day";
+  s.day = 1;
+  e.execute(baron);
+  assert.equal(c.poisoned, true);
+
+  e.execute(butler);
+  assert.equal(c.gained, "butler");
+  assert.equal(c.poisoned, false);
+  assert.equal(c.cannibalPoison, null);
+});
+
+test("a dead player's execution gives the Cannibal nothing", () => {
+  const { s, p, e } = opNight("cannibal-dead", [null, "cannibal"]);
+
+  s.phase = "day";
+  s.day = 1;
+  p[2].alive = false;
+  e.execute(p[2]);
+  assert.equal(p[1].gained, null);
+});
+
+test("an NPC Ogre becomes the alignment of the player they choose", () => {
+  const { s, p, strat, e } = opNight("ogre", [null, "ogre"]);
+
+  strat.ogre = () => p[4]; // the Imp
+  e.night();
+
+  assert.equal(p[1].alignment, "evil");
+  // They don't know: they play as good, and don't bluff.
+  assert.ok(!s.audit.some((x) => x.type === "bluff" && x.data.playerId === p[1].id));
+});
+
+test("you're never dealt the Pixie, Ogre or Marionette", () => {
+  for (let seed = 0; seed < 300; seed++) {
+    const human = createState(op, 10, seed).players[0];
+
+    assert.ok(!["pixie", "ogre", "marionette"].includes(human.role));
+  }
+});
+
+test("the Demon tells its Marionette only when evil is losing or it's under suspicion", () => {
+  const { s, p, e } = opNight("marionette-tell", [null, "marionette"], 2);
+  const [, m, butler, , imp] = p;
+  const r = s.r;
+
+  s.r = () => 0;
+
+  // 5 alive, 2 evil, from 2: on track, and nobody suspects the Demon.
+  butler.suspicion = { targetId: m.id, day: 1 };
+  e.marionetteReveal(imp);
+  assert.ok(!m.toldEvil);
+
+  // The good NPCs suspect the Demon: it tells them.
+  butler.suspicion = { targetId: imp.id, day: 1 };
+  e.marionetteReveal(imp);
+  assert.equal(m.toldEvil, 2);
+  assert.ok(s.audit.some((x) => x.type === "marionette" && /tells/.test(x.text)));
+  s.r = r;
+});
+
+test("a Marionette who knows keeps their claim, spreads misleading information and plays for evil", () => {
+  const { s, p, e } = opNight("marionette-decoy", [null, "marionette"], 2);
+  const [, m, butler, , imp] = p;
+
+  m.shown = "chef";
+  m.claim = "chef";
+  m.toldEvil = 2;
+  m.memories = [
+    {
+      night: 1,
+      role: "chef",
+      text: "Chef number: 0.",
+      targets: [],
+      functioning: false,
+    },
+  ];
+  s.phase = "day";
+  s.day = 2;
+  e.marionetteDawn();
+
+  // Their (false) information goes public; they still claim the Chef.
+  assert.equal(m.claim, "chef");
+  assert.ok(
+    s.publicLog.includes(`Day 2 — ${m.label} says: "I am the Chef. Night 1: My number is 0."`),
+  );
+
+  // With nothing new to share, they accuse a good player instead.
+  s.day = 3;
+  e.marionetteDawn();
+
+  const accusation = s.publicLog.find((x) => x.startsWith(`Day 3 — ${m.label} says:`));
+
+  assert.ok(accusation, s.publicLog.join("\n"));
+  assert.match(accusation, /I'm suspicious of/);
+  assert.ok(!accusation.includes(imp.label));
+
+  // They play for evil: never suspecting the Demon, voting for good nominees.
+  const strat = new SimpleStrategy();
+
+  for (let i = 0; i < 20; i++) {
+    assert.notEqual(strat.suspect(s, m, strat.others(s, m)), imp);
+  }
+
+  s.r = () => 0;
+  assert.equal(strat.vote(s, m, butler, { yes: 0, needed: 3 }), true);
+});
+
+test("a misinformed Noble sees any 3 players", () => {
+  const counts = new Set();
+
+  for (let seed = 0; seed < 40; seed++) {
+    const { s, p, e } = opNight(`noble-drunk-${seed}`, [null, "drunk"]);
+
+    p[1].shown = "noble";
+    p[1].claim = "noble";
+    e.night();
+
+    const named = p[1].memories[0].targets.map((id) =>
+      s.players.find((x) => x.id === id),
+    );
+
+    assert.equal(named.length, 3);
+    counts.add(named.filter((x) => x.alignment === "evil").length);
+  }
+
+  // Not always 0 (or always 2): any mix.
+  assert.ok(counts.size >= 2, [...counts].join(","));
+});

@@ -37,8 +37,8 @@ middle of the town square for the whole script.
 ## Scripts
 
 `scripts/` holds the scripts listed in `scripts/index.json`: Trouble Brewing,
-Everyone Can Play, Sects & Violets and Bad Moon Rising, in the official
-script-tool JSON format.
+Everyone Can Play, Sects & Violets, Bad Moon Rising and Onion Pies, in the
+official script-tool JSON format.
 
 ## Tuning
 
@@ -60,6 +60,7 @@ comment explaining it. These include:
 | `src/engine.js` | Runs nights, days, nominations, deaths and win checks |
 | `src/sects.js` | Sects & Violets characters (mixed into the engine) |
 | `src/bmr.js` | Bad Moon Rising characters (mixed into the engine) |
+| `src/onion.js` | Onion Pies characters (mixed into the engine) |
 | `src/storyteller.js` | What each character learns: true, false or bluffed |
 | `src/strategy.js` | How NPCs choose, vote, nominate, claim and suspect |
 | `src/log.js` | Formats the downloadable log |

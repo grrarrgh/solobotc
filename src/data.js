@@ -39,6 +39,9 @@ export const ROLES = {
   minstrel: ["Minstrel", "townsfolk"],
   tealady: ["Tea Lady", "townsfolk"],
   pacifist: ["Pacifist", "townsfolk"],
+  noble: ["Noble", "townsfolk"],
+  pixie: ["Pixie", "townsfolk"],
+  cannibal: ["Cannibal", "townsfolk"],
   butler: ["Butler", "outsider"],
   drunk: ["Drunk", "outsider"],
   recluse: ["Recluse", "outsider"],
@@ -51,6 +54,7 @@ export const ROLES = {
   tinker: ["Tinker", "outsider"],
   goon: ["Goon", "outsider"],
   lunatic: ["Lunatic", "outsider"],
+  ogre: ["Ogre", "outsider"],
   poisoner: ["Poisoner", "minion"],
   spy: ["Spy", "minion"],
   scarletwoman: ["Scarlet Woman", "minion"],
@@ -63,6 +67,7 @@ export const ROLES = {
   pithag: ["Pit-Hag", "minion"],
   godfather: ["Godfather", "minion"],
   mastermind: ["Mastermind", "minion"],
+  marionette: ["Marionette", "minion"],
   imp: ["Imp", "demon"],
   fanggu: ["Fang Gu", "demon"],
   vigormortis: ["Vigormortis", "demon"],
@@ -86,6 +91,7 @@ export const OUTSIDER_MODIFIERS = {
 // Townsfolk who learn something on the first night only, and those who keep
 // learning on later nights. Setup deals at least two of each when it can.
 export const FIRST_NIGHT_INFO = [
+  "noble",
   "washerwoman",
   "librarian",
   "investigator",
@@ -204,6 +210,12 @@ export const DEMON_KILL_PRIORITY = {
   sailor: "avoid", // can't die
   goon: "avoid", // makes the Demon drunk (and joins its team)
 
+  // Onion Pies.
+  noble: "med",
+  pixie: "med",
+  cannibal: "med", // gains the executed player's ability
+  ogre: "low",
+
   // The Demon's own Minions (by true character). Killing one can make the
   // Demon look good; the useful ones are avoided.
   baron: "low", // no ability left after setup
@@ -218,6 +230,7 @@ export const DEMON_KILL_PRIORITY = {
   pithag: "avoid",
   godfather: "avoid",
   mastermind: "avoid",
+  marionette: "avoid", // thinks they're good: a hidden teammate
 };
 
 // DEMON_STAR_PASS_CHANCE: chance the Demon kills itself to pass the Demon to
@@ -326,6 +339,14 @@ export const PITHAG_NO_DEATH_CHANCE = 0.3;
 // Tinker deaths, Shabaloth regurgitation, the Sweetheart's drunk and the
 // Sailor's drunk when no kill is at stake.
 export const FINAL_THREE_MARGIN = 0.5;
+
+// The Marionette: from Night 2, the Demon may tell its Marionette who they
+// are, when evil is losing (the Storyteller is helping evil; see lean() in
+// src/storyteller.js) or at least MARIONETTE_HEAT of the living good NPCs
+// suspect the Demon: then at MARIONETTE_REVEAL_CHANCE a night. A Marionette
+// who knows plays for evil, drawing suspicion away from the Demon.
+export const MARIONETTE_HEAT = 0.3;
+export const MARIONETTE_REVEAL_CHANCE = 0.5;
 
 // Bad Moon Rising Storyteller choices.
 // The Sailor: the Storyteller decides who is drunk (the Sailor or the player
@@ -523,6 +544,16 @@ export const ABILITIES = {
   shabaloth:
     "Each night*, choose 2 players: they die. A dead player you chose last night might be regurgitated.",
   po: "Each night*, you may choose a player: they die. If your last choice was no-one, choose 3 players tonight.",
+  noble:
+    "You start knowing 3 players, 1 and only 1 of which is evil.",
+  pixie:
+    "You start knowing 1 in-play Townsfolk. If you were mad that you were this character, you gain their ability when they die.",
+  cannibal:
+    "You have the ability of the recently killed executee. If they are evil, you are poisoned until a good player dies by execution.",
+  ogre:
+    "On your 1st night, choose a player (not yourself): you become their alignment (you don't know which) even if drunk or poisoned.",
+  marionette:
+    "You think you are a good character, but you are not. The Demon knows who you are. [You neighbour the Demon]",
 };
 
 // Yes/no questions an Artist can ask the Storyteller about a player.
@@ -559,9 +590,10 @@ export const PLAYER_COLOURS = [
 // first-night information, or information from an ability that's now spent,
 // may say it publicly the morning they get it (evil bluffers share their
 // bluffed information the same way). The chance for each character:
-export const PUBLIC_INFO_MIN_SEATS = 13;
+export const PUBLIC_INFO_MIN_SEATS = 12;
 export const PUBLIC_INFO_CHANCE = {
   // First night.
+  noble: 0.5,
   washerwoman: 0.5,
   librarian: 0.5,
   investigator: 0.4,
@@ -615,6 +647,10 @@ export const FORBIDDEN_HUMAN = new Set([
   "tinker",
   "goon",
   "lunatic",
+  // Onion Pies: the Pixie must claim their character in public (you don't
+  // make public claims), and the Ogre could turn you evil.
+  "pixie",
+  "ogre",
 ]);
 
 export const name = (id) => ROLES[id]?.[0] ?? id;

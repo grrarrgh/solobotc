@@ -134,6 +134,20 @@ export function createState(
     return k < 0 ? "chef" : unusedTF.splice(k, 1)[0];
   };
 
+  // The Marionette sits next to the Demon (never in your seat).
+  const mi = roles.indexOf("marionette");
+  const di = roles.findIndex((x) => team(x) === "demon");
+
+  if (mi > 0 && di >= 0) {
+    const n = roles.length;
+    const near = [(di + n - 1) % n, (di + 1) % n];
+    const seat = near.find((i) => i !== 0);
+
+    if (!near.includes(mi) && seat !== undefined) {
+      [roles[mi], roles[seat]] = [roles[seat], roles[mi]];
+    }
+  }
+
   // The Lunatic is shown a Demon, but not the one in play.
   const demonToken =
     pick(
@@ -144,8 +158,9 @@ export function createState(
     "imp";
 
   const players = roles.map((role, i) => {
+    // The Marionette, like the Drunk, is shown a Townsfolk not in play.
     const shown =
-      role === "drunk"
+      role === "drunk" || role === "marionette"
         ? drunkToken(i === 0)
         : role === "lunatic"
           ? demonToken
@@ -223,8 +238,9 @@ export function createState(
   // The Demon picks first and the Spy last, so the Spy sees every claim.
   const order = (p) =>
     team(p.role) === "demon" ? 0 : p.role === "spy" ? 2 : 1;
+  // (Not the Marionette, who thinks they're good and claims their token.)
   const evil = players
-    .filter((x) => x.alignment === "evil")
+    .filter((x) => x.alignment === "evil" && x.role !== "marionette")
     .sort((a, b) => order(a) - order(b));
   const taken = new Set();
 
@@ -410,6 +426,15 @@ export function createState(
       `${evilTwin.label} (Evil Twin) is paired with ${goodTwin.label} (${name(
         goodTwin.role,
       )}) and claims ${name(evilTwin.claim)}.`,
+    );
+  }
+
+  for (const p of players.filter((x) => x.role === "marionette")) {
+    setupLog(
+      "marionette",
+      `${p.label} is the Marionette, sitting next to the Demon; they think they are the ${name(
+        p.shown,
+      )}. The Demon knows who they are.`,
     );
   }
 

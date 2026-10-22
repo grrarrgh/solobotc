@@ -13,15 +13,23 @@ import { byId, pick, sample, shuffle } from "./util.js";
 // Drunk: the Drunk themselves, anyone made drunk "from now on" (by a
 // Sweetheart's death or a Philosopher choosing their character), and anyone
 // drunk until dusk (the Sailor, Innkeeper, Goon, Courtier or Minstrel).
+//
+// The Marionette has no ability either: like the Drunk, they act as the
+// Townsfolk they were shown, and their information is false.
 export const isDrunk = (p) =>
-  p.role === "drunk" || Boolean(p.drunkFrom) || Boolean(p.drunkTonight);
+  p.role === "drunk" ||
+  p.role === "marionette" ||
+  Boolean(p.drunkFrom) ||
+  Boolean(p.drunkTonight);
 
 export const isDemon = (p) => team(p.role) === "demon";
 
 // The ability a player acts with: the Drunk acts as the character they were
 // shown, and a Philosopher as the character they gained.
 export const ability = (p) =>
-  p.role === "drunk" ? p.shown : (p.gained ?? p.role);
+  p.role === "drunk" || p.role === "marionette"
+    ? p.shown
+    : (p.gained ?? p.role);
 
 // A player and their character, for the log: "Player 4, the Poisoner".
 export const who = (x) => `${x.label}, the ${name(x.role)}`;
@@ -34,8 +42,8 @@ export function misinformedBy(s, p) {
     (x) => x.alive && x.role === "vortox" && !x.poisoned,
   );
 
-  if (p.role === "drunk") {
-    causes.push("they are the Drunk");
+  if (p.role === "drunk" || p.role === "marionette") {
+    causes.push(`they are the ${name(p.role)}`);
   }
 
   if (p.drunkFrom) {
@@ -189,7 +197,7 @@ const PAIR_TEAM = {
 
 // Whether an information role wakes tonight.
 function actsTonight(role, night) {
-  if (FIRST_NIGHT.includes(role)) {
+  if (FIRST_NIGHT.includes(role) || role === "pixie") {
     return night === 1;
   }
 
@@ -657,8 +665,55 @@ export const gossipInfo = (s, t, q) => ({
   functioning: true,
 });
 
+// ── Onion Pies information ──────────────────────────────────
+
+const nobleText = (ts) => `Noble: one of ${listLabels(ts)} is evil.`;
+const pixieText = (role) => `Pixie: the ${name(role)} is in play.`;
+
+// The Townsfolk a Pixie can learn: those in play, or (`notInPlay`) those
+// that aren't. Never the Pixie.
+const pixieOptions = (s, p, notInPlay = false) => {
+  const inPlay = new Set(
+    s.players.filter((x) => x !== p).map((x) => x.role),
+  );
+
+  return s.script.ids.filter(
+    (id) =>
+      team(id) === "townsfolk" && id !== "pixie" && inPlay.has(id) !== notInPlay,
+  );
+};
+
 // Correct information for `role`, seen from player p's seat.
 function trueInfo(s, p, role, strat) {
+  if (role === "noble") {
+    const named = nameable(s, p);
+    const bad = pick(named.filter(evil), s.r);
+    const good = sample(
+      named.filter((x) => !evil(x)),
+      2,
+      s.r,
+    );
+
+    if (!bad || good.length < 2) {
+      return { targets: [], text: "No information." };
+    }
+
+    const ts = shuffle([bad, ...good], s.r);
+
+    return { targets: ts.map((x) => x.id), text: nobleText(ts) };
+  }
+
+  // (The Pixie remembers which character, to be mad about.)
+  if (role === "pixie") {
+    const id = pick(pixieOptions(s, p), s.r);
+
+    p.pixieRole = id;
+
+    return id
+      ? { targets: [], text: pixieText(id) }
+      : { targets: [], text: "No information." };
+  }
+
   const wanted = PAIR_TEAM[role];
 
   if (wanted) {
@@ -831,11 +886,56 @@ function framed(s, p) {
 // p's living evil neighbours, whom false information covers for.
 const evilNear = (s, p) => neigh(s, p).filter((x) => evil(x));
 
+// A false Noble: 3 players with no evil among them (the evil team's
+// scapegoat first), or failing that 2 evil.
+function falseNoble(s, p) {
+  const named = nameable(s, p);
+  const good = named.filter((x) => !evil(x));
+  const goat = framed(s, p);
+  const three = good.includes(goat)
+    ? [goat, ...sample(good.filter((x) => x !== goat), 2, s.r)]
+    : sample(good, 3, s.r);
+
+  if (three.length === 3) {
+    return shuffle(three, s.r);
+  }
+
+  return shuffle(
+    [...sample(named.filter(evil), 2, s.r), ...sample(good, 1, s.r)],
+    s.r,
+  );
+}
+
 // Deliberately false information for `role`, as an evil bluffer tells it.
 // A Drunk or poisoned good player hears the same kind of lie, so it helps
 // the evil team: it frames the scapegoat and vouches for evil players.
 function falseInfo(s, p, role, strat) {
   const wanted = PAIR_TEAM[role];
+
+  // A misinformed Noble (or a Marionette) sees any 3 players; an evil Noble
+  // bluffer (or a Marionette the Demon has told) frames 3 good ones.
+  if (role === "noble") {
+    const misled =
+      p.alignment === "good" || (p.role === "marionette" && !p.toldEvil);
+    const ts = misled ? sample(nameable(s, p), 3, s.r) : falseNoble(s, p);
+
+    return ts.length === 3
+      ? { targets: ts.map((x) => x.id), text: nobleText(ts) }
+      : { targets: [], text: "No information." };
+  }
+
+  // A misinformed Pixie learns a Townsfolk that isn't in play (and is mad
+  // about it, to no effect).
+  if (role === "pixie") {
+    const id =
+      pick(pixieOptions(s, p, true), s.r) ?? pick(pixieOptions(s, p), s.r);
+
+    p.pixieRole = id;
+
+    return id
+      ? { targets: [], text: pixieText(id) }
+      : { targets: [], text: "No information." };
+  }
 
   if (wanted) {
     const shown = pick(
@@ -1068,6 +1168,25 @@ function falseInfo(s, p, role, strat) {
 
 // Random information (e.g. a mad player's made-up information).
 function unreliableInfo(s, p, role, targets) {
+  if (role === "noble") {
+    const ts = sample(
+      s.players.filter((x) => x.id !== p.id),
+      3,
+      s.r,
+    );
+
+    return { targets: ts.map((x) => x.id), text: nobleText(ts) };
+  }
+
+  if (role === "pixie") {
+    const id = pick(
+      s.script.ids.filter((x) => team(x) === "townsfolk" && x !== "pixie"),
+      s.r,
+    );
+
+    return { targets: [], text: id ? pixieText(id) : "No information." };
+  }
+
   if (role === "clockmaker") {
     return {
       targets: [],

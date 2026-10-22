@@ -35,6 +35,7 @@ import {
 import {
   ability,
   bluffInfo,
+  madInfo,
   steer,
   evilTwinInfo,
   scapegoat,
@@ -47,8 +48,14 @@ import { byId, pick, sample } from "./util.js";
 // believe in (the "Minions" they were shown), though they're good.
 const thinksEvil = (p) => p.role === "lunatic" && !p.human;
 
+// The Marionette and an Ogre don't know they're evil: they play as good.
+// (Unless the Demon has told the Marionette.)
+const thinksGood = (p) =>
+  ["marionette", "ogre"].includes(p.role) && !p.human && !p.toldEvil;
+
 // The team p plays for.
-const sideOf = (p) => (thinksEvil(p) ? "evil" : p.alignment);
+const sideOf = (p) =>
+  thinksEvil(p) ? "evil" : thinksGood(p) ? "good" : p.alignment;
 
 // Whether p (playing for evil) counts x as a teammate.
 const teammate = (p, x) =>
@@ -127,6 +134,7 @@ function infoStance(m) {
     case "sage":
     case "eviltwin":
     case "lunatic":
+    case "noble":
       return "suspicious";
     case "professor":
       return /, who stayed dead\.$/.test(t) ? "suspicious" : null;
@@ -624,6 +632,22 @@ export class SimpleStrategy {
       : null;
   }
 
+  // A mad Pixie (until they gain the ability) answers as the character
+  // they're mad about, with made-up information to match (made up afresh
+  // each day).
+  pixieMad(s, p) {
+    if (!p.pixieMad || p.gained || !p.alive) {
+      return null;
+    }
+
+    if (p.pixieDay !== s.day) {
+      p.pixieDay = s.day;
+      p.pixieMemories = madInfo(s, p, p.pixieRole, this);
+    }
+
+    return { role: p.pixieRole, memories: p.pixieMemories };
+  }
+
   // For an Evil Twin: their good twin, and the good twin's information to
   // repeat word for word, with "X is your Evil Twin" naming the good twin.
   twinCopy(s, p) {
@@ -703,7 +727,7 @@ export class SimpleStrategy {
   //
   // The Evil Twin answers exactly as their good twin does (see twinCopy()).
   ask(s, p) {
-    const mad = p.mad?.day === s.day ? p.mad : null;
+    const mad = p.mad?.day === s.day ? p.mad : this.pixieMad(s, p);
     const copy = !mad && this.twinCopy(s, p);
     const memories = mad
       ? (mad.memories ?? [])
@@ -1684,6 +1708,15 @@ export class SimpleStrategy {
     const decoys = good.filter((x) => x.role !== "lunatic");
 
     return this.byPriority(s, decoys.length ? decoys : good);
+  }
+
+  // The Ogre (on their first night) joins the team of someone they don't
+  // suspect: anyone but their hunch.
+  ogre(s, p) {
+    const pool = this.others(s, p);
+    const trusted = pool.filter((x) => x.id !== p.suspicion?.targetId);
+
+    return pick(trusted.length ? trusted : pool, s.r);
   }
 
   // The Lunatic "kills" like a Demon: any other NPC but a twin, by priority.
