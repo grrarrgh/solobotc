@@ -192,6 +192,56 @@ export const GAMBLER_WILD_GUESS_CHANCE = 0.25;
 // targets) points at the evil team's shared scapegoat, when one is alive.
 export const SCAPEGOAT_CHANCE = 0.8;
 
+// How NPCs vote on a nomination.
+// GOOD_VOTE_CHANCE: a good NPC's chance to vote when nothing makes them lean
+//   either way. Each point of public evidence against the nominee (see
+//   evidence() in src/strategy.js) adds GOOD_VOTE_EVIDENCE_STEP, between
+//   GOOD_VOTE_MIN and GOOD_VOTE_MAX. They vote at GOOD_VOTE_MAX for someone
+//   they suspect and GOOD_VOTE_MIN for someone they trust.
+// HUMAN_NOMINATION_BONUS: added to a good NPC's chance when you nominated.
+// EVIL_VOTE_CHANCE: an evil NPC's chance to vote for a good nominee.
+// EVIL_TEAMMATE_VOTE_CHANCE: an evil NPC's chance to vote for a teammate,
+//   which they only do when their vote can't change the outcome (the
+//   nominee already has the votes needed, or can't reach them).
+export const GOOD_VOTE_CHANCE = 0.5;
+export const GOOD_VOTE_EVIDENCE_STEP = 0.15;
+export const GOOD_VOTE_MIN = 0.1;
+export const GOOD_VOTE_MAX = 0.9;
+export const HUMAN_NOMINATION_BONUS = 0.1;
+export const EVIL_VOTE_CHANCE = 0.85;
+export const EVIL_TEAMMATE_VOTE_CHANCE = 0.5;
+
+// How much each thing a good NPC has seen in public counts towards
+// suspecting a player (see evidence() in src/strategy.js). Negative weights
+// count towards trusting them.
+export const EVIDENCE_WEIGHT = {
+  claimsMyCharacter: 4, // claims the character I am
+  doubleClaim: 2, // claims the same character as another player
+  accusedByNightDeath: 2, // a player suspected them, then died in the night
+  trustedByNightDeath: -1, // a player trusted them, then died in the night
+  namedByInfo: 1, // someone's shared information points at them
+  vouchedByInfo: -1, // someone's shared information vouches for them
+  accused: 0.5, // someone says they're suspicious of them
+  trusted: -0.5, // someone says they trust them
+  nominatedTrusted: 1.5, // nominated a player I trust
+  votedTrusted: 0.5, // voted for a player I trust
+  nominatedNightDeath: 1, // nominated a player who later died in the night
+};
+
+// The evidence a good NPC needs before it changes who they suspect (less,
+// and they stick with their hunch). At 1, one player's say-so (0.5) isn't
+// enough, so the town doesn't all pile onto the first accusation.
+export const EVIDENCE_TO_SUSPECT = 1;
+
+// You, the human, can be misinformed like anyone else.
+// HUMAN_DRUNK_CHANCE: when the Drunk is dealt, the chance it's you (shown a
+//   Townsfolk, and never told). Otherwise you're dealt a good character at
+//   random, which can still be the Drunk.
+// HUMAN_POISON_CHANCE: each night, the chance the Poisoner picks you (not
+//   two nights running). Otherwise they pick as usual, and can still pick you.
+export const HUMAN_DRUNK_CHANCE = 0.15;
+export const HUMAN_POISON_CHANCE = 0.10;
+
 // Sects & Violets NPC behaviour.
 // WITCH_HUMAN_CHANCE: chance the Witch curses the human (the player most
 //   likely to nominate) rather than a random good NPC.

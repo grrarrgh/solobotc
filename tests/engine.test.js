@@ -23,7 +23,7 @@ import {
   nightInfo,
   infoMode,
 } from "../src/storyteller.js";
-import { shuffle, sample } from "../src/util.js";
+import { shuffle, sample, rng } from "../src/util.js";
 
 const script = JSON.parse(
   fs.readFileSync(new URL("../scripts/trouble-brewing.json", import.meta.url)),
@@ -193,23 +193,26 @@ function askedState(kind) {
 
   // Information that names nobody, so the NPC falls back on their general
   // suspicion rather than saying they have nothing to add.
-  s.players[1].memories.push({
-    night: 1,
-    role: "chef",
-    text: "Chef number: 1.",
-    targets: [],
-  });
+  // (The evil speaker, the Baron, bluffs the same.)
+  for (const p of [s.players[1], s.players[3]]) {
+    p.memories.push({
+      night: 1,
+      role: "chef",
+      text: "Chef number: 1.",
+      targets: [],
+    });
+  }
 
   return s;
 }
 
 function suspicionTarget(s, response) {
-  const label = response.match(/I'm suspicious of (Player \d+)\./)[1];
+  const label = response.match(/I'm suspicious of (Player \d+)[.:]/)[1];
 
   return s.players.find((p) => p.label === label);
 }
 
-test("NPC suspicion statements obey truth, lie, status, and target constraints", () => {
+test("NPC suspicion statements obey status and target constraints", () => {
   for (const kind of ["good", "evil", "poisoned", "drunk"]) {
     const s = askedState(kind);
     const e = new Engine(s);
@@ -221,14 +224,144 @@ test("NPC suspicion statements obey truth, lie, status, and target constraints",
     assert.ok(target);
     assert.equal(target.human, false);
     assert.notEqual(target.id, speaker.id);
-    assert.match(response, /I'm suspicious of Player \d+\./);
+    assert.match(response, /I'm suspicious of Player \d+[.:]/);
 
-    if (kind === "good") {
-      assert.equal(target.alignment, "evil");
-    } else {
+    if (kind === "evil") {
       assert.equal(target.alignment, "good");
     }
   }
+});
+
+test("good NPCs can't see alignments: with no evidence, their hunches are anyone", () => {
+  const seen = new Set();
+
+  for (let i = 0; i < 60; i++) {
+    const s = askedState("good");
+    const chef = s.players[1];
+
+    s.r = rng(`hunch-${i}`);
+    seen.add(suspicionTarget(s, new Engine(s).ask(chef.id)).alignment);
+  }
+
+  assert.deepEqual([...seen].sort(), ["evil", "good"]);
+});
+
+test("good NPCs suspect players on public evidence, and say why", () => {
+  const s = askedState("good");
+  const [, chef, butler, baron] = s.players;
+  const strat = new SimpleStrategy();
+
+  // The Baron publicly claims the Chef: the real Chef knows they're lying.
+  baron.claim = "chef";
+  baron.claimKnown = true;
+  baron.publicClaim = "chef";
+
+  let o = strat.opinion(s, chef);
+
+  assert.equal(o.targetId, baron.id);
+  assert.equal(
+    o.text,
+    `I'm suspicious of ${baron.label}: they claim the Chef, but I'm the Chef.`,
+  );
+
+  // Once the Chef claims in public too, the Butler sees a double claim.
+  chef.claimKnown = true;
+  chef.publicClaim = "chef";
+  o = strat.opinion(s, butler);
+  assert.equal(o.type, "suspicious");
+  assert.match(o.text, /they and Player \d both claim the Chef/);
+
+  // Someone who accused the Butler and then died in the night.
+  const t = createState(script, 8, "evidence");
+  const [, a, b, c] = t.players;
+
+  for (const x of [a, b, c]) {
+    role(x, "soldier", "good");
+  }
+
+  a.alive = false;
+  a.diedAtNight = 2;
+  t.statements = [
+    { byId: a.id, day: 1, type: "suspicious", targetId: c.id, source: "opinion" },
+  ];
+
+  const why = strat.evidence(t, b, c);
+
+  assert.ok(why.score > 0);
+  assert.deepEqual(why.reasons, [
+    `${a.label} was suspicious of them, then died in the night`,
+  ]);
+  assert.equal(strat.suspect(t, b, [c, ...t.players.slice(4)]), c);
+});
+
+test("what NPCs say when asked is recorded for others to weigh", () => {
+  const s = base("statements");
+  const [, chef, , baron] = s.players;
+
+  chef.memories.push({
+    night: 1,
+    role: "investigator",
+    text: `One of ${baron.label} and Player 3 is the Baron.`,
+    targets: [baron.id],
+  });
+
+  new Engine(s).ask(chef.id);
+
+  assert.ok(
+    s.statements.some(
+      (x) =>
+        x.byId === chef.id &&
+        x.targetId === baron.id &&
+        x.type === "suspicious" &&
+        x.source === "info",
+    ),
+  );
+});
+
+test("evil NPCs vote for a teammate only when it can't change the outcome", () => {
+  const s = base("teammate-votes");
+  const [, , , baron, imp] = s.players;
+  const strat = new SimpleStrategy();
+
+  s.r = () => 0; // always within the chance
+
+  assert.equal(strat.vote(s, baron, imp), false); // no tally: never
+  assert.equal(strat.vote(s, baron, imp, { yes: 1, needed: 3 }), true);
+  assert.equal(strat.vote(s, baron, imp, { yes: 2, needed: 3 }), false);
+  assert.equal(strat.vote(s, baron, imp, { yes: 3, needed: 3 }), true);
+
+  // Across many votes, the evil team sometimes votes for its own.
+  let teammateVotes = 0;
+
+  for (let seed = 0; seed < 100; seed++) {
+    const g = createState(script, 10, seed);
+    const e = new Engine(g);
+
+    e.start();
+    settle(e);
+
+    const demon = g.players.find((x) => team(x.role) === "demon");
+
+    if (g.phase !== "day" || !demon?.alive) {
+      continue;
+    }
+
+    const records = e.votes(demon);
+
+    teammateVotes += records.filter(
+      (r) => r.attempted && e.player(r.playerId).alignment === "evil",
+    ).length;
+
+    // The evil team's votes never decide it.
+    const good = records.filter(
+      (r) => r.attempted && e.player(r.playerId).alignment !== "evil",
+    ).length;
+    const evil = records.filter((r) => r.attempted).length - good;
+
+    assert.ok(evil === 0 || good >= e.votesNeeded() || good + evil < e.votesNeeded());
+  }
+
+  assert.ok(teammateVotes > 0);
 });
 
 test("post-game Key Moments include hidden Poisoner, Monk, and Demon night actions", () => {
@@ -1613,16 +1746,77 @@ test("only Townsfolk claimers nominate a claimed Virgin, first-night claimers fi
   assert.equal(strat.nominator(s, butler), null);
 });
 
-test("the Poisoner goes after ongoing information roles", () => {
+test("the Poisoner goes after information roles: first-night ones only on Night 1", () => {
   const s = base("poison-ongoing");
   const strat = new SimpleStrategy();
   const empath = s.players[2];
 
   role(empath, "empath", "good");
 
+  s.night = 2;
+
   for (let i = 0; i < 30; i++) {
     assert.equal(strat.poison(s), empath);
   }
+
+  // Night 1: the Chef (first-night information) is fair game too.
+  s.night = 1;
+
+  const picks = new Set(
+    Array.from({ length: 60 }, () => strat.poison(s).id),
+  );
+
+  assert.deepEqual([...picks].sort(), [s.players[1].id, empath.id].sort());
+});
+
+test("the Poisoner sometimes picks the human, who then hears false information", () => {
+  let poisoned = 0;
+  let falseInfo = 0;
+
+  for (let seed = 0; seed < 300; seed++) {
+    const s = createState(script, 10, `human-poison-${seed}`);
+    const poisoner = s.players.find((x) => x.role === "poisoner");
+    const h = s.players[0];
+
+    if (!poisoner || h.role === "drunk") {
+      continue;
+    }
+
+    const e = new Engine(s);
+
+    e.start();
+    settle(e);
+
+    if (s.audit.some((x) => x.type === "poison" && x.data.targetId === h.id)) {
+      poisoned++;
+      falseInfo += h.memories.some((m) => m.night === 1 && !m.functioning)
+        ? 1
+        : 0;
+    }
+  }
+
+  assert.ok(poisoned > 0);
+  assert.ok(falseInfo > 0);
+});
+
+test("the human can be dealt the Drunk, shown a Townsfolk they can play", () => {
+  let drunk = 0;
+
+  for (let seed = 0; seed < 400; seed++) {
+    const s = createState(script, 10, seed);
+    const h = s.players[0];
+
+    if (h.role !== "drunk") {
+      continue;
+    }
+
+    drunk++;
+    assert.equal(team(h.shown), "townsfolk");
+    assert.ok(!FORBIDDEN_HUMAN.has(h.shown), h.shown);
+    assert.equal(h.claim, h.shown);
+  }
+
+  assert.ok(drunk > 0);
 });
 
 test("an evil Empath bluffer keeps their number until a neighbour dies", () => {

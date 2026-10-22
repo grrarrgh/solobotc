@@ -17,6 +17,16 @@ import {
   VIGORMORTIS_MINION_PRIORITY,
   PITHAG_EVIL_CHANCE,
   CERENOVUS_EVIL_CHANCE,
+  GOOD_VOTE_CHANCE,
+  GOOD_VOTE_EVIDENCE_STEP,
+  GOOD_VOTE_MIN,
+  GOOD_VOTE_MAX,
+  HUMAN_NOMINATION_BONUS,
+  EVIL_VOTE_CHANCE,
+  EVIL_TEAMMATE_VOTE_CHANCE,
+  EVIDENCE_WEIGHT,
+  EVIDENCE_TO_SUSPECT,
+  HUMAN_POISON_CHANCE,
 } from "./data.js";
 import {
   ability,
@@ -101,69 +111,253 @@ function infoStance(m) {
   }
 }
 
-export class SimpleStrategy {
-  // Good NPCs point at evil players, unless drunk or poisoned (50% wrong).
-  // Evil NPCs always point at good players.
-  suspect(s, p, pool) {
-    const truthful = pool.filter((x) => x.alignment === "evil");
-    const falseTargets = pool.filter((x) => x.alignment === "good");
+// A player's character as last claimed in public (null if they haven't, or
+// for the human, who never claims).
+const publicClaim = (x) =>
+  x.claimKnown && !x.human ? (x.publicClaim ?? x.claim) : null;
 
-    let candidates;
+// Public evidence at least this strong outweighs a good NPC's own
+// information when they give their opinion (see opinion()).
+const STRONG_EVIDENCE = 3;
 
-    if (p.alignment === "evil") {
-      // Evil mostly points at the team's shared scapegoat.
-      const goat = scapegoat(s);
+// Records what p just said in public (information naming players, and their
+// opinion), so good NPCs can weigh it (see evidence()).
+export function heard(s, p, memories, opinion = null) {
+  s.statements ??= [];
 
-      if (falseTargets.includes(goat) && s.r() < SCAPEGOAT_CHANCE) {
-        return goat;
-      }
-
-      candidates = falseTargets;
-    } else if (isDrunk(p) || p.poisoned) {
-      const wrong = s.r() < 0.5;
-
-      candidates =
-        wrong && falseTargets.length
-          ? falseTargets
-          : truthful.length
-            ? truthful
-            : falseTargets;
-    } else {
-      candidates = truthful;
+  const say = (type, targetId, source) => {
+    if (["trust", "suspicious"].includes(type) && targetId && targetId !== p.id) {
+      s.statements.push({ byId: p.id, day: s.day, type, targetId, source });
     }
+  };
 
-    return pick(candidates, s.r);
+  for (const m of memories) {
+    for (const id of m.targets ?? []) {
+      say(infoStance(m), id, "info");
+    }
   }
 
-  // Each NPC keeps one suspect. It can move at the start of a new day (35%
-  // chance), and must move if the suspect has died. It only ever moves to a
-  // living NPC, never the human. Evil NPCs never suspect a teammate (such as
-  // the Demon), even one who turned evil after they picked them.
+  if (opinion) {
+    say(opinion.type, opinion.targetId, "opinion");
+  }
+}
+
+// What's been said in public about t: each speaker's information about t
+// (once per speaker and stance), and each speaker's latest opinion if it
+// was about t.
+function heardAbout(s, t) {
+  const info = new Map();
+  const latest = new Map();
+
+  for (const st of s.statements ?? []) {
+    if (st.source === "opinion") {
+      latest.set(st.byId, st);
+    } else if (st.targetId === t.id) {
+      info.set(`${st.byId}:${st.type}`, st);
+    }
+  }
+
+  return [
+    ...info.values(),
+    ...[...latest.values()].filter((st) => st.targetId === t.id),
+  ];
+}
+
+export class SimpleStrategy {
+  // Who in `pool` p suspects.
+  //
+  // Good NPCs can't see alignments: they go on what they've seen in public
+  // (see evidence()), never suspecting a player their own information
+  // vouches for. With nothing to go on, they keep their hunch, or pick one.
+  //
+  // Evil NPCs always point at good players: first anyone claiming their own
+  // character (they have to), then mostly the team's shared scapegoat.
+  suspect(s, p, pool) {
+    if (p.alignment === "good") {
+      return this.reasoned(s, p, pool);
+    }
+
+    const good = pool.filter((x) => x.alignment === "good");
+    const rival = good.find(
+      (x) => publicClaim(x) === p.claim && !isTwin(s, x),
+    );
+
+    if (rival) {
+      return rival;
+    }
+
+    const goat = scapegoat(s);
+
+    if (good.includes(goat) && s.r() < SCAPEGOAT_CHANCE) {
+      return goat;
+    }
+
+    return pick(good, s.r);
+  }
+
+  // A good NPC's suspect in `pool`: the player with the most evidence
+  // against them, if it's at least EVIDENCE_TO_SUSPECT (keeping their
+  // current suspect on a tie), else their current hunch, else anyone they
+  // don't trust.
+  reasoned(s, p, pool) {
+    const trusted = this.trusted(p);
+    const open = pool.filter((x) => !trusted.has(x.id));
+    const options = open.length ? open : pool;
+    const scores = new Map(
+      options.map((x) => [x, this.evidence(s, p, x).score]),
+    );
+    const best = Math.max(0, ...scores.values());
+    const top =
+      best >= EVIDENCE_TO_SUSPECT
+        ? options.filter((x) => scores.get(x) === best)
+        : options;
+
+    return top.find((x) => x.id === p.suspicion?.targetId) ?? pick(top, s.r);
+  }
+
+  // Each NPC keeps one suspect, always a living NPC, never the human.
+  //
+  // A good NPC's suspect follows the evidence (see reasoned()). Anyone with
+  // evidence against their suspect says what it is, and `score` is how
+  // much there is.
+  //
+  // An evil NPC's suspect can move at the start of a new day (35% chance),
+  // and must move if the suspect has died. Evil NPCs never suspect a
+  // teammate (such as the Demon), even one who turned evil after they picked
+  // them.
   suspicion(s, p) {
-    const current = byId(s, p.suspicion?.targetId);
-    const newDay = p.suspicion?.day !== s.day;
-    const stale =
-      !current?.alive ||
-      current.human ||
-      (p.alignment === "evil" && current.alignment === "evil");
-    const move = stale || (newDay && s.r() < 0.35);
+    let target;
 
-    const target = move
-      ? this.suspect(
-          s,
-          p,
-          this.others(s, p),
-        )
-      : current;
+    if (p.alignment === "good") {
+      target = this.suspect(s, p, this.others(s, p));
+    } else {
+      const current = byId(s, p.suspicion?.targetId);
+      const newDay = p.suspicion?.day !== s.day;
+      const stale =
+        !current?.alive || current.human || current.alignment === "evil";
+      const move = stale || (newDay && s.r() < 0.35);
 
-    p.suspicion = target ? { targetId: target.id, day: s.day } : null;
+      target = move ? this.suspect(s, p, this.others(s, p)) : current;
+    }
 
-    return target
-      ? {
-          targetId: target.id,
-          text: `I'm suspicious of ${target.label}.`,
+    const why = target ? this.evidence(s, p, target) : null;
+
+    if (!target) {
+      return null;
+    }
+
+    p.suspicion = { targetId: target.id, day: s.day };
+
+    return {
+      targetId: target.id,
+      score: why.score,
+      text:
+        why.score > 0
+          ? `I'm suspicious of ${target.label}: ${why.reasons.join("; ")}.`
+          : `I'm suspicious of ${target.label}.`,
+    };
+  }
+
+  // ── Public reasoning ───────────────────────────────────────
+
+  // The players p's own information vouches for.
+  trusted(p) {
+    return new Set(
+      p.memories
+        .filter((m) => infoStance(m) === "trust")
+        .flatMap((m) => m.targets ?? []),
+    );
+  }
+
+  // What p has seen in public that makes them suspect t (or trust them),
+  // weighed by EVIDENCE_WEIGHT in data.js: their own claim against t's,
+  // double claims, what players said (and whether they then died in the
+  // night), and who nominated or voted for whom. Returns the total `score`
+  // and up to two `reasons` against t, strongest first.
+  evidence(s, p, t) {
+    const W = EVIDENCE_WEIGHT;
+    const found = [];
+    const add = (weight, text) => found.push({ weight, text });
+    const twins = (a, b) => isTwin(s, a) && isTwin(s, b);
+    const claim = publicClaim(t);
+
+    if (claim && !twins(p, t)) {
+      if (claim === p.claim) {
+        add(
+          W.claimsMyCharacter,
+          `they claim the ${name(claim)}, but I'm the ${name(claim)}`,
+        );
+      }
+
+      for (const x of s.players) {
+        if (x !== t && x !== p && publicClaim(x) === claim && !twins(x, t)) {
+          add(
+            W.doubleClaim,
+            `they and ${x.label} both claim the ${name(claim)}`,
+          );
         }
-      : null;
+      }
+    }
+
+    for (const st of heardAbout(s, t)) {
+      const by = byId(s, st.byId);
+      const trust = st.type === "trust";
+
+      if (!by || by === p) {
+        continue;
+      }
+
+      if (by.diedAtNight) {
+        add(
+          trust ? W.trustedByNightDeath : W.accusedByNightDeath,
+          `${by.label} ${
+            trust ? "trusted" : "was suspicious of"
+          } them, then died in the night`,
+        );
+      } else if (st.source === "info") {
+        add(
+          trust ? W.vouchedByInfo : W.namedByInfo,
+          `${by.label}'s information ${
+            trust ? "vouches for" : "points at"
+          } them`,
+        );
+      } else {
+        add(
+          trust ? W.trusted : W.accused,
+          `${by.label} ${trust ? "trusts" : "is suspicious of"} them`,
+        );
+      }
+    }
+
+    const trusted = this.trusted(p);
+
+    for (const v of s.voteHistory ?? []) {
+      const n = byId(s, v.nomineeId);
+
+      if (!n || n === t) {
+        continue;
+      }
+
+      if (trusted.has(n.id) && v.nominatorId === t.id) {
+        add(W.nominatedTrusted, `they nominated ${n.label}, whom I trust`);
+      } else if (trusted.has(n.id) && v.voterIds.includes(t.id)) {
+        add(W.votedTrusted, `they voted for ${n.label}, whom I trust`);
+      } else if (n.diedAtNight && v.nominatorId === t.id) {
+        add(
+          W.nominatedNightDeath,
+          `they nominated ${n.label}, who later died in the night`,
+        );
+      }
+    }
+
+    return {
+      score: found.reduce((n, x) => n + x.weight, 0),
+      reasons: found
+        .filter((x) => x.weight > 0)
+        .sort((a, b) => b.weight - a.weight)
+        .slice(0, 2)
+        .map((x) => x.text),
+    };
   }
 
   // An NPC's closing remark when asked, one of:
@@ -172,6 +366,11 @@ export class SimpleStrategy {
   //   where it names someone (so a Drunk's or a bluffer's wrong information
   //   gives a wrong opinion);
   // - otherwise, "suspicious" of their general suspect (see suspicion()).
+  //
+  // Public evidence against their suspect (see evidence()) comes first when
+  // it's strong (STRONG_EVIDENCE). An NPC without information only speaks
+  // up with evidence (EVIDENCE_TO_SUSPECT), good or evil alike, so saying
+  // nothing isn't a tell.
   opinion(s, p) {
     const nothing = { type: "nothing", text: "I have nothing else to add." };
     const twin = this.twinOf(s, p);
@@ -185,19 +384,19 @@ export class SimpleStrategy {
       };
     }
 
-    if (p.alignment === "good" && !p.memories.length) {
-      return nothing;
-    }
-
-    const fromInfo = this.infoOpinion(s, p);
-
-    if (fromInfo) {
-      return fromInfo;
-    }
-
     const sus = this.suspicion(s, p);
+    const general = sus ? { type: "suspicious", ...sus } : nothing;
+    const evident = sus?.score >= EVIDENCE_TO_SUSPECT;
 
-    return sus ? { type: "suspicious", ...sus } : nothing;
+    if (evident && sus.score >= STRONG_EVIDENCE) {
+      return general;
+    }
+
+    if (!p.memories.length) {
+      return evident ? general : nothing;
+    }
+
+    return this.infoOpinion(s, p) ?? general;
   }
 
   // Once dead, the Mutant (no longer at risk of execution) can claim to be
@@ -304,19 +503,22 @@ export class SimpleStrategy {
       : copy
         ? copy.memories
         : p.memories;
-    const details = memories.length
-      ? memories
-          .map(
-            (x) =>
-              `${x.day ? `Day ${x.day}` : `Night ${x.night}`}: ${speak(x.text)}`,
-          )
-          .join("\n")
+    const info = memories.map(
+      (x) => `${x.day ? `Day ${x.day}` : `Night ${x.night}`}: ${speak(x.text)}`,
+    );
+    const details = info.length
+      ? info.join("\n")
       : "I have no stored information.";
     const opinion = mad
       ? (this.infoOpinion(s, { ...p, memories }) ?? {
           text: "I have nothing else to add.",
         })
       : this.opinion(s, p);
+
+    heard(s, p, memories, opinion);
+
+    // What they said, for the Claims table.
+    p.answer = { day: s.day, info, opinion: opinion.text };
 
     // Both twins insist they're the good one.
     const twin = !mad && this.twinOf(s, p);
@@ -346,20 +548,50 @@ export class SimpleStrategy {
       .join("\n");
   }
 
-  vote(s, v, n) {
-    if (v.alignment === "evil" && n.alignment === "evil") {
-      return false;
+  // Whether v votes for nominee n. `tally` is how the vote stands when v
+  // decides: `yes` votes so far, the votes `needed` to mark n, and the
+  // `nominator`. (Evil voters decide last, so they know how it's going.)
+  //
+  // Evil NPCs vote for good nominees at EVIL_VOTE_CHANCE, and for a teammate
+  // (at EVIL_TEAMMATE_VOTE_CHANCE) only when their vote can't change the
+  // outcome.
+  //
+  // Good NPCs vote by what they think of n (see the GOOD_VOTE_* settings in
+  // data.js). A dead good player has one vote left: they save it for a
+  // nominee they are suspicious of.
+  vote(s, v, n, tally = null) {
+    if (v.alignment === "evil") {
+      if (n.alignment !== "evil") {
+        return s.r() < EVIL_VOTE_CHANCE;
+      }
+
+      const harmless =
+        tally && (tally.yes >= tally.needed || tally.yes + 1 < tally.needed);
+
+      return Boolean(harmless) && s.r() < EVIL_TEAMMATE_VOTE_CHANCE;
     }
 
-    // A dead good player has one vote left: they save it for a nominee they
-    // are suspicious of.
-    if (!v.alive && v.alignment === "good") {
-      const o = this.opinion(s, v);
+    const o = this.opinion(s, v);
+    const about = o.targetId === n.id ? o.type : null;
 
-      return o.type === "suspicious" && o.targetId === n.id;
+    if (!v.alive) {
+      return about === "suspicious";
     }
 
-    return s.r() < (v.alignment === "evil" ? 0.85 : 0.62);
+    if (about === "suspicious") {
+      return s.r() < GOOD_VOTE_MAX;
+    }
+
+    if (about === "trust" || this.trusted(v).has(n.id)) {
+      return s.r() < GOOD_VOTE_MIN;
+    }
+
+    const chance =
+      GOOD_VOTE_CHANCE +
+      GOOD_VOTE_EVIDENCE_STEP * this.evidence(s, v, n).score +
+      (tally?.nominator?.human ? HUMAN_NOMINATION_BONUS : 0);
+
+    return s.r() < Math.min(GOOD_VOTE_MAX, Math.max(GOOD_VOTE_MIN, chance));
   }
 
   // ── Picking players ────────────────────────────────────────
@@ -423,13 +655,29 @@ export class SimpleStrategy {
   // The Poisoner goes after good players with ongoing information (Empath,
   // Fortune Teller, Undertaker) when there are any.
   // (Not the same player two nights running, when there's a choice.)
+  // The Poisoner picks a good player with information: on Night 1 anyone
+  // who learns something tonight, later those who learn something every
+  // night. The human is picked at HUMAN_POISON_CHANCE (not two nights
+  // running), and can also be picked like anyone else.
   poison(s, p = null) {
     const good = s.players.filter((x) => x.alive && x.alignment === "good");
-    const ongoing = good.filter((x) => ONGOING_INFO.includes(ability(x)));
-    const pool = ongoing.length ? ongoing : good;
+    const roles =
+      s.night === 1 ? [...FIRST_NIGHT_INFO, ...ONGOING_INFO] : ONGOING_INFO;
+    const info = good.filter((x) => roles.includes(ability(x)));
+    const pool = info.length ? info : good;
 
     if (!p) {
       return pick(pool, s.r);
+    }
+
+    const human = good.find((x) => x.human);
+
+    if (
+      human &&
+      !p.lastPicks?.poison?.includes(human.id) &&
+      s.r() < HUMAN_POISON_CHANCE
+    ) {
+      return this.noted(p, "poison", human);
     }
 
     return this.noted(p, "poison", pick(this.fresh(p, "poison", pool), s.r));

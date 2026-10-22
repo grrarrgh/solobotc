@@ -128,6 +128,12 @@ let s;
 let e;
 let selectedPlayerId = null;
 
+// Your notes on each player, by id: { guess: "good" | "evil" | "", role,
+// text }. Only you see them; they're cleared with Reset.
+let notes = {};
+
+const noteFor = (id) => notes[id] ?? { guess: "", role: "", text: "" };
+
 // Players picked in the town square while the Storyteller has woken you.
 let nightPicks = [];
 
@@ -179,6 +185,8 @@ function start() {
     e.start();
 
     selectedPlayerId = null;
+    notes = {};
+    noteRoleOptions();
 
     $("setup").hidden = true;
     $("game").hidden = false;
@@ -208,11 +216,21 @@ function circle() {
   $("circle").innerHTML = s.players
     .map((p, i) => {
       const token = p.human || p.claimKnown ? name(p.claim) : "Unknown";
+      const note = noteFor(p.id);
+      const noted = [
+        note.guess,
+        note.role && `${name(note.role)}?`,
+        note.text,
+      ].filter(Boolean);
 
       return `
         <button
-          title="${esc(`${p.label}: ${token}`)}"
+          title="${esc(
+            `${p.label}: ${token}${noted.length ? ` (your notes: ${noted.join(", ")})` : ""}`,
+          )}"
           class="seat ${p.human ? "human" : ""} ${p.alive ? "" : "dead"} ${
+            note.guess ? `guess-${note.guess}` : ""
+          } ${
             (s.pending ? nightPicks.includes(p.id) : p.id === selectedPlayerId)
               ? "selected"
               : ""
@@ -237,6 +255,14 @@ function circle() {
           <small class="player-name" style="color:${playerColour(p)}">
             ${esc(p.label)}
           </small>
+
+          ${
+            note.role
+              ? `<small class="note-role role-${alignment(note.role)}">${esc(
+                  name(note.role),
+                )}?</small>`
+              : ""
+          }
 
           ${p.alive ? "" : "<br><small>DEAD</small>"}
         </button>
@@ -556,6 +582,121 @@ function renderPublic() {
           .join("")}`,
     )
     .join("");
+}
+
+// ── Claims & notes ───────────────────────────────────────────
+
+// Every NPC in one table: what they claim, the information and opinion they
+// last gave (when you asked them, or shared in public) and your notes.
+// Pressing a row selects that player.
+function renderClaims() {
+  const rows = s.players
+    .filter((p) => !p.human)
+    .map((p) => {
+      const a = p.answer;
+      const info = [
+        ...(a?.info ?? []),
+        ...(p.shared ?? []).filter((x) => !a?.info.includes(x)),
+      ];
+      const said = [
+        ...info.map((x) => `<div>${linkRoles(x)}</div>`),
+        a ? `<div class="claims-opinion">${linkRoles(a.opinion)}</div>` : "",
+      ].join("");
+      const note = noteFor(p.id);
+
+      return `<tr data-id="${esc(p.id)}" class="${p.alive ? "" : "is-dead"} ${
+        p.id === selectedPlayerId ? "is-selected" : ""
+      }">
+          <td>${colourPlayers(p.label)}${
+            p.alive ? "" : '<br><small class="claims-dead">DEAD</small>'
+          }</td>
+          <td>${p.claimKnown ? roleLink(p.claim) : '<span class="unknown">—</span>'}</td>
+          <td>${
+            said
+              ? `${said}${a ? `<small class="claims-when">Asked on Day ${a.day}</small>` : ""}`
+              : '<span class="unknown">Not asked yet</span>'
+          }</td>
+          <td>${[
+            note.guess &&
+              `<span class="guess-tag guess-${note.guess}">${esc(note.guess)}</span>`,
+            note.role && `${roleLink(note.role)}?`,
+            note.text && esc(note.text),
+          ]
+            .filter(Boolean)
+            .join(" ")}</td>
+        </tr>`;
+    })
+    .join("");
+
+  $("claims").innerHTML = `<div class="grimoire-wrap">
+      <table class="grimoire claims">
+        <thead>
+          <tr><th>Player</th><th>Claim</th><th>Said</th><th>Your notes</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  $("claims")
+    .querySelectorAll("tr[data-id]")
+    .forEach((row) => {
+      row.onclick = (ev) => {
+        if (ev.target.closest(".role-link") || s.pending || voteAnim) {
+          return;
+        }
+
+        selectedPlayerId = row.dataset.id;
+        $("answer").textContent = "";
+        render();
+      };
+    });
+}
+
+// The notes controls show the selected player's notes. (The note text box
+// is left alone while you're typing in it.)
+function renderNotes(t) {
+  const note = t ? noteFor(t.id) : null;
+
+  $("notes").hidden = !t;
+
+  if (!t) {
+    return;
+  }
+
+  document.querySelectorAll("#notes [data-guess]").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.dataset.guess === note.guess));
+  });
+
+  $("note-role").value = note.role;
+
+  if (document.activeElement !== $("note-text")) {
+    $("note-text").value = note.text;
+  }
+}
+
+// Changes the selected player's notes and redraws.
+function setNote(change) {
+  if (!selectedPlayerId) {
+    return;
+  }
+
+  notes[selectedPlayerId] = { ...noteFor(selectedPlayerId), ...change };
+  render();
+}
+
+// The character choices for notes: the script's characters, by team.
+function noteRoleOptions() {
+  $("note-role").innerHTML = `<option value="">Character?</option>${TEAMS.map(
+    ([key, label]) => {
+      const ids = s.script.ids.filter((id) => team(id) === key);
+
+      return ids.length
+        ? `<optgroup label="${esc(label)}">${ids
+            .map((id) => `<option value="${esc(id)}">${esc(name(id))}</option>`)
+            .join("")}</optgroup>`
+        : "";
+    },
+  ).join("")}`;
 }
 
 // ── Final reveal ─────────────────────────────────────────────
@@ -909,6 +1050,8 @@ function render() {
     .join("");
 
   renderPublic();
+  renderClaims();
+  renderNotes(t);
   renderNightChoice();
 
   $("actions").hidden = !!s.winner || !t || !!s.pending;
@@ -1045,6 +1188,7 @@ function resetGame() {
   s = null;
   e = null;
   selectedPlayerId = null;
+  notes = {};
   nightPicks = [];
   shownGameOver = false;
 
@@ -1110,6 +1254,14 @@ $("ask").onclick = () => {
     $("answer").textContent = err.message;
   }
 };
+
+// Your notes on the selected player.
+document.querySelectorAll("#notes [data-guess]").forEach((b) => {
+  b.onclick = () => setNote({ guess: b.dataset.guess });
+});
+
+$("note-role").onchange = () => setNote({ role: $("note-role").value });
+$("note-text").oninput = () => setNote({ text: $("note-text").value.trim() });
 
 $("nominate").onclick = () => runVote(() => e.nominate(selectedPlayerId));
 

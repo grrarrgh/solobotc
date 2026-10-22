@@ -91,6 +91,31 @@
             <button id="artist-ask">Ask Storyteller</button>
           </span>
           <p id="answer"></p>
+
+          <!-- Your own notes on the selected player (only you see them). -->
+          <div id="notes" class="notes">
+            <span class="notes-label">Your notes:</span>
+            <span class="note-guess" role="group" aria-label="Your guess">
+              <button type="button" data-guess="good">Good</button>
+              <button type="button" data-guess="evil">Evil</button>
+              <button type="button" data-guess="">?</button>
+            </span>
+            <select id="note-role" aria-label="Character you think they are"></select>
+            <input
+              id="note-text"
+              type="text"
+              maxlength="80"
+              placeholder="Note"
+              aria-label="Note"
+            />
+          </div>
+        </section>
+
+        <section class="claims-section">
+          <details id="claims-panel" class="panel" open>
+            <summary><h2>Claims</h2></summary>
+            <div id="claims"></div>
+          </details>
         </section>
 
         <div class="cols">

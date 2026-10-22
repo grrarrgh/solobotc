@@ -6,6 +6,7 @@ import {
   ONGOING_INFO,
   MINION_BLUFF_CHANCE,
   OUTSIDER_MODIFIERS,
+  HUMAN_DRUNK_CHANCE,
   team,
   alignment,
   name,
@@ -112,8 +113,13 @@ export function createState(
     safe = [i];
   }
 
-  // Move the human's role into seat 1.
-  const hi = pick(safe, r);
+  // Move the human's role into seat 1. When the Drunk is dealt, it's the
+  // human's at HUMAN_DRUNK_CHANCE. (A separate generator decides this, so the
+  // random draws for the rest of the deal are the same either way.)
+  const drunk = roles.indexOf("drunk");
+  const dealt = pick(safe, r);
+  const hi =
+    drunk >= 0 && rng(`${seed}:drunk`)() < HUMAN_DRUNK_CHANCE ? drunk : dealt;
   [roles[0], roles[hi]] = [roles[hi], roles[0]];
 
   const used = new Set(roles),
@@ -302,6 +308,8 @@ export function createState(
     executedToday: false,
     dayVoters: [],
     dayNominators: [],
+    statements: [], // { byId, day, type, targetId, source }: said in public
+    voteHistory: [], // { day, nominatorId, nomineeId, voterIds }
     nightDeaths: [], // announced at dawn
     dawnLearn: [], // "when you learn that you died", at dawn
     block: null, // { nomineeId, count }: marked for execution today

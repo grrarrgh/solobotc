@@ -854,3 +854,139 @@ input {
 .player-name {
   font-weight: 700;
 }
+
+/* ── Your notes & the Claims table ───────────────────────── */
+
+/* Your guess rings a seat: blue (good) or red (evil), dashed so it isn't
+   mistaken for anything the game tells you. */
+.seat.guess-good {
+  outline: 3px dashed #64b5f6;
+  outline-offset: 2px;
+}
+
+.seat.guess-evil {
+  outline: 3px dashed #ef6b72;
+  outline-offset: 2px;
+}
+
+/* The character you think a player is, under their name. */
+.note-role {
+  font-size: 0.62rem;
+  font-style: italic;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #343a45;
+}
+
+.notes-label {
+  color: #bbb;
+  margin-right: 4px;
+}
+
+.note-guess button[aria-pressed="true"] {
+  background: #3b3428;
+  border-color: #dfb85f;
+}
+
+.note-guess button[data-guess="good"][aria-pressed="true"] {
+  color: #64b5f6;
+}
+
+.note-guess button[data-guess="evil"][aria-pressed="true"] {
+  color: #ef6b72;
+}
+
+#note-text {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.claims tbody tr {
+  cursor: pointer;
+}
+
+.claims tbody tr:hover td {
+  background: #2a2f3a;
+}
+
+.claims tr.is-selected td {
+  background: #3b3428;
+}
+
+.claims tr.is-dead td:not(:first-child) {
+  color: #999;
+}
+
+/* Player, Claim, Said, Your notes. */
+.claims th:nth-child(1) {
+  width: 18%;
+}
+
+.claims th:nth-child(2) {
+  width: 17%;
+}
+
+.claims th:nth-child(4) {
+  width: 22%;
+}
+
+.claims-opinion {
+  margin-top: 4px;
+  color: #ddd;
+  font-style: italic;
+}
+
+.claims-when,
+.claims-dead {
+  display: block;
+  color: #999;
+  font-size: 0.75rem;
+}
+
+.guess-tag {
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+}
+
+.guess-tag.guess-good {
+  color: #64b5f6;
+}
+
+.guess-tag.guess-evil {
+  color: #ef6b72;
+}
+
+.notes[hidden] {
+  display: none;
+}
+
+/* On a phone, character names in the Claims table get room to fit. */
+@media (max-width: 650px) {
+  .claims th:nth-child(1) {
+    width: 19%;
+  }
+
+  .claims th:nth-child(2) {
+    width: 27%;
+  }
+
+  .claims .role-link {
+    overflow-wrap: normal;
+    font-size: 0.72rem;
+  }
+}

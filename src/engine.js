@@ -787,8 +787,10 @@ export class Engine {
       cause,
     });
 
-    // Night deaths are announced in the morning (see dawnDeaths()).
+    // Night deaths are announced in the morning (see dawnDeaths()). That
+    // they died in the night is public: good NPCs weigh it.
     if (this.s.phase === "night") {
+      p.diedAtNight = this.s.night;
       this.s.nightDeaths.push(p.id);
     } else {
       this.s.publicLog.push(`${p.label} died.`);
@@ -944,21 +946,29 @@ export class Engine {
     return response;
   }
 
-  votes(n) {
+  // Everyone's vote on nominee n, in seat order. Good players decide first,
+  // then evil players, who see how the vote is going (see strategy vote()).
+  votes(n, nominator = null) {
     const s = this.s;
     const intents = new Map();
+    const tally = { yes: 0, needed: this.votesNeeded(), nominator };
+    const order = [
+      ...s.players.filter((v) => v.alignment !== "evil"),
+      ...s.players.filter((v) => v.alignment === "evil"),
+    ];
 
-    const records = s.players.map((v) => {
+    for (const v of order) {
       const eligible = v.alive || v.ghost;
-
-      let attempted =
-        eligible && (v.human || this.strat.vote(s, v, n));
-
-      if (v.alignment === "evil" && n.alignment === "evil") {
-        attempted = false;
-      }
+      const attempted = Boolean(
+        eligible && (v.human || this.strat.vote(s, v, n, { ...tally })),
+      );
 
       intents.set(v.id, attempted);
+      tally.yes += attempted ? 1 : 0;
+    }
+
+    const records = s.players.map((v) => {
+      const attempted = intents.get(v.id);
 
       if (attempted && !s.dayVoters.includes(v.id)) {
         s.dayVoters.push(v.id);
@@ -1104,8 +1114,16 @@ export class Engine {
     }
 
     const needed = this.votesNeeded();
-    const records = this.votes(n);
+    const records = this.votes(n, nominator);
     const count = records.filter((x) => x.counted).length;
+
+    // Who nominated and voted for whom is public: good NPCs weigh it.
+    (s.voteHistory ??= []).push({
+      day: s.day,
+      nominatorId: nominator.id,
+      nomineeId: id,
+      voterIds: records.filter((x) => x.attempted).map((x) => x.playerId),
+    });
     const threshold = Math.ceil(this.alive().length / 2);
     const previous = s.block;
     const enough = count >= threshold;

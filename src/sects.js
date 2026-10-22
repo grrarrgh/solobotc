@@ -5,7 +5,7 @@ import {
   PUBLIC_INFO_MIN_SEATS,
   PUBLIC_INFO_CHANCE,
 } from "./data.js";
-import { speak } from "./strategy.js";
+import { speak, heard } from "./strategy.js";
 import {
   ability,
   works,
@@ -401,6 +401,8 @@ export const sectsAndViolets = {
       )}"`;
 
       this.claimPublicly(p);
+      heard(s, p, [m]);
+      p.shared = [...(p.shared ?? []), `Night ${m.night}: ${speak(m.text)}`];
       s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
       this.audit("share", `${p.label}${said}`, { playerId: p.id });
     }

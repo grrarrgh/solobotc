@@ -2,6 +2,24 @@
 
 Newest first.
 
+## New Features: Public Reasoning, Honest Votes, Your Notes, Claims Table & Misinformed Human
+
+- No more hidden giveaways: a good NPC's suspicion used to land on an evil player (sober good NPCs only ever suspected evil players), so you could read the answer off their opinions. Good NPCs now can't see alignments. They suspect players for reasons anyone could see, and say them ("I'm suspicious of Player 4: they claim the Chef, but I'm the Chef."):
+  - someone claiming their own character, or two players claiming the same one;
+  - a player who suspected (or trusted) someone and then died in the night;
+  - information shared in public that names a player, and what others say they suspect;
+  - nominating or voting for someone they trust, or nominating someone who later died in the night.
+  Each kind of evidence has a weight in EVIDENCE_WEIGHT (src/data.js). They change suspects only on at least EVIDENCE_TO_SUSPECT, so one accusation doesn't send the whole town after the same player. With nothing to go on, they keep a hunch. Strong evidence (a counter-claim) outweighs their own information.
+- Evil NPCs accuse anyone claiming their own character, then (as before) mostly the scapegoat. An NPC with no information, good or evil, only gives an opinion when there's evidence, so having nothing to add is no longer a tell.
+- Votes: evil NPCs used to never vote for a teammate. Now they vote for one at EVIL_TEAMMATE_VOTE_CHANCE, but only when their vote can't change the outcome. Good NPCs used to vote at random. Now they vote by what they think of the nominee: likely for someone they suspect, rarely for someone they trust, and otherwise more readily the more public evidence there is (GOOD_VOTE_* and HUMAN_NOMINATION_BONUS in src/data.js).
+- Your notes: select a player to mark them Good, Evil or ? and to note a character you think they are, plus a short note. A guess rings their seat with a dashed blue or red line, and the character shows under their name. Notes are cleared with Reset.
+- Claims table: above the logs, every NPC in one table: their claim, the information and opinion they last gave (and the day you asked), and your notes. Press a row to select that player.
+- You can be misinformed:
+  - when the Drunk is dealt, it's yours at HUMAN_DRUNK_CHANCE (you're shown a Townsfolk and never told);
+  - the Poisoner picks you at HUMAN_POISON_CHANCE each night (not two nights running);
+  - on Night 1 the Poisoner also goes after first-night information characters (Washerwoman, Chef...), not just those who learn something every night.
+  Either way you hear false information, as an NPC would.
+
 ## Bug Fixes: Witch, Snake Charmer, Character Changes, Public Info & Conversations
 
 - Witch: never curses the human for Day 1.
