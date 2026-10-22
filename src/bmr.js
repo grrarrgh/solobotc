@@ -23,6 +23,7 @@ import {
   leanNote,
   artistTruth,
   chambermaidInfo,
+  who,
   choiceInfo,
   gossipInfo,
 } from "./storyteller.js";
@@ -69,6 +70,7 @@ export const badMoonRising = {
       t.goonNight = s.night;
       t.alignment = actor.alignment;
       actor.drunkTonight = true;
+      actor.drunkBy = `choosing ${t.label}, the Goon`;
 
       if (turned) {
         t.suspicion = null;
@@ -150,8 +152,9 @@ export const badMoonRising = {
     return null;
   },
 
-  // Brings a dead player back to life (the Professor, the Shabaloth). They're
-  // announced at dawn.
+  // Brings a dead player back to life (the Professor, the Shabaloth). They
+  // can't die again tonight (see kill()), and the Storyteller announces it at
+  // dawn.
   revive(p, by) {
     const s = this.s;
 
@@ -159,7 +162,10 @@ export const badMoonRising = {
     p.ghost = true;
     p.death = null;
     p.diedAtNight = null;
+    // (Their death tonight, if they died tonight, never happened: nothing
+    // "when you learn that you died" triggers.)
     s.nightDeaths = s.nightDeaths.filter((id) => id !== p.id);
+    s.dawnLearn = s.dawnLearn.filter((id) => id !== p.id);
     s.revived.push(p.id);
 
     this.audit(by, `${p.label} (${name(p.role)}) came back to life.`, {
@@ -178,10 +184,12 @@ export const badMoonRising = {
     for (const p of s.players) {
       if (p.drunkTill >= s.night) {
         p.drunkTonight = true;
+        p.drunkBy = p.drunkTillBy;
       }
 
       if (s.minstrelUntil >= s.night && p.role !== "minstrel") {
         p.drunkTonight = true;
+        p.drunkBy = s.minstrelBy;
       }
     }
 
@@ -190,6 +198,7 @@ export const badMoonRising = {
 
     if (victim?.alive) {
       victim.poisoned = true;
+      victim.poisonedBy = who(pukka);
     }
   },
 
@@ -265,6 +274,7 @@ export const badMoonRising = {
 
       if (drunk) {
         drunk.drunkTonight = true;
+        drunk.drunkBy = who(sailor);
       }
 
       this.audit(
@@ -428,6 +438,7 @@ export const badMoonRising = {
 
         if (drunk) {
           drunk.drunkTonight = true;
+          drunk.drunkBy = who(p);
         }
       }
 
@@ -478,7 +489,9 @@ export const badMoonRising = {
       if (effective) {
         for (const x of holders) {
           x.drunkTill = s.night + 2;
+          x.drunkTillBy = who(p);
           x.drunkTonight = true;
+          x.drunkBy = who(p);
         }
       }
 
@@ -643,6 +656,7 @@ export const badMoonRising = {
     if (t) {
       if (effective) {
         t.poisoned = true;
+        t.poisonedBy = who(d);
         s.pukka = { targetId: t.id };
       }
 
@@ -894,13 +908,24 @@ export const badMoonRising = {
     for (const id of s.revived.splice(0)) {
       const p = this.player(id);
 
+      // (Not how: "regurgitated" would give the Shabaloth away.)
       s.publicLog.push(
-        `Day ${s.day} — ${p.human ? "You are" : `${p.label} is`} alive again.`,
+        `Day ${s.day} — The Storyteller announces that ${
+          p.human ? "you are" : `${p.label} is`
+        } alive again.`,
       );
     }
 
     this.professorReveals();
     this.lunaticReveals();
+    this.npcGossips();
+  },
+
+  // NPC Gossips (and Gossip bluffers) who haven't made today's statement:
+  // at dawn some do (see strategy gossip()); at the end of the day (`late`),
+  // the rest do. A Gossip gossips every day.
+  npcGossips(late = false) {
+    const s = this.s;
 
     for (const p of s.players.filter(
       (x) =>
@@ -911,7 +936,7 @@ export const badMoonRising = {
           ((x.alignment === "evil" || x.role === "lunatic") &&
             x.claim === "gossip")),
     )) {
-      const said = this.strat.gossip(s, p);
+      const said = this.strat.gossip(s, p, late);
 
       if (s.winner || !said) {
         continue;
@@ -1120,9 +1145,11 @@ export const badMoonRising = {
     }
 
     s.minstrelUntil = s.night + 1;
+    s.minstrelBy = `${who(m)}, after ${p.label}'s execution`;
 
     for (const x of s.players.filter((y) => y.role !== "minstrel")) {
       x.drunkTonight = true;
+      x.drunkBy = s.minstrelBy;
     }
 
     this.audit(

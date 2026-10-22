@@ -23,6 +23,46 @@ export const isDemon = (p) => team(p.role) === "demon";
 export const ability = (p) =>
   p.role === "drunk" ? p.shown : (p.gained ?? p.role);
 
+// A player and their character, for the log: "Player 4, the Poisoner".
+export const who = (x) => `${x.label}, the ${name(x.role)}`;
+
+// Why p's information is wrong, for the log: what made them drunk or
+// poisoned (and who), or the Vortox. Empty if nothing did.
+export function misinformedBy(s, p) {
+  const causes = [];
+  const vortox = s.players.find(
+    (x) => x.alive && x.role === "vortox" && !x.poisoned,
+  );
+
+  if (p.role === "drunk") {
+    causes.push("they are the Drunk");
+  }
+
+  if (p.drunkFrom) {
+    causes.push(
+      `drunk from now on by ${p.drunkFromBy ?? `the ${name(p.drunkFrom)}`}`,
+    );
+  }
+
+  if (p.drunkTonight) {
+    causes.push(`drunk until dusk by ${p.drunkBy ?? "someone's ability"}`);
+  }
+
+  if (p.poisoned) {
+    causes.push(`poisoned by ${p.poisonedBy ?? "someone's ability"}`);
+  }
+
+  if (vortox && team(p.role) === "townsfolk") {
+    causes.push(`${who(vortox)}, makes Townsfolk information false`);
+  }
+
+  if (!causes.length && !(p.alive || p.vigor)) {
+    causes.push("they're dead");
+  }
+
+  return causes.join("; ");
+}
+
 // Dead players have no ability, except Minions the Vigormortis killed and a
 // Zombuul that only registers as dead.
 export const works = (p) =>

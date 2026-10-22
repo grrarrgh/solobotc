@@ -855,7 +855,7 @@ input {
   font-weight: 700;
 }
 
-/* ── Your marks & the Claims table ───────────────────────── */
+/* ── Your marks ─────────────────────────────────────────── */
 
 /* Your mark rings a seat: blue (good) or red (evil), dashed so it isn't
    mistaken for anything the game tells you. */
@@ -898,80 +898,6 @@ input {
   color: #ef6b72;
 }
 
-.claims tbody tr {
-  cursor: pointer;
-}
-
-.claims tbody tr:hover td {
-  background: #2a2f3a;
-}
-
-.claims tr.is-selected td {
-  background: #3b3428;
-}
-
-.claims tr.is-dead td:not(:first-child) {
-  color: #999;
-}
-
-/* Your Good / Evil mark tints the whole row (selection and hover show
-   over it). */
-.claims tr.guess-good td {
-  background: rgba(100, 181, 246, 0.16);
-}
-
-.claims tr.guess-evil td {
-  background: rgba(239, 107, 114, 0.16);
-}
-
-.claims tbody tr.guess-good:hover td,
-.claims tbody tr.guess-evil:hover td {
-  background: #2a2f3a;
-}
-
-.claims tr.is-selected.guess-good td,
-.claims tr.is-selected.guess-evil td {
-  background: #3b3428;
-}
-
-/* Player, Claim, Said. */
-.claims th:nth-child(1) {
-  width: 20%;
-}
-
-.claims th:nth-child(2) {
-  width: 20%;
-}
-
-.claims-opinion {
-  margin-top: 4px;
-  color: #ddd;
-  font-style: italic;
-}
-
-.claims-when,
-.claims-dead {
-  display: block;
-  color: #999;
-  font-size: 0.75rem;
-}
-
 .mark[hidden] {
   display: none;
-}
-
-/* On a phone, character names in the Claims table get room to fit. */
-@media (max-width: 650px) {
-  .claims th:nth-child(1) {
-    width: 19%;
-  }
-
-  .claims th:nth-child(2) {
-    width: 27%;
-  }
-
-  .claims .role-link {
-    overflow-wrap: normal;
-    font-size: 0.72rem;
-  }
 }

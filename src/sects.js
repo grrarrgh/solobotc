@@ -23,6 +23,7 @@ import {
   philosopherInfo,
   snakeInfo,
   madInfo,
+  who,
 } from "./storyteller.js";
 import { pick } from "./util.js";
 
@@ -53,18 +54,23 @@ export const sectsAndViolets = {
 
       if (p.lastingPoison) {
         p.poisoned = true;
+        p.poisonedBy = "the Snake Charmer swap";
       }
     }
 
-    if (s.players.some((x) => x.alive && x.role === "vigormortis")) {
+    const vigor = s.players.find((x) => x.alive && x.role === "vigormortis");
+
+    if (vigor) {
       for (const { id } of s.lastingPoison) {
         this.player(id).poisoned = true;
+        this.player(id).poisonedBy = who(vigor);
       }
     }
 
     for (const d of s.players.filter((x) => x.alive && x.role === "nodashii")) {
       for (const x of this.townsfolkNeighbours(d)) {
         x.poisoned = true;
+        x.poisonedBy = who(d);
       }
     }
   },
@@ -130,8 +136,10 @@ export const sectsAndViolets = {
       // A drunk or poisoned Philosopher only thinks they gained it.
       if (!effective) {
         p.drunkFrom = "philosopher";
+        p.drunkFromBy = "their own failed Philosopher choice";
       } else if (holder) {
         holder.drunkFrom = "philosopher";
+        holder.drunkFromBy = who(p);
       }
 
       this.audit(
@@ -204,6 +212,7 @@ export const sectsAndViolets = {
     d.suspicion = null;
     d.lastingPoison = true;
     d.poisoned = true;
+    d.poisonedBy = "the Snake Charmer swap";
 
     this.audit(
       "succession",
@@ -415,7 +424,6 @@ export const sectsAndViolets = {
 
       this.claimPublicly(p);
       heard(s, p, [m]);
-      p.shared = [...(p.shared ?? []), `Night ${m.night}: ${speak(m.text)}`];
       s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
       this.audit("share", `${p.label}${said}`, { playerId: p.id });
     }
@@ -600,6 +608,7 @@ export const sectsAndViolets = {
     if (n) {
       s.lastingPoison.push({ id: n.id });
       n.poisoned = true;
+      n.poisonedBy = who(d);
     }
 
     this.audit(
@@ -848,6 +857,7 @@ export const sectsAndViolets = {
 
       if (t) {
         t.drunkFrom = "sweetheart";
+        t.drunkFromBy = who(p);
 
         this.audit(
           "sweetheart",

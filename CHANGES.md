@@ -2,6 +2,15 @@
 
 Newest first.
 
+## Bug Fixes: Gossip, Claims Section, Executions & Suspicion Reasons
+
+- log.txt: information that isn't working says why, and who caused it: "Chef number: 0. (misinformation: poisoned by Player 4, the Poisoner)". This covers the Drunk, the Poisoner, Pukka, No Dashii, Vigormortis, Snake Charmer swaps, Sailor, Innkeeper, Goon, Courtier, Minstrel, Sweetheart, Philosopher and the Vortox. It appears in the Storyteller entries and the night's information under the player table; you never see it during play.
+- Gossip: an NPC Gossip (or an evil player bluffing Gossip) makes a public statement every day. Some speak at dawn (GOSSIP_CHANCE); any who haven't by the end of the day speak then, before the execution. Before, they only spoke at dawn, and only 40% of days. Your own statement is still optional.
+- The Claims section is gone. Your Good / Evil marks still ring the seats in the town square.
+- Executions in the public log: a player who is executed but survives (the Devil's Advocate, Pacifist, Fool, Sailor, Tea Lady or Innkeeper) gets "Player 4 is executed. But does not die." Executing a player who's already dead gets "Player 4 is executed. And nothing happens because they are already dead." A Zombuul that only registers as dead isn't really dead: it's executed (and dies) as normal.
+- Suspicion reasons: "they nominated Player 12, who later died in the night" is gone. It isn't a good reason to suspect someone.
+- Coming back to life (the Shabaloth's regurgitation, the Professor): the player is alive again and can't die that night. Before, the Shabaloth could regurgitate a player and then kill them again straight away, so they stayed dead. At dawn the Storyteller announces it ("The Storyteller announces that Player 5 is alive again."), without saying how, since "regurgitated" would give the Shabaloth away. Anything their death would have triggered at dawn (a Gambler admitting a wrong guess, say) doesn't happen.
+
 ## Bug Fixes: Log Table, Twins, Repeat Picks & Protectors
 
 - Your marks: all you can note about a player is Good, Evil or ? (clear). The character guess and the free-text note are gone, from the controls and from the town square.

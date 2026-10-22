@@ -12,6 +12,8 @@ import {
   isDrunk,
   infoMode,
   philosopherInfo,
+  misinformedBy,
+  who,
   steer,
   killHelps,
   lean,
@@ -132,13 +134,25 @@ export class Engine {
     };
   }
 
+  // Information that isn't working says why in the log (never to the human):
+  // "(misinformation: poisoned by Player 4, the Poisoner)".
   remember(p, info) {
+    if (info.functioning === false) {
+      info.misinfo = misinformedBy(this.s, p) || null;
+    }
+
     p.memories.push(info);
 
-    this.audit("information", `${name(p.role)} received: ${info.text}`, {
-      playerId: p.id,
-      ...info,
-    });
+    this.audit(
+      "information",
+      `${name(p.role)} received: ${info.text}${
+        info.misinfo ? ` (misinformation: ${info.misinfo})` : ""
+      }`,
+      {
+        playerId: p.id,
+        ...info,
+      },
+    );
 
     // Info carries a `day` when it was learned during the day (the Artist).
     if (p.human && info.day) {
@@ -177,6 +191,8 @@ export class Engine {
       x.protected = false;
       x.poisoned = false;
       x.drunkTonight = false;
+      x.drunkBy = null;
+      x.poisonedBy = null;
       x.dusk = { role: x.role, claim: x.claim };
     });
     s.woke = [];
@@ -380,6 +396,7 @@ export class Engine {
 
       if (t && works(poisoner)) {
         t.poisoned = true;
+        t.poisonedBy = who(poisoner);
         s.poisoned = t.id;
 
         this.audit(
@@ -933,6 +950,9 @@ export class Engine {
       outcome = "blocked";
       detail = "blocked by the Soldier ability";
       foiled = true;
+    } else if (s.revived.includes(t.id)) {
+      outcome = "blocked";
+      detail = "blocked: they came back to life tonight";
     } else if (t.protected) {
       outcome = "blocked";
       detail = "blocked by Monk protection";
@@ -1039,6 +1059,17 @@ export class Engine {
     if (!p?.alive) {
       // A Zombuul that registers as dead can still die for good.
       return Boolean(p?.undead) && this.zombuulDies(p, cause);
+    }
+
+    // Nobody dies the night they come back to life.
+    if (this.s.phase === "night" && this.s.revived.includes(p.id)) {
+      this.audit(
+        "death",
+        `${p.label} would have died (${cause}), but came back to life tonight.`,
+        { playerId: p.id, cause },
+      );
+
+      return false;
     }
 
     this.sailorResolve({ victim: p });
@@ -1496,13 +1527,18 @@ export class Engine {
     const s = this.s;
     const before = this.alive().length;
 
-    if (living(p)) {
+    // (A Zombuul that only registers as dead isn't really dead.)
+    const dead = !living(p);
+
+    if (!dead) {
       s.lastExecution = p.id;
     }
 
     s.executedToday = true;
 
-    s.publicLog.push(`Day ${s.day} — ${p.label} is executed.`);
+    // What happened is added to this line once it's known (see below).
+    const line =
+      s.publicLog.push(`Day ${s.day} — ${p.label} is executed.`) - 1;
     this.audit("execution", `${p.label} was executed.`, { playerId: p.id });
 
     // The Devil's Advocate's pick (or a Fool) is executed but doesn't die.
@@ -1519,6 +1555,12 @@ export class Engine {
     // ...and so can a good player while the Pacifist lives.
     const spared = !advocated && p.alive && this.pacifistSaves(p);
     const died = !advocated && !spared && this.kill(p, "execution");
+
+    if (dead) {
+      s.publicLog[line] += " And nothing happens because they are already dead.";
+    } else if (!died) {
+      s.publicLog[line] += " But does not die.";
+    }
 
     if (died) {
       this.minstrel(p);
@@ -1561,7 +1603,9 @@ export class Engine {
       this.check();
     }
 
+    // (The day is over: any Gossip yet to speak today does so now.)
     if (!s.winner) {
+      this.npcGossips(true);
       s.night++;
       this.night();
     }
@@ -1579,6 +1623,9 @@ export class Engine {
     }
 
     this.audit("end_day", `You ended Day ${s.day}.`);
+
+    // (Any Gossip yet to speak today does so now.)
+    this.npcGossips(true);
 
     const p = this.marked();
 
@@ -1831,7 +1878,9 @@ export class Engine {
       used: abilityUsed(p, ability(p)),
       info: p.memories
         .filter((m) => !m.day && m.night === s.night)
-        .map((m) => m.text),
+        .map(
+          (m) => `${m.text}${m.misinfo ? ` (misinformation: ${m.misinfo})` : ""}`,
+        ),
     }));
 
     this.audit(

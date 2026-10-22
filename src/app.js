@@ -604,66 +604,7 @@ function renderPublic() {
     .join("");
 }
 
-// ── Claims & notes ───────────────────────────────────────────
-
-// Every NPC in one table: what they claim, the information and opinion they
-// last gave (when you asked them, or shared in public) and your notes.
-// Pressing a row selects that player.
-function renderClaims() {
-  const rows = s.players
-    .filter((p) => !p.human)
-    .map((p) => {
-      const a = p.answer;
-      const info = [
-        ...(a?.info ?? []),
-        ...(p.shared ?? []).filter((x) => !a?.info.includes(x)),
-      ];
-      const said = [
-        ...info.map((x) => `<div>${linkRoles(x)}</div>`),
-        a ? `<div class="claims-opinion">${linkRoles(a.opinion)}</div>` : "",
-      ].join("");
-      const guess = markFor(p.id);
-
-      // Your Good / Evil mark colours the whole row.
-      return `<tr data-id="${esc(p.id)}" class="${p.alive ? "" : "is-dead"} ${
-        p.id === selectedPlayerId ? "is-selected" : ""
-      } ${guess ? `guess-${guess}` : ""}">
-          <td>${colourPlayers(p.label)}${
-            p.alive ? "" : '<br><small class="claims-dead">DEAD</small>'
-          }</td>
-          <td>${p.claimKnown ? roleLink(p.claim) : '<span class="unknown">—</span>'}</td>
-          <td>${
-            said
-              ? `${said}${a ? `<small class="claims-when">Asked on Day ${a.day}</small>` : ""}`
-              : '<span class="unknown">Not asked yet</span>'
-          }</td>
-        </tr>`;
-    })
-    .join("");
-
-  $("claims").innerHTML = `<div class="grimoire-wrap">
-      <table class="grimoire claims">
-        <thead>
-          <tr><th>Player</th><th>Claim</th><th>Said</th></tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
-
-  $("claims")
-    .querySelectorAll("tr[data-id]")
-    .forEach((row) => {
-      row.onclick = (ev) => {
-        if (ev.target.closest(".role-link") || s.pending || voteAnim) {
-          return;
-        }
-
-        selectedPlayerId = row.dataset.id;
-        $("answer").textContent = "";
-        render();
-      };
-    });
-}
+// ── Your marks ───────────────────────────────────────────────
 
 // The Good / Evil / ? buttons show your mark on the selected player.
 function renderMark(t) {
@@ -1046,7 +987,6 @@ function render() {
     .join("");
 
   renderPublic();
-  renderClaims();
   renderMark(t);
   renderNightChoice();
 

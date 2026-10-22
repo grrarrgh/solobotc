@@ -4362,7 +4362,11 @@ test("a human Professor resurrects a dead Townsfolk, but not an Outsider", () =>
   e.choose([p[1].id]);
 
   assert.equal(p[1].alive, true);
-  assert.ok(s.publicLog.includes(`Day 2 — ${p[1].label} is alive again.`));
+  assert.ok(
+    s.publicLog.includes(
+      `Day 2 — The Storyteller announces that ${p[1].label} is alive again.`,
+    ),
+  );
 
   const g = bmrNight("professor-2", ["professor"]);
 
@@ -5238,4 +5242,176 @@ test("the twins look alike: the Evil Twin's copied information points at the goo
       assert.ok(!isTwin(s, strat.suspect(s, p, strat.others(s, p))));
     }
   }
+});
+
+test("an NPC Gossip always makes their statement before the day ends", () => {
+  for (let seed = 0; seed < 20; seed++) {
+    const { s, p, e } = bmrDay(`gossip-daily-${seed}`, [null, "gossip"]);
+    const said = () =>
+      s.publicLog.filter((x) =>
+        x.startsWith(`Day 1 — ${p[1].label} claims Gossip and says`),
+      );
+
+    // Quiet at dawn...
+    const r = s.r;
+
+    s.r = () => 0.99;
+    e.bmrDawn();
+    s.r = r;
+    assert.equal(said().length, 0);
+
+    // ...so they speak up before the day ends (and the execution).
+    e.nominate(p[3].id);
+    e.endDay();
+
+    const log = s.publicLog;
+    const at = log.findIndex((x) => x.includes("claims Gossip and says"));
+
+    assert.equal(said().length, 1, `seed ${seed}`);
+    assert.ok(at < log.findIndex((x) => x.includes("is executed")));
+  }
+});
+
+test("the public log says when an executed player doesn't die, or was already dead", () => {
+  // Saved by the Devil's Advocate.
+  const s = base("exec-survives");
+  const strat = new SimpleStrategy();
+  const e = new Engine(s, strat);
+  const butler = s.players[2];
+
+  strat.vote = () => true;
+  strat.demon = () => null;
+  s.advocate = { targetId: butler.id, day: 1, effective: true };
+  e.nominate(butler.id);
+  e.endDay();
+
+  assert.equal(butler.alive, true);
+  assert.ok(
+    s.publicLog.includes(`Day 1 — ${butler.label} is executed. But does not die.`),
+    s.publicLog.join("\n"),
+  );
+
+  // Already dead.
+  const t = base("exec-dead");
+  const strat2 = new SimpleStrategy();
+  const e2 = new Engine(t, strat2);
+  const chef = t.players[1];
+
+  strat2.vote = () => true;
+  strat2.demon = () => null;
+  chef.alive = false;
+  e2.nominate(chef.id);
+  e2.endDay();
+
+  assert.ok(
+    t.publicLog.includes(
+      `Day 1 — ${chef.label} is executed. And nothing happens because they are already dead.`,
+    ),
+  );
+
+  // A Zombuul that only registers as dead dies (no "already dead").
+  const z = bmrDay("exec-zombuul", [null, null, null, null, "zombuul"]);
+
+  z.p[4].alive = false;
+  z.p[4].undead = true;
+  z.p[4].zombuulUsed = true;
+  z.e.nominate(z.p[4].id);
+  z.e.endDay();
+
+  assert.ok(z.s.publicLog.includes(`Day 1 — ${z.p[4].label} is executed.`));
+  assert.equal(z.s.winner, "good");
+});
+
+test("a regurgitated player is alive, can't die that night, and is announced at dawn", () => {
+  const { s, p, e } = bmrNight("regurgitate", [
+    null,
+    null,
+    null,
+    null,
+    "shabaloth",
+  ]);
+  const chef = p[1];
+
+  // Last night the Shabaloth chose the Chef, who died.
+  chef.alive = false;
+  chef.death = "demon";
+  s.shabaloth = [chef.id];
+
+  // Tonight it regurgitates them (forced), then tries to kill them again.
+  const r = s.r;
+
+  s.r = () => 0;
+  e.regurgitate(p[4]);
+  s.r = r;
+
+  assert.equal(chef.alive, true);
+
+  s.night = 3;
+  s.shabaloth = [];
+  e.attack(p[4], chef);
+  assert.equal(chef.alive, true);
+  assert.ok(s.audit.some((x) => /came back to life tonight/.test(x.text)));
+
+  // At dawn the Storyteller announces it (without saying how).
+  e.bmrDawn();
+  assert.ok(
+    s.publicLog.includes(
+      `Day ${s.day} — The Storyteller announces that ${chef.label} is alive again.`,
+    ),
+  );
+  assert.ok(!s.publicLog.some((x) => /regurgitat/i.test(x)));
+
+  // The Demon doesn't pick them while they're freshly back.
+  s.revived = [chef.id];
+  assert.notEqual(new SimpleStrategy().demon(s, p[4]), chef);
+});
+
+test("misinformation in the log says who caused it (never shown to you)", () => {
+  const s = base("misinfo-cause");
+  const [human, chef, , baron] = s.players;
+
+  role(human, "chef", "good");
+  role(baron, "poisoner", "evil");
+  s.phase = "night";
+  s.night = 1;
+  s.day = 0;
+
+  const strat = new SimpleStrategy();
+
+  strat.poison = () => chef;
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  e.start();
+
+  const cause = `(misinformation: poisoned by ${baron.label}, the Poisoner)`;
+  const log = e.debugLog();
+
+  assert.equal(chef.memories[0].functioning, false);
+  assert.ok(
+    s.audit.some((x) => x.type === "information" && x.text.endsWith(cause)),
+  );
+  assert.ok(log.includes(`${chef.memories[0].text} ${cause}`));
+
+  // The human (a sober Chef) sees nothing of it.
+  assert.ok(!s.privateLog.some((x) => x.includes("misinformation")));
+  assert.ok(!s.publicLog.some((x) => x.includes("misinformation")));
+
+  // Drunk until dusk, by a Sailor's choice.
+  const g = bmrNight("misinfo-sailor", [null, "chambermaid", "sailor"]);
+
+  g.strat.sailor = () => g.p[1];
+  g.strat.chambermaid = () => [g.p[3], g.p[4]];
+
+  // (Nothing at stake: force the Storyteller to make the Chambermaid drunk.)
+  const r = g.s.r;
+
+  g.s.r = () => 0.99;
+  g.e.night();
+  g.s.r = r;
+
+  const info = g.p[1].memories.at(-1);
+
+  assert.equal(info.misinfo, `drunk until dusk by ${g.p[2].label}, the Sailor`);
 });

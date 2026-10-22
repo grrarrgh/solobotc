@@ -442,8 +442,8 @@ export class SimpleStrategy {
   // What p has seen in public that makes them suspect t (or trust them),
   // weighed by EVIDENCE_WEIGHT in data.js: their own claim against t's,
   // double claims, what players said (and whether they then died in the
-  // night), and who nominated or voted for whom. Returns the total `score`
-  // and up to two `reasons` against t, strongest first.
+  // night), and who nominated or voted for a player they trust. Returns the
+  // total `score` and up to two `reasons` against t, strongest first.
   evidence(s, p, t) {
     const W = EVIDENCE_WEIGHT;
     const found = [];
@@ -557,11 +557,6 @@ export class SimpleStrategy {
         add(W.nominatedTrusted, `they nominated ${n.label}, whom I trust`);
       } else if (trusted.has(n.id) && v.voterIds.includes(t.id)) {
         add(W.votedTrusted, `they voted for ${n.label}, whom I trust`);
-      } else if (n.diedAtNight && v.nominatorId === t.id) {
-        add(
-          W.nominatedNightDeath,
-          `they nominated ${n.label}, who later died in the night`,
-        );
       }
     }
 
@@ -728,9 +723,6 @@ export class SimpleStrategy {
       : this.opinion(s, p);
 
     heard(s, p, memories, opinion);
-
-    // What they said, for the Claims table.
-    p.answer = { day: s.day, info, opinion: opinion.text };
 
     // Both twins insist they're the good one.
     const twin = !mad && this.twinOf(s, p);
@@ -984,9 +976,11 @@ export class SimpleStrategy {
               : this.priorityLevel(x)
         : undefined;
 
-    // Neither twin is ever the Demon's kill.
+    // Neither twin is ever the Demon's kill, nor anyone who came back to
+    // life tonight (they can't die again).
     const pool = this.others(s, p).filter(
-      (x) => !isTwin(s, x) && !exclude.includes(x),
+      (x) =>
+        !isTwin(s, x) && !exclude.includes(x) && !s.revived?.includes(x.id),
     );
     const decoys = pool.filter(
       (x) => x.role !== "lunatic" && !p.foiled?.includes(x.id),
@@ -1665,10 +1659,13 @@ export class SimpleStrategy {
       : null;
   }
 
-  // A Gossip (at GOSSIP_CHANCE each day) says in public that someone they
-  // suspect is the Demon, a Minion or evil.
-  gossip(s, p) {
-    if (s.r() >= GOSSIP_CHANCE) {
+  // A Gossip says in public that someone they suspect is the Demon, a
+  // Minion or evil.
+  //
+  // At dawn they speak up at GOSSIP_CHANCE; at the end of the day (`late`)
+  // any who haven't yet always do.
+  gossip(s, p, late = false) {
+    if (!late && s.r() >= GOSSIP_CHANCE) {
       return null;
     }
 
@@ -1682,7 +1679,7 @@ export class SimpleStrategy {
   // The Godfather kills a good NPC, the way the Demon picks.
   godfather(s, p) {
     const good = untwinned(s, this.others(s, p)).filter(
-      (x) => x.alignment === "good",
+      (x) => x.alignment === "good" && !s.revived?.includes(x.id),
     );
     const decoys = good.filter((x) => x.role !== "lunatic");
 

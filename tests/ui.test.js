@@ -159,11 +159,13 @@ test("dead players can be nominated from the town square", () => {
   assert.match(app, /const blocked = !t \|\| e\.nominatedToday/);
 });
 
-test("the Claims table has no notes column; your Good / Evil mark colours the row", () => {
-  assert.doesNotMatch(app, /<th>Your notes<\/th>/);
-  assert.match(app, /guess \? `guess-\$\{guess\}` : ""/);
-  assert.match(css, /\.claims tr\.guess-good td/);
-  assert.match(css, /\.claims tr\.guess-evil td/);
+test("there's no Claims section; your Good / Evil mark rings the seat", () => {
+  assert.doesNotMatch(html, /id="claims"/);
+  assert.doesNotMatch(app, /renderClaims/);
+  assert.doesNotMatch(css, /\.claims\b/);
+  assert.match(app, /mark \? `guess-\$\{mark\}` : ""/);
+  assert.match(css, /\.seat\.guess-good/);
+  assert.match(css, /\.seat\.guess-evil/);
   assert.match(app, /e\.mark\(selectedPlayerId, guess\)/);
 });
 

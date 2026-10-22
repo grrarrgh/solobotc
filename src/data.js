@@ -274,7 +274,6 @@ export const EVIDENCE_WEIGHT = {
   trusted: -0.5, // someone says they trust them
   nominatedTrusted: 1.5, // nominated a player I trust
   votedTrusted: 0.5, // voted for a player I trust
-  nominatedNightDeath: 1, // nominated a player who later died in the night
   myInfo: 2, // my own information points at them
   markedEvil: 1, // you've marked them Evil (in your notes)
   markedGood: -1, // you've marked them Good
@@ -352,8 +351,9 @@ export const TINKER_DEATH_CHANCE = 0.1;
 export const SHABALOTH_REGURGITATE_CHANCE = 0.25;
 
 // Bad Moon Rising NPC behaviour.
-// GOSSIP_CHANCE: each day, the chance an NPC Gossip (or Gossip bluffer)
-//   makes a public statement.
+// GOSSIP_CHANCE: the chance an NPC Gossip (or Gossip bluffer) makes their
+//   public statement at dawn. One who hasn't by the end of the day makes it
+//   then, before any execution: they gossip every day.
 // PO_CHARGE_CHANCE: each night, the chance the Po chooses no-one, to kill 3
 //   the next night.
 // LUNATIC_FOLLOW_CHANCE: the Demon learns who the Lunatic chose to "kill";
