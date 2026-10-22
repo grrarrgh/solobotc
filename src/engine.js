@@ -15,8 +15,15 @@ import {
   steer,
   killHelps,
   lean,
+  leanText,
 } from "./storyteller.js";
-import { SimpleStrategy, isTwin, heard, speak } from "./strategy.js";
+import {
+  SimpleStrategy,
+  isTwin,
+  heard,
+  speak,
+  abilityUsed,
+} from "./strategy.js";
 import { byId, pick } from "./util.js";
 import { formatLog } from "./log.js";
 import { sectsAndViolets } from "./sects.js";
@@ -949,6 +956,7 @@ export class Engine {
               !isTwin(s, x),
           ),
           killHelps,
+          "where the Mayor's bounce lands",
         ),
         s.r,
       );
@@ -1799,6 +1807,7 @@ export class Engine {
       "Game Over",
     );
 
+    this.refreshSuspicions();
     this.snapshot("Game Over");
   }
 
@@ -1818,6 +1827,8 @@ export class Engine {
       poisoned: p.poisoned,
       protected: p.protected,
       suspects: p.human ? null : (this.player(p.suspicion?.targetId)?.label ?? null),
+      why: p.human ? [] : (p.suspicion?.reasons ?? []),
+      used: abilityUsed(p, ability(p)),
       info: p.memories
         .filter((m) => !m.day && m.night === s.night)
         .map((m) => m.text),
@@ -1826,7 +1837,7 @@ export class Engine {
     this.audit(
       "state",
       "Player states",
-      { players, scapegoat: s.scapegoat ?? null, lean: lean(s) },
+      { players, scapegoat: s.scapegoat ?? null, lean: leanText(s) },
       group,
     );
   }

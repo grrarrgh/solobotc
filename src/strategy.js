@@ -43,6 +43,38 @@ import {
 } from "./storyteller.js";
 import { byId, pick, sample } from "./util.js";
 
+// The Lunatic thinks they're the Demon: they play for the evil team they
+// believe in (the "Minions" they were shown), though they're good.
+const thinksEvil = (p) => p.role === "lunatic" && !p.human;
+
+// The team p plays for.
+const sideOf = (p) => (thinksEvil(p) ? "evil" : p.alignment);
+
+// Whether p (playing for evil) counts x as a teammate.
+const teammate = (p, x) =>
+  thinksEvil(p)
+    ? (p.lunaticTeam ?? []).includes(x.id)
+    : x.alignment === "evil";
+
+// Whether p has used the once-per-game ability of `role` (null if it has
+// none).
+export function abilityUsed(p, role) {
+  const used = {
+    slayer: p.shotUsed,
+    artist: p.artistUsed,
+    seamstress: p.seamUsed,
+    juggler: p.juggled,
+    philosopher: p.gained ?? p.bluffGained,
+    virgin: p.virginUsed,
+    fool: p.foolUsed,
+    courtier: p.courtierUsed,
+    professor: p.professorUsed,
+    assassin: p.assassinUsed,
+  };
+
+  return role in used ? Boolean(used[role]) : null;
+}
+
 // One of the Evil Twin pair (good or evil).
 export const isTwin = (s, x) =>
   Boolean(s.twins) && [s.twins.evilId, s.twins.goodId].includes(x.id);
@@ -94,7 +126,10 @@ function infoStance(m) {
     case "investigator":
     case "sage":
     case "eviltwin":
+    case "lunatic":
       return "suspicious";
+    case "professor":
+      return /, who stayed dead\.$/.test(t) ? "suspicious" : null;
     case "exorcist":
       return "suspicious";
     // A Gambler who died guessing knows they were wrong.
@@ -277,18 +312,25 @@ export class SimpleStrategy {
   //
   // Evil NPCs always point at good players: first anyone claiming their own
   // character (they have to), then mostly the team's shared scapegoat.
+  //
+  // The Lunatic plays as the Demon of its imagined team: it points at anyone
+  // outside its "Minions", but doesn't know the real team's scapegoat.
   suspect(s, p, pool) {
-    if (p.alignment === "good") {
+    if (sideOf(p) === "good") {
       return this.reasoned(s, p, pool);
     }
 
-    const good = pool.filter((x) => x.alignment === "good");
+    const good = pool.filter((x) => !teammate(p, x));
     const rival = good.find(
       (x) => publicClaim(x) === p.claim && !isTwin(s, x),
     );
 
     if (rival) {
       return rival;
+    }
+
+    if (thinksEvil(p)) {
+      return pick(good, s.r);
     }
 
     const goat = scapegoat(s);
@@ -341,13 +383,12 @@ export class SimpleStrategy {
   suspicion(s, p) {
     let target;
 
-    if (p.alignment === "good") {
+    if (sideOf(p) === "good") {
       target = this.suspect(s, p, this.others(s, p));
     } else {
       const current = byId(s, p.suspicion?.targetId);
       const newDay = p.suspicion?.day !== s.day;
-      const stale =
-        !current?.alive || current.human || current.alignment === "evil";
+      const stale = !current?.alive || current.human || teammate(p, current);
       const move = stale || (newDay && s.r() < 0.35);
 
       target = move ? this.suspect(s, p, this.others(s, p)) : current;
@@ -359,7 +400,7 @@ export class SimpleStrategy {
       return null;
     }
 
-    p.suspicion = { targetId: target.id, day: s.day };
+    p.suspicion = { targetId: target.id, day: s.day, reasons: why.reasons };
 
     return {
       targetId: target.id,
@@ -372,6 +413,17 @@ export class SimpleStrategy {
   }
 
   // ── Public reasoning ───────────────────────────────────────
+
+  // Players p knows lied about their character: a dead player a Professor
+  // couldn't bring back, though they claimed a Townsfolk (p's own Professor
+  // choice, or a Professor's public word).
+  liars(s, p) {
+    const own = p.memories
+      .filter((m) => m.role === "professor" && infoStance(m) === "suspicious")
+      .flatMap((m) => m.targets ?? []);
+
+    return new Set([...(s.exposed ?? []), ...own]);
+  }
 
   // The players p's own information vouches for.
   trusted(s, p) {
@@ -436,15 +488,28 @@ export class SimpleStrategy {
       );
     }
 
+    // Each speaker counts once (their strongest statement about t).
+    const strongest = new Map();
+    const liars = this.liars(s, p);
+
     for (const st of heardAbout(s, t)) {
       const by = byId(s, st.byId);
       const trust = st.type === "trust";
+      const found = [];
+      const add = (weight, text) => found.push({ weight, text });
 
       if (!by || by === p) {
         continue;
       }
 
-      if (by.diedAtNight) {
+      if (liars.has(by.id)) {
+        add(
+          trust ? W.vouchedByLiar : W.accusedByLiar,
+          `${by.label} ${trust ? "vouched for" : "accused"} them, but ${
+            by.label
+          } lied about their character`,
+        );
+      } else if (by.diedAtNight) {
         add(
           trust ? W.trustedByNightDeath : W.accusedByNightDeath,
           `${by.label} ${
@@ -464,6 +529,16 @@ export class SimpleStrategy {
           `${by.label} ${trust ? "trusts" : "is suspicious of"} them`,
         );
       }
+
+      const best = strongest.get(by.id);
+
+      if (!best || Math.abs(found[0].weight) > Math.abs(best.weight)) {
+        strongest.set(by.id, found[0]);
+      }
+    }
+
+    for (const x of strongest.values()) {
+      add(x.weight, x.text);
     }
 
     const trusted = this.trusted(s, p);
@@ -546,19 +621,7 @@ export class SimpleStrategy {
   // "I haven't used my X ability yet." for a living NPC whose claimed
   // character has a once-per-game ability they (say they) haven't used.
   unusedAbility(p) {
-    const used = {
-      slayer: p.shotUsed,
-      artist: p.artistUsed,
-      seamstress: p.seamUsed,
-      juggler: p.juggled,
-      philosopher: p.gained ?? p.bluffGained,
-      virgin: p.virginUsed,
-      fool: p.foolUsed,
-      courtier: p.courtierUsed,
-      professor: p.professorUsed,
-    };
-
-    return p.alive && p.claim in used && !used[p.claim]
+    return p.alive && abilityUsed(p, p.claim) === false
       ? `I haven't used my ${name(p.claim)} ability yet.`
       : null;
   }
@@ -593,7 +656,8 @@ export class SimpleStrategy {
   // Trust or suspicion from the latest piece of information that names a
   // living NPC. Evil NPCs trust their teammates and accuse the scapegoat.
   infoOpinion(s, p) {
-    const goat = p.alignment === "evil" ? scapegoat(s) : null;
+    const evil = sideOf(p) === "evil";
+    const goat = evil && !thinksEvil(p) ? scapegoat(s) : null;
 
     for (const m of [...p.memories].reverse()) {
       const named = (m.targets ?? [])
@@ -606,12 +670,11 @@ export class SimpleStrategy {
         continue;
       }
 
-      const preferred =
-        p.alignment === "evil"
-          ? named.filter((o) =>
-              o.type === "trust" ? o.x.alignment === "evil" : o.x === goat,
-            )
-          : [];
+      const preferred = evil
+        ? named.filter((o) =>
+            o.type === "trust" ? teammate(p, o.x) : o.x === goat,
+          )
+        : [];
       const { x: target, type } = pick(
         preferred.length ? preferred : named,
         s.r,
@@ -715,8 +778,8 @@ export class SimpleStrategy {
       return (late || decisive) && this.suspicion(s, v)?.targetId === n.id;
     }
 
-    if (v.alignment === "evil") {
-      if (n.alignment !== "evil") {
+    if (sideOf(v) === "evil") {
+      if (!teammate(v, n)) {
         return s.r() < EVIL_VOTE_CHANCE;
       }
 
@@ -1137,10 +1200,14 @@ export class SimpleStrategy {
       return null;
     }
 
+    // (Never the Lunatic, the evil team's decoy.)
     return pick(
       untwinned(
         s,
-        s.players.filter((x) => x.alive && !x.human && x.alignment === "good"),
+        s.players.filter(
+          (x) =>
+            x.alive && !x.human && x.alignment === "good" && x.role !== "lunatic",
+        ),
       ),
       s.r,
     );
@@ -1316,8 +1383,11 @@ export class SimpleStrategy {
 
     // (Unless the Storyteller is helping good: then anyone but them.)
     return pick(
-      steer(s, info.length ? info : good, (x) =>
-        info.includes(x) ? "evil" : "good",
+      steer(
+        s,
+        info.length ? info : good,
+        (x) => (info.includes(x) ? "evil" : "good"),
+        "who the Sweetheart makes drunk",
       ),
       s.r,
     );
@@ -1560,15 +1630,20 @@ export class SimpleStrategy {
 
   // The Godfather kills a good NPC, the way the Demon picks.
   godfather(s, p) {
-    return this.byPriority(
-      s,
-      untwinned(s, this.others(s, p)).filter((x) => x.alignment === "good"),
+    const good = untwinned(s, this.others(s, p)).filter(
+      (x) => x.alignment === "good",
     );
+    const decoys = good.filter((x) => x.role !== "lunatic");
+
+    return this.byPriority(s, decoys.length ? decoys : good);
   }
 
   // The Lunatic "kills" like a Demon: any other NPC but a twin, by priority.
   lunatic(s, p) {
-    return this.byPriority(s, untwinned(s, this.others(s, p)));
+    return this.byPriority(
+      s,
+      untwinned(s, this.others(s, p)).filter((x) => !teammate(p, x)),
+    );
   }
 
   // Night info an evil NPC reports for their bluff (true only for the Spy).

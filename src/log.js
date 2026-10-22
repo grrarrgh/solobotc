@@ -23,6 +23,8 @@ function stateLines(players) {
       p.drunk && "DRUNK",
       p.poisoned && "POISONED",
       p.protected && "PROTECTED",
+      p.used === true && "ability used",
+      p.used === false && "ability unused",
     ]
       .filter(Boolean)
       .join(" ");
@@ -31,10 +33,16 @@ function stateLines(players) {
       `  ${pad(p.seat, 3)}${pad(p.label, 11)}${pad(role, 28)}${pad(
         `claims ${name(p.claim)}`,
         24,
-      )}${pad(p.alignment, 6)}${pad(flags, 30)}${
-        p.suspects ? `suspects ${p.suspects}` : ""
-      }`.trimEnd(),
+      )}${pad(p.alignment, 6)}${flags}`.trimEnd(),
     );
+
+    if (p.suspects) {
+      lines.push(
+        `       suspects ${p.suspects}${
+          p.why?.length ? `: ${p.why.join("; ")}` : " (a hunch)"
+        }`,
+      );
+    }
 
     for (const info of p.info) {
       lines.push(`       info: ${info}`);
@@ -90,7 +98,7 @@ export function formatLog(s) {
       }
 
       if (e.data.lean) {
-        lines.push(`  Storyteller is helping: ${e.data.lean}`);
+        lines.push(`  Storyteller ${e.data.lean}`);
       }
 
       continue;

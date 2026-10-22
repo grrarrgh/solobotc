@@ -200,7 +200,7 @@ export const DEMON_KILL_PRIORITY = {
   minstrel: "low",
   pacifist: "low",
   tinker: "low",
-  lunatic: "low",
+  lunatic: "avoid", // thinks they're the Demon, and the Demon knows who they pick
   sailor: "avoid", // can't die
   goon: "avoid", // makes the Demon drunk (and joins its team)
 
@@ -266,8 +266,8 @@ export const EVIL_TEAMMATE_VOTE_CHANCE = 0.5;
 export const EVIDENCE_WEIGHT = {
   claimsMyCharacter: 4, // claims the character I am
   doubleClaim: 2, // claims the same character as another player
-  accusedByNightDeath: 2, // a player suspected them, then died in the night
-  trustedByNightDeath: -1, // a player trusted them, then died in the night
+  accusedByNightDeath: 0.5, // a player suspected them, then died in the night
+  trustedByNightDeath: -0.5, // a player trusted them, then died in the night
   namedByInfo: 1, // someone's shared information points at them
   vouchedByInfo: -1, // someone's shared information vouches for them
   accused: 0.5, // someone says they're suspicious of them
@@ -278,6 +278,8 @@ export const EVIDENCE_WEIGHT = {
   myInfo: 2, // my own information points at them
   markedEvil: 1, // you've marked them Evil (in your notes)
   markedGood: -1, // you've marked them Good
+  vouchedByLiar: 2, // vouched for by a player shown to have lied (Professor)
+  accusedByLiar: -0.5, // accused by a player shown to have lied
 };
 
 // The evidence a good NPC needs before it changes who they suspect (less,

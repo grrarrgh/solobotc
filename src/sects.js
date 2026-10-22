@@ -524,7 +524,9 @@ export const sectsAndViolets = {
       s.players.filter((x) => x.alive && !x.human && !isDemon(x)),
     );
     let t =
-      s.r() < PITHAG_NO_DEATH_CHANCE ? null : pick(steer(s, pool, killHelps), s.r);
+      s.r() < PITHAG_NO_DEATH_CHANCE
+        ? null
+        : pick(steer(s, pool, killHelps, "who dies at random"), s.r);
 
     // "If you die at night, another player might die instead": the Mayor.
     if (t?.role === "mayor" && works(t)) {

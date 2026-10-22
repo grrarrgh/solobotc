@@ -24,6 +24,7 @@ import {
   nightInfo,
   infoMode,
   lean,
+  scapegoat,
 } from "../src/storyteller.js";
 import { shuffle, sample, rng } from "../src/util.js";
 
@@ -4134,28 +4135,6 @@ test("the Godfather deals 1 fewer or 1 more Outsider", () => {
   assert.deepEqual([...seen].sort(), [0, 2]);
 });
 
-test("the Lunatic is shown the Demon in play and bluffs a good character", () => {
-  let lunatics = 0;
-
-  for (let seed = 0; seed < 300; seed++) {
-    const s = createState(bmr, 12, seed);
-    const demon = s.players.find((p) => team(p.role) === "demon");
-    const human = s.players[0];
-
-    assert.ok(!["tinker", "goon", "lunatic"].includes(human.role));
-
-    for (const p of s.players.filter((x) => x.role === "lunatic")) {
-      lunatics++;
-      assert.equal(p.shown, demon.role);
-      assert.equal(p.alignment, "good");
-      assert.equal(alignment(p.claim), "good");
-      assert.ok(!s.players.some((x) => x.role === p.claim));
-    }
-  }
-
-  assert.ok(lunatics > 0);
-});
-
 // Night 2 of an 8-player Bad Moon Rising game (so the Sailor isn't in the
 // late game): You (Chef), Sailor, Butler, Godfather, Zombuul, then good
 // players. The Demon doesn't attack unless a test overrides strat.demon.
@@ -4999,4 +4978,177 @@ test("dead players keep their ghost vote until late, unless it's decisive", () =
   const other = s.players.find((x) => x.alive && !x.human && x !== suspect);
 
   assert.equal(strat.vote(s, dead, other, { yes: 0, needed: 3 }), false);
+});
+
+// A 12-player Bad Moon Rising game with an NPC Lunatic.
+function lunaticGame() {
+  for (let seed = 0; ; seed++) {
+    const s = createState(bmr, 12, `lunatic-${seed}`);
+    const l = s.players.find((p) => p.role === "lunatic");
+
+    if (l) {
+      return { s, l, demon: s.players.find((p) => team(p.role) === "demon") };
+    }
+  }
+}
+
+test("the Lunatic is shown another Demon, its own bluffs and false Minions", () => {
+  let lunatics = 0;
+
+  for (let seed = 0; seed < 300; seed++) {
+    const s = createState(bmr, 12, seed);
+    const demon = s.players.find((p) => team(p.role) === "demon");
+    const minions = s.players.filter((p) => team(p.role) === "minion");
+
+    assert.ok(!["tinker", "goon", "lunatic"].includes(s.players[0].role));
+    assert.ok(!s.demonBluffs.includes("lunatic"));
+
+    for (const p of s.players.filter((x) => x.role === "lunatic")) {
+      lunatics++;
+      assert.equal(team(p.shown), "demon");
+      assert.notEqual(p.shown, demon.role);
+      assert.equal(p.alignment, "good");
+
+      // Their own 3 bluffs (good, never the Lunatic), and they claim one.
+      assert.equal(p.bluffs.length, 3);
+      assert.ok(p.bluffs.every((id) => alignment(id) === "good" && id !== "lunatic"));
+      assert.ok(p.bluffs.includes(p.claim));
+
+      // "Minions": the real Demon and good NPCs.
+      const team_ = p.lunaticTeam.map((id) => s.players.find((x) => x.id === id));
+
+      assert.equal(team_.length, Math.max(2, minions.length));
+      assert.ok(team_.includes(demon));
+      assert.ok(
+        team_.filter((x) => x !== demon).every((x) => x.alignment === "good" && !x.human),
+      );
+    }
+  }
+
+  assert.ok(lunatics > 0);
+});
+
+test("the Lunatic plays for its imagined team", () => {
+  const { s, l } = lunaticGame();
+  const strat = new SimpleStrategy();
+  const mates = s.players.filter((p) => l.lunaticTeam.includes(p.id));
+
+  for (let i = 0; i < 20; i++) {
+    const t = strat.suspect(s, l, strat.others(s, l));
+
+    assert.ok(!mates.includes(t));
+    assert.ok(!mates.includes(strat.lunatic(s, l)));
+  }
+
+  // It votes like the Demon: rarely for a "Minion" when it matters.
+  const r = s.r;
+
+  s.r = () => 0.99;
+  assert.equal(strat.vote(s, l, mates[0], { yes: 0, needed: 1 }), false);
+  s.r = r;
+});
+
+test("the evil team frames the Lunatic and never targets them", () => {
+  const { s, l, demon } = lunaticGame();
+  const strat = new SimpleStrategy();
+
+  s.night = 3;
+  assert.equal(scapegoat(s), l);
+
+  for (let i = 0; i < 30; i++) {
+    assert.notEqual(strat.demon(s, demon), l);
+    assert.notEqual(strat.godfather(s, demon), l);
+    assert.notEqual(strat.assassin(s), l);
+  }
+});
+
+test("a dead Lunatic says the next day who their Minions were", () => {
+  const { s, l, demon } = lunaticGame();
+  const e = new Engine(s);
+
+  s.phase = "day";
+  s.day = 1;
+  s.night = 1;
+  // (Executed today; marked dead directly, as a Tea Lady or Sailor nearby
+  // could stop a real death.)
+  l.alive = false;
+  l.death = "execution";
+  assert.ok(!s.publicLog.some((x) => x.includes("I was the Lunatic")));
+
+  e.endDay();
+  settle(e);
+
+  const said = s.publicLog.find((x) => x.includes("I was the Lunatic"));
+
+  assert.ok(said, s.publicLog.join("\n"));
+  assert.ok(said.includes(demon.label));
+  assert.equal(l.claim, "lunatic");
+  assert.ok(
+    s.statements.some(
+      (x) => x.byId === l.id && x.targetId === demon.id && x.type === "suspicious",
+    ),
+  );
+});
+
+test("a failed Professor exposes a liar, whose word then counts the other way", () => {
+  const { s, p, strat, e } = bmrNight("professor-liar", [null, "professor"]);
+  const [, prof, butler, baron] = p;
+
+  // The Baron (dead) claimed the Chef, and vouched for the Butler.
+  baron.alive = false;
+  Object.assign(baron, { claim: "chef", claimKnown: true, publicClaim: "chef" });
+  s.statements = [
+    { byId: baron.id, day: 1, type: "trust", targetId: butler.id, source: "info" },
+  ];
+  strat.professor = () => baron;
+  e.night();
+
+  assert.equal(baron.alive, false);
+  assert.match(prof.memories.at(-1).text, /who stayed dead/);
+  assert.ok(
+    s.publicLog.some((x) => x.includes(`I chose ${baron.label}, and they didn't come back`)),
+  );
+  assert.deepEqual(s.exposed, [baron.id]);
+
+  const why = new SimpleStrategy().evidence(s, p[0], butler);
+
+  assert.equal(why.score, 2);
+  assert.match(why.reasons[0], /vouched for them, but .* lied/);
+});
+
+test("each speaker counts once in a player's reasons", () => {
+  const s = base("one-reason");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron] = s.players;
+
+  baron.alive = false;
+  baron.diedAtNight = 1;
+  s.statements = [
+    { byId: baron.id, day: 1, type: "suspicious", targetId: butler.id, source: "info" },
+    { byId: baron.id, day: 1, type: "suspicious", targetId: butler.id, source: "opinion" },
+  ];
+
+  const why = strat.evidence(s, chef, butler);
+
+  assert.equal(why.reasons.length, 1);
+  // Not enough, on its own, to suspect someone.
+  assert.ok(why.score < 1);
+});
+
+test("the log shows each NPC's reasons, used abilities and the Storyteller's lean", () => {
+  const s = createState(bmr, 12, "log-detail");
+  const e = new Engine(s);
+
+  e.start();
+  settle(e);
+
+  const log = e.debugLog();
+
+  assert.match(log, /\n {7}suspects Player \d+/);
+  assert.match(log, /Storyteller (is helping (good|evil)|isn't leaning): /);
+  assert.match(log, /\d+ evil of \d+ shown alive/);
+
+  if (s.players.some((p) => ["courtier", "professor", "assassin"].includes(p.role))) {
+    assert.match(log, /ability (un)?used/);
+  }
 });

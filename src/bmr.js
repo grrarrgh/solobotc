@@ -11,7 +11,7 @@ import {
   TINKER_DEATH_CHANCE,
   SHABALOTH_REGURGITATE_CHANCE,
 } from "./data.js";
-import { heard, isTwin, untwinned } from "./strategy.js";
+import { heard, speak, isTwin, untwinned } from "./strategy.js";
 import {
   ability,
   works,
@@ -20,6 +20,7 @@ import {
   lean,
   steer,
   killHelps,
+  leanNote,
   artistTruth,
   chambermaidInfo,
   choiceInfo,
@@ -321,8 +322,11 @@ export const badMoonRising = {
 
     // Nothing at stake: the Storyteller may still lean (a drunk evil pick
     // helps good; a drunk good pick helps evil; the Sailor spares them).
-    const options2 = steer(s, [sailor, target], (x) =>
-      x === target ? killHelps(target) : target.alignment,
+    const options2 = steer(
+      s,
+      [sailor, target],
+      (x) => (x === target ? killHelps(target) : target.alignment),
+      `who ${sailor.label}'s Sailor choice makes drunk`,
     );
 
     return {
@@ -687,6 +691,10 @@ export const badMoonRising = {
         ? 1
         : 0;
 
+    if (t && works(d) && side && chance === 1) {
+      leanNote(s, `the Shabaloth regurgitates ${t.label}.`);
+    }
+
     if (t && works(d) && s.r() < chance) {
       this.revive(t, "shabaloth");
     }
@@ -759,6 +767,7 @@ export const badMoonRising = {
             s.players.filter((x) => x.alive && !x.human && !isDemon(x)),
           ),
           killHelps,
+          "who dies for the Gossip",
         ),
         s.r,
       );
@@ -816,7 +825,17 @@ export const badMoonRising = {
         this.revive(t, "professor");
       }
 
-      this.remember(p, choiceInfo(s, "professor", "chose", [t]));
+      // They see it fail. A player who claimed a Townsfolk lied (as far as
+      // the Professor knows): the Professor says so in the morning.
+      const lied = !revived && t.claimKnown && team(t.claim) === "townsfolk";
+      const info = choiceInfo(s, "professor", "chose", [t]);
+
+      if (lied) {
+        info.text = `Professor: chose ${t.label}, who stayed dead.`;
+        p.professorExposed = t.id;
+      }
+
+      this.remember(p, info);
     }
   },
 
@@ -829,6 +848,10 @@ export const badMoonRising = {
         x.alive && !x.human && x.role === "tinker" && works(x) && !isTwin(s, x),
     )) {
       // (Never while the Storyteller is helping good.)
+      if (!s.winner && lean(s) === "good") {
+        leanNote(s, `${p.label} (Tinker) doesn't die.`);
+      }
+
       if (s.winner || lean(s) === "good" || s.r() >= TINKER_DEATH_CHANCE) {
         continue;
       }
@@ -876,13 +899,17 @@ export const badMoonRising = {
       );
     }
 
+    this.professorReveals();
+    this.lunaticReveals();
+
     for (const p of s.players.filter(
       (x) =>
         !x.human &&
         x.alive &&
         x.gossipDay !== s.day &&
         (ability(x) === "gossip" ||
-          (x.alignment === "evil" && x.claim === "gossip")),
+          ((x.alignment === "evil" || x.role === "lunatic") &&
+            x.claim === "gossip")),
     )) {
       const said = this.strat.gossip(s, p);
 
@@ -891,6 +918,65 @@ export const badMoonRising = {
       }
 
       this.gossipSays(p, said.target, said.question);
+    }
+  },
+
+  // An NPC Professor whose resurrection failed says so: the player they
+  // chose claimed a Townsfolk, so they lied. Everyone weighs that player's
+  // statements the other way round from now on (see strategy liars()).
+  professorReveals() {
+    const s = this.s;
+
+    for (const p of s.players.filter(
+      (x) => !x.human && x.alive && x.professorExposed,
+    )) {
+      const t = this.player(p.professorExposed);
+      const said = ` says: "As the Professor I chose ${t.label}, and they didn't come back: they weren't the ${name(
+        t.claim,
+      )}."`;
+
+      p.professorExposed = null;
+      s.exposed = [...new Set([...(s.exposed ?? []), t.id])];
+      this.claimPublicly(p);
+      s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
+      this.audit("professor", `${p.label}${said}`, { playerId: p.id });
+    }
+  },
+
+  // A Lunatic who died (and the game goes on) realises they weren't the
+  // Demon: the next morning they say so, and who their "Minions" were.
+  lunaticReveals() {
+    const s = this.s;
+
+    for (const p of s.players.filter(
+      (x) =>
+        !x.human &&
+        !x.alive &&
+        x.role === "lunatic" &&
+        x.lunaticTeam &&
+        !x.lunaticRevealed,
+    )) {
+      const team = p.lunaticTeam.map((id) => this.player(id));
+      const list = team.map((x) => x.label).join(" and ");
+      const said = ` says: "I was the Lunatic: I thought I was the ${name(
+        p.shown,
+      )}. My Minions were ${list}."`;
+      const info = {
+        night: s.night,
+        role: "lunatic",
+        text: `Lunatic: my Minions were ${list}.`,
+        targets: p.lunaticTeam,
+        trigger: "death",
+        functioning: true,
+      };
+
+      p.lunaticRevealed = true;
+      p.claim = "lunatic";
+      p.memories.push(info);
+      this.claimPublicly(p);
+      heard(s, p, [info]);
+      s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
+      this.audit("lunatic", `${p.label}${said}`, { playerId: p.id });
     }
   },
 
@@ -1002,6 +1088,13 @@ export const badMoonRising = {
       p.alignment === "good" &&
       s.players.some((x) => x.alive && ability(x) === "pacifist" && works(x)) &&
       s.r() < ({ good: 1, evil: 0 }[lean(s)] ?? PACIFIST_SAVE_CHANCE);
+
+    if (lean(s) && p.alignment === "good") {
+      leanNote(
+        s,
+        `the Pacifist ${saves ? "saves" : "doesn't save"} ${p.label}.`,
+      );
+    }
 
     if (saves) {
       this.audit(

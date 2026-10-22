@@ -134,8 +134,14 @@ export function createState(
     return k < 0 ? "chef" : unusedTF.splice(k, 1)[0];
   };
 
-  // The Lunatic is shown the Demon in play, so they can't tell they aren't.
-  const demonToken = demons[0] ?? pool("demon")[0] ?? "imp";
+  // The Lunatic is shown a Demon, but not the one in play.
+  const demonToken =
+    pick(
+      pool("demon").filter((x) => x !== demons[0]),
+      r,
+    ) ??
+    demons[0] ??
+    "imp";
 
   const players = roles.map((role, i) => {
     const shown =
@@ -202,12 +208,12 @@ export function createState(
   // The Spy sees the Grimoire, so always knows the bluffs, and claims a
   // character that is neither in play nor one of the Demon's bluffs, so it
   // never doubles up with anyone.
-  // (Neither shown nor dealt: the Lunatic is shown the Demon.)
+  // (Neither shown nor dealt, and never the Lunatic.)
   const tokens = new Set(players.map((p) => p.shown));
   const notInPlay = script.ids.filter(
     (x) =>
       alignment(x) === "good" &&
-      x !== "drunk" &&
+      !["drunk", "lunatic"].includes(x) &&
       !tokens.has(x) &&
       !roles.includes(x),
   );
@@ -260,16 +266,30 @@ export function createState(
     taken.add(p.claim);
   }
 
-  // The Lunatic thinks they're the Demon, so they bluff like one: a good
-  // character that isn't in play (and that nobody evil is claiming).
+  // The Lunatic thinks they're the Demon. They're shown their own 3 bluffs
+  // (good characters, which may be in play) and claim one, and their own
+  // "Minions": the real Demon and good NPCs, as many as there are Minions
+  // (at least 2).
+  const realDemon = evil.find((x) => team(x.role) === "demon");
+
   for (const p of players.filter((x) => x.role === "lunatic" && !x.human)) {
-    p.claim =
-      pick(
-        notInPlay.filter((x) => !taken.has(x)),
-        r,
-      ) ?? p.claim;
+    const goods = script.ids.filter(
+      (x) => alignment(x) === "good" && !["drunk", "lunatic"].includes(x),
+    );
+    const others = players.filter(
+      (x) => !x.human && x !== p && x.alignment === "good",
+    );
+
+    p.bluffs = sample(goods, 3, r);
+    p.claim = pick(p.bluffs, r) ?? p.claim;
     p.bluff = p.claim;
-    taken.add(p.claim);
+    p.lunaticTeam = shuffle(
+      [
+        realDemon,
+        ...sample(others, Math.max(2, m) - 1, r),
+      ].filter(Boolean),
+      r,
+    ).map((x) => x.id);
   }
 
   // The Mutant is "mad" that they're not an Outsider: they claim a Townsfolk
@@ -390,6 +410,17 @@ export function createState(
       `${evilTwin.label} (Evil Twin) is paired with ${goodTwin.label} (${name(
         goodTwin.role,
       )}) and claims ${name(evilTwin.claim)}.`,
+    );
+  }
+
+  for (const p of players.filter((x) => x.lunaticTeam)) {
+    setupLog(
+      "lunatic",
+      `${p.label} (Lunatic) thinks they are the ${name(p.shown)}; bluffs ${p.bluffs
+        .map(name)
+        .join(", ")}; claims ${name(p.claim)}; "Minions": ${p.lunaticTeam
+        .map((id) => players.find((x) => x.id === id).label)
+        .join(", ")}. The Demon knows who they are.`,
     );
   }
 

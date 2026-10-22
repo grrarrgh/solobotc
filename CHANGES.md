@@ -2,6 +2,23 @@
 
 Newest first.
 
+## Bug Fixes: Professor, Suspicion Reasons, Log Details & Lunatic
+
+- Professor: when their resurrection fails on a player who claimed a Townsfolk, that player lied. The Professor says so the next morning ("As the Professor I chose Player 4, and they didn't come back: they weren't the Chef."). From then on everyone weighs that player's word the other way round: anyone they vouched for is suspicious (EVIDENCE_WEIGHT.vouchedByLiar), and their accusations count slightly in favour (accusedByLiar).
+- Suspicion reasons: each player who said something counts once, by their strongest statement, so a reason no longer repeats ("Player 7 was suspicious of them, then died in the night; Player 7 was suspicious of them..."). "Suspected them, then died in the night" now weighs the same as a plain accusation (0.5), so it isn't enough on its own.
+- log.txt:
+  - each NPC's suspect, with their reasons (or "a hunch");
+  - whether their once-per-game ability is used or unused;
+  - what the Storyteller is doing and why ("is helping good: 3 evil of 7 shown alive; the path to a final 3 wants 2.1"), plus an entry for every choice the lean decided ("the Pacifist saves Player 2", "who dies for the Gossip: one of Player 4, Player 9").
+  The Game Over table shows up-to-date suspicions.
+- Lunatic:
+  - Shown a Demon that isn't the one in play, and their own 3 bluffs (good characters, which may be in play). They claim one of them.
+  - Shown false Minions: the real Demon and good NPCs (as many as there are Minions, at least 2).
+  - Plays as the Demon of that imagined team: points at and "kills" players outside it, votes like the Demon, and backs up their "Minions". Their kills never happen.
+  - Never one of the Demon's bluffs.
+  - The evil team never targets them (Demon, Godfather and Assassin), and frames them: a living Lunatic is always the evil team's scapegoat.
+  - When they die (and the game goes on), the next morning they claim the Lunatic and name their "Minions", the real Demon among them ("I was the Lunatic: I thought I was the Po. My Minions were Player 3 and Player 12."). The town weighs it.
+
 ## Bug Fixes: Suspicions, Ghost Votes, Gambler, Contradicted Claims, Claims Table & Final 3
 
 - log.txt: each night's player table shows who every NPC suspects, and whether the Storyteller is helping good or evil (see below).

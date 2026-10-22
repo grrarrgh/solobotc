@@ -44,6 +44,12 @@ export const vortoxActive = (s) =>
 // FINAL_THREE_MARGIN above that band, help good; that far below it, help
 // evil.
 export function lean(s) {
+  return leanState(s).side;
+}
+
+// lean(), with its workings: { side, n, e, low, high, end } (side null
+// when there's nothing to steer).
+export function leanState(s) {
   const n0 = s.players.length;
   const e0 = s.players.filter((x) => alignment(x.startRole) === "evil").length;
   const n = s.players.filter((x) => x.alive).length;
@@ -57,7 +63,7 @@ export function lean(s) {
   const end = zombuul ? 2 : 3;
 
   if (n <= end || n0 <= end) {
-    return null;
+    return { side: null, n, e, end };
   }
 
   // How far along the path the game is (1 at the start, 0 at the end), and
@@ -68,19 +74,53 @@ export function lean(s) {
   const low = 1 + (e0 - 1) * t;
   const high = last + (e0 - last) * t;
 
-  return e > high + FINAL_THREE_MARGIN
-    ? "good"
-    : e < low - FINAL_THREE_MARGIN
-      ? "evil"
-      : null;
+  const side =
+    e > high + FINAL_THREE_MARGIN
+      ? "good"
+      : e < low - FINAL_THREE_MARGIN
+        ? "evil"
+        : null;
+
+  return { side, n, e, end, low, high };
+}
+
+// The Storyteller's lean, as a line for the log.
+export function leanText(s) {
+  const l = leanState(s);
+  const band =
+    l.low === undefined
+      ? ""
+      : `; the path to a final ${l.end} wants ${l.low.toFixed(1)}${
+          l.high > l.low ? ` to ${l.high.toFixed(1)}` : ""
+        }`;
+
+  return `${l.side ? `is helping ${l.side}` : "isn't leaning"}: ${l.e} evil of ${
+    l.n
+  } shown alive${band}.`;
+}
+
+// Records a Storyteller choice the lean decided, in the log.
+export function leanNote(s, text) {
+  s.audit.push({
+    id: s.auditId++,
+    group: s.phase === "night" ? `Night ${s.night}` : `Day ${s.day}`,
+    type: "storyteller",
+    text: `Storyteller (${lean(s) ?? "no lean"}): ${text}`,
+    data: {},
+  });
 }
 
 // The part of `pool` the Storyteller would rather pick: those whose pick
 // helps (by `helps(x)`: "good", "evil" or null) the team lean() names; all
-// of `pool` if none do, or there's no lean.
-export function steer(s, pool, helps) {
+// of `pool` if none do, or there's no lean. When that narrows the choice,
+// `what` (the choice being made) goes in the log.
+export function steer(s, pool, helps, what = null) {
   const side = lean(s);
   const better = side ? pool.filter((x) => helps(x) === side) : [];
+
+  if (what && better.length && better.length < pool.length) {
+    leanNote(s, `${what}: one of ${better.map((x) => x.label).join(", ")}.`);
+  }
 
   return better.length ? better : pool;
 }
@@ -326,7 +366,17 @@ const oracleText = (n) =>
 // good player's information is just random rather than a lie that frames
 // good players. (The Vortox's false information is always false.)
 export function infoMode(s, p, deadOk = false) {
-  const misled = lean(s) === "good" && p.alignment === "good" ? "random" : "lie";
+  const soft = lean(s) === "good" && p.alignment === "good";
+  const misled = soft ? "random" : "lie";
+
+  if (
+    soft &&
+    (isDrunk(p) || p.poisoned) &&
+    p.alive &&
+    !(team(p.role) === "townsfolk" && vortoxActive(s))
+  ) {
+    leanNote(s, `${p.label}'s false information is random, not framing.`);
+  }
 
   if (team(p.role) === "townsfolk" && vortoxActive(s)) {
     return "lie";
@@ -366,7 +416,13 @@ export function sageInfo(s, p, mode) {
   const others = nameable(s, p).filter((x) => x !== d);
   const pair =
     mode === "truth" && d
-      ? [d, pick(steer(s, others, killHelps), s.r)]
+      ? [
+          d,
+          pick(
+            steer(s, others, killHelps, `the other player ${p.label}'s Sage sees`),
+            s.r,
+          ),
+        ]
       : mode === "lie" || !d
         ? sample(others, 2, s.r)
         : sample(nameable(s, p), 2, s.r);
@@ -583,6 +639,7 @@ function trueInfo(s, p, role, strat) {
         nameable(s, p).filter((x) => x.id !== real.id),
         (x) =>
           role === "investigator" ? killHelps(x) : x.alignment,
+        `the other player ${p.label}'s ${name(role)} sees`,
       ),
       s.r,
     );
@@ -695,16 +752,24 @@ const INFO_ROLES = [...FIRST_NIGHT_INFO, ...ONGOING_INFO];
 // The good NPC the evil team agrees to frame. Kept until they die, then a new
 // one is chosen, preferring good NPCs who have publicly claimed an
 // information role (the voices the human is most likely to trust).
+//
+// A living Lunatic is always the scapegoat: the evil team knows who they are.
 export function scapegoat(s) {
   const current = byId(s, s.scapegoat);
+  const good = s.players.filter(
+    (x) => x.alive && !x.human && x.alignment === "good",
+  );
+  const lunatic = good.find((x) => x.role === "lunatic");
+
+  if (lunatic) {
+    s.scapegoat = lunatic.id;
+    return lunatic;
+  }
 
   if (current?.alive && current.alignment === "good") {
     return current;
   }
 
-  const good = s.players.filter(
-    (x) => x.alive && !x.human && x.alignment === "good",
-  );
   const voices = good.filter((x) => x.claimKnown && INFO_ROLES.includes(x.claim));
   const next = pick(voices.length ? voices : good, s.r);
 
