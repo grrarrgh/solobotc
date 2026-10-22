@@ -2,6 +2,15 @@
 
 Newest first.
 
+## Bug Fixes: Log Table, Twins, Repeat Picks & Protectors
+
+- log.txt: each night's player states are a proper table, with columns for Player, Character, Claims, Team, State, Ability (used / unused), Suspects and Why. There's no seat number column. The night's information is listed under the table.
+- Twins: both twins now look alike to the town until public information tells them apart.
+  - When the Evil Twin repeats their twin's "X is your Evil Twin" word for word, it now points at the good twin. Before, only the good twin's accusation counted publicly.
+  - Evil NPCs never accuse or frame either twin. Before, they could accuse only the good twin, which gave it away.
+- Repeat picks: NPCs with an ongoing ability don't pick a player they've ever picked with it before, while anyone else is left; then never last night's pick if they can help it. This covers the Monk, Fortune Teller, Butler, Gambler, Dreamer, Snake Charmer, Sailor, Chambermaid, Exorcist, Innkeeper, Poisoner, Witch, Cerenovus and Pit-Hag.
+- Protectors: the Monk and Innkeeper protect players who have publicly claimed the characters the Demon most wants dead (DEMON_KILL_PRIORITY "high", then "med"), trusted ones first. They never protect their own suspect, and never you (the Demon never attacks you).
+
 ## Bug Fixes: Professor, Suspicion Reasons, Log Details & Lunatic
 
 - Professor: when their resurrection fails on a player who claimed a Townsfolk, that player lied. The Professor says so the next morning ("As the Professor I chose Player 4, and they didn't come back: they weren't the Chef."). From then on everyone weighs that player's word the other way round: anyone they vouched for is suspicious (EVIDENCE_WEIGHT.vouchedByLiar), and their accusations count slightly in favour (accusedByLiar).

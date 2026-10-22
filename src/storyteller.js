@@ -756,8 +756,10 @@ const INFO_ROLES = [...FIRST_NIGHT_INFO, ...ONGOING_INFO];
 // A living Lunatic is always the scapegoat: the evil team knows who they are.
 export function scapegoat(s) {
   const current = byId(s, s.scapegoat);
+  // (Never either twin, who must look alike to the town.)
+  const twins = s.twins ? [s.twins.evilId, s.twins.goodId] : [];
   const good = s.players.filter(
-    (x) => x.alive && !x.human && x.alignment === "good",
+    (x) => x.alive && !x.human && x.alignment === "good" && !twins.includes(x.id),
   );
   const lunatic = good.find((x) => x.role === "lunatic");
 
@@ -766,7 +768,7 @@ export function scapegoat(s) {
     return lunatic;
   }
 
-  if (current?.alive && current.alignment === "good") {
+  if (current?.alive && current.alignment === "good" && !twins.includes(current.id)) {
     return current;
   }
 

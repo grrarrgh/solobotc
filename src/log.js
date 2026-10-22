@@ -10,46 +10,64 @@ const indent = (text, prefix) =>
     .map((line, i) => (i ? " ".repeat(prefix.length) : prefix) + line)
     .join("\n");
 
-// One row per player, plus any information they received that night.
+// A text table: a header row, a rule, then one line per row, each column
+// as wide as its widest cell.
+function table(headers, rows) {
+  const widths = headers.map((h, i) =>
+    Math.max(h.length, ...rows.map((r) => String(r[i]).length)),
+  );
+  const line = (cells) =>
+    `  ${cells.map((c, i) => pad(c, widths[i])).join(" | ")}`.trimEnd();
+
+  return [
+    line(headers),
+    `  ${widths.map((w) => "-".repeat(w)).join("-+-")}`,
+    ...rows.map(line),
+  ];
+}
+
+// The player states as a table (one row per player: their character, claim,
+// team, state, once-per-game ability, who they suspect and why), then the
+// information each received that night.
 function stateLines(players) {
-  const lines = ["  -- Player states --"];
-
-  for (const p of players) {
-    const role =
-      p.role === p.shown ? name(p.role) : `${name(p.role)} (as ${name(p.shown)})`;
-
-    const flags = [
+  const rows = players.map((p) => [
+    p.label,
+    p.role === p.shown ? name(p.role) : `${name(p.role)} (as ${name(p.shown)})`,
+    name(p.claim),
+    p.alignment,
+    [
       p.alive ? "alive" : "DEAD",
-      p.drunk && "DRUNK",
-      p.poisoned && "POISONED",
-      p.protected && "PROTECTED",
-      p.used === true && "ability used",
-      p.used === false && "ability unused",
+      p.drunk && "drunk",
+      p.poisoned && "poisoned",
+      p.protected && "protected",
     ]
       .filter(Boolean)
-      .join(" ");
+      .join(", "),
+    p.used === true ? "used" : p.used === false ? "unused" : "",
+    p.suspects ?? "",
+    p.suspects ? (p.why?.length ? p.why.join("; ") : "a hunch") : "",
+  ]);
+  const info = players.flatMap((p) =>
+    p.info.map((x) => indent(x, `    ${pad(`${p.label}:`, 11)}`)),
+  );
 
-    lines.push(
-      `  ${pad(p.seat, 3)}${pad(p.label, 11)}${pad(role, 28)}${pad(
-        `claims ${name(p.claim)}`,
-        24,
-      )}${pad(p.alignment, 6)}${flags}`.trimEnd(),
-    );
-
-    if (p.suspects) {
-      lines.push(
-        `       suspects ${p.suspects}${
-          p.why?.length ? `: ${p.why.join("; ")}` : " (a hunch)"
-        }`,
-      );
-    }
-
-    for (const info of p.info) {
-      lines.push(`       info: ${info}`);
-    }
-  }
-
-  return lines;
+  return [
+    "  -- Player states --",
+    ...table(
+      [
+        "Player",
+        "Character",
+        "Claims",
+        "Team",
+        "State",
+        "Ability",
+        "Suspects",
+        "Why",
+      ],
+      rows,
+    ),
+    ...(info.length ? ["", "  Information tonight:", ...info] : []),
+  ];
 }
 
 function voteLine(s, records) {

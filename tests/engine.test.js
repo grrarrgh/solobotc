@@ -25,6 +25,7 @@ import {
   infoMode,
   lean,
   scapegoat,
+  evilTwinInfo,
 } from "../src/storyteller.js";
 import { shuffle, sample, rng } from "../src/util.js";
 
@@ -1218,8 +1219,9 @@ test("the debug log records every night's player states and all interactions", (
     "[vote_result]",
     "votes: You",
     "[end_day] You ended Day 1.",
-    "POISONED",
-    `info: ${chef.memories[0].text}`,
+    "alive, poisoned",
+    "Information tonight:",
+    `${chef.label}:  ${chef.memories[0].text}`,
   ]) {
     assert.ok(log.includes(text), `missing: ${text}`);
   }
@@ -4777,7 +4779,8 @@ test("the log's player tables show who each NPC suspects", () => {
   e.start();
   settle(e);
 
-  assert.match(e.debugLog(), /suspects Player \d+/);
+  assert.match(e.debugLog(), /\| Suspects +\| Why/);
+  assert.match(e.debugLog(), /\| Player \d+ +\| (a hunch|.*them)/);
   assert.ok(s.players.filter((p) => !p.human).every((p) => p.suspicion));
 });
 
@@ -5144,11 +5147,95 @@ test("the log shows each NPC's reasons, used abilities and the Storyteller's lea
 
   const log = e.debugLog();
 
-  assert.match(log, /\n {7}suspects Player \d+/);
+  assert.match(log, /\n {2}Player +\| Character +\| Claims/);
+  assert.match(log, /\| Player \d+ +\| /);
   assert.match(log, /Storyteller (is helping (good|evil)|isn't leaning): /);
   assert.match(log, /\d+ evil of \d+ shown alive/);
 
   if (s.players.some((p) => ["courtier", "professor", "assassin"].includes(p.role))) {
-    assert.match(log, /ability (un)?used/);
+    assert.match(log, /\| (used|unused) +\|/);
+  }
+});
+
+test("ongoing abilities don't pick the same player twice while anyone else is left", () => {
+  const s = createState(script, 12, "no-repeats");
+  const strat = new SimpleStrategy();
+  const monk = s.players.find((p) => !p.human && p.alignment === "good");
+  const others = strat.others(s, monk);
+  const seen = [];
+
+  // One night each for every other living NPC: all different.
+  for (let night = 2; night < 2 + others.length; night++) {
+    s.night = night;
+    seen.push(strat.monk(s, monk).id);
+  }
+
+  assert.equal(new Set(seen).size, others.length);
+
+  // Then, with nobody new left, they may repeat (not last night's pick).
+  s.night++;
+  const again = strat.monk(s, monk);
+
+  assert.ok(seen.includes(again.id));
+  assert.notEqual(again.id, seen.at(-1));
+});
+
+test("the Monk and Innkeeper protect players claiming important characters", () => {
+  const s = base("protect-important");
+  const strat = new SimpleStrategy();
+  const [, monk, butler, baron, imp] = s.players;
+  const claims = (x, id) =>
+    Object.assign(x, { claim: id, claimKnown: true, publicClaim: id });
+
+  claims(butler, "butler"); // low
+  claims(baron, "fortuneteller"); // high
+  claims(imp, "saint"); // low
+
+  for (let night = 2; night < 6; night++) {
+    s.night = night;
+    monk.picked = {};
+    monk.lastPicks = {};
+    assert.equal(strat.monk(s, monk), baron);
+  }
+
+  // ...but never their own suspect.
+  monk.suspicion = { targetId: baron.id, day: 1 };
+  monk.picked = {};
+  assert.notEqual(strat.monk(s, monk), baron);
+  monk.suspicion = null;
+
+  // The Innkeeper's first pick is the Fortune Teller too.
+  const inn = monk;
+
+  inn.picked = {};
+  assert.ok(strat.innkeeper(s, inn).includes(baron));
+});
+
+test("the twins look alike: the Evil Twin's copied information points at the good twin", () => {
+  for (let seed = 0; seed < 60; seed++) {
+    const s = createState(sv, 12, `twin-look-${seed}`);
+
+    if (!s.twins) {
+      continue;
+    }
+
+    const strat = new SimpleStrategy();
+    const evil = s.players.find((p) => p.id === s.twins.evilId);
+    const good = s.players.find((p) => p.id === s.twins.goodId);
+
+    good.memories = [evilTwinInfo({ night: 1 }, evil)];
+
+    const copy = strat.twinCopy(s, evil);
+
+    assert.deepEqual(copy.memories[0].targets, [good.id]);
+
+    // The evil team never frames or accuses either twin.
+    assert.ok(!isTwin(s, scapegoat(s) ?? { id: null }));
+
+    for (const p of s.players.filter(
+      (x) => !x.human && x.alignment === "evil" && !isTwin(s, x),
+    )) {
+      assert.ok(!isTwin(s, strat.suspect(s, p, strat.others(s, p))));
+    }
   }
 });

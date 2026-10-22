@@ -320,7 +320,10 @@ export class SimpleStrategy {
       return this.reasoned(s, p, pool);
     }
 
-    const good = pool.filter((x) => !teammate(p, x));
+    // (Never either twin: the twins must look alike to the town.)
+    const outside = pool.filter((x) => !teammate(p, x));
+    const untwinnedOutside = untwinned(s, outside);
+    const good = untwinnedOutside.length ? untwinnedOutside : outside;
     const rival = good.find(
       (x) => publicClaim(x) === p.claim && !isTwin(s, x),
     );
@@ -637,8 +640,11 @@ export class SimpleStrategy {
     return twin
       ? {
           twin,
+          // (Naming, and pointing at, the good twin.)
           memories: twin.memories.map((m) =>
-            m.role === "eviltwin" ? { ...m, text: evilTwinInfo(s, twin).text } : m,
+            m.role === "eviltwin"
+              ? { ...m, text: evilTwinInfo(s, twin).text, targets: [twin.id] }
+              : m,
           ),
         }
       : null;
@@ -823,20 +829,28 @@ export class SimpleStrategy {
     return s.players.filter((x) => x.alive && !x.human && x.id !== p.id);
   }
 
-  // The part of `pool` p didn't pick last time for this ability (`key`), so
-  // picks don't repeat night after night; all of `pool` if that's everyone.
+  // The part of `pool` p has never picked for this ability (`key`), so an
+  // ongoing ability doesn't pick the same player twice; failing that, those
+  // they didn't pick last time; failing that, all of `pool`.
   fresh(p, key, pool) {
+    const ever = p.picked?.[key] ?? [];
     const last = p.lastPicks?.[key] ?? [];
-    const fresh = pool.filter((x) => !last.includes(x.id));
+    const never = pool.filter((x) => !ever.includes(x.id));
+    const notLast = pool.filter((x) => !last.includes(x.id));
 
-    return fresh.length ? fresh : pool;
+    return never.length ? never : notLast.length ? notLast : pool;
   }
 
-  // Records p's pick(s) for `key` (see fresh()) and returns them.
+  // Records p's pick(s) for `key` (see fresh(): last time, and ever) and
+  // returns them.
   noted(p, key, picks) {
     const list = [].concat(picks ?? []).filter(Boolean);
 
     p.lastPicks = { ...p.lastPicks, [key]: list.map((x) => x.id) };
+    p.picked = {
+      ...p.picked,
+      [key]: [...new Set([...(p.picked?.[key] ?? []), ...p.lastPicks[key]])],
+    };
 
     return picks;
   }
@@ -904,8 +918,31 @@ export class SimpleStrategy {
     return this.noted(
       p,
       "monk",
-      pick(this.fresh(p, "monk", this.others(s, p)), s.r),
+      pick(this.protectees(s, p, this.fresh(p, "monk", this.others(s, p))), s.r),
     );
+  }
+
+  // Who in `pool` a protector (the Monk, Innkeeper) would rather protect:
+  // those who've publicly claimed the characters the Demon most wants dead
+  // (DEMON_KILL_PRIORITY "high", then "med"), trusted ones first; never
+  // their own suspect. All of `pool` (but the suspect) if nobody stands out.
+  protectees(s, p, pool) {
+    const safe = pool.filter((x) => x.id !== p.suspicion?.targetId);
+    const options = safe.length ? safe : pool;
+    const trusted = this.trusted(s, p);
+    const level = (x) =>
+      publicClaim(x) ? (DEMON_KILL_PRIORITY[publicClaim(x)] ?? "low") : null;
+
+    for (const tier of ["high", "med"]) {
+      const found = options.filter((x) => level(x) === tier);
+      const sure = found.filter((x) => trusted.has(x.id));
+
+      if (found.length) {
+        return sure.length ? sure : found;
+      }
+    }
+
+    return options;
   }
 
   // The Demon kills with purpose (see DEMON_* and KILL_PRIORITY_* in data.js):
@@ -1555,8 +1592,10 @@ export class SimpleStrategy {
   // a twin).
   exorcist(s, p) {
     const last = p.lastPicks?.exorcist ?? [];
-    const pool = untwinned(s, this.pickable(s, p)).filter(
-      (x) => !last.includes(x.id),
+    const pool = this.fresh(
+      p,
+      "exorcist",
+      untwinned(s, this.pickable(s, p)).filter((x) => !last.includes(x.id)),
     );
 
     return this.noted(
@@ -1566,12 +1605,24 @@ export class SimpleStrategy {
     );
   }
 
-  // The Innkeeper protects 2 other living players (never a twin: one of
-  // them is made drunk).
+  // The Innkeeper protects 2 other living players, the most important it
+  // can (see protectees()); never a twin, as one of them is made drunk.
   innkeeper(s, p) {
-    const all = untwinned(s, this.pickable(s, p));
+    // (Not the human, whom the Demon never attacks.)
+    const all = untwinned(s, this.others(s, p));
     const pool = this.fresh(p, "innkeeper", all);
-    const pair = pool.length >= 2 ? sample(pool, 2, s.r) : sample(all, 2, s.r);
+    const options = pool.length >= 2 ? pool : all;
+    // The most important first, then anyone else they didn't pick before.
+    const first = pick(this.protectees(s, p, options), s.r);
+    const second = pick(
+      this.protectees(
+        s,
+        p,
+        options.filter((x) => x !== first),
+      ),
+      s.r,
+    );
+    const pair = [first, second].filter(Boolean);
 
     return pair.length === 2 ? this.noted(p, "innkeeper", pair) : null;
   }
