@@ -871,8 +871,14 @@ export function scapegoat(s) {
   const current = byId(s, s.scapegoat);
   // (Never either twin, who must look alike to the town.)
   const twins = s.twins ? [s.twins.evilId, s.twins.goodId] : [];
+  // (Not anyone confirmed good: it wouldn't stick.)
   const good = s.players.filter(
-    (x) => x.alive && !x.human && x.alignment === "good" && !twins.includes(x.id),
+    (x) =>
+      x.alive &&
+      !x.human &&
+      x.alignment === "good" &&
+      !twins.includes(x.id) &&
+      !["certain", "likely"].includes(s.confirmed?.[x.id]?.level),
   );
   const lunatic = good.find((x) => x.role === "lunatic");
 
@@ -881,7 +887,12 @@ export function scapegoat(s) {
     return lunatic;
   }
 
-  if (current?.alive && current.alignment === "good" && !twins.includes(current.id)) {
+  if (
+    current?.alive &&
+    current.alignment === "good" &&
+    !twins.includes(current.id) &&
+    !["certain", "likely"].includes(s.confirmed?.[current.id]?.level)
+  ) {
     return current;
   }
 
@@ -1206,11 +1217,14 @@ function unreliableInfo(s, p, role, targets) {
     return { targets: ts.map((x) => x.id), text: nobleText(ts) };
   }
 
+  // (A Pixie bluffer goes mad about it, as a real one would: see onion.js.)
   if (role === "pixie") {
     const id = pick(
       s.script.ids.filter((x) => team(x) === "townsfolk" && x !== "pixie"),
       s.r,
     );
+
+    p.pixieRole = id;
 
     return { targets: [], text: id ? pixieText(id) : "No information." };
   }
@@ -1455,7 +1469,10 @@ export function bluffInfo(s, p, strat) {
   // A Philosopher or Cannibal bluffer reports for the character they
   // "gained" (nothing until they have one); a first-night one the night
   // after they gain it, as a real Cannibal would.
-  const gains = ["philosopher", "cannibal"].includes(p.claim);
+  // (A Pixie bluffer who "gained" theirs claims the Pixie again.)
+  const gains =
+    ["philosopher", "cannibal"].includes(p.claim) ||
+    (p.claim === "pixie" && p.bluffGained);
   const role = gains ? p.bluffGained : p.claim;
   const spy = p.role === "spy" && works(p);
   const gainedTonight =

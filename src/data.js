@@ -150,7 +150,10 @@ export const ONCE_PER_GAME = {
 // moves down a level. "avoid" characters are never attacked while anyone else
 // is available. If no level fires, it attacks any good NPC it isn't avoiding;
 // with no good NPC left to attack, any random NPC.
+// "top" is above every character: a good player the town is sure of
+// (confirmed "certain" or "likely"; see engine confirm()), who can't be framed.
 export const KILL_PRIORITY_CHANCE = {
+  top: 0.9,
   avoid: 0,
   low: 0.25,
   med: 0.5,
@@ -211,10 +214,11 @@ export const COME_CLEAN_NOMINATED_CHANCE = 0.9;
 export const COME_CLEAN_NOMINATION_CHANCE = 0.5;
 export const FAKE_CLEAN_CHANCE = 0.3;
 
-// DISTORT_CHANCE: when you talk to an evil NPC, a claim they pass on (see
-// strategy passedOn()) about a player the evil team wants to discredit (its
-// scapegoat, or someone who accused one of them) is a lie at this chance: a
-// different character, the same lie every time.
+// DISTORT_CHANCE: when an evil NPC passes on to another NPC what a player
+// told them (see strategy told()), and that player is one the evil team
+// wants to discredit (its scapegoat, or someone who accused one of them),
+// it's a lie at this chance: a different character, the same lie every
+// time.
 export const DISTORT_CHANCE = 0.25;
 
 // SPY_COVER_CHANCE: with a working Spy, the Demon knows every character, so
@@ -358,14 +362,10 @@ export const EVIL_TEAMMATE_VOTE_CHANCE = 0.5;
 export const EVIDENCE_WEIGHT = {
   claimsMyCharacter: 4, // claims the character I am
   doubleClaim: 2, // claims the same character as another player
-  accusedByNightDeath: 0.5, // a player suspected them, then died in the night
-  trustedByNightDeath: -0.5, // a player trusted them, then died in the night
-  namedByInfo: 1, // someone's shared information points at them
-  vouchedByInfo: -1, // someone's shared information vouches for them
-  accused: 0.5, // someone says they're suspicious of them
-  trusted: -0.5, // someone says they trust them
-  nominatedTrusted: 1.5, // nominated a player I trust
-  votedTrusted: 0.5, // voted for a player I trust
+  namedByInfo: 0.2, // someone's shared information points at them
+  vouchedByInfo: -0.2, // someone's shared information vouches for them
+  accused: 0.3, // someone says they're suspicious of them
+  trusted: -0.3, // someone says they trust them
   myInfo: 2, // my own information points at them
   markedEvil: 1, // you've marked them Evil (in your notes)
   markedGood: -1, // you've marked them Good
@@ -381,6 +381,12 @@ export const EVIDENCE_WEIGHT = {
   changedStoryCleared: 0.25, // ...but they came clean in public, saying why
   heardOtherwise: 0.5, // someone passed on that they claimed something else
   passedOnOtherwise: 0.5, // passed on a claim that isn't what that player told me
+  // Their claimed ability visibly worked (see engine confirm()), by how sure:
+  confirmedGood: -6, // certain: a Virgin who executed a Townsfolk; a Slayer whose shot killed
+  confirmedLikely: -4, // near certain: a Professor whose choice came back to life
+  confirmedMaybe: -2, // partly: a Fool, Sailor or Pacifist saving an execution, a Tea Lady's neighbour surviving one, a Moonchild's pick dying, a Gossip's statement followed by a death
+  abilityFailed: 1.5, // their claimed ability visibly failed (a Virgin, a Monk's protection)
+  abilityUnused: 0.5, // late on, still hasn't used a public ability they claim (Slayer, Juggler)
 };
 
 // With a Pixie on the script, two players claiming the same Townsfolk may
@@ -393,6 +399,11 @@ export const PIXIE_DOUBLE_CLAIM_FACTOR = 0.4;
 // saying why: strongest case first, at most half the living players
 // (rounded down) a day, each NPC once.
 export const NPC_NOMINATE_EVIDENCE = 3;
+
+// TRUST_EVIDENCE: an NPC trusts a player with this much evidence for them
+// (a score this low or lower; see EVIDENCE_WEIGHT), or whom their own
+// information vouches for. They say so when you ask ("Who I trust").
+export const TRUST_EVIDENCE = -1;
 
 // The evidence a good NPC needs before it changes who they suspect (less,
 // and they stick with their hunch). At 1, one player's say-so (0.5) isn't

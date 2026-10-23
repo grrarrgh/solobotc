@@ -90,6 +90,8 @@ test("nominations open after your conversations, with a confirm if you start ear
   assert.doesNotMatch(app, /setTimeout\([^)]*openNominations/);
   assert.match(app, /e\.openNominations\(\)/);
   assert.match(app, /e\.npcNomination\(\)/);
+  assert.match(html, /id="npc-nominations"[^>]*>NPC nominations 0</);
+  assert.match(app, /`NPC nominations \$\{s\.npcWanting \?\? 0\}`/);
   assert.match(app, /Nominations are open/);
 });
 

@@ -1061,8 +1061,6 @@ const LIE_TEXT = {
     `${by} told you they're the ${roleLink(x.said)}: they were hiding the ${roleLink(x.truth)}.`,
   bait: (by, x) =>
     `${by} told you they're the ${roleLink(x.said)} to bait the Demon: they were the ${roleLink(x.truth)}.`,
-  distorted: (by, x, about) =>
-    `${by} said ${about} told them they're the ${roleLink(x.said)}: ${about} had said the ${roleLink(x.truth)}.`,
   fake: (by, x) =>
     `${by} faked coming clean as the ${roleLink(x.said)}: they were the ${roleLink(x.truth)}.`,
 };
@@ -1369,6 +1367,9 @@ function draw() {
   $("start-nominations").hidden = open || s.phase !== "day";
   $("start-nominations").disabled = !!voteAnim || nominating;
   $("nomination-controls").hidden = !open;
+  $("npc-nominations").textContent = `NPC nominations ${s.npcWanting ?? 0}`;
+  $("npc-nominations").disabled =
+    !s.npcWanting || !!voteAnim || nominating || !!s.winner;
   $("pass").hidden = !open;
   $("nominate").hidden = !h.alive;
   $("nominate").disabled = blocked || s.dayNominators.includes(h.id);
@@ -1631,30 +1632,23 @@ function confirmOpen() {
 }
 
 // Opens nominations ("Nominations are open" card), asking first if you
-// could still talk to someone (`ask`), then lets the NPCs nominate (unless
-// `then` is false: you're about to nominate yourself). Resolves to whether
-// they're open.
-async function openNominations(ask = true, then = true) {
+// could still talk to someone.
+async function openNominations() {
   if (!s.nominationsOpen) {
-    if (ask && e.talkStatus().remaining && !(await confirmOpen())) {
-      return false;
+    if (e.talkStatus().remaining && !(await confirmOpen())) {
+      return;
     }
 
     e.openNominations();
     render();
   }
-
-  if (then) {
-    await npcNominations();
-  }
-
-  return true;
 }
 
-// NPCs make their nominations, one vote at a time (see engine
-// npcNomination()), each after any card is closed.
-async function npcNominations() {
-  if (nominating || !s.nominationsOpen) {
+// "NPC nominations X": one NPC nomination and its vote (see engine
+// npcNomination()), after any card is closed; then X shows how many still
+// want to nominate.
+async function npcNominate() {
+  if (nominating || voteAnim || !s.nominationsOpen) {
     return;
   }
 
@@ -1662,19 +1656,11 @@ async function npcNominations() {
   render();
 
   try {
-    while (s.phase === "day" && !s.winner) {
-      await cardsClosed();
+    await cardsClosed();
 
-      if (voteAnim) {
-        break;
-      }
+    const next = e.npcNomination();
 
-      const next = e.npcNomination();
-
-      if (!next) {
-        break;
-      }
-
+    if (next) {
       await runVote(() => next);
     }
   } finally {
@@ -1683,20 +1669,18 @@ async function npcNominations() {
   }
 }
 
-// Your nomination (or request): nominations open first (asking, if you
-// could still talk), then your vote, then any NPC nominations.
+// Your nomination (or request), once nominations have started.
 async function yourNomination(fn) {
-  if (!s.nominationsOpen) {
-    return;
+  if (s.nominationsOpen) {
+    await runVote(() => fn(selectedPlayerId));
   }
-
-  await runVote(() => fn(selectedPlayerId));
-  await npcNominations();
 }
 
 // Start Nominations: the nomination phase begins (asking first if you could
-// still talk to someone), and NPCs make theirs.
+// still talk to someone).
 $("start-nominations").onclick = () => openNominations();
+
+$("npc-nominations").onclick = () => npcNominate();
 
 // Your Good / Evil mark on the selected player.
 document.querySelectorAll("#mark [data-guess]").forEach((b) => {

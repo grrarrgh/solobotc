@@ -43,6 +43,7 @@ import {
   DISTORT_CHANCE,
   NPC_NOMINATE_EVIDENCE,
   PIXIE_DOUBLE_CLAIM_FACTOR,
+  TRUST_EVIDENCE,
 } from "./data.js";
 import {
   ability,
@@ -371,6 +372,13 @@ function heardAbout(s, p, t) {
   ];
 }
 
+// The players the town is sure are good (confirmed "certain" or "likely";
+// see engine confirm()): trusted, never suspected, never framed.
+export const sure = (s) =>
+  Object.entries(s.confirmed ?? {})
+    .filter(([, c]) => ["certain", "likely"].includes(c.level))
+    .map(([id]) => id);
+
 // How a player is named in a reason: "you" for the human.
 const who = (x) => (x.human ? "you" : x.label);
 const whose = (x) => (x.human ? "your" : `${x.label}'s`);
@@ -392,8 +400,12 @@ export class SimpleStrategy {
       return this.reasoned(s, p, pool);
     }
 
-    // (Never either twin: the twins must look alike to the town.)
-    const outside = pool.filter((x) => !teammate(p, x));
+    // (Never either twin: the twins must look alike to the town. Nor anyone
+    // confirmed good, if there's anyone else: it wouldn't stick.)
+    const unconfirmed = pool.filter((x) => !sure(s).includes(x.id));
+    const outside = (unconfirmed.length ? unconfirmed : pool).filter(
+      (x) => !teammate(p, x),
+    );
     const untwinnedOutside = untwinned(s, outside);
     const good = untwinnedOutside.length ? untwinnedOutside : outside;
     const rival = good.find(
@@ -505,23 +517,24 @@ export class SimpleStrategy {
     return new Set([...(s.exposed ?? []), ...own]);
   }
 
-  // The players p's own information vouches for.
+  // The players p's own information vouches for, and anyone confirmed good
+  // in public (see engine confirm()).
   trusted(s, p) {
-    return new Set(
-      p.memories.flatMap((m) =>
+    return new Set([
+      ...p.memories.flatMap((m) =>
         (m.targets ?? []).filter(
           (id) => stanceOn(s, m, byId(s, id), p) === "trust",
         ),
       ),
-    );
+      ...sure(s).filter((id) => id !== p.id),
+    ]);
   }
 
   // What p has seen and heard (in public, or told them in private) that
-  // makes them suspect t (or trust them),
-  // weighed by EVIDENCE_WEIGHT in data.js: their own claim against t's,
-  // double claims, what players said (and whether they then died in the
-  // night), and who nominated or voted for a player they trust. Returns the
-  // total `score` and up to two `reasons` against t, strongest first.
+  // makes them suspect t (or trust them), weighed by EVIDENCE_WEIGHT in
+  // data.js: their own claim against t's, double claims, what players said,
+  // abilities seen to work or fail, and your marks and nominations. Returns
+  // the total `score` and up to two `reasons` against t, strongest first.
   evidence(s, p, t) {
     const W = EVIDENCE_WEIGHT;
     const found = [];
@@ -607,6 +620,70 @@ export class SimpleStrategy {
       }
     }
 
+    // Their ability visibly worked: confirmed good, by how sure (see engine
+    // confirm()).
+    const confirmed = s.confirmed?.[t.id];
+
+    if (confirmed) {
+      add(
+        {
+          certain: W.confirmedGood,
+          likely: W.confirmedLikely,
+          maybe: W.confirmedMaybe,
+        }[confirmed.level],
+        `${
+          { certain: "they're confirmed", likely: "they're almost certainly good", maybe: "they may be good" }[
+            confirmed.level
+          ]
+        }: ${confirmed.why}`,
+      );
+    }
+
+    // Their claimed ability visibly failed (see engine failed()).
+    for (const f of s.failures ?? []) {
+      if (f.id === t.id) {
+        add(W.abilityFailed, f.text);
+      }
+    }
+
+    // A protector who told p (or the town) they protected a player the
+    // Demon killed that night.
+    if (["monk", "innkeeper"].includes(claim) && (p.toldMe?.[t.id] || t.claimKnown)) {
+      const m = t.memories.find(
+        (m) =>
+          m.role === claim &&
+          (m.targets ?? []).some((id) => {
+            const x = byId(s, id);
+
+            return x?.death === "demon" && x.diedAtNight === m.night;
+          }),
+      );
+
+      if (m) {
+        const x = byId(s, m.targets.find((id) => byId(s, id)?.death === "demon"));
+
+        add(
+          W.abilityFailed,
+          `they say they protected ${who(x)} on Night ${m.night}, but the Demon killed them`,
+        );
+      }
+    }
+
+    // Late on, a public ability they claim, still unused: a Slayer's shot,
+    // or a Juggler's Day 1 guesses.
+    const late =
+      (claim === "slayer" && !t.shotUsed && s.day >= ONCE_PER_GAME.slayer.AFTER_DAY + 2) ||
+      (claim === "juggler" && !t.juggled && s.day >= 2);
+
+    if (late && t.alive) {
+      add(
+        W.abilityUnused,
+        claim === "slayer"
+          ? "they claim the Slayer, but haven't shot"
+          : "they claim the Juggler, but never juggled",
+      );
+    }
+
     // Your Good / Evil mark on them.
     const mark = s.marks?.[t.id];
 
@@ -652,13 +729,6 @@ export class SimpleStrategy {
             by.label
           } lied about their character`,
         );
-      } else if (by.diedAtNight) {
-        add(
-          trust ? W.trustedByNightDeath : W.accusedByNightDeath,
-          `${by.label} ${
-            trust ? "trusted" : "was suspicious of"
-          } them, then died in the night`,
-        );
       } else if (st.source === "info") {
         add(
           trust ? W.vouchedByInfo : W.namedByInfo,
@@ -684,24 +754,10 @@ export class SimpleStrategy {
       add(x.weight, x.text);
     }
 
-    const trusted = this.trusted(s, p);
-
+    // You nominated them (see humanTrusted).
     for (const v of s.voteHistory ?? []) {
-      const n = byId(s, v.nomineeId);
-
-      // You nominated them (see humanTrusted).
-      if (n === t && byId(s, v.nominatorId)?.human) {
+      if (v.nomineeId === t.id && byId(s, v.nominatorId)?.human) {
         add(W.humanTrusted, "you nominated them");
-      }
-
-      if (!n || n === t) {
-        continue;
-      }
-
-      if (trusted.has(n.id) && v.nominatorId === t.id) {
-        add(W.nominatedTrusted, `they nominated ${n.label}, whom I trust`);
-      } else if (trusted.has(n.id) && v.voterIds.includes(t.id)) {
-        add(W.votedTrusted, `they voted for ${n.label}, whom I trust`);
       }
     }
 
@@ -767,8 +823,8 @@ export class SimpleStrategy {
   // The character a dead player now admits to, if any (else null): the
   // Mutant (no longer at risk of execution), and so does an evil player who
   // took the Mutant bluff; a mad Pixie who never gained the ability (the
-  // madness can't matter any more). Other evil players stick to their
-  // bluffs.
+  // madness can't matter any more), and so does an evil Pixie bluffer, who
+  // acts just like one. Other evil players stick to their bluffs.
   revealsWhenDead(p) {
     if (p.alive) {
       return null;
@@ -778,7 +834,12 @@ export class SimpleStrategy {
       return "mutant";
     }
 
-    return p.role === "pixie" && p.pixieMad && !p.gained ? "pixie" : null;
+    return (p.role === "pixie" || p.bluff === "pixie") &&
+      p.pixieMad &&
+      !p.gained &&
+      !p.bluffGained
+      ? "pixie"
+      : null;
   }
 
   // "I haven't used my X ability yet." for a living NPC whose claimed
@@ -793,7 +854,7 @@ export class SimpleStrategy {
   // they're mad about, with made-up information to match (made up afresh
   // each day).
   pixieMad(s, p) {
-    if (!p.pixieMad || p.gained || !p.alive) {
+    if (!p.pixieMad || p.gained || p.bluffGained || !p.alive) {
       return null;
     }
 
@@ -1046,8 +1107,8 @@ export class SimpleStrategy {
   //
   // p also passes on what everyone else told them (`to.secondHand`, the
   // latest for each player; see claimHeard()), which an evil p distorts
-  // (see distortion()). Only NPCs keep it: what they pass on to you is in
-  // their answer (see passedOn()).
+  // (see distortion()). Only NPCs keep it: you hear who they trust and
+  // suspect instead (see ask()).
   told(s, p, to, a = this.answer(s, p, to)) {
     const before = to.toldMe?.[p.id];
     const was = before && before.claim !== a.claim ? before.claim : (before?.was ?? null);
@@ -1073,30 +1134,6 @@ export class SimpleStrategy {
         at: tick(s),
       };
     }
-  }
-
-  // What p passes on of what other NPCs told them in private, seat by
-  // seat: "Player 5 told me they're the Chef.". (Not a claim they've also
-  // made in public.)
-  //
-  // An evil NPC lies about players the evil team wants to discredit (see
-  // distortion()).
-  passedOn(s, p) {
-    return Object.entries(p.toldMe ?? {})
-      .map(([id, x]) => [byId(s, id), x])
-      .filter(
-        ([x, told]) => x && x !== p && !x.human && told.claim !== claimTo(x),
-      )
-      .sort(([a], [b]) => a.seat - b.seat)
-      .map(([x, told]) => {
-        const lie = this.distortion(s, p, x, told.claim);
-
-        if (lie) {
-          lied(s, { kind: "distorted", byId: p.id, aboutId: x.id, said: lie, truth: told.claim });
-        }
-
-        return `${x.label} told me they're the ${name(lie ?? told.claim)}.`;
-      });
   }
 
   // The character evil NPC p falsely says x told them (null for the
@@ -1140,8 +1177,8 @@ export class SimpleStrategy {
   }
 
   // Each night's (or day's) information goes on its own line, followed by
-  // their opinion, then what other NPCs told them (see passedOn()). Only
-  // you hear it: no NPC learns anything from your conversations.
+  // who they trust and who they suspect (see stances()). Only you hear it:
+  // no NPC learns anything from your conversations.
   ask(s, p) {
     const a = this.answer(s, p, human(s));
     const { mad, copy, memories, opinion, hidden } = a;
@@ -1174,7 +1211,16 @@ export class SimpleStrategy {
       c.told = true;
     }
 
-    const passed = this.passedOn(s, p);
+    // One player: who they trust, or who they suspect (see stances()).
+    const st = this.stances(s, p);
+    const one = st.say
+      ? `Who I ${st.say.type}: ${st.say.players
+          .map((x) => (x.why && !hidden ? `${x.x.label} (${x.why})` : x.x.label))
+          .join(", ")}.`
+      : "Who I trust or suspect: I have nothing.";
+
+    // (For the log: how they got there; see engine ask().)
+    p.workings = st.rows;
 
     return [
       `I claim ${name(a.claim)}.`,
@@ -1187,15 +1233,101 @@ export class SimpleStrategy {
       !mad &&
         !hidden &&
         a.claim === "pixie" &&
-        p.gained &&
-        `I have the ${name(p.gained)} ability.`,
+        (p.gained ?? p.bluffGained) &&
+        `I have the ${name(p.gained ?? p.bluffGained)} ability.`,
       details,
       !mad && !hidden && this.unusedAbility(copy ? copy.twin : p),
-      opinion.text,
-      passed.length && `What others have told me:\n${passed.join("\n")}`,
+      // (A hider gives no reasons: they could give them away.)
+      one,
     ]
       .filter(Boolean)
       .join("\n");
+  }
+
+  // Who p really trusts and suspects among the other living NPCs; when you
+  // ask, they tell you about one of them (`say`; see ask()). From each
+  // player's evidence score (see evidence()):
+  // - trust: their own information vouches for them, or a score of
+  //   TRUST_EVIDENCE or less (their own information first, then the lowest
+  //   score);
+  // - suspect: a score of EVIDENCE_TO_SUSPECT or more (strongest first),
+  //   with the strongest reason; their twin, always (first).
+  // An evil NPC never names a teammate as a suspect, and always names the
+  // evil team's scapegoat (or a twin, the other twin). `rows` are the
+  // workings, for the log.
+  //
+  // `say` is whichever they feel more strongly about: their top suspect's
+  // score against their most trusted player's (negative) score, their own
+  // information counting as at least myInfo (a tie goes to the suspect;
+  // a twin always wins); null if they have neither. It names the top
+  // player, and any others they feel as strongly about, or strongly
+  // (STRONG_EVIDENCE): an Empath's 0, say, vouches for both neighbours.
+  stances(s, p) {
+    const own = this.trusted(s, p);
+    const evil = sideOf(p) === "evil";
+    const goat = evil && !thinksEvil(p) ? scapegoat(s) : null;
+    const twin = this.twinOf(s, p);
+    const rows = s.players
+      .filter((x) => x !== p && !x.human && x.alive)
+      .map((x) => {
+        const ev = this.evidence(s, p, x);
+        let stance = own.has(x.id)
+          ? "trust"
+          : ev.score <= TRUST_EVIDENCE
+            ? "trust"
+            : ev.score >= EVIDENCE_TO_SUSPECT
+              ? "suspect"
+              : null;
+        let note = sure(s).includes(x.id)
+          ? "confirmed"
+          : own.has(x.id)
+            ? "my information vouches for them"
+            : null;
+
+        if (x === twin || (x === goat && !twin)) {
+          stance = "suspect";
+          note = x === twin ? "my twin" : "the evil team's scapegoat";
+        } else if (evil && teammate(p, x) && stance === "suspect") {
+          stance = null;
+          note = "a teammate";
+        }
+
+        return { id: x.id, x, score: ev.score, reasons: ev.reasons, stance, note };
+      });
+    const suspect = rows
+      .filter((r) => r.stance === "suspect")
+      .sort((a, b) => (b.x === twin) - (a.x === twin) || b.score - a.score)
+      .map((r) => ({
+        x: r.x,
+        why: r.x === twin ? "my twin" : r.reasons[0] ?? null,
+      }));
+    const trust = rows
+      .filter((r) => r.stance === "trust")
+      .sort((a, b) => own.has(b.id) - own.has(a.id) || a.score - b.score)
+      .map((r) => ({ x: r.x }));
+
+    const row = (x) => rows.find((r) => r.x === x);
+    const strength = {
+      suspect: (x) => (x === twin ? Infinity : row(x).score),
+      trust: (x) =>
+        Math.max(-row(x).score, own.has(x.id) ? EVIDENCE_WEIGHT.myInfo : 0),
+    };
+    const top = suspect[0] && strength.suspect(suspect[0].x);
+    const best = trust[0] && strength.trust(trust[0].x);
+    const type =
+      !suspect.length && !trust.length
+        ? null
+        : suspect.length && (!trust.length || top >= best)
+          ? "suspect"
+          : "trust";
+    const list = type === "suspect" ? suspect : trust;
+    const bar = Math.min(type === "suspect" ? top : best, STRONG_EVIDENCE);
+    const say = type && {
+      type,
+      players: list.filter((x, i) => i === 0 || strength[type](x.x) >= bar),
+    };
+
+    return { trust, suspect, rows, say };
   }
 
   // Who NPC p nominates today, if anyone: their suspect, if they're alive
@@ -1551,7 +1683,8 @@ export class SimpleStrategy {
   // A player's kill priority (DEMON_KILL_PRIORITY in data.js) to evil
   // player p: good players by the character they've claimed to p (null if
   // unknown; see claimTo()), or by their true character when p's team has
-  // a working Spy (see spyWorks()); evil players by their true character,
+  // a working Spy (see spyWorks()); a good player the town is sure of
+  // (see sure()) above all ("top"); evil players by their true character,
   // raised to a public "med"/"high" bluff's level unless their own level is
   // "avoid".
   priorityLevel(s, x, p) {
@@ -1559,6 +1692,11 @@ export class SimpleStrategy {
     const claimLevel = claim ? (DEMON_KILL_PRIORITY[claim] ?? "low") : null;
 
     if (x.alignment !== "evil") {
+      // (A good player the town is sure of can't be framed: kill them first.)
+      if (sure(s).includes(x.id)) {
+        return "top";
+      }
+
       return this.spyWorks(s, p)
         ? (DEMON_KILL_PRIORITY[x.role] ?? "low")
         : claimLevel;
@@ -1581,7 +1719,7 @@ export class SimpleStrategy {
   byPriority(s, p, pool, level = (x) => this.priorityLevel(s, x, p)) {
     const notAvoided = pool.filter((x) => level(x) !== "avoid");
 
-    for (const tier of ["high", "med", "low"]) {
+    for (const tier of ["top", "high", "med", "low"]) {
       const found = notAvoided.filter((x) => level(x) === tier);
 
       if (found.length && s.r() < KILL_PRIORITY_CHANCE[tier]) {

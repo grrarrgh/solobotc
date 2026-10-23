@@ -796,6 +796,12 @@ export const badMoonRising = {
       );
 
       if (t && this.kill(t, "gossip")) {
+        // (An extra death the night after their statement: maybe theirs.)
+        this.confirm(
+          p,
+          "maybe",
+          `the night after their Gossip statement, ${t.label} died too`,
+        );
         this.check();
       }
     }
@@ -838,6 +844,7 @@ export const badMoonRising = {
 
       if (revived) {
         this.revive(t, "professor");
+        p.professorRevived = t.id;
       }
 
       // They see it fail. A player who claimed a Townsfolk lied (as far as
@@ -950,8 +957,27 @@ export const badMoonRising = {
   // they lied. Everyone weighs that player's statements the other way round
   // from now on (see strategy liars()), and it's public information against
   // them.
+  //
+  // A Professor whose choice came back says so too, and the town can
+  // believe them (almost: a Shabaloth brings players back too).
   professorReveals() {
     const s = this.s;
+
+    for (const p of s.players.filter(
+      (x) => !x.human && x.alive && x.professorRevived,
+    )) {
+      const t = this.player(p.professorRevived);
+      const said = ` says: "As the Professor I chose ${t.label}, and they came back."`;
+
+      p.professorRevived = null;
+      this.claimPublicly(p);
+      s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
+      this.audit("professor", `${p.label}${said}`, { playerId: p.id });
+
+      if (t.alive) {
+        this.confirm(p, "likely", `${t.label}, whom they chose as the Professor, came back to life`);
+      }
+    }
 
     for (const p of s.players.filter(
       (x) => !x.human && x.alive && x.professorExposed,

@@ -9,6 +9,8 @@ import {
   COME_CLEAN_NOMINATED_CHANCE,
   COME_CLEAN_NOMINATION_CHANCE,
   FAKE_CLEAN_CHANCE,
+  TRUST_EVIDENCE,
+  EVIDENCE_TO_SUSPECT,
 } from "./data.js";
 import {
   nightInfo,
@@ -43,6 +45,7 @@ import {
   stanceOn,
   sideOf,
   claimHeard,
+  claimTo,
   lied,
 } from "./strategy.js";
 import { byId, pick, shuffle } from "./util.js";
@@ -751,7 +754,15 @@ export class Engine {
       return;
     }
 
-    this.kill(t, "moonchild");
+    // (The town sees the pick die: maybe a Demon kill, maybe the curse.)
+    if (this.kill(t, "moonchild")) {
+      this.confirm(
+        this.player(s.moonCurseBy),
+        "maybe",
+        `the player they chose as the Moonchild, ${t.label}, died that night`,
+      );
+    }
+
     this.check();
   }
 
@@ -810,6 +821,7 @@ export class Engine {
 
     if (real) {
       s.moonCurse = t.id;
+      s.moonCurseBy = p.id;
     }
 
     s.publicLog.push(`${p.label} claims Moonchild and chooses ${t.label}.`);
@@ -1366,6 +1378,26 @@ export class Engine {
       { target: id },
     );
 
+    // How they decided who they trust and suspect (log only).
+    const rows = p.workings ?? [];
+
+    if (rows.length) {
+      this.audit(
+        "workings",
+        `${p.label}'s evidence scores (trust at ${TRUST_EVIDENCE} or less, suspect at ${EVIDENCE_TO_SUSPECT} or more; they tell you the strongest one):\n${rows
+          .map(
+            (r) =>
+              `${r.x.label}: ${Math.round(r.score * 10) / 10}${
+                r.stance ? `, ${r.stance === "trust" ? "trusted" : "suspected"}` : ""
+              }${r.note ? ` (${r.note})` : ""}${
+                r.reasons.length ? ` — ${r.reasons.join("; ")}` : ""
+              }`,
+          )
+          .join("\n")}`,
+        { target: id },
+      );
+    }
+
     return response;
   }
 
@@ -1449,14 +1481,46 @@ export class Engine {
       lines: [s.publicLog[i]],
     });
     this.audit("nominations", "Nominations opened.");
+    this.countNpcNominations();
   }
 
-  // The next NPC nomination, if any NPC makes one (see strategy
-  // nomination()): the strongest case first, from a living NPC who hasn't
-  // nominated today, of a nominee nobody has; at most half the living
-  // players (rounded down) a day. They say why, on the card before the
-  // vote, and the vote waits for your hand (see runNomination()). Null if
-  // nobody nominates, or nominations aren't open (see openNominations()).
+  // The NPCs who want to nominate now, strongest case first (see strategy
+  // nomination()): living NPCs who haven't nominated today, each with a
+  // nominee nobody has nominated (one NPC per nominee); none once the
+  // day's NPC nominations (half the living players, rounded down) are
+  // used.
+  npcNominators() {
+    const s = this.s;
+
+    if (!s.nominationsOpen || s.phase !== "day" || s.winner) {
+      return [];
+    }
+
+    const left = Math.floor(this.alive().length / 2) - (s.npcNominations ?? 0);
+    const seen = new Set();
+
+    return s.players
+      .filter((x) => x.alive && !x.human && !s.dayNominators.includes(x.id))
+      .map((p) => ({ p, n: this.strat.nomination(s, p) }))
+      .filter((o) => o.n && !this.nominatedToday(o.n.target.id))
+      .sort((a, b) => b.n.score - a.n.score)
+      .filter((o) => !seen.has(o.n.target.id) && seen.add(o.n.target.id))
+      .slice(0, Math.max(0, left));
+  }
+
+  // How many NPCs want to nominate (s.npcWanting, for the "NPC nominations"
+  // button): counted when nominations open and after each vote.
+  countNpcNominations() {
+    this.s.npcWanting = this.npcNominators().length;
+
+    return this.s.npcWanting;
+  }
+
+  // The next NPC nomination, when you ask for one ("NPC nominations"): the
+  // strongest case first (see npcNominators()). They say why, on the card
+  // before the vote, and the vote waits for your hand (see runNomination()).
+  // Null if nobody nominates, or nominations aren't open (see
+  // openNominations()). NPCs never nominate by themselves.
   npcNomination() {
     const s = this.s;
 
@@ -1464,17 +1528,10 @@ export class Engine {
       return null;
     }
 
-    if ((s.npcNominations ?? 0) >= Math.floor(this.alive().length / 2)) {
-      return null;
-    }
-
-    const best = s.players
-      .filter((x) => x.alive && !x.human && !s.dayNominators.includes(x.id))
-      .map((p) => ({ p, n: this.strat.nomination(s, p) }))
-      .filter((o) => o.n && !this.nominatedToday(o.n.target.id))
-      .sort((a, b) => b.n.score - a.n.score)[0];
+    const best = this.npcNominators()[0];
 
     if (!best) {
+      s.npcWanting = 0;
       return null;
     }
 
@@ -1537,6 +1594,72 @@ export class Engine {
 
     if (lines.length) {
       this.audit("talks", lines.join("\n"));
+    }
+  }
+
+  // ── Abilities seen to work or fail ─────────────────────────
+
+  // p's claimed ability visibly worked (`why`), so the town has reason to
+  // think they're good, at a `level` of how sure:
+  // - "certain" (confirmedGood) and "likely" (confirmedLikely): good NPCs
+  //   trust them and never suspect them, and the evil team stops framing
+  //   them;
+  // - "maybe" (confirmedMaybe): it only counts for them.
+  // (See strategy evidence().) A surer level replaces a less sure one.
+  confirm(p, level, why) {
+    if (!p || p.human) {
+      return;
+    }
+
+    const rank = { maybe: 1, likely: 2, certain: 3 };
+    const was = this.s.confirmed?.[p.id];
+
+    if (was && rank[was.level] >= rank[level]) {
+      return;
+    }
+
+    (this.s.confirmed ??= {})[p.id] = { level, why };
+    this.audit(
+      "confirmed",
+      `${p.label} is ${
+        { certain: "confirmed good", likely: "almost certainly good", maybe: "maybe good" }[level]
+      }: ${why}.`,
+      { playerId: p.id, level },
+    );
+  }
+
+  // p's claimed ability visibly failed (`why`): good NPCs count it against
+  // them (see strategy evidence()).
+  failed(p, why) {
+    (this.s.failures ??= []).push({ id: p.id, day: this.s.day, text: why });
+    this.audit("failed", `${p.label}: ${why}.`, { playerId: p.id });
+  }
+
+  // p was executed and didn't die: the town can guess why, from the
+  // characters claimed in public (each "maybe": a Devil's Advocate, or
+  // something else, could have saved them): p's own Fool or Sailor, a
+  // Pacifist, or a Tea Lady next to p (and p, a good neighbour of hers).
+  survivedExecution(p) {
+    const s = this.s;
+    const claim = claimTo(p);
+
+    if (["fool", "sailor"].includes(claim)) {
+      this.confirm(p, "maybe", `they claim the ${name(claim)}, and survived execution`);
+    }
+
+    for (const x of s.players.filter((y) => y.alive && y !== p)) {
+      if (claimTo(x) === "pacifist") {
+        this.confirm(x, "maybe", `they claim the Pacifist, and ${p.label} survived execution`);
+      }
+
+      if (claimTo(x) === "tealady" && this.aliveNeighbours(x).includes(p)) {
+        this.confirm(
+          x,
+          "maybe",
+          `they claim the Tea Lady, and their neighbour ${p.label} survived execution`,
+        );
+        this.confirm(p, "maybe", `they survived execution next to ${x.label}, who claims the Tea Lady`);
+      }
     }
   }
 
@@ -1917,13 +2040,43 @@ export class Engine {
       return base;
     }
 
-    // A working Virgin's first nomination executes a Townsfolk nominator.
+    // The first nomination of a player claiming the Virgin, in public (see
+    // below).
+    const virginClaim =
+      claimTo(n) === "virgin" && !(s.virginTested ??= []).includes(n.id);
+
+    if (virginClaim) {
+      s.virginTested.push(n.id);
+    }
+
+    // A working Virgin's first nomination executes a Townsfolk nominator:
+    // the town now knows they're the real Virgin (good).
     if (n.role === "virgin" && !n.virginUsed) {
       n.virginUsed = true;
 
       if (works(n) && team(nominator.role) === "townsfolk") {
-        return this.virgin(n, nominator, base);
+        this.confirm(n, "certain", `their Virgin ability executed ${nominator.label}`);
+
+        const result = this.virgin(n, nominator, base);
+
+        this.countNpcNominations();
+        return result;
       }
+    }
+
+    // A player claiming a Townsfolk nominated them, and nothing happened:
+    // one of the two is lying (or drunk or poisoned).
+    if (virginClaim && team(claimTo(nominator)) === "townsfolk") {
+      this.failed(
+        n,
+        `they claim the Virgin, but nothing happened when ${nominator.label} (who claims the ${name(
+          claimTo(nominator),
+        )}) nominated them`,
+      );
+      this.failed(
+        nominator,
+        `they claim the ${name(claimTo(nominator))}, but nominating ${n.label} (who claims the Virgin) did nothing`,
+      );
     }
 
     this.openNominations();
@@ -2010,6 +2163,9 @@ export class Engine {
       } (${threshold} needed); ${outcome}.`,
     );
 
+    // (Who still wants to nominate, after this vote.)
+    this.countNpcNominations();
+
     return result;
   }
 
@@ -2071,6 +2227,7 @@ export class Engine {
       s.publicLog[line] += " And nothing happens because they are already dead.";
     } else if (!died) {
       s.publicLog[line] += " But does not die.";
+      this.survivedExecution(p);
     }
 
     if (died) {
@@ -2248,6 +2405,7 @@ export class Engine {
       const before = this.alive().length;
 
       this.kill(t, "slayer");
+      this.confirm(p, "certain", `their Slayer shot killed ${t.label}`);
 
       if (isDemon(t)) {
         this.successor(t, before, false);
@@ -2425,9 +2583,85 @@ export class Engine {
     this.audit(
       "state",
       "Player states",
-      { players, scapegoat: s.scapegoat ?? null, lean: leanText(s) },
+      {
+        players,
+        scapegoat: s.scapegoat ?? null,
+        lean: leanText(s),
+        clues: this.clues(listed),
+      },
       group,
     );
+  }
+
+  // For log.txt, under each player table: what could lead the town to the
+  // evil team since the last table.
+  // - Tonight's true information (a good player's, working) that points at
+  //   an evil player: "Player 8 (Fortune Teller): ... points at Player 2
+  //   (the Imp)."
+  // - Each living evil player claiming a character a good player really
+  //   has (or thinks they have): one of the two is lying.
+  // - Each lie an evil NPC told you (see strategy lied()). (A good player's
+  //   cover story isn't a clue.)
+  // (`listed`: tonight's information is already in an earlier table.)
+  clues(listed = false) {
+    const s = this.s;
+    const lines = [];
+    const evil = (x) => x?.alignment === "evil";
+    const as = (x) => `${x.label} (the ${name(x.role)})`;
+
+    for (const p of s.players.filter((x) => x.alignment === "good" && !listed)) {
+      for (const m of p.memories) {
+        const tonight = m.day ? m.day === s.day : m.night === s.night;
+
+        if (!tonight || m.functioning === false) {
+          continue;
+        }
+
+        const named = (m.targets ?? [])
+          .map((id) => this.player(id))
+          .filter((x) => evil(x) && stanceOn(s, m, x, p) !== "trust");
+
+        if (named.length) {
+          lines.push(
+            `${p.label} (${name(p.role)}): "${m.text}" points at ${named.map(as).join(", ")}.`,
+          );
+        }
+      }
+    }
+
+    for (const x of s.players.filter((y) => y.alive && evil(y) && !y.human)) {
+      const holder = s.players.find(
+        (y) => y !== x && y.alignment === "good" && y.shown === x.claim,
+      );
+
+      if (holder) {
+        lines.push(
+          `${as(x)} claims the ${name(x.claim)}, which ${holder.label} ${
+            holder.role === holder.shown ? "really is" : "thinks they are"
+          }${holder.alive ? "" : " (dead)"}.`,
+        );
+      }
+    }
+
+    const lies = s.liesToYou ?? [];
+
+    for (const lie of lies.slice(s.cluesLies ?? 0)) {
+      const by = this.player(lie.byId);
+
+      if (!evil(by)) {
+        continue;
+      }
+
+      lines.push(
+        `Day ${lie.day}: ${as(by)} lied to you: ${
+          lie.kind === "fake" ? "faked coming clean as" : "said they're"
+        } the ${name(lie.said)}.`,
+      );
+    }
+
+    s.cluesLies = lies.length;
+
+    return lines;
   }
 
   // Every NPC, alive or dead, reconsiders who they suspect (for the log,
@@ -2450,7 +2684,10 @@ export class Engine {
 
     // Everything that happened, in order (the per-night player tables stay
     // in log.txt).
-    const events = this.s.audit.filter((e) => e.type !== "state");
+    // (Not the per-conversation workings: those are for log.txt.)
+    const events = this.s.audit.filter(
+      (e) => e.type !== "state" && e.type !== "workings",
+    );
 
     return {
       winner: this.s.winner,

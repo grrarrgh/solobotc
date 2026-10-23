@@ -231,15 +231,22 @@ test("NPC suspicion statements obey status and target constraints", () => {
     const speaker = kind === "evil" ? s.players[3] : s.players[1];
 
     const response = e.ask(speaker.id);
-    const target = suspicionTarget(s, response);
+    const line = response.split("\n").at(-1);
+    const named = line.startsWith("Who I suspect: ")
+      ? [...line.matchAll(/Player \d+/g)].map((m) =>
+          s.players.find((x) => x.label === m[0]),
+        )
+      : [];
 
-    assert.ok(target);
-    assert.equal(target.human, false);
-    assert.notEqual(target.id, speaker.id);
-    assert.match(response, /I'm suspicious of Player \d+[.:]/);
+    assert.match(line, /^Who I (trust|suspect)/);
 
-    if (kind === "evil") {
-      assert.equal(target.alignment, "good");
+    for (const target of named) {
+      assert.equal(target.human, false);
+      assert.notEqual(target.id, speaker.id);
+
+      if (kind === "evil") {
+        assert.equal(target.alignment, "good");
+      }
     }
   }
 });
@@ -252,7 +259,7 @@ test("good NPCs can't see alignments: with no evidence, their hunches are anyone
     const chef = s.players[1];
 
     s.r = rng(`hunch-${i}`);
-    seen.add(suspicionTarget(s, new Engine(s).ask(chef.id)).alignment);
+    seen.add(s.players.find((x) => x.id === new SimpleStrategy().opinion(s, chef).targetId).alignment);
   }
 
   assert.deepEqual([...seen].sort(), ["evil", "good"]);
@@ -283,7 +290,8 @@ test("good NPCs suspect players on public evidence, and say why", () => {
   assert.equal(o.type, "suspicious");
   assert.match(o.text, /they and Player \d both claim the Chef/);
 
-  // Someone who accused the Butler and then died in the night.
+  // Someone who accused the Butler and then died in the night: their word
+  // counts as anyone's (their death isn't evidence).
   const t = createState(script, 8, "evidence");
   const [, a, b, c] = t.players;
 
@@ -299,11 +307,8 @@ test("good NPCs suspect players on public evidence, and say why", () => {
 
   const why = strat.evidence(t, b, c);
 
-  assert.ok(why.score > 0);
-  assert.deepEqual(why.reasons, [
-    `${a.label} was suspicious of them, then died in the night`,
-  ]);
-  assert.equal(strat.suspect(t, b, [c, ...t.players.slice(4)]), c);
+  assert.equal(why.score, EVIDENCE_WEIGHT.accused);
+  assert.deepEqual(why.reasons, [`${a.label} is suspicious of them`]);
 });
 
 test("what NPCs say when asked is recorded for others to weigh", () => {
@@ -2103,7 +2108,11 @@ test("a good NPC with no information has nothing else to add", () => {
   const s = base("opinion-nothing");
   const e = new Engine(s);
 
-  assert.ok(e.ask(s.players[1].id).endsWith("\nI have nothing else to add."));
+  assert.ok(
+    e
+      .ask(s.players[1].id)
+      .endsWith("\nWho I trust or suspect: I have nothing."),
+  );
 });
 
 test("NPCs trust or suspect players named by their own information", () => {
@@ -2782,8 +2791,8 @@ test("a player the Cerenovus made mad claims that character for a day", () => {
   // The Mayor has no night information to make up. (Then what other NPCs
   // told them.)
   assert.equal(
-    e.ask(chef.id).split("\n").slice(0, 3).join("\n"),
-    "I claim Mayor.\nI have no stored information.\nI have nothing else to add.",
+    e.ask(chef.id).split("\n").slice(0, 2).join("\n"),
+    "I claim Mayor.\nI have no stored information.",
   );
   assert.equal(chef.claim, "mayor");
 
@@ -2872,10 +2881,8 @@ test("a mad NPC makes up information to match their mad character", () => {
   assert.equal(lines[0], "I claim Empath.");
   assert.match(lines[1], /^Night 1: My number is [0-2]\.$/);
   assert.match(lines[2], /^Night 2: My number is [0-2]\.$/);
-  assert.match(
-    lines[3],
-    /^I( trust|'m suspicious of) Player \d+, because of what I learned on Night \d\.$/,
-  );
+  assert.match(lines[3], /^Who I (trust|suspect)/);
+  assert.equal(lines.length, 4);
 
   // Their real information is untouched, and returns with their claim.
   assert.ok(!chef.memories.some((m) => m.role === "empath"));
@@ -3055,7 +3062,7 @@ test("the twins each claim to be the good twin and suspect each other, until one
     const lines = strat.ask(s, p).split("\n");
 
     assert.equal(lines[1], `${other.label} is my twin, and I am the good twin.`);
-    assert.equal(lines.at(-1), `I'm suspicious of ${other.label}, my evil twin.`);
+    assert.ok(lines.at(-1).startsWith(`Who I suspect: ${other.label} (my twin)`));
   }
 
   // With the Evil Twin dead, the good twin's opinion comes from their info.
@@ -3070,7 +3077,7 @@ test("the twins each claim to be the good twin and suspect each other, until one
   const after = strat.ask(s, chef);
 
   assert.ok(!after.includes("my twin"));
-  assert.ok(after.endsWith(`I trust ${butler.label}, because of what I learned on Night 2.`));
+  assert.ok(after.includes(`Who I trust: ${butler.label}.`));
 });
 
 test("NPC twins say publicly on Day 1 that they are the good twin", () => {
@@ -5977,28 +5984,20 @@ test("a reason found more than once is given once, saying how often", () => {
   const strat = new SimpleStrategy();
   const [, chef, butler, baron] = s.players;
 
-  // The Chef trusts the Baron; the Butler voted for the Baron twice.
-  chef.memories = [
-    {
-      night: 1,
-      role: "washerwoman",
-      text: `One of ${baron.label} and ${butler.label} is Chef.`,
-      targets: [baron.id],
-    },
-  ];
+  // You nominated the Butler twice. (Votes for a trusted player no longer
+  // count.)
   s.voteHistory = [1, 2].map((day) => ({
     day,
     nominatorId: s.players[0].id,
-    nomineeId: baron.id,
-    voterIds: [butler.id],
+    nomineeId: butler.id,
+    voterIds: [baron.id],
   }));
 
   const why = strat.evidence(s, chef, butler);
 
-  assert.equal(why.score, 1);
-  assert.deepEqual(why.reasons, [
-    `they voted for ${baron.label}, whom I trust (twice)`,
-  ]);
+  assert.equal(why.score, 2 * EVIDENCE_WEIGHT.humanTrusted);
+  assert.deepEqual(why.reasons, ["you nominated them (twice)"]);
+  assert.equal(strat.evidence(s, chef, baron).score, 0);
 });
 
 test("dawn and dusk cards hold only what the Storyteller announced", () => {
@@ -6120,19 +6119,39 @@ test("NPCs weigh what they're told in private, and only the listener does", () =
   assert.equal(strat.evidence(s, butler, baron).score, 0);
 });
 
-test("when you ask, an NPC passes on the claims other NPCs told them", () => {
-  const s = base("passed-on");
+test("when you ask, an NPC says who they really trust and suspect, and the log shows why", () => {
+  const s = base("trust-suspect");
   const [, chef, butler, baron] = s.players;
   const strat = new SimpleStrategy();
+  const e = new Engine(s, strat);
 
-  strat.told(s, butler, chef);
+  // Their information vouches for the Butler; the Baron claims their Chef.
+  chef.memories.push(memory("empath", "Empath number: 0.", [butler]));
+  baron.claim = "chef";
   strat.told(s, baron, chef);
 
-  const said = new Engine(s, strat).ask(chef.id);
+  const said = e.ask(chef.id);
 
-  assert.ok(said.includes("What others have told me:"));
-  assert.ok(said.includes(`${butler.label} told me they're the Butler.`));
-  assert.ok(said.includes(`${baron.label} told me they're the ${name(baron.claim)}.`));
+  // Just one: the Baron's 4 outweighs trusting the Butler (2, from their
+  // own information).
+  assert.ok(
+    said.endsWith(`\nWho I suspect: ${baron.label} (they claim the Chef, but I'm the Chef).`),
+  );
+  assert.ok(!said.includes("Who I trust"));
+
+  // Both neighbours their 0 vouches for, as strongly as each other.
+  baron.claim = "baron";
+  strat.told(s, baron, chef);
+  chef.memories = [memory("empath", "Empath number: 0.", [butler, baron])];
+  s.talked = [];
+
+  assert.ok(e.ask(chef.id).endsWith(`\nWho I trust: ${butler.label}, ${baron.label}.`));
+  assert.ok(!said.includes("What others have told me"));
+
+  const workings = s.audit.find((x) => x.type === "workings");
+
+  assert.match(workings.text, new RegExp(`${baron.label}: 4, suspected`));
+  assert.match(workings.text, new RegExp(`${butler.label}: .*trusted \\(my information vouches for them\\)`));
 });
 
 test("the Demon goes after true characters only with a working Spy, with some cover kills", () => {
@@ -6377,15 +6396,20 @@ test("an evil NPC distorts what the scapegoat told them, the same way each time"
   const [, , , chef, , baron] = s.players;
   const strat = new SimpleStrategy();
 
+  const [, , , , butler, , imp] = s.players;
+
   s.scapegoat = chef.id;
   baron.toldMe = { [chef.id]: { claim: "chef", at: 1 } };
   s.r = () => 0;
 
-  const first = strat.passedOn(s, baron);
+  strat.told(s, baron, butler);
+
+  const first = butler.secondHand[chef.id].claim;
 
   s.r = () => 0.99;
-  assert.deepEqual(strat.passedOn(s, baron), first);
-  assert.ok(!first[0].includes("the Chef."));
+  strat.told(s, baron, imp);
+  assert.notEqual(first, "chef");
+  assert.equal(imp.secondHand[chef.id].claim, first);
 });
 
 // ── Bug fixes: NPC nominations, Cannibal bluffs, "You's" ────
@@ -6530,4 +6554,144 @@ test("a mad Pixie or the Lunatic acts out a claimed character, to no effect", ()
 
   assert.equal(baron.artistUsed, true);
   assert.ok(baron.memories.some((m) => m.role === "artist" && m.functioning === false));
+});
+
+test("the NPC nominations count goes down as NPCs nominate, one at a time", () => {
+  const s = coverGame("npc-count");
+  const e = new Engine(s);
+  const [, empath, soldier, chef, butler] = s.players;
+  const wants = new Map([
+    [empath, chef],
+    [soldier, butler],
+  ]);
+
+  e.strat.nomination = (_, p) =>
+    wants.has(p) ? { target: wants.get(p), score: 5, reasons: [] } : null;
+
+  e.openNominations();
+  assert.equal(s.npcWanting, 2);
+  assert.equal(s.nominated.length, 0); // nobody nominated by themselves
+
+  e.npcNomination();
+  e.castVotes(false);
+  assert.equal(s.npcWanting, 1);
+
+  e.npcNomination();
+  e.castVotes(false);
+  assert.equal(s.npcWanting, 0);
+  assert.equal(e.npcNomination(), null);
+});
+
+test("an evil Pixie bluffer acts like a real Pixie: mad, then admits it", () => {
+  const { s, p, e } = opNight("pixie-bluff", [null, "chef", "fortuneteller"]);
+  const baron = p[3];
+
+  Object.assign(baron, { claim: "pixie", bluff: "pixie" });
+
+  e.night(); // Night 1: they "learn" a Townsfolk; Day 1: mad about it
+  assert.ok(baron.pixieRole);
+  assert.equal(baron.pixieMad, true);
+  assert.equal(baron.claim, baron.pixieRole);
+  assert.match(e.strat.ask(s, baron), new RegExp(`^I claim ${name(baron.pixieRole)}\.`));
+
+  // Never "I claim Pixie" while alive and mad; on death, they admit it.
+  e.execute(baron);
+  assert.ok(
+    s.publicLog.includes(
+      `Day 1 — ${baron.label} reveals they were the Pixie, mad about being the ${name(baron.pixieRole)}.`,
+    ),
+  );
+});
+
+// ── Abilities seen to work or fail ──────────────────────────
+
+test("a Virgin who executes a Townsfolk is confirmed good: trusted, never framed", () => {
+  const s = coverGame("virgin-confirmed");
+  const e = new Engine(s);
+  const [, empath, soldier, chef, butler, baron] = s.players;
+
+  role(butler, "virgin", "good");
+  s.scapegoat = butler.id; // the evil team was framing them
+  e.claimPublicly(butler);
+  e.openNominations();
+  e.runNomination(chef, butler); // a Chef (Townsfolk) nominates the Virgin
+
+  assert.equal(chef.alive, false);
+  assert.ok(s.confirmed[butler.id]);
+
+  // Good NPCs trust them, even with accusations against them.
+  s.statements.push({ byId: baron.id, day: 1, type: "suspicious", targetId: butler.id, source: "opinion" });
+  assert.ok(e.strat.evidence(s, empath, butler).score < 0);
+  assert.ok(e.strat.trusted(s, soldier).has(butler.id));
+  assert.notEqual(e.strat.suspicion(s, empath).targetId, butler.id);
+
+  // The evil team frames someone else.
+  assert.notEqual(scapegoat(s).id, butler.id);
+});
+
+test("a claimed Virgin nominated by a claimed Townsfolk, with nothing happening, counts against both", () => {
+  const s = coverGame("virgin-failed");
+  const e = new Engine(s);
+  const [, empath, , chef, , baron] = s.players;
+
+  baron.claim = "virgin";
+  e.claimPublicly(baron);
+  e.claimPublicly(chef);
+  e.openNominations();
+  e.runNomination(chef, baron, false, null);
+  e.castVotes(false);
+
+  assert.equal(chef.alive, true);
+  assert.ok(e.strat.evidence(s, empath, baron).reasons.some((x) => /claim the Virgin, but nothing happened/.test(x)));
+  assert.ok(e.strat.evidence(s, empath, chef).reasons.some((x) => /nominating .* did nothing/.test(x)));
+});
+
+test("a Monk whose protected player died to the Demon, and a Slayer who never shoots, look suspicious", () => {
+  const s = coverGame("monk-failed");
+  const strat = new SimpleStrategy();
+  const [, empath, soldier, , butler, baron] = s.players;
+
+  baron.claim = "monk";
+  baron.memories = [{ night: 2, role: "monk", text: `Monk: protected ${butler.label} from the Demon.`, targets: [butler.id] }];
+  Object.assign(butler, { alive: false, death: "demon", diedAtNight: 2 });
+  strat.told(s, baron, empath);
+
+  assert.ok(
+    strat.evidence(s, empath, baron).reasons.some((x) => /they say they protected .* but the Demon killed them/.test(x)),
+  );
+
+  // A claimed Slayer, still not shooting by Day 4.
+  Object.assign(soldier, { claim: "slayer" });
+  strat.told(s, soldier, empath);
+  s.day = 4;
+  assert.ok(strat.evidence(s, empath, soldier).reasons.includes("they claim the Slayer, but haven't shot"));
+});
+
+test("confirmations come in levels: certain, near certain, and maybe", () => {
+  const s = coverGame("confirm-levels");
+  const e = new Engine(s);
+  const [, empath, soldier, , butler, baron, imp] = s.players;
+
+  // A Slayer whose shot kills the Demon: certain.
+  role(soldier, "slayer", "good");
+  e.shoot(soldier, imp);
+  assert.equal(s.confirmed[soldier.id].level, "certain");
+
+  // A claimed Fool who survives execution: only maybe.
+  butler.claim = "fool";
+  e.claimPublicly(butler);
+  e.survivedExecution(butler);
+  assert.equal(s.confirmed[butler.id].level, "maybe");
+
+  const W = EVIDENCE_WEIGHT;
+
+  assert.equal(e.strat.evidence(s, empath, soldier).score, W.confirmedGood);
+  assert.equal(e.strat.evidence(s, empath, butler).score, W.confirmedMaybe);
+
+  // Only the sure ones are trusted outright, and top the Demon's kill list.
+  assert.ok(e.strat.trusted(s, empath).has(soldier.id));
+  assert.ok(!e.strat.trusted(s, empath).has(butler.id));
+  assert.equal(e.strat.priorityLevel(s, soldier, baron), "top");
+  assert.notEqual(e.strat.priorityLevel(s, butler, baron), "top");
+
 });

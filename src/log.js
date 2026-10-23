@@ -119,6 +119,14 @@ export function formatLog(s) {
     if (e.type === "state") {
       lines.push(...stateLines(e.data.players));
 
+      if (e.data.clues?.length) {
+        lines.push(
+          "",
+          "  Clues to the evil team:",
+          ...e.data.clues.map((x) => indent(x, "    - ")),
+        );
+      }
+
       const goat = byId(s, e.data.scapegoat);
 
       if (goat) {
