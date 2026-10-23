@@ -1742,6 +1742,35 @@ export class SimpleStrategy {
       : null;
   }
 
+  // A Professor bluffer (timed like the real one) "chooses" a dead good
+  // player who claimed a Townsfolk, to say they stayed dead: those who
+  // accused one of their team first, so that accusation is discredited.
+  professorBluff(s, p) {
+    const dead = s.players.filter(
+      (x) =>
+        !x.alive &&
+        !x.undead &&
+        !x.human &&
+        x.claimKnown &&
+        x.alignment === "good" &&
+        team(x.claim) === "townsfolk",
+    );
+    const accusers = dead.filter((x) =>
+      (s.statements ?? []).some(
+        (st) =>
+          st.byId === x.id &&
+          st.type === "suspicious" &&
+          teammate(p, byId(s, st.targetId) ?? {}),
+      ),
+    );
+
+    if (!dead.length || !this.onceReady(s, "professor", s.night)) {
+      return null;
+    }
+
+    return pick(accusers.length ? accusers : dead, s.r);
+  }
+
   // A Gossip says in public that someone they suspect is the Demon, a
   // Minion or evil.
   //

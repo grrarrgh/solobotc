@@ -12,6 +12,7 @@ import {
   isDrunk,
   infoMode,
   philosopherInfo,
+  choiceInfo,
   misinformedBy,
   who,
   steer,
@@ -859,6 +860,24 @@ export class Engine {
           p.bluffGained = role;
           this.rememberBluff(p, philosopherInfo(s, role));
         }
+      }
+
+      // A Professor bluffer "uses" it once, on a dead player who claimed a
+      // Townsfolk, and says in the morning they stayed dead (see
+      // professorReveals()): they lied, so their word counts against them.
+      if (p.claim === "professor" && !p.professorUsed && s.night > 1) {
+        const t = this.strat.professorBluff(s, p);
+
+        if (t) {
+          p.professorUsed = true;
+          p.professorExposed = t.id;
+          this.rememberBluff(p, {
+            ...choiceInfo(s, "professor", "chose", [t]),
+            text: `Professor: chose ${t.label}, who stayed dead.`,
+          });
+        }
+
+        continue;
       }
 
       const info = this.strat.bluff(s, p);

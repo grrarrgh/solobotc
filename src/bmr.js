@@ -946,9 +946,11 @@ export const badMoonRising = {
     }
   },
 
-  // An NPC Professor whose resurrection failed says so: the player they
-  // chose claimed a Townsfolk, so they lied. Everyone weighs that player's
-  // statements the other way round from now on (see strategy liars()).
+  // An NPC Professor whose resurrection failed says so (or a Professor
+  // bluffer says it did): the player they chose claimed a Townsfolk, so
+  // they lied. Everyone weighs that player's statements the other way round
+  // from now on (see strategy liars()), and it's public information against
+  // them.
   professorReveals() {
     const s = this.s;
 
@@ -960,9 +962,12 @@ export const badMoonRising = {
         t.claim,
       )}."`;
 
+      const m = p.memories.findLast((x) => x.role === "professor");
+
       p.professorExposed = null;
       s.exposed = [...new Set([...(s.exposed ?? []), t.id])];
       this.claimPublicly(p);
+      heard(s, p, m ? [m] : []);
       s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
       this.audit("professor", `${p.label}${said}`, { playerId: p.id });
     }

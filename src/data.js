@@ -427,6 +427,14 @@ export const VOTE_COUNT_DELAY_MS = 500;
 // counts votes. (A voter's hand goes up just before the clock hand arrives.)
 export const VOTE_TICK_MS = 200;
 
+// Performance timing (for finding lag): with PERF_LOGGING on, the game times
+// every click (until the next frame is drawn), each redraw of the page, and
+// any long task the browser reports. Anything that takes PERF_SLOW_MS or
+// more is written to the browser console ("[perf] ..."); a summary is added
+// to the end of log.txt, and soloPerf() in the console prints it any time.
+export const PERF_LOGGING = true;
+export const PERF_SLOW_MS = 50;
+
 // Town square: the ⚠ on an NPC who just claimed their character in public
 // without being asked (sharing information, a Gossip statement, a Slayer
 // shot...). It stays CLAIM_ALERT_HOLD_MS, then fades out over

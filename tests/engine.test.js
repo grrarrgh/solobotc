@@ -5783,6 +5783,37 @@ test("a good NPC Courtier picks an in-play Demon or Minion at COURTIER_CORRECT_C
   }
 });
 
+test("a Professor bluffer 'fails' to revive a dead accuser, and says so", () => {
+  const s = base("professor-bluff", bmr);
+  const strat = new SimpleStrategy();
+  const e = new Engine(s, strat);
+  const [, chef, butler, baron] = s.players;
+
+  // The Chef (dead, a claimed Townsfolk) accused the Baron; the Butler didn't.
+  for (const x of [chef, butler]) {
+    x.alive = false;
+    x.claimKnown = true;
+  }
+
+  butler.claim = "chef";
+  s.statements = [
+    { byId: chef.id, day: 1, type: "suspicious", targetId: baron.id, source: "info" },
+  ];
+  baron.claim = "professor";
+  strat.onceReady = () => true;
+  s.night = 2;
+
+  e.bluffs();
+  assert.equal(baron.professorUsed, true);
+  assert.equal(baron.professorExposed, chef.id);
+
+  // In the morning: said in public, and the Chef's word now counts against them.
+  e.professorReveals();
+  assert.match(s.publicLog.at(-1), new RegExp(`${baron.label} says: "As the Professor I chose ${chef.label}`));
+  assert.ok(s.exposed.includes(chef.id));
+  assert.ok(strat.liars(s, butler).has(chef.id));
+});
+
 test("an NPC Ogre becomes the alignment of the player they choose", () => {
   const { s, p, strat, e } = opNight("ogre", [null, "ogre"]);
 

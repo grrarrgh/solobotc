@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Bug Fix & New Feature: Professor Bluff, Performance Timing
+
+- Professor bluffers: an evil NPC claiming the Professor now "uses" the ability once (from Night 2, timed like a real Professor): they choose a dead good player who claimed a Townsfolk, preferring one who accused their team, and say in the morning that they stayed dead, so they weren't the Townsfolk they claimed. That player's word then counts against them (see liars() in src/strategy.js), discrediting their accusations. Before, a Professor bluffer never used it. A real Professor's failed revival is now also public information against that player.
+- Performance timing (PERF_LOGGING and PERF_SLOW_MS in src/data.js, on by default): every click, change and key press is timed until the next frame is drawn, and each redraw is timed. The browser's long tasks (50 ms or more) are recorded with the action before them. Anything at PERF_SLOW_MS (50) or more is written to the browser console as "[perf] ...". log.txt ends with a Performance section (each action's count, average and slowest, then the slowest 15), and soloPerf() in the browser console prints the same at any time.
+
 ## Bug Fixes: Courtier & First-Night Poisoning
 
 - Courtier NPCs: a good Courtier now chooses a Demon or Minion character that's really in play at COURTIER_CORRECT_CHANCE (0.35, in src/data.js), and otherwise one that isn't. Before, they only ever guessed a Demon, at random from the script, so they rarely hit anything. An evil Courtier bluffer still chooses one that isn't in play.

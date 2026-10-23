@@ -12,6 +12,8 @@ import {
   VOTE_TICK_MS,
   CLAIM_ALERT_HOLD_MS,
   CLAIM_ALERT_FADE_MS,
+  PERF_LOGGING,
+  PERF_SLOW_MS,
   TOWN_SQUARE_SIZE,
   TOWN_SQUARE_SIZE_STEP,
   TOWN_SQUARE_SIZE_MIN,
@@ -1021,11 +1023,153 @@ function updateLogLink() {
   }
 
   link.href = URL.createObjectURL(
-    new Blob([e.debugLog()], { type: "text/plain" }),
+    new Blob(
+      [PERF_LOGGING ? `${e.debugLog()}\n\n${perfReport()}\n` : e.debugLog()],
+      { type: "text/plain" },
+    ),
   );
 }
 
+// ── Performance timing (PERF_LOGGING in data.js) ────────────
+
+const perf = { actions: [], renders: [], longTasks: [] };
+const PERF_KEEP = 2000;
+// The latest click or change, which a long task is put down to.
+let perfAction = "page load";
+
+// What was pressed: its id, or the seat's player, or its tag.
+function perfName(el) {
+  const x = el?.closest?.("button, select, input, a, dialog, summary, [id]");
+  const seat = x?.closest?.(".seat");
+
+  if (seat) {
+    return `seat ${e?.player(seat.dataset.id)?.label ?? "?"}`;
+  }
+
+  return x?.id || x?.className || x?.tagName?.toLowerCase() || "page";
+}
+
+// Where the game was at: "Day 3", "Night 2" or "setup".
+function perfWhen() {
+  if (!s) {
+    return "setup";
+  }
+
+  if (s.winner) {
+    return "game over";
+  }
+
+  return s.phase === "night" ? `Night ${s.night}` : `Day ${s.day}`;
+}
+
+function perfNote(list, entry) {
+  list.push(entry);
+  list.splice(0, list.length - PERF_KEEP);
+
+  if (entry.ms >= PERF_SLOW_MS) {
+    console.warn(`[perf] ${entry.action} (${entry.when}): ${entry.ms} ms`);
+  }
+}
+
+if (PERF_LOGGING) {
+  // From the event (before its handler runs) to the next frame drawn: the
+  // engine, the redraw, layout and paint.
+  for (const type of ["click", "change", "keydown"]) {
+    document.addEventListener(
+      type,
+      (ev) => {
+        const action = `${type} ${perfName(ev.target)}`;
+        const when = perfWhen();
+        const t0 = performance.now();
+
+        perfAction = action;
+        requestAnimationFrame(() =>
+          setTimeout(() =>
+            perfNote(perf.actions, {
+              action,
+              when,
+              ms: Math.round(performance.now() - t0),
+            }),
+          ),
+        );
+      },
+      true,
+    );
+  }
+
+  // Tasks of 50 ms or more, whatever caused them (the browser's own report).
+  try {
+    new PerformanceObserver((list) => {
+      for (const x of list.getEntries()) {
+        perfNote(perf.longTasks, {
+          action: `long task after ${perfAction}`,
+          when: perfWhen(),
+          ms: Math.round(x.duration),
+        });
+      }
+    }).observe({ type: "longtask", buffered: true });
+  } catch {}
+
+  globalThis.soloPerf = () => {
+    console.log(perfReport());
+    return perf;
+  };
+}
+
+// Count, average and slowest of each action; the slowest few; long tasks.
+function perfReport() {
+  const by = new Map();
+
+  for (const x of [...perf.actions, ...perf.renders]) {
+    const v = by.get(x.action) ?? { n: 0, total: 0, max: 0 };
+
+    v.n++;
+    v.total += x.ms;
+    v.max = Math.max(v.max, x.ms);
+    by.set(x.action, v);
+  }
+
+  const rows = [...by]
+    .sort((a, b) => b[1].max - a[1].max)
+    .map(
+      ([k, v]) =>
+        `  ${k.padEnd(32)} ${String(v.n).padStart(5)}x  avg ${(v.total / v.n)
+          .toFixed(1)
+          .padStart(6)} ms  max ${String(v.max).padStart(5)} ms`,
+    );
+  const slowest = [...perf.actions, ...perf.renders, ...perf.longTasks]
+    .sort((a, b) => b.ms - a.ms)
+    .slice(0, 15)
+    .map((x) => `  ${String(x.ms).padStart(5)} ms  ${x.action} (${x.when})`);
+
+  return [
+    "=== Performance ===========================================",
+    `  (Clicks: until the next frame is drawn. Renders: JavaScript only. Slow: ${PERF_SLOW_MS} ms or more.)`,
+    ...rows,
+    "",
+    "  Slowest:",
+    ...slowest,
+    "",
+    `  Long tasks: ${perf.longTasks.length}`,
+  ].join("\n");
+}
+
+// Redraws the page (timed: see PERF_LOGGING).
 function render() {
+  const t0 = performance.now();
+
+  draw();
+
+  if (PERF_LOGGING) {
+    perfNote(perf.renders, {
+      action: "render",
+      when: perfWhen(),
+      ms: Math.round(performance.now() - t0),
+    });
+  }
+}
+
+function draw() {
   const h = e.human();
   const t = selectedPlayerId ? e.player(selectedPlayerId) : null;
   const talk = e.talkStatus(t?.id);
