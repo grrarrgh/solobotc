@@ -215,7 +215,8 @@ export function createState(
       drunkFrom: null, // drunk from now on (Sweetheart, Philosopher)
       lastingPoison: null, // poisoned from now on (Snake Charmer)
       vigor: false, // a Minion killed by the Vigormortis keeps their ability
-      gained: null, // the ability a Philosopher gained
+      gained: null, // the ability a Philosopher (or Cannibal, Pixie) gained
+      gainedNight: 0, // the night a gained first-night ability is used
       bluffGained: null, // ...or that an evil Philosopher bluffer "gained"
       seamUsed: false,
       juggled: false,

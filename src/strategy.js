@@ -41,6 +41,7 @@ import {
   scapegoat,
   isDrunk,
   isDemon,
+  atFinal,
 } from "./storyteller.js";
 import { byId, pick, sample } from "./util.js";
 
@@ -145,10 +146,12 @@ function infoStance(m) {
       return /, and died\.$/.test(t) ? "suspicious" : "trust";
     case "washerwoman":
     case "grandmother":
+      return "trust";
+    // Their own pick (who to protect, or their master) tells them nothing.
     case "monk":
     case "butler":
     case "innkeeper":
-      return "trust";
+      return null;
     case "gossip":
       return / is (evil|the Demon|a Minion)\.$/.test(t)
         ? "suspicious"
@@ -823,7 +826,15 @@ export class SimpleStrategy {
   // A dead player (good or evil) has one vote left: they save it for the
   // player they currently suspect, and don't spend it early (see
   // GHOST_VOTE_ALIVE).
+  //
+  // In the final 3 (or 2, with a Zombuul), the call is yours: good NPCs,
+  // living or dead, vote for whoever you nominate (or asked to have
+  // nominated), whatever they think of them.
   vote(s, v, n, tally = null) {
+    if (tally?.humanChoice && atFinal(s) && sideOf(v) !== "evil") {
+      return true;
+    }
+
     if (!v.alive) {
       const late =
         s.players.filter((x) => x.alive).length <= GHOST_VOTE_ALIVE;

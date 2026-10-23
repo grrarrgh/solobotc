@@ -33,7 +33,9 @@ function table(headers, rows) {
 function stateLines(players) {
   const rows = players.map((p) => [
     p.label,
-    p.role === p.shown ? name(p.role) : `${name(p.role)} (as ${name(p.shown)})`,
+    `${
+      p.role === p.shown ? name(p.role) : `${name(p.role)} (as ${name(p.shown)})`
+    }${p.gained ? ` (has ${name(p.gained)})` : ""}`,
     name(p.claim),
     p.alignment,
     [

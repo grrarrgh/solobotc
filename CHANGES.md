@@ -2,6 +2,24 @@
 
 Newest first.
 
+## Bug Fixes: Off-Script Characters & Game Over Log
+
+- Ravenkeeper: when drunk, poisoned or lied to, they're now only shown characters on the script being played. Before, they could be shown any character in the game (e.g. "Player 9 is Mutant" in Onion Pies). The same goes for a misinformed Undertaker.
+- log.txt: the Game Over player table no longer repeats the last night's "Information tonight" when that night's table already listed it.
+
+## Bug Fix: Protectors Trusting Their Own Picks
+
+- Monk, Innkeeper and Butler NPCs no longer say "I trust Player X, because of what I learned on Night N" about the player they chose to protect (or their master). Picking a player isn't information: an Innkeeper could end up vouching for the Assassin or the Demon, and other NPCs then held votes and nominations against that player's accusers ("they nominated Player 11, whom I trust").
+
+## New Feature: The Final Call Is Yours
+
+- Final 3 (or final 2 with a Zombuul): good NPCs, living or dead, now vote for whoever you nominate, or ask to have nominated, whatever they think of that player. They no longer outvote your pick, so if you pick wrong, that's on you. Evil NPCs vote as before.
+
+## Bug Fix: Cannibal First-Night Abilities
+
+- Cannibal: a first-night ability gained from an executee (Chef, Librarian, Washerwoman, Noble...) is now used the night after the execution, as the rules say. Before, the Cannibal gained it but never woke, since those characters only act on Night 1.
+- log.txt: the player table's Character column shows a gained ability, e.g. "Cannibal (has Chef)".
+
 ## New Feature: Good NPCs Trust You a Little More
 
 - EVIDENCE_WEIGHT.humanTrusted (0.5, in src/data.js): good NPCs give your view a little extra weight, so it's easier to sway votes your way.

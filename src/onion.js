@@ -212,6 +212,8 @@ export const onionPies = {
           ? dead.claim
           : pick(goods, s.r)
         : dead.role;
+      // A first-night ability (the Chef, the Librarian...) is used tonight.
+      c.gainedNight = s.night + 1;
       c.cannibalPoison = evil ? `eating ${who(dead)}` : null;
 
       // Poisoned now; or, with a good player executed, no longer (unless

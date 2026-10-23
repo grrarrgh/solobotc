@@ -2058,6 +2058,20 @@ const memory = (role, text, targets, night = 1) => ({
   targets: targets.map((p) => p.id),
 });
 
+test("a Monk, Innkeeper or Butler doesn't trust the player they picked", () => {
+  const s = base("opinion-protect");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron] = s.players;
+
+  chef.memories.push(
+    memory("monk", `Monk: protected ${baron.label} from the Demon.`, [baron]),
+    memory("innkeeper", `Innkeeper: protected ${butler.label} and ${baron.label}.`, [butler, baron], 2),
+  );
+
+  assert.doesNotMatch(strat.opinion(s, chef).text ?? "", /because of what I learned/);
+  assert.ok(!strat.trusted(s, chef).has(baron.id));
+});
+
 test("a good NPC with no information has nothing else to add", () => {
   const s = base("opinion-nothing");
   const e = new Engine(s);
@@ -4837,6 +4851,34 @@ test("good NPCs give your nominations a little extra trust (humanTrusted)", () =
   assert.equal(why.score, W.humanTrusted);
 });
 
+test("in the final 3, good NPCs vote for whoever you put up", () => {
+  const s = base("final-three");
+  const strat = new SimpleStrategy();
+  const e = new Engine(s, strat);
+  const [human, chef, butler, baron, imp] = s.players;
+  const vote = (v, humanChoice) =>
+    strat.vote(s, v, imp, { yes: 0, needed: 2, nominator: human, humanChoice });
+
+  // The Chef trusts the Imp, and nearly never votes for them...
+  strat.opinion = () => ({ type: "trust", targetId: imp.id });
+  s.r = () => 0.5;
+  assert.equal(vote(chef, true), false);
+
+  // ...until the final 3, when it's your call (alive or dead, and also for
+  // a nomination you asked for). Not someone else's nomination, though.
+  baron.alive = false;
+  butler.alive = false;
+  butler.ghost = true;
+  assert.equal(vote(chef, true), true);
+  assert.equal(vote(butler, true), true);
+  assert.equal(vote(chef, false), false);
+  assert.equal(vote(imp, true), false);
+
+  // Through the engine: you ask for the Imp's nomination, and they're marked.
+  e.requestNomination(imp.id);
+  assert.equal(s.block?.nomineeId, imp.id);
+});
+
 test("the log's player tables show who each NPC suspects", () => {
   const s = createState(script, 10, "suspects-log");
   const e = new Engine(s);
@@ -5629,6 +5671,25 @@ test("a Cannibal's poison from an evil executee ends when a good player is execu
   assert.equal(c.cannibalPoison, null);
 });
 
+test("a Cannibal who gains a first-night ability uses it that night", () => {
+  const { s, p, e } = opNight("cannibal-chef", [null, "cannibal", "chef"]);
+  const [, c, chef] = p;
+
+  e.night();
+  s.phase = "day";
+  e.execute(chef);
+  assert.equal(c.gained, "chef");
+
+  s.night++;
+  e.night();
+  assert.ok(c.memories.some((m) => m.night === 2 && /^Chef number/.test(m.text)));
+
+  // Only the night after they gained it.
+  s.night++;
+  e.night();
+  assert.ok(!c.memories.some((m) => m.night === 3));
+});
+
 test("a dead player's execution gives the Cannibal nothing", () => {
   const { s, p, e } = opNight("cannibal-dead", [null, "cannibal"]);
 
@@ -5637,6 +5698,30 @@ test("a dead player's execution gives the Cannibal nothing", () => {
   p[2].alive = false;
   e.execute(p[2]);
   assert.equal(p[1].gained, null);
+});
+
+test("a misinformed Ravenkeeper is only shown characters on the script", () => {
+  const { s, p } = opNight("raven-script", [null, "ravenkeeper"]);
+
+  p[1].poisoned = true;
+
+  for (let i = 0; i < 50; i++) {
+    const seen = ravenInfo(s, p[1], p[2]).text.replace(/^.+ is (.+)\.$/, "$1");
+
+    assert.ok(s.script.ids.some((id) => name(id) === seen), seen);
+  }
+});
+
+test("the Game Over table doesn't repeat tonight's information", () => {
+  const { s, p, e } = opNight("gameover-info", [null, "chef"]);
+
+  e.night();
+  e.finish("good", "Test.");
+
+  const states = s.audit.filter((x) => x.type === "state");
+
+  assert.ok(states[0].data.players[1].info.length);
+  assert.deepEqual(states.at(-1).data.players[1].info, []);
 });
 
 test("an NPC Ogre becomes the alignment of the player they choose", () => {

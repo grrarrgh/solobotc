@@ -1297,10 +1297,16 @@ export class Engine {
 
   // Everyone's vote on nominee n, in seat order. Good players decide first,
   // then evil players, who see how the vote is going (see strategy vote()).
-  votes(n, nominator = null) {
+  // `humanChoice`: the human picked the nominee (nominated, or asked for it).
+  votes(n, nominator = null, humanChoice = Boolean(nominator?.human)) {
     const s = this.s;
     const intents = new Map();
-    const tally = { yes: 0, needed: this.votesNeeded(), nominator };
+    const tally = {
+      yes: 0,
+      needed: this.votesNeeded(),
+      nominator,
+      humanChoice,
+    };
     const order = [
       ...s.players.filter((v) => v.alignment !== "evil"),
       ...s.players.filter((v) => v.alignment === "evil"),
@@ -1422,7 +1428,7 @@ export class Engine {
       { actorId: nominator.id, targetId: n.id },
     );
 
-    return this.runNomination(nominator, n);
+    return this.runNomination(nominator, n, true);
   }
 
   // A nomination and its vote. Nobody is executed yet: if at least half the
@@ -1430,8 +1436,8 @@ export class Engine {
   // today, the nominee is marked for execution (s.block) instead. A tie with
   // the highest count so far (official rules) leaves nobody marked, and a
   // later nomination must beat that count. Ending the day executes whoever
-  // is marked.
-  runNomination(nominator, n) {
+  // is marked. (`requested`: the human asked for this nomination.)
+  runNomination(nominator, n, requested = false) {
     const s = this.s;
     const id = n.id;
     const base = {
@@ -1465,7 +1471,7 @@ export class Engine {
     }
 
     const needed = this.votesNeeded();
-    const records = this.votes(n, nominator);
+    const records = this.votes(n, nominator, nominator.human || requested);
     const count = records.filter((x) => x.counted).length;
 
     // Who nominated and voted for whom is public: good NPCs weigh it.
@@ -1877,11 +1883,20 @@ export class Engine {
   // the debug log.
   snapshot(group) {
     const s = this.s;
+    // (Tonight's information is only listed once: the Game Over table
+    // leaves it out if tonight's table already has it.)
+    const listed = Boolean(group) && s.snapshotNight === s.night;
+
+    if (!group) {
+      s.snapshotNight = s.night;
+    }
+
     const players = s.players.map((p) => ({
       seat: p.seat,
       label: p.label,
       role: p.role,
       shown: p.shown,
+      gained: p.gained,
       claim: p.claim,
       alignment: p.alignment,
       alive: p.alive,
@@ -1893,7 +1908,7 @@ export class Engine {
       score: p.human ? null : (p.suspicion?.score ?? null),
       used: abilityUsed(p, ability(p)),
       info: p.memories
-        .filter((m) => !m.day && m.night === s.night)
+        .filter((m) => !listed && !m.day && m.night === s.night)
         .map(
           (m) => `${m.text}${m.misinfo ? ` (misinformation: ${m.misinfo})` : ""}`,
         ),

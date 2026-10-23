@@ -268,6 +268,8 @@ export const SCAPEGOAT_CHANCE = 0.8;
 //   GOOD_VOTE_MIN and GOOD_VOTE_MAX. They vote at GOOD_VOTE_MAX for someone
 //   they suspect and GOOD_VOTE_MIN for someone they trust.
 // HUMAN_NOMINATION_BONUS: added to a good NPC's chance when you nominated.
+//   (In the final 3, or 2 with a Zombuul, good NPCs always vote for the
+//   player you nominate or ask to have nominated: see vote().)
 // EVIL_VOTE_CHANCE: an evil NPC's chance to vote for a good nominee.
 // EVIL_TEAMMATE_VOTE_CHANCE: an evil NPC's chance to vote for a teammate,
 //   which they only do when their vote can't change the outcome (the

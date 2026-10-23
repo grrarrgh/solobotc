@@ -1,5 +1,4 @@
 import {
-  ROLES,
   ARTIST_QUESTIONS,
   FIRST_NIGHT_INFO,
   ONGOING_INFO,
@@ -95,6 +94,17 @@ export function lean(s) {
   return leanState(s).side;
 }
 
+// How many players the game ends with: 3, or 2 with a Zombuul in play
+// (alive, or a Zombuul that only registers as dead).
+export const finalCount = (s) =>
+  s.players.some((x) => x.role === "zombuul" && (x.alive || x.undead))
+    ? 2
+    : 3;
+
+// Whether the game is down to its final 3 (or 2), shown alive.
+export const atFinal = (s) =>
+  s.players.filter((x) => x.alive).length <= finalCount(s);
+
 // lean(), with its workings: { side, n, e, low, high, end } (side null
 // when there's nothing to steer).
 export function leanState(s) {
@@ -105,10 +115,7 @@ export function leanState(s) {
     (x) => (x.alive || x.undead) && x.alignment === "evil",
   ).length;
   const human = s.players.find((x) => x.human);
-  const zombuul = s.players.some(
-    (x) => x.role === "zombuul" && (x.alive || x.undead),
-  );
-  const end = zombuul ? 2 : 3;
+  const end = finalCount(s);
 
   if (n <= end || n0 <= end) {
     return { side: null, n, e, end };
@@ -1250,7 +1257,7 @@ function unreliableInfo(s, p, role, targets) {
   }
 
   if (role === "undertaker") {
-    const shown = pick(Object.keys(ROLES), s.r);
+    const shown = pick(s.script.ids, s.r);
 
     return {
       targets: [],
@@ -1297,8 +1304,11 @@ function unreliableInfo(s, p, role, targets) {
 
 export function nightInfo(s, p, strat) {
   const role = ability(p);
+  // A first-night ability gained later (by the Cannibal) is used that night.
+  const gainedTonight =
+    p.gainedNight === s.night && FIRST_NIGHT.includes(role);
 
-  if (!p.alive || !actsTonight(role, s.night)) {
+  if (!p.alive || !(actsTonight(role, s.night) || gainedTonight)) {
     return null;
   }
 
@@ -1528,12 +1538,12 @@ export function ravenInfo(s, p, t, lie = isDrunk(p), frame = false) {
     ? pick(
         evilRoles.length
           ? evilRoles
-          : Object.keys(ROLES).filter((id) => id !== t.role),
+          : s.script.ids.filter((id) => id !== t.role),
         s.r,
       )
     : functioning
       ? t.role
-      : pick(Object.keys(ROLES), s.r);
+      : pick(s.script.ids, s.r);
 
   return {
     night: s.night,
