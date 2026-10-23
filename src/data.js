@@ -414,6 +414,11 @@ export const SINK_KILL_CHANCE = 0.2;
 export const PO_CHARGE_CHANCE = 0.25;
 export const LUNATIC_FOLLOW_CHANCE = 0.5;
 
+// COURTIER_CORRECT_CHANCE: the chance a good NPC Courtier chooses a Demon
+//   or Minion character that's really in play (alive); otherwise they choose
+//   one that isn't. (An evil Courtier bluffer always chooses one that isn't.)
+export const COURTIER_CORRECT_CHANCE = 0.35;
+
 // Vote animation: how long (in ms) the clock hands point at the nominator
 // and nominee before the large hand starts counting votes.
 export const VOTE_COUNT_DELAY_MS = 500;
@@ -421,6 +426,13 @@ export const VOTE_COUNT_DELAY_MS = 500;
 // Vote animation: how long (in ms) the large hand takes per seat as it
 // counts votes. (A voter's hand goes up just before the clock hand arrives.)
 export const VOTE_TICK_MS = 200;
+
+// Town square: the ⚠ on an NPC who just claimed their character in public
+// without being asked (sharing information, a Gossip statement, a Slayer
+// shot...). It stays CLAIM_ALERT_HOLD_MS, then fades out over
+// CLAIM_ALERT_FADE_MS. (It waits while a dawn or dusk card is showing.)
+export const CLAIM_ALERT_HOLD_MS = 2500;
+export const CLAIM_ALERT_FADE_MS = 2000;
 
 // Town square size, set from the menu (☰) by the title (as a fraction of
 // the normal size). The −/+ buttons step it by TOWN_SQUARE_SIZE_STEP, between

@@ -189,6 +189,8 @@ export class Engine {
 
     s.phase = "night";
     s.humanChoice = null;
+    // Where tonight's public log starts, for the dawn card (see phaseCard()).
+    s.nightLog = s.publicLog.length;
 
     // Each player's character and claim at nightfall, so a change in the
     // night can be announced at dawn (see announceClaims()).
@@ -525,17 +527,42 @@ export class Engine {
 
     this.dawnDeaths();
 
-    if (s.winner) {
-      return;
+    if (!s.winner) {
+      this.shareInfo();
+      this.npcShots();
+      this.npcArtists();
+      this.sectsDawn();
+      this.bmrDawn();
+      this.pixieMadness();
+      this.marionetteDawn();
     }
 
-    this.shareInfo();
-    this.npcShots();
-    this.npcArtists();
-    this.sectsDawn();
-    this.bmrDawn();
-    this.pixieMadness();
-    this.marionetteDawn();
+    this.phaseCard("dawn", s.nightLog ?? 0);
+  }
+
+  // A public log line the Storyteller announces (a death, an execution and
+  // what came of it), as opposed to what a player said. Returns its index.
+  announce(text) {
+    const s = this.s;
+    const i = s.publicLog.push(text) - 1;
+
+    (s.announced ??= []).push(i);
+
+    return i;
+  }
+
+  // A dawn or dusk card for the UI: what the Storyteller announced since
+  // public log line `from`, word for word as the Public Log has it. (None
+  // if there was nothing, as at the first dawn.)
+  phaseCard(kind, from) {
+    const s = this.s;
+    const lines = (s.announced ?? [])
+      .filter((i) => i >= from)
+      .map((i) => s.publicLog[i]);
+
+    if (lines.length) {
+      (s.phaseCards ??= []).push({ kind, day: s.day, lines });
+    }
   }
 
   // The strategy used for p's night info: for the human, the Fortune Teller's
@@ -1128,7 +1155,7 @@ export class Engine {
       p.diedAtNight = this.s.night;
       this.s.nightDeaths.push(p.id);
     } else {
-      this.s.publicLog.push(`${p.label} died.`);
+      this.announce(`${p.label} died.`);
     }
 
     // "If you die at night": any death at night wakes the Ravenkeeper (the
@@ -1205,7 +1232,7 @@ export class Engine {
     const dead = s.nightDeaths.map((id) => this.player(id));
 
     for (const p of dead) {
-      s.publicLog.push(`Day ${s.day} — ${p.label} died in the night.`);
+      this.announce(`Day ${s.day} — ${p.label} died in the night.`);
 
       if (p.human) {
         s.privateLog.push(`Day ${s.day}: You died in the night.`);
@@ -1213,7 +1240,7 @@ export class Engine {
     }
 
     if (!dead.length && s.night > 1) {
-      s.publicLog.push(`Day ${s.day} — Nobody died in the night.`);
+      this.announce(`Day ${s.day} — Nobody died in the night.`);
     }
 
     s.nightDeaths = [];
@@ -1227,9 +1254,16 @@ export class Engine {
 
   // p has now said their current claim in public (to the human, or to
   // everyone); later changes to it get announced (see announceClaims()).
-  claimPublicly(p) {
+  // Unless the human asked (`prompted`), the town square flags it (⚠, see
+  // claimAlert).
+  claimPublicly(p, prompted = false) {
     p.claimKnown = true;
     p.publicClaim = p.claim;
+
+    if (!prompted && !p.human) {
+      this.s.claimAlerts = (this.s.claimAlerts ?? 0) + 1;
+      p.claimAlert = this.s.claimAlerts;
+    }
   }
 
   ask(id) {
@@ -1261,7 +1295,7 @@ export class Engine {
       p.claim = "mutant";
     }
 
-    this.claimPublicly(p);
+    this.claimPublicly(p, true);
 
     const response = this.strat.ask(s, p);
 
@@ -1557,8 +1591,7 @@ export class Engine {
     s.executedToday = true;
 
     // What happened is added to this line once it's known (see below).
-    const line =
-      s.publicLog.push(`Day ${s.day} — ${p.label} is executed.`) - 1;
+    const line = this.announce(`Day ${s.day} — ${p.label} is executed.`);
     this.audit("execution", `${p.label} was executed.`, { playerId: p.id });
 
     // The Devil's Advocate's pick (or a Fool) is executed but doesn't die.
@@ -1601,6 +1634,7 @@ export class Engine {
   // or an NPC) is executed immediately, and the day ends.
   virgin(n, by, base) {
     const s = this.s;
+    const from = s.publicLog.length;
 
     s.lastExecution = by.id;
     s.lastVote = null;
@@ -1613,7 +1647,7 @@ export class Engine {
       { actorId: by.id, targetId: n.id },
     );
 
-    s.publicLog.push(
+    this.announce(
       by.human
         ? `Day ${s.day} — You nominated ${n.label} and were executed immediately.`
         : `Day ${s.day} — ${by.label} nominated ${n.label} and was executed immediately.`,
@@ -1627,6 +1661,11 @@ export class Engine {
     // (The day is over: any Gossip yet to speak today does so now.)
     if (!s.winner) {
       this.npcGossips(true);
+    }
+
+    this.phaseCard("dusk", from);
+
+    if (!s.winner) {
       s.night++;
       this.night();
     }
@@ -1645,6 +1684,8 @@ export class Engine {
 
     this.audit("end_day", `You ended Day ${s.day}.`);
 
+    const from = s.publicLog.length;
+
     // (Any Gossip yet to speak today does so now.)
     this.npcGossips(true);
 
@@ -1652,9 +1693,14 @@ export class Engine {
 
     s.block = null;
 
+    if (!p) {
+      this.announce(`Day ${s.day} — Nobody was executed.`);
+    }
+
     if (p) {
       this.execute(p);
     } else if (this.vortoxDay()) {
+      this.phaseCard("dusk", from);
       return;
     } else if (
       this.alive().length === 3 &&
@@ -1665,6 +1711,7 @@ export class Engine {
     }
 
     this.mastermindEnd(p);
+    this.phaseCard("dusk", from);
 
     if (!s.winner) {
       s.night++;

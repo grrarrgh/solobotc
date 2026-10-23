@@ -16,6 +16,7 @@ import {
   GOOD_VOTE_CHANCE,
   GOOD_VOTE_EVIDENCE_STEP,
   ARTIST_QUESTIONS,
+  COURTIER_CORRECT_CHANCE,
   name,
   team,
   alignment,
@@ -33,7 +34,7 @@ import {
   scapegoat,
   evilTwinInfo,
 } from "../src/storyteller.js";
-import { shuffle, sample, rng } from "../src/util.js";
+import { shuffle, sample, rng, byId } from "../src/util.js";
 
 const script = JSON.parse(
   fs.readFileSync(new URL("../scripts/trouble-brewing.json", import.meta.url)),
@@ -5724,6 +5725,64 @@ test("the Game Over table doesn't repeat tonight's information", () => {
   assert.deepEqual(states.at(-1).data.players[1].info, []);
 });
 
+test("on Night 1, the Poisoner's first-night pick hears a lie that helps evil", () => {
+  for (let seed = 0; seed < 20; seed++) {
+    // A Noble: never the 1 evil player in 3, and never the Demon. (With a
+    // Minion and a Recluse to name, 2 evil and 1 good.)
+    const { s, p, strat, e } = opNight(`poison-n1-${seed}`, [
+      null,
+      "noble",
+      "recluse",
+      "poisoner",
+    ]);
+
+    strat.poison = () => p[1];
+    e.night();
+
+    const named = p[1].memories[0].targets.map((id) => byId(s, id));
+
+    assert.equal(p[1].memories[0].functioning, false);
+    assert.equal(named.length, 3);
+    assert.ok(!named.some((x) => x.role === "imp"));
+    assert.deepEqual(
+      named.filter((x) => x.role !== "mayor").map((x) => x.role).sort(),
+      ["poisoner", "recluse"],
+    );
+  }
+
+  // A Librarian's "Outsider" pair covers an evil player.
+  const { s, p, strat, e } = opNight("poison-n1-lib", [null, "librarian", null, "poisoner"]);
+
+  strat.poison = () => p[1];
+  e.night();
+  assert.ok(
+    p[1].memories[0].targets.some((id) => byId(s, id).alignment === "evil"),
+  );
+});
+
+test("a good NPC Courtier picks an in-play Demon or Minion at COURTIER_CORRECT_CHANCE", () => {
+  const s = base("courtier", bmr);
+  const strat = new SimpleStrategy();
+  const [, c, , baron, imp] = s.players;
+  const inPlay = [baron.role, imp.role];
+
+  strat.onceReady = () => true;
+  c.alignment = "good";
+
+  s.r = () => COURTIER_CORRECT_CHANCE - 0.01;
+  assert.ok(inPlay.includes(strat.courtier(s, c)));
+
+  // Otherwise (and always, for an evil bluffer) one that isn't in play.
+  for (const [who, roll] of [[c, COURTIER_CORRECT_CHANCE + 0.01], [baron, 0]]) {
+    s.r = () => roll;
+
+    const id = strat.courtier(s, who);
+
+    assert.ok(["demon", "minion"].includes(team(id)));
+    assert.ok(!inPlay.includes(id));
+  }
+});
+
 test("an NPC Ogre becomes the alignment of the player they choose", () => {
   const { s, p, strat, e } = opNight("ogre", [null, "ogre"]);
 
@@ -5875,4 +5934,67 @@ test("a reason found more than once is given once, saying how often", () => {
   assert.deepEqual(why.reasons, [
     `they voted for ${baron.label}, whom I trust (twice)`,
   ]);
+});
+
+test("dawn and dusk cards hold only what the Storyteller announced", () => {
+  const s = base("phase-cards");
+  const e = new Engine(s);
+  const [, , butler, baron] = s.players;
+
+  // Dusk, nobody marked: the log (and the card) says so.
+  const before = s.publicLog.length;
+
+  e.endDay();
+
+  const dusk = s.phaseCards.find((c) => c.kind === "dusk");
+
+  assert.equal(dusk.day, 1);
+  assert.deepEqual(dusk.lines, ["Day 1 — Nobody was executed."]);
+  assert.equal(s.publicLog[before], "Day 1 — Nobody was executed.");
+
+  // Dawn: the night's deaths (or that nobody died), word for word as the
+  // public log has them, but not what players said, or how many are alive.
+  const dawn = s.phaseCards.at(-1);
+
+  assert.equal(dawn.kind, "dawn");
+  assert.equal(dawn.day, 2);
+  assert.ok(dawn.lines.length);
+
+  for (const x of dawn.lines) {
+    assert.ok(s.publicLog.includes(x));
+    assert.match(x, /died|Nobody died/);
+  }
+
+  // An execution: the card has the execution line, as the log has it.
+  s.block = { nomineeId: butler.id, count: 3 };
+  e.endDay();
+
+  const executed = s.phaseCards.filter((c) => c.kind === "dusk").at(-1);
+
+  assert.ok(
+    executed.lines.some((x) => x.startsWith(`Day 2 — ${butler.label} is executed.`)),
+  );
+  assert.ok(executed.lines.every((x) => s.publicLog.includes(x)));
+
+  // A player's statement is in the log, but not on a card.
+  s.phase = "day";
+  s.winner = null;
+  s.publicLog.push(`Day 3 — ${baron.label} says: "I am the Chef."`);
+  const cards = s.phaseCards.length;
+
+  e.phaseCard("dusk", s.publicLog.length - 1);
+  assert.equal(s.phaseCards.length, cards);
+});
+
+test("unprompted public claims flag the NPC (claimAlert); answering you doesn't", () => {
+  const s = base("claim-alert");
+  const e = new Engine(s);
+  const [, chef, butler] = s.players;
+
+  e.ask(chef.id);
+  assert.equal(chef.claimAlert, undefined);
+
+  e.claimPublicly(butler);
+  e.claimPublicly(chef);
+  assert.ok(chef.claimAlert > butler.claimAlert);
 });

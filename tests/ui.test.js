@@ -181,3 +181,13 @@ test("a dead player's seat fades, but your Good / Evil mark around it doesn't", 
   assert.match(css, /\.seat\.dead > \* \{\s*opacity: 0\.4;\s*filter: grayscale\(1\);/);
   assert.doesNotMatch(css, /(^|\n)\.dead \{[^}]*(opacity|filter)/);
 });
+
+test("dawn / dusk cards close on any press; a fading ⚠ marks unprompted claims", () => {
+  assert.match(html, /<dialog id="phase-dialog"/);
+  assert.match(app, /"role-dialog", "phase-dialog"\]\)/);
+  assert.match(app, /\$\(id\)\.onclick = \(\) => \$\(id\)\.close\(\)/);
+  assert.match(app, /s\?\.phaseCards/);
+  assert.match(app, /CLAIM_ALERT_HOLD_MS/);
+  assert.match(app, /CLAIM_ALERT_FADE_MS/);
+  assert.match(css, /@keyframes claim-alert-fade/);
+});

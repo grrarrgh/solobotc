@@ -10,6 +10,8 @@ import {
   ABILITIES,
   VOTE_COUNT_DELAY_MS,
   VOTE_TICK_MS,
+  CLAIM_ALERT_HOLD_MS,
+  CLAIM_ALERT_FADE_MS,
   TOWN_SQUARE_SIZE,
   TOWN_SQUARE_SIZE_STEP,
   TOWN_SQUARE_SIZE_MIN,
@@ -137,6 +139,11 @@ const markFor = (id) => marks[id] ?? "";
 
 // Players picked in the town square while the Storyteller has woken you.
 let nightPicks = [];
+// How many of the engine's dawn / dusk cards (s.phaseCards) have been shown.
+let cardsShown = 0;
+// Each NPC's latest ⚠ (claimAlert) seen, and when its clock started.
+const alertSeen = new Map();
+const alertStart = new Map();
 
 // Script files are re-checked with the server on every load ("no-cache"), so
 // newly added or edited scripts show up without the browser using a stale
@@ -187,6 +194,9 @@ function start() {
 
     selectedPlayerId = null;
     marks = {};
+    cardsShown = 0;
+    alertSeen.clear();
+    alertStart.clear();
 
     $("setup").hidden = true;
     $("game").hidden = false;
@@ -198,6 +208,37 @@ function start() {
 }
 
 // ── Rendering ────────────────────────────────────────────────
+
+// The ⚠ on an NPC who just claimed in public unprompted: it holds for
+// CLAIM_ALERT_HOLD_MS, then fades over CLAIM_ALERT_FADE_MS. Its clock starts
+// once no dawn / dusk card covers the town square. (The seats are redrawn
+// often, so each redraw picks the fade up where it was.)
+function claimAlert(p) {
+  const title = 'title="Claimed in public"';
+
+  if (!p.claimAlert) {
+    return "";
+  }
+
+  if (alertSeen.get(p.id) !== p.claimAlert) {
+    if ($("phase-dialog").open) {
+      return `<span class="claim-alert waiting" ${title}>⚠</span>`;
+    }
+
+    alertSeen.set(p.id, p.claimAlert);
+    alertStart.set(p.id, performance.now());
+  }
+
+  const elapsed = performance.now() - alertStart.get(p.id);
+
+  if (elapsed >= CLAIM_ALERT_HOLD_MS + CLAIM_ALERT_FADE_MS) {
+    return "";
+  }
+
+  return `<span class="claim-alert" ${title} style="animation-duration:${CLAIM_ALERT_FADE_MS}ms;animation-delay:${Math.round(
+    CLAIM_ALERT_HOLD_MS - elapsed,
+  )}ms">⚠</span>`;
+}
 
 function circle() {
   // While a vote is being counted, only the hands counted so far are up, and
@@ -232,6 +273,7 @@ function circle() {
           data-id="${p.id}"
           ${p.human ? "disabled" : ""}
         >
+          ${claimAlert(p)}
           ${voters.has(p.id) ? '<span class="vote-hand">✋</span>' : ""}
           ${
             p.id === skullId
@@ -566,6 +608,33 @@ function showScript() {
 }
 
 // Groups log lines by their "Day N" prefix, newest first.
+// A public log line without its "Day 3 — " prefix.
+const dayless = (text) => text.replace(/^Day\s+\d+\s*[:—-]?\s*/i, "");
+
+// The next dawn / dusk card the engine made (s.phaseCards), if none is
+// showing: the public log lines from that change of phase, as the Public Log
+// shows them. Pressing anywhere closes it (and shows the next, if any).
+function showPhaseCard() {
+  const d = $("phase-dialog");
+  const card = s?.phaseCards?.[cardsShown];
+
+  if (d.open || !card) {
+    return;
+  }
+
+  cardsShown++;
+  d.className = `script-dialog phase-dialog phase-${card.kind}`;
+  $("phase-sheet").innerHTML = `
+    <h2>${card.kind === "dawn" ? "☀️ Dawn" : "🌙 Dusk"}: Day ${card.day}</h2>
+    <ul class="phase-lines">
+      ${card.lines
+        .map((x) => `<li class="log-entry">${colourPlayers(dayless(x))}</li>`)
+        .join("")}
+    </ul>
+    <p class="phase-hint">Click anywhere to continue.</p>`;
+  d.showModal();
+}
+
 function renderPublic() {
   const groups = [];
   let current = null;
@@ -579,9 +648,7 @@ function renderPublic() {
       groups.push(current);
     }
 
-    current.items.push(
-      m ? text.replace(/^Day\s+\d+\s*[:—-]?\s*/i, "") : text,
-    );
+    current.items.push(m ? dayless(text) : text);
   }
 
   $("public").innerHTML = [...groups]
@@ -980,6 +1047,8 @@ function render() {
       }.`
     : "";
 
+  // (Before the seats: a ⚠ waits while a card covers them.)
+  showPhaseCard();
   circle();
 
   $("private").innerHTML = [...s.privateLog]
@@ -1138,6 +1207,13 @@ function resetGame() {
   marks = {};
   nightPicks = [];
   shownGameOver = false;
+  cardsShown = 0;
+  alertSeen.clear();
+  alertStart.clear();
+
+  if ($("phase-dialog").open) {
+    $("phase-dialog").close();
+  }
 
   $("public-panel").open = true;
 
@@ -1177,9 +1253,12 @@ $("seats").onchange = () => {
 };
 
 // Pressing a popup (or the dimmed backdrop around it) closes it.
-for (const id of ["script-dialog", "role-dialog"]) {
+for (const id of ["script-dialog", "role-dialog", "phase-dialog"]) {
   $(id).onclick = () => $(id).close();
 }
+
+// (Then the next dawn / dusk card, and any ⚠ that was waiting for it.)
+$("phase-dialog").onclose = () => s && render();
 
 // Any character name outside the town square opens its role popup.
 document.addEventListener("click", (ev) => {

@@ -909,7 +909,7 @@ export const badMoonRising = {
       const p = this.player(id);
 
       // (Not how: "regurgitated" would give the Shabaloth away.)
-      s.publicLog.push(
+      this.announce(
         `Day ${s.day} — The Storyteller announces that ${
           p.human ? "you are" : `${p.label} is`
         } alive again.`,

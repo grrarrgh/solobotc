@@ -148,6 +148,43 @@ input {
   color: #999;
 }
 
+/* An NPC who just claimed in public unprompted: a ⚠ at the top of their
+   seat, which fades (see CLAIM_ALERT_* in src/data.js; app.js sets the
+   timing). It waits at full strength while a dawn / dusk card is up. */
+.claim-alert {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.15rem;
+  line-height: 1;
+  color: #ffb02e;
+  text-shadow: 0 0 6px #000;
+  pointer-events: none;
+  animation-name: claim-alert-fade;
+  animation-timing-function: ease-in;
+  animation-fill-mode: both;
+}
+
+.claim-alert.waiting {
+  animation: none;
+}
+
+.seat.dead > .claim-alert {
+  opacity: 1;
+  filter: none;
+}
+
+@keyframes claim-alert-fade {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
 /* ── Actions & logs ──────────────────────────────────────── */
 
 #actions {
@@ -642,6 +679,44 @@ input {
 .script-dialog h2 {
   margin: 0;
   color: #f0cf83;
+}
+
+/* Dawn and dusk cards: pressing anywhere closes them. */
+.phase-dialog {
+  width: min(480px, calc(100vw - 32px));
+  text-align: center;
+  cursor: pointer;
+}
+
+.phase-dialog h2 {
+  font-size: 1.6rem;
+}
+
+.phase-dusk {
+  border-color: #6f86c9;
+}
+
+.phase-dusk h2 {
+  color: #a9bcf2;
+}
+
+.phase-lines {
+  margin: 14px 0;
+  padding: 0;
+  list-style: none;
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.phase-lines .log-entry {
+  padding: 4px 0;
+  border-bottom: none;
+}
+
+.phase-hint {
+  margin: 0;
+  color: #999;
+  font-size: 0.85rem;
 }
 
 .script-author {

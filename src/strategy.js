@@ -31,6 +31,7 @@ import {
   GOSSIP_CHANCE,
   PO_CHARGE_CHANCE,
   LUNATIC_FOLLOW_CHANCE,
+  COURTIER_CORRECT_CHANCE,
 } from "./data.js";
 import {
   ability,
@@ -1695,16 +1696,25 @@ export class SimpleStrategy {
   }
 
   // The Courtier (once per game, timed by ONCE_PER_GAME.courtier) guesses
-  // the Demon's character, hoping to make it drunk.
+  // a Demon or Minion character, hoping to make its holder drunk: at
+  // COURTIER_CORRECT_CHANCE (good Courtiers only) one that's in play,
+  // otherwise one that isn't.
   courtier(s, p) {
     if (!this.onceReady(s, "courtier", s.night)) {
       return null;
     }
 
-    return pick(
-      s.script.ids.filter((id) => team(id) === "demon"),
-      s.r,
-    );
+    const evil = (id) => ["demon", "minion"].includes(team(id));
+    const inPlay = [
+      ...new Set(
+        s.players.filter((x) => x.alive && evil(x.role)).map((x) => x.role),
+      ),
+    ];
+    const absent = s.script.ids.filter((id) => evil(id) && !inPlay.includes(id));
+    const right =
+      p.alignment === "good" && s.r() < COURTIER_CORRECT_CHANCE && inPlay;
+
+    return pick(right?.length ? right : absent, s.r) ?? null;
   }
 
   // The Professor (once per game, timed by ONCE_PER_GAME.professor) brings

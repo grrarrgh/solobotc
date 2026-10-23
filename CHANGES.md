@@ -2,6 +2,17 @@
 
 Newest first.
 
+## Bug Fixes: Courtier & First-Night Poisoning
+
+- Courtier NPCs: a good Courtier now chooses a Demon or Minion character that's really in play at COURTIER_CORRECT_CHANCE (0.35, in src/data.js), and otherwise one that isn't. Before, they only ever guessed a Demon, at random from the script, so they rarely hit anything. An evil Courtier bluffer still chooses one that isn't in play.
+- Poisoner: on Night 1 only, a player the Poisoner poisons who has first-night information always hears a lie that helps the evil team, whichever way the Storyteller leans. A poisoned Noble now sees 3 players with no evil among them (or, failing that, 2 evil), never including the Demon, not 3 at random; a poisoned Librarian's "Outsider" pair gives an evil player cover, like the Washerwoman's. (The Chef, Investigator and Grandmother already lied that way.)
+
+## New Features: Dawn & Dusk Cards, Claim Alerts
+
+- Dawn and dusk cards: each change of phase pops up a card with what the Storyteller announced: at dusk, the execution and what came of it (or "Nobody was executed."); at dawn, who died in the night (or "Nobody died in the night."), and any other deaths or returns to life. What players say (claims, shared information, Gossip) stays in the Public Log only, for you to weigh. Each card line is word for word the Public Log line. Press anywhere (or Esc) to close it; a second card (dusk, then dawn) follows. A dawn with nothing to announce (the first) has no card.
+- Public Log: a day ending with nobody marked now says "Nobody was executed."
+- Claim alerts: an NPC who claims their character in public without being asked (sharing information, a Gossip statement, a Slayer shot, a character change at dawn...) gets a ⚠ on their seat that fades away. Your conversations don't count. It stays for CLAIM_ALERT_HOLD_MS (2500) and then fades over CLAIM_ALERT_FADE_MS (2000), both in src/data.js, and only starts once no dawn or dusk card covers the town square.
+
 ## Bug Fixes: Off-Script Characters & Game Over Log
 
 - Ravenkeeper: when drunk, poisoned or lied to, they're now only shown characters on the script being played. Before, they could be shown any character in the game (e.g. "Player 9 is Mutant" in Onion Pies). The same goes for a misinformed Undertaker.

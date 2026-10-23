@@ -894,9 +894,10 @@ function framed(s, p) {
 const evilNear = (s, p) => neigh(s, p).filter((x) => evil(x));
 
 // A false Noble: 3 players with no evil among them (the evil team's
-// scapegoat first), or failing that 2 evil.
+// scapegoat first), or failing that 2 evil. Never the Demon (so with too
+// few players to name, the 3 may happen to hold just 1 evil).
 function falseNoble(s, p) {
-  const named = nameable(s, p);
+  const named = nameable(s, p).filter((x) => !isDemon(x));
   const good = named.filter((x) => !evil(x));
   const goat = framed(s, p);
   const three = good.includes(goat)
@@ -907,8 +908,10 @@ function falseNoble(s, p) {
     return shuffle(three, s.r);
   }
 
+  const bad = sample(named.filter(evil), 2, s.r);
+
   return shuffle(
-    [...sample(named.filter(evil), 2, s.r), ...sample(good, 1, s.r)],
+    [...bad, ...sample(good, 3 - bad.length, s.r)],
     s.r,
   );
 }
@@ -916,14 +919,17 @@ function falseNoble(s, p) {
 // Deliberately false information for `role`, as an evil bluffer tells it.
 // A Drunk or poisoned good player hears the same kind of lie, so it helps
 // the evil team: it frames the scapegoat and vouches for evil players.
-function falseInfo(s, p, role, strat) {
+// (`helpEvil`: a good player's lie that must help evil, the Poisoner's Night 1
+// pick, where a misinformed Noble's 3 would otherwise be random.)
+function falseInfo(s, p, role, strat, helpEvil = false) {
   const wanted = PAIR_TEAM[role];
 
   // A misinformed Noble (or a Marionette) sees any 3 players; an evil Noble
   // bluffer (or a Marionette the Demon has told) frames 3 good ones.
   if (role === "noble") {
     const misled =
-      p.alignment === "good" || (p.role === "marionette" && !p.toldEvil);
+      !helpEvil &&
+      (p.alignment === "good" || (p.role === "marionette" && !p.toldEvil));
     const ts = misled ? sample(nameable(s, p), 3, s.r) : falseNoble(s, p);
 
     return ts.length === 3
@@ -965,9 +971,10 @@ function falseInfo(s, p, role, strat) {
         s.r,
       );
 
-    // A Washerwoman's "Townsfolk" pair gives an evil player cover.
+    // A Washerwoman's "Townsfolk" pair gives an evil player cover (and, when
+    // it must help evil, a Librarian's "Outsider" pair).
     const shield =
-      role === "washerwoman" &&
+      (role === "washerwoman" || (helpEvil && role === "librarian")) &&
       pick(
         others.filter((x) => x.alignment === "evil"),
         s.r,
@@ -1321,11 +1328,18 @@ export function nightInfo(s, p, strat) {
   }
 
   // The Drunk always hears something wrong, as does every Townsfolk under the
-  // Vortox; poisoned players hear noise.
-  const mode = infoMode(s, p);
+  // Vortox; poisoned players hear noise. On Night 1, the Poisoner's pick
+  // with first-night information always hears a lie that helps the evil
+  // team, whichever way the Storyteller leans.
+  const poisonerPick =
+    s.night === 1 &&
+    p.poisoned &&
+    s.poisoned === p.id &&
+    FIRST_NIGHT.includes(role);
+  const mode = poisonerPick ? "lie" : infoMode(s, p);
 
   if (mode === "lie") {
-    ({ text, targets } = falseInfo(s, p, role, strat));
+    ({ text, targets } = falseInfo(s, p, role, strat, poisonerPick));
   } else if (mode === "random") {
     ({ text, targets } = unreliableInfo(s, p, role, targets));
   }
