@@ -2,6 +2,43 @@
 
 Newest first.
 
+## New Features: NPC Nominations, Telling NPCs, Second-Hand Claims, Who Lied to You
+
+- Nominations open once a day: when you've had all your conversations, they open by themselves after NOMINATIONS_DELAY_MS (2000, in src/data.js), with a "⚖️ Nominations" card ("Nominations are open."). Nominating (or asking for a nomination, or End day) before then asks first: "Start nominations? You won't be able to talk to any more players today." (Start nominations / Keep talking). Once they're open, there are no more conversations that day. End day before nominations opens them; press it again to end the day.
+- NPC nominations: once nominations open (and after each vote), an NPC whose suspect has at least NPC_NOMINATE_EVIDENCE (3) evidence against them nominates them, strongest case first, saying why on the card before the vote ('Player 2 nominates Player 6: "My information points at them; Player 3's information points at them."'). At most half the living players (rounded down) a day, each NPC once, never you. You vote on them like any other nomination (your hand, the Lower hand countdown).
+- Conversations: once you ask an NPC, the Ask button goes, and their answer ends with two buttons. Share My Info tells them, in private, your character and what you've learned (once a day per NPC, before nominations open): good NPCs weigh it like anything else they're told, and pass your claim on. Leave conversation ends it. Nominate and Request nomination now have their own row at the bottom, under your Good / Evil mark.
+- Second-hand claims: when NPCs talk, each also passes on what everyone else told them, which evil NPCs distort as they do to you. NPCs use second-hand claims for who to kill, protect or guess when they've heard nothing first-hand, but don't weigh them as evidence. A second-hand claim that doesn't match what that player told them counts against both the player (EVIDENCE_WEIGHT.heardOtherwise, 0.5) and whoever passed it on (passedOnOtherwise, 0.5), unless it was a cover story they've since come clean about.
+- Final reveal: "Who lied to you" lists every lie an NPC told you, by day, with the truth: bluffs, cover stories (hiding or baiting), distorted passed-on claims, and fake comings-clean.
+
+## New Features: Cover Stories, Coming Clean, Distorted Gossip
+
+- Cover stories: on Day 1, some good NPCs claim a character they aren't, and keep it up until they come clean (settings in src/data.js):
+  - Hiding: a good NPC with a character the Demon most wants dead (Empath, Fortune Teller, Undertaker, Monk, Dreamer, Oracle, Innkeeper...) hides it at HIDE_CHANCE (0.25), claiming a safe character instead (Soldier, Butler, Recluse...) with no information. The Demon looks elsewhere, unless it has a working Spy.
+  - Baiting: a good NPC whose character doesn't mind a night kill (BAIT_ROLES: Soldier, Ravenkeeper, Mayor, Sage, Fool, Sailor) claims a valuable character at BAIT_CHANCE (0.25), with made-up information, to draw the Demon's attack.
+  - The cover character is never in play, already claimed, or one of the Demon's bluffs. They tell the truth to players their own information vouches for, and to you at COVER_TELL_HUMAN_CHANCE (0.5, decided the first time you talk). So the same good player can tell different people different things.
+- Coming clean: a player with a cover story says in public what they really are, with all their information ('Player 5 comes clean: "I was hiding as the Soldier; I'm really the Empath. Night 1: My number is 0."'):
+  - at dawn, once they're dead, or with COME_CLEAN_ALIVE (5) or fewer alive; a hider also does when last night's information points at a living player, at COME_CLEAN_URGENT_CHANCE (0.5);
+  - before a vote: the nominee at COME_CLEAN_NOMINATED_CHANCE (0.9), and anyone whose information vouches for or points at the nominee at COME_CLEAN_NOMINATION_CHANCE (0.5). A "🗣️ Before the vote" card shows what they said, like the dawn and dusk cards; click anywhere to continue, then decide on your hand.
+  - Fakes: a nominated evil NPC fakes coming clean once at FAKE_CLEAN_CHANCE (0.3), claiming they were hiding a valuable character (a free Demon bluff if there is one) with made-up information, and claims it from then on.
+- Distorted gossip: when you talk to an evil NPC, a claim they pass on about a player the evil team wants to discredit (its scapegoat, or someone who accused one of them) is a lie at DISTORT_CHANCE (0.25): a different character, the same lie every time. A passed-on claim that doesn't match what that player told you could mean the passer is lying, the player is evil, or the player is good and hiding.
+- Changed stories: a good NPC counts it against a player who told them one character and said another, to them before or in public (EVIDENCE_WEIGHT.changedStory, 1). Once that player has come clean, it counts for much less (changedStoryCleared, 0.25).
+- log.txt: the Claims column shows a cover story ("Empath (hiding as Recluse)"), and taking one, coming clean and faking it are listed ("[cover]", "[come_clean]").
+
+## New Feature: Lower Your Hand
+
+- Voting is now your choice: when a vote starts (your nomination, or one you asked for), your hand starts raised and a "✋ Lower hand" button under the clock counts down for HAND_WAIT_MS (3000, in src/data.js). Press it to lower your hand (and again to raise it); when the countdown ends, the votes are cast and counted as before. Before, your hand always went up for every nomination.
+- Ghost vote: dead, you keep your one vote by lowering your hand. Before, it was spent on the first nomination of the day. With it spent, there's no wait.
+- Evil NPCs, who vote last, see whether you voted, as before.
+
+## New Features: NPC Conversations, Private Talks, Spy Kills
+
+- NPC conversations: every dawn, each NPC (living or dead) talks in private to as many other NPCs as you can talk to that day (half the living players, rounded down). They pick people they've never talked to first, then the ones they talked to longest ago, so over the game each builds up their own picture of the town. Each conversation works like yours: the NPC they talk to tells them their claim, their information and their opinion (an evil player tells their bluff). Nobody talks to you. log.txt lists who talked to whom each day ("[talks]").
+- Decisions use what each NPC has heard: who they suspect, how they vote, who a Monk or Innkeeper protects, who a Gambler or Juggler guesses, who a Professor brings back and who the Demon kills all depend on the claims and information that NPC has heard, in public or in private. Before, everyone used the same public knowledge. Claim-based reasons ("they and Player 5 both claim the Chef", "they claim the Chef, but I'm the Chef") now come only from claims that NPC heard.
+- Evil bluffs work the same way: bluffers use the same conversations to choose their made-up picks (a Monk, Innkeeper, Gambler or Juggler bluffer, say), and the evil team frames a good player its members have heard claim an information character.
+- Your conversations are private: no NPC hears what an NPC tells you, and it doesn't make their claim public. It stays in your log, and you still see their claim on their seat. Public information works as before: shared information at dawn, Gossip statements, Slayer shots, claims that change at dawn and so on are heard by everyone.
+- Passed-on claims: when you talk to an NPC, they end with what other NPCs told them in private ("What others have told me: Player 5 told me they're the Chef."). Claims already made in public are left out.
+- Spy kills: the Demon only goes after good players by their true character when a working Spy (not drunk or poisoned) is on its team, since the Spy sees the Grimoire. Otherwise it goes by what it has heard players claim. To keep the Spy hidden, on SPY_COVER_CHANCE (0.3, in src/data.js) of nights a Demon with a Spy kills a less valuable ("low") good player instead.
+
 ## Bug Fix & New Feature: Professor Bluff, Performance Timing
 
 - Professor bluffers: an evil NPC claiming the Professor now "uses" the ability once (from Night 2, timed like a real Professor): they choose a dead good player who claimed a Townsfolk, preferring one who accused their team, and say in the morning that they stayed dead, so they weren't the Townsfolk they claimed. That player's word then counts against them (see liars() in src/strategy.js), discrediting their accusations. Before, a Professor bluffer never used it. A real Professor's failed revival is now also public information against that player.

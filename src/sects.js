@@ -350,6 +350,9 @@ export const sectsAndViolets = {
         dusk.role !== p.role &&
         dusk.claim !== p.claim
       ) {
+        // (A new character ends any cover story.)
+        p.cover = null;
+
         const said = ` says they woke up as the ${name(
           p.claim,
         )}; they were the ${name(dusk.claim)}.`;
@@ -368,7 +371,7 @@ export const sectsAndViolets = {
         continue;
       }
 
-      if (p.human || !p.alive || !before || before === p.claim) {
+      if (p.human || !p.alive || !before || before === (p.cover?.as ?? p.claim)) {
         continue;
       }
 
@@ -408,7 +411,8 @@ export const sectsAndViolets = {
           m.night === s.night && !m.day && PUBLIC_INFO_CHANCE[m.role] !== undefined,
       );
 
-      if (p.human || p.mad?.day === s.day || !news.length) {
+      // (A cover story stays a secret.)
+      if (p.human || p.mad?.day === s.day || p.cover || !news.length) {
         continue;
       }
 

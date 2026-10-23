@@ -70,7 +70,41 @@ test("night choices have a Select panel wired to the engine", () => {
 
 test("a Request nomination button is wired to the engine", () => {
   assert.match(html, /id="request-nomination"[^>]*>Request nomination</);
-  assert.match(app, /e\.requestNomination\(selectedPlayerId\)/);
+  assert.match(app, /e\.requestNomination\(id, null\)/);
+});
+
+test("a vote waits for you to lower your hand before counting", () => {
+  assert.match(app, /e\.nominate\(id, null\)/);
+  assert.match(app, /handChoice\(c\)/);
+  assert.match(app, /e\.castVotes\(hand\)/);
+  assert.match(app, /HAND_WAIT_MS/);
+  assert.match(css, /\.hand-toggle/);
+});
+
+test("nominations open after your conversations, with a confirm if you start early", () => {
+  assert.match(html, /id="confirm-dialog"/);
+  assert.match(html, /id="confirm-yes"[^>]*>Start nominations</);
+  assert.match(html, /id="confirm-no"[^>]*>Keep talking</);
+  assert.match(app, /NOMINATIONS_DELAY_MS/);
+  assert.match(app, /e\.openNominations\(\)/);
+  assert.match(app, /e\.npcNomination\(\)/);
+  assert.match(app, /Nominations are open/);
+});
+
+test("a conversation ends with Share My Info and Leave conversation", () => {
+  assert.match(html, /id="share-info"[^>]*>Share My Info</);
+  assert.match(html, /id="leave-conversation"[^>]*>Leave conversation</);
+  assert.match(app, /e\.tell\(talkingTo, e\.human\(\)\.claim, true\)/);
+  // Nominations get their own row, below your Good / Evil mark.
+  assert.match(
+    html,
+    /id="mark"[\s\S]*id="nomination-controls"[\s\S]*id="nominate"[\s\S]*id="request-nomination"/,
+  );
+});
+
+test("the reveal lists who lied to you", () => {
+  assert.match(html, /id="lies"/);
+  assert.match(app, /Who lied to you/);
 });
 
 test("End day is always reachable, not hidden in the selected-player panel", () => {

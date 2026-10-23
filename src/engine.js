@@ -1,4 +1,15 @@
-import { ARTIST_QUESTIONS, name, team } from "./data.js";
+import {
+  ARTIST_QUESTIONS,
+  name,
+  team,
+  alignment,
+  DEMON_KILL_PRIORITY,
+  COME_CLEAN_ALIVE,
+  COME_CLEAN_URGENT_CHANCE,
+  COME_CLEAN_NOMINATED_CHANCE,
+  COME_CLEAN_NOMINATION_CHANCE,
+  FAKE_CLEAN_CHANCE,
+} from "./data.js";
 import {
   nightInfo,
   ability,
@@ -19,6 +30,7 @@ import {
   killHelps,
   lean,
   leanText,
+  madInfo,
 } from "./storyteller.js";
 import {
   SimpleStrategy,
@@ -26,8 +38,13 @@ import {
   heard,
   speak,
   abilityUsed,
+  tick,
+  stanceOn,
+  sideOf,
+  claimHeard,
+  lied,
 } from "./strategy.js";
-import { byId, pick } from "./util.js";
+import { byId, pick, shuffle } from "./util.js";
 import { formatLog } from "./log.js";
 import { sectsAndViolets } from "./sects.js";
 import { badMoonRising } from "./bmr.js";
@@ -516,6 +533,9 @@ export class Engine {
     s.outsiderDiedToday = false;
     s.block = null;
     s.lastVote = null;
+    s.nominationsOpen = false;
+    s.npcNominations = 0;
+    s.toldToday = [];
 
     this.applyMadness();
     this.announceClaims();
@@ -529,6 +549,7 @@ export class Engine {
     this.dawnDeaths();
 
     if (!s.winner) {
+      this.coverStories();
       this.shareInfo();
       this.npcShots();
       this.npcArtists();
@@ -536,6 +557,8 @@ export class Engine {
       this.bmrDawn();
       this.pixieMadness();
       this.marionetteDawn();
+      this.dawnComeClean();
+      this.npcTalks();
     }
 
     this.phaseCard("dawn", s.nightLog ?? 0);
@@ -1271,15 +1294,16 @@ export class Engine {
 
   // ── Day ────────────────────────────────────────────────────
 
-  // p has now said their current claim in public (to the human, or to
-  // everyone); later changes to it get announced (see announceClaims()).
-  // Unless the human asked (`prompted`), the town square flags it (⚠, see
-  // claimAlert).
-  claimPublicly(p, prompted = false) {
+  // p has now said their current claim in public, to everyone; later
+  // changes to it get announced (see announceClaims()). The town square
+  // flags it (⚠, see claimAlert).
+  // (A cover story is what they claim in public, too.)
+  claimPublicly(p) {
     p.claimKnown = true;
-    p.publicClaim = p.claim;
+    p.publicClaim = p.cover?.as ?? p.claim;
+    p.publicAt = tick(this.s);
 
-    if (!prompted && !p.human) {
+    if (!p.human) {
       this.s.claimAlerts = (this.s.claimAlerts ?? 0) + 1;
       p.claimAlert = this.s.claimAlerts;
     }
@@ -1298,6 +1322,10 @@ export class Engine {
       throw Error("Talk during the day.");
     }
 
+    if (s.nominationsOpen) {
+      throw Error("Nominations are open: no more conversations today.");
+    }
+
     if (st.already) {
       throw Error("Already asked today.");
     }
@@ -1307,15 +1335,13 @@ export class Engine {
     }
 
     s.talked.push(id);
-    p.claimKnown = true;
 
     // A dead Mutant (or Mutant bluffer) now claims the Mutant.
     if (this.strat.revealsWhenDead?.(p)) {
       p.claim = "mutant";
     }
 
-    this.claimPublicly(p, true);
-
+    // (In private: only you learn their claim; see claimTo().)
     const response = this.strat.ask(s, p);
 
     p.talks.push({
@@ -1323,6 +1349,7 @@ export class Engine {
       response,
     });
 
+    // (In your log, but no NPC hears it.)
     s.publicLog.push(
       `Day ${s.day} — ${p.label}\n${response}`,
     );
@@ -1334,6 +1361,359 @@ export class Engine {
     );
 
     return response;
+  }
+
+  // In a conversation (once a day, with an NPC you've asked today, before
+  // nominations open), you tell them, in private, that you're the `claim`
+  // (the truth, or a bluff) and, with `info`, what you learned. They weigh
+  // it like anything else they're told (see strategy evidence()), and pass
+  // your claim on (see strategy told()).
+  tell(id, claim, info = false) {
+    const s = this.s;
+    const h = this.human();
+    const p = this.player(id);
+
+    if (!p || p.human || s.phase !== "day") {
+      throw Error("Select an NPC during the day.");
+    }
+
+    if (s.nominationsOpen) {
+      throw Error("Nominations are open: no more conversations today.");
+    }
+
+    if (!this.talkStatus(id).already) {
+      throw Error("Ask them first: telling them is part of the conversation.");
+    }
+
+    if ((s.toldToday ??= []).includes(id)) {
+      throw Error("You've already told them today.");
+    }
+
+    if (!s.script.ids.includes(claim)) {
+      throw Error("Choose a character on the script.");
+    }
+
+    s.toldToday.push(id);
+
+    const before = p.toldMe?.[h.id];
+
+    (p.toldMe ??= {})[h.id] = {
+      claim,
+      day: s.day,
+      at: tick(s),
+      was: before && before.claim !== claim ? before.claim : (before?.was ?? null),
+    };
+
+    const memories = info ? h.memories : [];
+
+    heard(s, h, memories, null, p);
+
+    const said = [
+      `I am the ${name(claim)}.`,
+      ...memories.map(
+        (m) => `${m.day ? `Day ${m.day}` : `Night ${m.night}`}: ${speak(m.text)}`,
+      ),
+    ].join("\n");
+
+    s.publicLog.push(`Day ${s.day} — You told ${p.label}:\n${said}`);
+    this.audit("tell", `You told ${p.label}:\n${said}`, { target: id, claim, info });
+
+    return said;
+  }
+
+  // ── Nominations ────────────────────────────────────────────
+
+  // Nominations open (once a day; the first nomination opens them too):
+  // no more conversations today. A card says so.
+  openNominations() {
+    const s = this.s;
+
+    if (s.nominationsOpen || s.phase !== "day" || s.winner) {
+      return;
+    }
+
+    s.nominationsOpen = true;
+
+    const i = this.announce(`Day ${s.day} — Nominations are open.`);
+
+    (s.phaseCards ??= []).push({
+      kind: "nominations",
+      day: s.day,
+      lines: [s.publicLog[i]],
+    });
+    this.audit("nominations", "Nominations opened.");
+  }
+
+  // The next NPC nomination, if any NPC makes one (see strategy
+  // nomination()): the strongest case first, from a living NPC who hasn't
+  // nominated today, of a nominee nobody has; at most half the living
+  // players (rounded down) a day. They say why, on the card before the
+  // vote, and the vote waits for your hand (see runNomination()). Null if
+  // nobody nominates.
+  npcNomination() {
+    const s = this.s;
+
+    if (s.phase !== "day" || s.winner || s.pendingVote) {
+      return null;
+    }
+
+    this.openNominations();
+
+    if ((s.npcNominations ?? 0) >= Math.floor(this.alive().length / 2)) {
+      return null;
+    }
+
+    const best = s.players
+      .filter((x) => x.alive && !x.human && !s.dayNominators.includes(x.id))
+      .map((p) => ({ p, n: this.strat.nomination(s, p) }))
+      .filter((o) => o.n && !this.nominatedToday(o.n.target.id))
+      .sort((a, b) => b.n.score - a.n.score)[0];
+
+    if (!best) {
+      return null;
+    }
+
+    const { p, n } = best;
+    const why = n.reasons.length ? n.reasons.join("; ") : "I suspect them";
+    const line = `Day ${s.day} — ${p.label} nominates ${n.target.label}: "${
+      why.charAt(0).toUpperCase() + why.slice(1)
+    }."`;
+
+    s.npcNominations = (s.npcNominations ?? 0) + 1;
+    s.publicLog.push(line);
+    this.audit("npc_nomination", line.replace(/^Day \d+ — /, ""), {
+      actorId: p.id,
+      targetId: n.target.id,
+    });
+
+    return this.runNomination(p, n.target, false, null, line);
+  }
+
+  // At dawn, every NPC (living or dead) talks in private to as many other
+  // NPCs as you can (talkLimit()): those they've never talked to first, then
+  // those they talked to longest ago, so over the days they fill in their
+  // own picture of the town. Each learns what the other would tell you
+  // (their claim, information and opinion; see strategy told()), and only
+  // they hear it: who they suspect, protect or kill comes from what they've
+  // heard, in private or in public. (Nobody talks to you: you talk to them.)
+  npcTalks() {
+    const s = this.s;
+    const limit = this.talkLimit();
+    const npcs = s.players.filter((x) => !x.human);
+    const lines = [];
+
+    for (const p of npcs) {
+      const last = (p.talkedTo ??= {});
+      const picks = shuffle(
+        npcs.filter((x) => x !== p),
+        s.r,
+      )
+        .sort((a, b) => (last[a.id] ?? 0) - (last[b.id] ?? 0))
+        .slice(0, limit);
+
+      for (const t of picks) {
+        // (A dead Mutant now claims the Mutant, as they would to you.)
+        if (this.strat.revealsWhenDead?.(t)) {
+          t.claim = "mutant";
+        }
+
+        this.strat.told(s, t, p);
+        last[t.id] = s.day;
+      }
+
+      if (picks.length) {
+        lines.push(
+          `${p.label} talked to ${picks.map((x) => x.label).join(", ")}.`,
+        );
+      }
+    }
+
+    if (lines.length) {
+      this.audit("talks", lines.join("\n"));
+    }
+  }
+
+  // ── Cover stories ──────────────────────────────────────────
+
+  // On Day 1, good NPCs may take a cover story: hiding a valuable character,
+  // or baiting the Demon with one (see strategy coverFor()). Each morning a
+  // baiter makes up their cover character's information for last night.
+  coverStories() {
+    const s = this.s;
+
+    for (const p of s.players.filter((x) => !x.human && x.alive)) {
+      if (s.day === 1 && !p.cover) {
+        p.cover = this.strat.coverFor?.(s, p) ?? null;
+
+        if (p.cover) {
+          this.audit(
+            "cover",
+            `${p.label} (${name(p.claim)}) ${
+              p.cover.kind === "hide" ? "hides as" : "baits the Demon as"
+            } the ${name(p.cover.as)}.`,
+            { playerId: p.id, ...p.cover },
+          );
+        }
+      }
+
+      if (p.cover?.kind === "bait") {
+        this.strat.baitInfo(s, p);
+      }
+    }
+  }
+
+  // At dawn, players with a cover story come clean (see comeClean()): once
+  // they're dead, or late in the game (COME_CLEAN_ALIVE), or (a hider)
+  // when last night's information points at a living player, at
+  // COME_CLEAN_URGENT_CHANCE.
+  dawnComeClean() {
+    const s = this.s;
+    const late = this.alive().length <= COME_CLEAN_ALIVE;
+
+    for (const p of s.players.filter((x) => x.cover)) {
+      const urgent =
+        p.cover.kind === "hide" &&
+        p.alive &&
+        p.memories.some(
+          (m) =>
+            m.night === s.night &&
+            !m.day &&
+            m.night > p.cover.night &&
+            (m.targets ?? []).some((id) => {
+              const t = this.player(id);
+
+              return t?.alive && t !== p && stanceOn(s, m, t, p) === "suspicious";
+            }),
+        );
+
+      if (!p.alive || late || (urgent && s.r() < COME_CLEAN_URGENT_CHANCE)) {
+        this.comeClean(p);
+      }
+    }
+  }
+
+  // p drops their cover story and says in public what they really are,
+  // with all their information. Returns the Public Log line.
+  comeClean(p) {
+    const s = this.s;
+    const { kind, as } = p.cover;
+    const info = p.memories.map(
+      (m) => `${m.day ? `Day ${m.day}` : `Night ${m.night}`}: ${speak(m.text)}`,
+    );
+    const why =
+      kind === "hide"
+        ? `I was hiding as the ${name(as)}; I'm really the ${name(p.claim)}.`
+        : `I said I was the ${name(as)} to bait the Demon; I'm really the ${name(p.claim)}.`;
+    const line = `Day ${s.day} — ${p.label} comes clean: "${[why, ...info].join(" ")}"`;
+
+    p.cover = null;
+    p.cameClean = { day: s.day, from: as };
+    this.claimPublicly(p);
+    heard(s, p, p.memories);
+    s.publicLog.push(line);
+    this.audit("come_clean", line.replace(/^Day \d+ — /, ""), { playerId: p.id, from: as });
+
+    return line;
+  }
+
+  // An evil NPC fakes coming clean (once): they say they were hiding a
+  // "high" good character (a Demon bluff nobody claims, if there is one;
+  // else one that isn't in play), with made-up information, and claim it
+  // from now on. Returns the Public Log line, or null if there's no
+  // character to fake.
+  fakeClean(p) {
+    const s = this.s;
+    const claimed = new Set(s.players.map((x) => claimHeard(x, p)).filter(Boolean));
+    const inPlay = new Set(s.players.flatMap((x) => [x.role, x.shown]));
+    const fits = (id) =>
+      DEMON_KILL_PRIORITY[id] === "high" &&
+      alignment(id) === "good" &&
+      !claimed.has(id) &&
+      id !== p.claim;
+    const role =
+      pick((s.demonBluffs ?? []).filter(fits), s.r) ??
+      pick(
+        s.script.ids.filter((id) => fits(id) && !inPlay.has(id)),
+        s.r,
+      );
+
+    if (!role) {
+      return null;
+    }
+
+    const was = p.claim;
+    const memories = madInfo(s, p, role, this.strat);
+    const info = memories.map(
+      (m) => `${m.day ? `Day ${m.day}` : `Night ${m.night}`}: ${speak(m.text)}`,
+    );
+    const line = `Day ${s.day} — ${p.label} comes clean: "${[
+      `I was hiding as the ${name(was)}; I'm really the ${name(role)}.`,
+      ...info,
+    ].join(" ")}"`;
+
+    p.claim = role;
+    p.bluff = role;
+    p.memories = memories;
+    p.cameClean = { day: s.day, from: was, fake: true };
+    lied(s, { kind: "fake", byId: p.id, said: role, truth: p.role });
+    this.claimPublicly(p);
+    heard(s, p, memories);
+    s.publicLog.push(line);
+    this.audit(
+      "come_clean",
+      `${line.replace(/^Day \d+ — /, "")} (fake: they're the ${name(p.role)})`,
+      { playerId: p.id, from: was, fake: true },
+    );
+
+    return line;
+  }
+
+  // Before the vote on nominee n: n comes clean if they have a cover story
+  // (at COME_CLEAN_NOMINATED_CHANCE), or, if evil, may fake it
+  // (FAKE_CLEAN_CHANCE, once); then each other player with a cover story
+  // whose own information vouches for or points at n does, at
+  // COME_CLEAN_NOMINATION_CHANCE. Whatever was said goes on a card for you
+  // (s.phaseCards), shown before you decide on your hand.
+  // (`intro`: an NPC's nomination and why, first on the card.)
+  nominationReveals(n, intro = null) {
+    const s = this.s;
+    const lines = intro ? [intro] : [];
+
+    if (n.cover) {
+      if (s.r() < COME_CLEAN_NOMINATED_CHANCE) {
+        lines.push(this.comeClean(n));
+      }
+    } else if (
+      !n.human &&
+      n.alive &&
+      n.alignment === "evil" &&
+      sideOf(n) === "evil" &&
+      !n.cameClean &&
+      !isTwin(s, n) &&
+      DEMON_KILL_PRIORITY[n.claim] !== "high" &&
+      s.r() < FAKE_CLEAN_CHANCE
+    ) {
+      const line = this.fakeClean(n);
+
+      if (line) {
+        lines.push(line);
+      }
+    }
+
+    for (const p of s.players.filter((x) => x.cover && x !== n)) {
+      if (
+        this.strat.ownStance(s, p, n) &&
+        s.r() < COME_CLEAN_NOMINATION_CHANCE
+      ) {
+        lines.push(this.comeClean(p));
+      }
+    }
+
+    if (lines.length) {
+      (s.phaseCards ??= []).push({ kind: "nomination", day: s.day, lines });
+    }
+
+    return lines;
   }
 
   // Your Good / Evil mark on a player ("good", "evil", or "" to clear it).
@@ -1351,7 +1731,8 @@ export class Engine {
   // Everyone's vote on nominee n, in seat order. Good players decide first,
   // then evil players, who see how the vote is going (see strategy vote()).
   // `humanChoice`: the human picked the nominee (nominated, or asked for it).
-  votes(n, nominator = null, humanChoice = Boolean(nominator?.human)) {
+  // `hand`: whether your hand is up (if you can vote).
+  votes(n, nominator = null, humanChoice = Boolean(nominator?.human), hand = true) {
     const s = this.s;
     const intents = new Map();
     const tally = {
@@ -1368,7 +1749,7 @@ export class Engine {
     for (const v of order) {
       const eligible = v.alive || v.ghost;
       const attempted = Boolean(
-        eligible && (v.human || this.strat.vote(s, v, n, { ...tally })),
+        eligible && (v.human ? hand : this.strat.vote(s, v, n, { ...tally })),
       );
 
       intents.set(v.id, attempted);
@@ -1441,7 +1822,9 @@ export class Engine {
   }
 
   // The human nominates a living NPC (once per day).
-  nominate(id) {
+  // `hand`: whether your hand is up for the vote, or null to wait for you
+  // to decide (see castVotes()).
+  nominate(id, hand = true) {
     const s = this.s;
     const h = this.human();
 
@@ -1455,12 +1838,13 @@ export class Engine {
       throw Error("You have already nominated today.");
     }
 
-    return this.runNomination(h, n);
+    return this.runNomination(h, n, false, hand);
   }
 
   // The human asks the town for a nomination; a living NPC who hasn't
-  // nominated today makes it. (A dead human can still do this.)
-  requestNomination(id) {
+  // nominated today makes it. (A dead human can still do this.) `hand` as
+  // for nominate().
+  requestNomination(id, hand = true) {
     const s = this.s;
     const n = this.nominee(id);
     const nominator = this.strat.nominator(s, n);
@@ -1481,7 +1865,14 @@ export class Engine {
       { actorId: nominator.id, targetId: n.id },
     );
 
-    return this.runNomination(nominator, n, true);
+    return this.runNomination(nominator, n, true, hand);
+  }
+
+  // Whether you can vote now: alive, or dead with your ghost vote left.
+  canVote() {
+    const h = this.human();
+
+    return Boolean(h.alive || h.ghost);
   }
 
   // A nomination and its vote. Nobody is executed yet: if at least half the
@@ -1490,7 +1881,12 @@ export class Engine {
   // the highest count so far (official rules) leaves nobody marked, and a
   // later nomination must beat that count. Ending the day executes whoever
   // is marked. (`requested`: the human asked for this nomination.)
-  runNomination(nominator, n, requested = false) {
+  //
+  // With `hand` null, the vote waits (s.pendingVote) until castVotes() says
+  // whether your hand is up, and this returns { pending: true, ... }. (No
+  // wait when there's no vote: the Virgin, or a Witch curse ending the
+  // game.)
+  runNomination(nominator, n, requested = false, hand = true, intro = null) {
     const s = this.s;
     const id = n.id;
     const base = {
@@ -1523,8 +1919,44 @@ export class Engine {
       }
     }
 
+    this.openNominations();
+    this.nominationReveals(n, intro);
+
+    s.pendingVote = { nominatorId: nominator.id, nomineeId: id, requested };
+
+    if (hand === null) {
+      return { ...base, needed: this.votesNeeded(), pending: true };
+    }
+
+    return this.castVotes(hand);
+  }
+
+  // The vote on the pending nomination (see runNomination()), with your
+  // hand up or not (`hand`; ignored if you can't vote).
+  castVotes(hand = true) {
+    const s = this.s;
+    const pending = s.pendingVote;
+
+    if (!pending) {
+      throw Error("No vote is waiting.");
+    }
+
+    s.pendingVote = null;
+
+    const nominator = this.player(pending.nominatorId);
+    const n = this.player(pending.nomineeId);
+    const id = n.id;
+    const base = {
+      nominatorId: nominator.id,
+      nomineeId: id,
+    };
     const needed = this.votesNeeded();
-    const records = this.votes(n, nominator, nominator.human || requested);
+    const records = this.votes(
+      n,
+      nominator,
+      nominator.human || pending.requested,
+      hand && this.canVote(),
+    );
     const count = records.filter((x) => x.counted).length;
 
     // Who nominated and voted for whom is public: good NPCs weigh it.
@@ -1699,6 +2131,10 @@ export class Engine {
 
     if (s.phase !== "day" || s.winner) {
       throw Error("Cannot end day.");
+    }
+
+    if (s.pendingVote) {
+      throw Error("Finish the vote first.");
     }
 
     this.audit("end_day", `You ended Day ${s.day}.`);
@@ -1964,6 +2400,7 @@ export class Engine {
       shown: p.shown,
       gained: p.gained,
       claim: p.claim,
+      cover: p.cover ? { kind: p.cover.kind, as: p.cover.as } : null,
       alignment: p.alignment,
       alive: p.alive,
       drunk: isDrunk(p),
@@ -2021,6 +2458,7 @@ export class Engine {
       players: this.s.players,
       events,
       keyMoments: events.filter((e) => KEY_MOMENT_TYPES.has(e.type)),
+      lies: this.s.liesToYou ?? [],
     };
   }
 }

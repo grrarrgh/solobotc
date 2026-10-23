@@ -143,8 +143,9 @@ export const ONCE_PER_GAME = {
 };
 
 // How the Demon picks its nightly kill. It "finds" a good player's character
-// when they have publicly claimed it, and always knows its own Minions'
-// characters. It checks the priority levels from high to low: at each level
+// when they have claimed it in public or told the Demon in private (see
+// NPC conversations in engine.js), or, with a working Spy on its team, from
+// the Grimoire; it always knows its own Minions' characters. It checks the priority levels from high to low: at each level
 // with someone to kill, it attacks one of them at that level's chance, else
 // moves down a level. "avoid" characters are never attacked while anyone else
 // is available. If no level fires, it attacks any good NPC it isn't avoiding;
@@ -155,6 +156,71 @@ export const KILL_PRIORITY_CHANCE = {
   med: 0.5,
   high: 0.75,
 };
+
+// Cover stories: on Day 1, some good NPCs claim a character they aren't
+// (see strategy coverFor()), and keep it up until they come clean.
+// HIDE_CHANCE: a good NPC with a character the Demon most wants dead ("high"
+//   below) hides it, claiming a safe ("low" or "avoid") character instead,
+//   with no information, so the Demon looks elsewhere.
+// BAIT_CHANCE: a good NPC with a character in BAIT_ROLES (one that survives
+//   a night kill, or gains from it) claims a "high" character instead, with
+//   made-up information, to draw the Demon's attack.
+// Either way they tell the truth to players their own information vouches
+// for, and to you at COVER_TELL_HUMAN_CHANCE (decided once). The cover
+// character is never in play, claimed, or one of the Demon's bluffs.
+export const HIDE_CHANCE = 0.25;
+export const BAIT_CHANCE = 0.25;
+export const COVER_TELL_HUMAN_CHANCE = 0.5;
+export const BAIT_ROLES = ["soldier", "ravenkeeper", "mayor", "sage", "fool", "sailor"];
+// Characters that never hide or are never used as a bait (they act in
+// public every day), and characters a hider never pretends to be (they'd
+// draw a nomination, or need a public act to back them up).
+export const HIDE_NEVER = ["savant"];
+export const HIDE_NEVER_AS = [
+  "saint",
+  "virgin",
+  "klutz",
+  "moonchild",
+  "mutant",
+  "sweetheart",
+  "barber",
+  "lunatic",
+  "goon",
+  "drunk",
+  "fool",
+  "ogre",
+  "pixie",
+  "tinker",
+];
+
+// Coming clean: a player with a cover story says in public what they really
+// are, with all their information:
+// - at dawn, once they're dead (nothing left to protect), or with
+//   COME_CLEAN_ALIVE or fewer players alive;
+// - at dawn, a hider whose information last night points at someone, at
+//   COME_CLEAN_URGENT_CHANCE;
+// - before the vote, when they're nominated (COME_CLEAN_NOMINATED_CHANCE),
+//   or a player their information vouches for or points at is
+//   (COME_CLEAN_NOMINATION_CHANCE). A card shows it before you vote.
+// FAKE_CLEAN_CHANCE: an evil NPC who's nominated fakes it once, claiming
+//   they were hiding a "high" character (a free Demon bluff if there is
+//   one), with made-up information.
+export const COME_CLEAN_ALIVE = 5;
+export const COME_CLEAN_URGENT_CHANCE = 0.5;
+export const COME_CLEAN_NOMINATED_CHANCE = 0.9;
+export const COME_CLEAN_NOMINATION_CHANCE = 0.5;
+export const FAKE_CLEAN_CHANCE = 0.3;
+
+// DISTORT_CHANCE: when you talk to an evil NPC, a claim they pass on (see
+// strategy passedOn()) about a player the evil team wants to discredit (its
+// scapegoat, or someone who accused one of them) is a lie at this chance: a
+// different character, the same lie every time.
+export const DISTORT_CHANCE = 0.25;
+
+// SPY_COVER_CHANCE: with a working Spy, the Demon knows every character, so
+// it could always kill the most valuable. To keep the Spy hidden, this is
+// its chance each night to kill a less valuable ("low") good player instead.
+export const SPY_COVER_CHANCE = 0.3;
 
 // Kill priority for each character (unlisted good characters: "low"; unlisted
 // Minions: "avoid").
@@ -311,7 +377,17 @@ export const EVIDENCE_WEIGHT = {
   humanTrusted: 0.5,
   vouchedByLiar: 2, // vouched for by a player shown to have lied (Professor)
   accusedByLiar: -0.5, // accused by a player shown to have lied
+  changedStory: 1, // told me one character, and said another (to me before, or in public)
+  changedStoryCleared: 0.25, // ...but they came clean in public, saying why
+  heardOtherwise: 0.5, // someone passed on that they claimed something else
+  passedOnOtherwise: 0.5, // passed on a claim that isn't what that player told me
 };
+
+// NPC nominations: once nominations open, an NPC whose suspect has at least
+// this much evidence against them (see EVIDENCE_WEIGHT) nominates them,
+// saying why: strongest case first, at most half the living players
+// (rounded down) a day, each NPC once.
+export const NPC_NOMINATE_EVIDENCE = 3;
 
 // The evidence a good NPC needs before it changes who they suspect (less,
 // and they stick with their hunch). At 1, one player's say-so (0.5) isn't
@@ -422,6 +498,15 @@ export const COURTIER_CORRECT_CHANCE = 0.35;
 // Vote animation: how long (in ms) the clock hands point at the nominator
 // and nominee before the large hand starts counting votes.
 export const VOTE_COUNT_DELAY_MS = 500;
+
+// How long (in ms) after your last conversation of the day before
+// nominations open by themselves.
+export const NOMINATIONS_DELAY_MS = 2000;
+
+// Vote: how long (in ms) you have to lower your hand (it starts raised)
+// before the votes are counted. Skipped when you can't vote (dead, with your
+// ghost vote spent).
+export const HAND_WAIT_MS = 3000;
 
 // Vote animation: how long (in ms) the large hand takes per seat as it
 // counts votes. (A voter's hand goes up just before the clock hand arrives.)

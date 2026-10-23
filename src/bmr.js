@@ -11,7 +11,7 @@ import {
   TINKER_DEATH_CHANCE,
   SHABALOTH_REGURGITATE_CHANCE,
 } from "./data.js";
-import { heard, speak, isTwin, untwinned } from "./strategy.js";
+import { heard, speak, isTwin, untwinned, claimTo } from "./strategy.js";
 import {
   ability,
   works,
@@ -841,7 +841,7 @@ export const badMoonRising = {
 
       // They see it fail. A player who claimed a Townsfolk lied (as far as
       // the Professor knows): the Professor says so in the morning.
-      const lied = !revived && t.claimKnown && team(t.claim) === "townsfolk";
+      const lied = !revived && team(claimTo(t, p)) === "townsfolk";
       const info = choiceInfo(s, "professor", "chose", [t]);
 
       if (lied) {

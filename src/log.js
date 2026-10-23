@@ -36,7 +36,11 @@ function stateLines(players) {
     `${
       p.role === p.shown ? name(p.role) : `${name(p.role)} (as ${name(p.shown)})`
     }${p.gained ? ` (has ${name(p.gained)})` : ""}`,
-    name(p.claim),
+    `${name(p.claim)}${
+      p.cover
+        ? ` (${p.cover.kind === "hide" ? "hiding as" : "baiting as"} ${name(p.cover.as)})`
+        : ""
+    }`,
     p.alignment,
     [
       p.alive ? "alive" : "DEAD",

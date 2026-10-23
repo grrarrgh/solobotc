@@ -32,6 +32,16 @@ import {
   PO_CHARGE_CHANCE,
   LUNATIC_FOLLOW_CHANCE,
   COURTIER_CORRECT_CHANCE,
+  SPY_COVER_CHANCE,
+  HIDE_CHANCE,
+  HIDE_NEVER,
+  HIDE_NEVER_AS,
+  BAIT_CHANCE,
+  BAIT_ROLES,
+  COVER_TELL_HUMAN_CHANCE,
+  COME_CLEAN_ALIVE,
+  DISTORT_CHANCE,
+  NPC_NOMINATE_EVIDENCE,
 } from "./data.js";
 import {
   ability,
@@ -43,8 +53,24 @@ import {
   isDrunk,
   isDemon,
   atFinal,
+  works,
 } from "./storyteller.js";
-import { byId, pick, sample } from "./util.js";
+import { byId, pick, sample, claimTo, claimHeard, tick } from "./util.js";
+
+export { claimTo, claimHeard, tick };
+
+const human = (s) => s.players.find((x) => x.human);
+
+// Records a lie told to you (or in public), for the final reveal (see
+// engine reveal()): { kind, byId, said, truth, aboutId? }. Kept once.
+export function lied(s, lie) {
+  const list = (s.liesToYou ??= []);
+  const key = (x) => [x.kind, x.byId, x.aboutId, x.said].join(":");
+
+  if (!list.some((x) => key(x) === key(lie))) {
+    list.push({ day: s.day, ...lie });
+  }
+}
 
 // The Lunatic thinks they're the Demon: they play for the evil team they
 // believe in (the "Minions" they were shown), though they're good.
@@ -56,7 +82,7 @@ const thinksGood = (p) =>
   ["marionette", "ogre"].includes(p.role) && !p.human && !p.toldEvil;
 
 // The team p plays for.
-const sideOf = (p) =>
+export const sideOf = (p) =>
   thinksEvil(p) ? "evil" : thinksGood(p) ? "good" : p.alignment;
 
 // Whether p (playing for evil) counts x as a teammate.
@@ -178,10 +204,6 @@ function infoStance(m) {
   }
 }
 
-// A player's character as last claimed in public (null if they haven't, or
-// for the human, who never claims).
-const publicClaim = (x) =>
-  x.claimKnown && !x.human ? (x.publicClaim ?? x.claim) : null;
 
 const PAIR_ROLES = ["washerwoman", "librarian", "investigator"];
 
@@ -219,10 +241,11 @@ function namedCharacters(m) {
 // - a pair's character: t claims it (trust; for the Investigator's Minion,
 //   suspicious), the other player does (t is just the other one: neither),
 //   or neither does, though both have claimed (one is lying: suspicious).
-// Otherwise it's how infoStance() reads it.
-export function stanceOn(s, m, t) {
+// Otherwise it's how infoStance() reads it. Claims are the ones `viewer`
+// (m's owner) knows (see claimTo()).
+export function stanceOn(s, m, t, viewer = null) {
   const roles = namedCharacters(m);
-  const claim = t && publicClaim(t);
+  const claim = t && claimTo(t, viewer);
 
   if (!roles.length || !claim || !(m.targets ?? []).includes(t.id)) {
     return infoStance(m);
@@ -233,7 +256,7 @@ export function stanceOn(s, m, t) {
       s,
       m.targets.find((id) => id !== t.id),
     );
-    const otherClaim = other && publicClaim(other);
+    const otherClaim = other && claimTo(other, viewer);
 
     if (roles.includes(claim)) {
       return m.role === "investigator" ? "suspicious" : "trust";
@@ -255,9 +278,9 @@ export function stanceOn(s, m, t) {
 
 // What p's information m says against t's claim, as a reason to suspect
 // them (null if it doesn't contradict it).
-function contradiction(m, t) {
+function contradiction(m, t, p) {
   const roles = namedCharacters(m);
-  const claim = publicClaim(t);
+  const claim = claimTo(t, p);
 
   if (!roles.length || !claim || roles.includes(claim) || PAIR_ROLES.includes(m.role)) {
     return null;
@@ -272,20 +295,25 @@ function contradiction(m, t) {
 // information when they give their opinion (see opinion()).
 const STRONG_EVIDENCE = 3;
 
-// Records what p just said in public (information naming players, and their
-// opinion), so good NPCs can weigh it (see evidence()).
-export function heard(s, p, memories, opinion = null) {
-  s.statements ??= [];
+// Records what p just said (information naming players, and their
+// opinion), so good NPCs can weigh it (see evidence()): in public, or in
+// private `to` one listener, who alone hears it. (Nothing is kept for the
+// human: you weigh it yourself.)
+export function heard(s, p, memories, opinion = null, to = null) {
+  if (to?.human) {
+    return;
+  }
 
+  const list = to ? (to.heard ??= []) : (s.statements ??= []);
   const say = (type, targetId, source) => {
     if (["trust", "suspicious"].includes(type) && targetId && targetId !== p.id) {
-      s.statements.push({ byId: p.id, day: s.day, type, targetId, source });
+      list.push({ byId: p.id, day: s.day, type, targetId, source, at: tick(s) });
     }
   };
 
   for (const m of memories) {
     for (const id of m.targets ?? []) {
-      say(stanceOn(s, m, byId(s, id)), id, "info");
+      say(stanceOn(s, m, byId(s, id), p), id, "info");
     }
   }
 
@@ -317,16 +345,20 @@ function merged(found) {
   }));
 }
 
-// What's been said in public about t: each speaker's information about t
-// (once per speaker and stance), and each speaker's latest opinion if it
-// was about t.
-function heardAbout(s, t) {
+// What p has heard about t, in public or told to them in private: each
+// speaker's information about t (once per speaker and stance), and each
+// speaker's latest opinion if it was about t.
+function heardAbout(s, p, t) {
   const info = new Map();
   const latest = new Map();
 
-  for (const st of s.statements ?? []) {
+  for (const st of [...(s.statements ?? []), ...(p.heard ?? [])]) {
     if (st.source === "opinion") {
-      latest.set(st.byId, st);
+      const was = latest.get(st.byId);
+
+      if (!was || (st.at ?? 0) >= (was.at ?? 0)) {
+        latest.set(st.byId, st);
+      }
     } else if (st.targetId === t.id) {
       info.set(`${st.byId}:${st.type}`, st);
     }
@@ -337,6 +369,10 @@ function heardAbout(s, t) {
     ...[...latest.values()].filter((st) => st.targetId === t.id),
   ];
 }
+
+// How a player is named in a reason: "you" for the human.
+const who = (x) => (x.human ? "you" : x.label);
+const whose = (x) => (x.human ? "your" : `${x.label}'s`);
 
 export class SimpleStrategy {
   // Who in `pool` p suspects.
@@ -360,7 +396,7 @@ export class SimpleStrategy {
     const untwinnedOutside = untwinned(s, outside);
     const good = untwinnedOutside.length ? untwinnedOutside : outside;
     const rival = good.find(
-      (x) => publicClaim(x) === p.claim && !isTwin(s, x),
+      (x) => claimTo(x, p) === p.claim && !isTwin(s, x),
     );
 
     if (rival) {
@@ -473,13 +509,14 @@ export class SimpleStrategy {
     return new Set(
       p.memories.flatMap((m) =>
         (m.targets ?? []).filter(
-          (id) => stanceOn(s, m, byId(s, id)) === "trust",
+          (id) => stanceOn(s, m, byId(s, id), p) === "trust",
         ),
       ),
     );
   }
 
-  // What p has seen in public that makes them suspect t (or trust them),
+  // What p has seen and heard (in public, or told them in private) that
+  // makes them suspect t (or trust them),
   // weighed by EVIDENCE_WEIGHT in data.js: their own claim against t's,
   // double claims, what players said (and whether they then died in the
   // night), and who nominated or voted for a player they trust. Returns the
@@ -489,7 +526,7 @@ export class SimpleStrategy {
     const found = [];
     const add = (weight, text) => found.push({ weight, text });
     const twins = (a, b) => isTwin(s, a) && isTwin(s, b);
-    const claim = publicClaim(t);
+    const claim = claimTo(t, p);
 
     if (claim && !twins(p, t)) {
       if (claim === p.claim) {
@@ -500,12 +537,63 @@ export class SimpleStrategy {
       }
 
       for (const x of s.players) {
-        if (x !== t && x !== p && publicClaim(x) === claim && !twins(x, t)) {
+        if (x !== t && x !== p && claimTo(x, p) === claim && !twins(x, t)) {
           add(
             W.doubleClaim,
-            `they and ${x.label} both claim the ${name(claim)}`,
+            `they and ${who(x)} both claim the ${name(claim)}`,
           );
         }
+      }
+    }
+
+    // They told p one character, and another before, or in public. Coming
+    // clean (saying why) wins most of it back.
+    const told = p.toldMe?.[t.id];
+    const open = claimTo(t);
+    const other = told && open && open !== told.claim ? open : told?.was;
+
+    if (other && other !== told.claim && !twins(p, t)) {
+      add(
+        t.cameClean ? W.changedStoryCleared : W.changedStory,
+        `they told me they're the ${name(told.claim)}, but they've also said the ${name(other)}`,
+      );
+    }
+
+    // Passed on to p (see told()): someone says t told them otherwise
+    // (unless that was a cover story t has since come clean about)...
+    const passed = p.secondHand?.[t.id];
+    const by = passed && byId(s, passed.fromId);
+
+    if (
+      by &&
+      claim &&
+      passed.claim !== claim &&
+      passed.claim !== t.cameClean?.from &&
+      !twins(p, t)
+    ) {
+      add(
+        W.heardOtherwise,
+        `${who(by)} says they claimed the ${name(passed.claim)}`,
+      );
+    }
+
+    // ...or t passed on a claim that isn't what that player told p.
+    for (const [id, x] of Object.entries(p.secondHand ?? {})) {
+      const about = byId(s, id);
+      const known = about && claimTo(about, p);
+
+      if (
+        x.fromId === t.id &&
+        known &&
+        x.claim !== known &&
+        x.claim !== about.cameClean?.from
+      ) {
+        add(
+          W.passedOnOtherwise,
+          `they say ${who(about)} claimed the ${name(x.claim)}, but ${who(
+            about,
+          )} told me the ${name(known)}`,
+        );
       }
     }
 
@@ -522,13 +610,14 @@ export class SimpleStrategy {
     // Their own information (saying why, when it contradicts t's claim).
     const against = p.memories.find(
       (m) =>
-        (m.targets ?? []).includes(t.id) && stanceOn(s, m, t) === "suspicious",
+        (m.targets ?? []).includes(t.id) &&
+        stanceOn(s, m, t, p) === "suspicious",
     );
 
     if (against) {
       add(
         W.myInfo,
-        contradiction(against, t) ?? "my information points at them",
+        contradiction(against, t, p) ?? "my information points at them",
       );
     }
 
@@ -536,7 +625,7 @@ export class SimpleStrategy {
     const strongest = new Map();
     const liars = this.liars(s, p);
 
-    for (const st of heardAbout(s, t)) {
+    for (const st of heardAbout(s, p, t)) {
       const by = byId(s, st.byId);
       const trust = st.type === "trust";
       const found = [];
@@ -563,7 +652,7 @@ export class SimpleStrategy {
       } else if (st.source === "info") {
         add(
           trust ? W.vouchedByInfo : W.namedByInfo,
-          `${by.label}'s information ${
+          `${whose(by)} information ${
             trust ? "vouches for" : "points at"
           } them`,
         );
@@ -725,7 +814,7 @@ export class SimpleStrategy {
       const named = (m.targets ?? [])
         .map((id) => byId(s, id))
         .filter((x) => x?.alive && !x.human && x.id !== p.id)
-        .map((x) => ({ x, type: stanceOn(s, m, x) }))
+        .map((x) => ({ x, type: stanceOn(s, m, x, p) }))
         .filter((o) => o.type);
 
       if (!named.length) {
@@ -755,42 +844,298 @@ export class SimpleStrategy {
     return null;
   }
 
-  // Good NPCs share what they learned; evil NPCs share their bluffed info.
-  // Each night's (or day's) information goes on its own line, followed by
-  // their opinion.
+  // What p says when asked: their claim, their information and their
+  // opinion. Good NPCs share what they learned; evil NPCs share their
+  // bluffed info.
   //
   // An NPC the Cerenovus made "mad" claims that character instead, with
   // made-up information to match (and an opinion drawn from it).
   //
   // The Evil Twin answers exactly as their good twin does (see twinCopy()).
-  ask(s, p) {
+  //
+  // A good NPC with a cover story (see coverFor()) tells listener `to`
+  // their cover character instead, unless they tell `to` the truth (see
+  // truthTo()): hiding, with no information; baiting, with made-up
+  // information to match (and an opinion drawn from it).
+  answer(s, p, to = null) {
     const mad = p.mad?.day === s.day ? p.mad : this.pixieMad(s, p);
     const copy = !mad && this.twinCopy(s, p);
+    const hidden = !mad && !copy && p.cover && !this.truthTo(s, p, to);
+
+    if (hidden && p.cover.kind === "bait") {
+      const memories = p.cover.memories ?? [];
+
+      return {
+        claim: p.cover.as,
+        memories,
+        opinion: this.infoOpinion(s, { ...p, memories }) ??
+          this.hiddenOpinion(s, p),
+        hidden,
+      };
+    }
+
+    if (hidden) {
+      return {
+        claim: p.cover.as,
+        memories: [],
+        opinion: this.hiddenOpinion(s, p),
+        hidden,
+      };
+    }
+
     const memories = mad
       ? (mad.memories ?? [])
       : copy
         ? copy.memories
         : p.memories;
-    const info = memories.map(
-      (x) => `${x.day ? `Day ${x.day}` : `Night ${x.night}`}: ${speak(x.text)}`,
-    );
-    const details = info.length
-      ? info.join("\n")
-      : "I have no stored information.";
     const opinion = mad
       ? (this.infoOpinion(s, { ...p, memories }) ?? {
           text: "I have nothing else to add.",
         })
       : this.opinion(s, p);
 
-    heard(s, p, memories, opinion);
+    return { claim: mad ? mad.role : p.claim, memories, opinion, mad, copy };
+  }
+
+  // On Day 1, whether good NPC p takes a cover story, and which (null if
+  // not):
+  // - hide ({ kind: "hide", as }): at HIDE_CHANCE, if their character is one
+  //   the Demon most wants dead ("high" in DEMON_KILL_PRIORITY, not in
+  //   HIDE_NEVER), they claim a safe good character ("low" or "avoid", not
+  //   in HIDE_NEVER_AS), so the Demon looks elsewhere;
+  // - bait ({ kind: "bait", as }): at BAIT_CHANCE, if their character
+  //   doesn't mind a night kill (BAIT_ROLES: one that survives it, or
+  //   learns something from it), they claim a "high" one (not in
+  //   HIDE_NEVER), to draw the Demon's attack.
+  // Either way, a good character on the script that isn't in play, claimed,
+  // or one of the Demon's bluffs (the Demon knows those aren't in play).
+  coverFor(s, p) {
+    if (
+      p.human ||
+      p.alignment !== "good" ||
+      sideOf(p) !== "good" ||
+      isTwin(s, p) ||
+      p.pixieMad ||
+      p.mad?.day === s.day ||
+      // (Late enough to come clean already: see dawnComeClean().)
+      s.players.filter((x) => x.alive).length <= COME_CLEAN_ALIVE
+    ) {
+      return null;
+    }
+
+    const kind =
+      DEMON_KILL_PRIORITY[p.claim] === "high" && !HIDE_NEVER.includes(p.claim)
+        ? s.r() < HIDE_CHANCE && "hide"
+        : BAIT_ROLES.includes(p.claim)
+          ? s.r() < BAIT_CHANCE && "bait"
+          : null;
+
+    if (!kind) {
+      return null;
+    }
+
+    const used = new Set([
+      ...s.players.flatMap((x) => [x.role, x.shown, x.claim]),
+      ...(s.demonBluffs ?? []),
+    ]);
+    const fits = (id) => {
+      const level = DEMON_KILL_PRIORITY[id] ?? "low";
+
+      return kind === "hide"
+        ? ["low", "avoid"].includes(level) && !HIDE_NEVER_AS.includes(id)
+        : level === "high" && !HIDE_NEVER.includes(id);
+    };
+    const as = pick(
+      s.script.ids.filter(
+        (id) =>
+          ["townsfolk", "outsider"].includes(team(id)) && fits(id) && !used.has(id),
+      ),
+      s.r,
+    );
+
+    return as ? { kind, as, night: s.night } : null;
+  }
+
+  // A baiter's made-up information for their cover character, kept from
+  // day to day: tonight's is added each morning.
+  baitInfo(s, p) {
+    const c = p.cover;
+    const fresh = madInfo(s, p, c.as, this).filter(
+      (m) => !c.memories || (m.night === s.night && !m.day),
+    );
+
+    c.memories = [...(c.memories ?? []), ...fresh];
+  }
+
+  // Whether p, with a cover story, tells listener `to` the truth: a player
+  // their own information vouches for, or you at COVER_TELL_HUMAN_CHANCE
+  // (decided the first time you talk, and kept).
+  truthTo(s, p, to) {
+    if (to?.human) {
+      p.cover.human ??= s.r() < COVER_TELL_HUMAN_CHANCE;
+      return p.cover.human;
+    }
+
+    return Boolean(to) && this.trusted(s, p).has(to.id);
+  }
+
+  // A hider's opinion while hiding, as a player with no information
+  // would give it: their suspect, with no reasons (which could give them
+  // away), only if there's evidence against them (see opinion()).
+  hiddenOpinion(s, p) {
+    const sus = this.suspicion(s, p);
+
+    return sus && sus.score >= EVIDENCE_TO_SUSPECT
+      ? {
+          type: "suspicious",
+          targetId: sus.targetId,
+          text: `I'm suspicious of ${byId(s, sus.targetId).label}.`,
+        }
+      : { type: "nothing", text: "I have nothing else to add." };
+  }
+
+  // What p's own information says about t: "trust", "suspicious" (which
+  // wins), or null.
+  ownStance(s, p, t) {
+    const types = p.memories
+      .filter((m) => (m.targets ?? []).includes(t.id))
+      .map((m) => stanceOn(s, m, t, p));
+
+    return types.includes("suspicious")
+      ? "suspicious"
+      : types.includes("trust")
+        ? "trust"
+        : null;
+  }
+
+  // p tells listener `to` (in private) what they'd tell you: `to` learns
+  // their claim (see claimTo()), and hears their information and opinion
+  // (see heard()). `to` remembers a different character p told them
+  // before (`was`; see evidence()).
+  //
+  // p also passes on what everyone else told them (`to.secondHand`, the
+  // latest for each player; see claimHeard()), which an evil p distorts
+  // (see distortion()). Only NPCs keep it: what they pass on to you is in
+  // their answer (see passedOn()).
+  told(s, p, to, a = this.answer(s, p, to)) {
+    const before = to.toldMe?.[p.id];
+    const was = before && before.claim !== a.claim ? before.claim : (before?.was ?? null);
+
+    (to.toldMe ??= {})[p.id] = { claim: a.claim, day: s.day, at: tick(s), was };
+    heard(s, p, a.memories, a.opinion, to);
+
+    if (to.human) {
+      return;
+    }
+
+    for (const [id, x] of Object.entries(p.toldMe ?? {})) {
+      const about = byId(s, id);
+
+      if (!about || about === to || about === p) {
+        continue;
+      }
+
+      (to.secondHand ??= {})[id] = {
+        claim: this.distortion(s, p, about, x.claim) ?? x.claim,
+        fromId: p.id,
+        day: s.day,
+        at: tick(s),
+      };
+    }
+  }
+
+  // What p passes on of what other NPCs told them in private, seat by
+  // seat: "Player 5 told me they're the Chef.". (Not a claim they've also
+  // made in public.)
+  //
+  // An evil NPC lies about players the evil team wants to discredit (see
+  // distortion()).
+  passedOn(s, p) {
+    return Object.entries(p.toldMe ?? {})
+      .map(([id, x]) => [byId(s, id), x])
+      .filter(
+        ([x, told]) => x && x !== p && !x.human && told.claim !== claimTo(x),
+      )
+      .sort(([a], [b]) => a.seat - b.seat)
+      .map(([x, told]) => {
+        const lie = this.distortion(s, p, x, told.claim);
+
+        if (lie) {
+          lied(s, { kind: "distorted", byId: p.id, aboutId: x.id, said: lie, truth: told.claim });
+        }
+
+        return `${x.label} told me they're the ${name(lie ?? told.claim)}.`;
+      });
+  }
+
+  // The character evil NPC p falsely says x told them (null for the
+  // truth): for x the evil team's scapegoat, or a player who accused one
+  // of the team in p's hearing, at DISTORT_CHANCE, a different good
+  // character on the script. Decided once for each player, so p tells the
+  // same lie every time.
+  distortion(s, p, x, claim) {
+    if (sideOf(p) !== "evil" || teammate(p, x) || x.human) {
+      return null;
+    }
+
+    const lies = (p.distorted ??= {});
+
+    if (!(x.id in lies)) {
+      const accused = [...(s.statements ?? []), ...(p.heard ?? [])].some(
+        (st) =>
+          st.byId === x.id &&
+          st.type === "suspicious" &&
+          teammate(p, byId(s, st.targetId) ?? {}),
+      );
+      const target = x === scapegoat(s) || accused;
+
+      lies[x.id] =
+        target && s.r() < DISTORT_CHANCE
+          ? pick(
+              s.script.ids.filter(
+                // (Not a character nobody would claim.)
+                (id) =>
+                  ["townsfolk", "outsider"].includes(team(id)) &&
+                  !["drunk", "lunatic"].includes(id) &&
+                  id !== claim &&
+                  id !== p.claim,
+              ),
+              s.r,
+            )
+          : null;
+    }
+
+    return lies[x.id] && lies[x.id] !== claim ? lies[x.id] : null;
+  }
+
+  // Each night's (or day's) information goes on its own line, followed by
+  // their opinion, then what other NPCs told them (see passedOn()). Only
+  // you hear it: no NPC learns anything from your conversations.
+  ask(s, p) {
+    const a = this.answer(s, p, human(s));
+    const { mad, copy, memories, opinion, hidden } = a;
+    const info = memories.map(
+      (x) => `${x.day ? `Day ${x.day}` : `Night ${x.night}`}: ${speak(x.text)}`,
+    );
+    const details = info.length
+      ? info.join("\n")
+      : "I have no stored information.";
+
+    this.told(s, p, human(s), a);
+
+    // For the final reveal: a cover story, or an evil player's bluff.
+    if (hidden) {
+      lied(s, { kind: p.cover.kind, byId: p.id, said: a.claim, truth: p.claim });
+    } else if (!mad && p.alignment === "evil" && a.claim !== p.role) {
+      lied(s, { kind: "bluff", byId: p.id, said: a.claim, truth: p.role });
+    }
 
     // Both twins insist they're the good one.
     const twin = !mad && this.twinOf(s, p);
 
     // A good NPC who woke up as a new character says so (once).
     const changes =
-      !mad && p.alignment === "good"
+      !mad && !hidden && p.alignment === "good"
         ? (p.changes ?? []).filter((c) => !c.told)
         : [];
 
@@ -798,19 +1143,39 @@ export class SimpleStrategy {
       c.told = true;
     }
 
+    const passed = this.passedOn(s, p);
+
     return [
-      `I claim ${name(mad ? mad.role : p.claim)}.`,
+      `I claim ${name(a.claim)}.`,
       ...changes.map(
         (c) =>
           `I woke up as the ${name(c.to)} on Night ${c.night}; before that I was the ${name(c.from)}.`,
       ),
       twin && `${twin.label} is my twin, and I am the good twin.`,
       details,
-      !mad && this.unusedAbility(copy ? copy.twin : p),
+      !mad && !hidden && this.unusedAbility(copy ? copy.twin : p),
       opinion.text,
+      passed.length && `What others have told me:\n${passed.join("\n")}`,
     ]
       .filter(Boolean)
       .join("\n");
+  }
+
+  // Who NPC p nominates today, if anyone: their suspect, if they're alive
+  // and the evidence against them is strong (NPC_NOMINATE_EVIDENCE), with
+  // its `score` and `reasons` (see suspicion()). Never you, and never by
+  // either twin (who only ever suspect each other).
+  nomination(s, p) {
+    if (this.twinOf(s, p)) {
+      return null;
+    }
+
+    const sus = this.suspicion(s, p);
+    const t = sus && byId(s, sus.targetId);
+
+    return t?.alive && !t.human && sus.score >= NPC_NOMINATE_EVIDENCE
+      ? { target: t, score: sus.score, reasons: p.suspicion.reasons }
+      : null;
   }
 
   // Whether v votes for nominee n. `tally` is how the vote stands when v
@@ -997,7 +1362,7 @@ export class SimpleStrategy {
     const options = safe.length ? safe : pool;
     const trusted = this.trusted(s, p);
     const level = (x) =>
-      publicClaim(x) ? (DEMON_KILL_PRIORITY[publicClaim(x)] ?? "low") : null;
+      claimHeard(x, p) ? (DEMON_KILL_PRIORITY[claimHeard(x, p)] ?? "low") : null;
 
     for (const tier of ["high", "med"]) {
       const found = options.filter((x) => level(x) === tier);
@@ -1014,12 +1379,16 @@ export class SimpleStrategy {
   // The Demon kills with purpose (see DEMON_* and KILL_PRIORITY_* in data.js):
   // - after being nominated (and surviving), it may kill itself so a Minion
   //   takes over;
-  // - otherwise it works down its kill priorities: good NPCs by the
-  //   character they've publicly claimed, its own Minions by their true
-  //   character, raised to their public bluff's level if that bluff is
-  //   "med" or "high" (killing a "confirmed" info role makes good cover). A
-  //   Minion it avoids stays avoided. If no priority fires, it attacks a good
-  //   NPC it isn't avoiding; with no good NPC left, any random NPC.
+  // - otherwise it works down its kill priorities (see priorityLevel()):
+  //   good NPCs by the character they've claimed to it (in public or in
+  //   private), or, with a working Spy on its team, by their true
+  //   character; its own Minions by their true character, raised to their
+  //   public bluff's level if that bluff is "med" or "high" (killing a
+  //   "confirmed" info role makes good cover). A Minion it avoids stays
+  //   avoided. If no priority fires, it attacks a good NPC it isn't
+  //   avoiding; with no good NPC left, any random NPC.
+  // - With a Spy, at SPY_COVER_CHANCE a night it kills a less valuable
+  //   ("low") good player instead, so its kills don't give the Spy away.
   //
   // `exclude`: players it can't pick (already chosen tonight, or the Pukka's
   // last victim). It steers clear of players its attack bounced off before
@@ -1047,7 +1416,7 @@ export class SimpleStrategy {
         ? (x) =>
             team(x.role) === "minion"
               ? VIGORMORTIS_MINION_PRIORITY
-              : this.priorityLevel(x)
+              : this.priorityLevel(s, x, p)
         : undefined;
 
     // Neither twin is ever the Demon's kill, nor anyone who came back to
@@ -1079,7 +1448,32 @@ export class SimpleStrategy {
       return exorcist;
     }
 
-    return this.byPriority(s, options, level);
+    // (Hiding the Spy: someone it wouldn't have known to go after.)
+    const cover = this.spyWorks(s, p)
+      ? options.filter(
+          (x) =>
+            x.alignment === "good" &&
+            (DEMON_KILL_PRIORITY[x.role] ?? "low") === "low",
+        )
+      : [];
+
+    if (cover.length && s.r() < SPY_COVER_CHANCE) {
+      return pick(cover, s.r);
+    }
+
+    return this.byPriority(s, p, options, level);
+  }
+
+  // Whether evil player p has a working Spy on their team (themselves, or a
+  // teammate): someone who sees the Grimoire, so the team knows every
+  // character in play. (Not the Lunatic, whose team is imagined.)
+  spyWorks(s, p) {
+    return (
+      p.alignment === "evil" &&
+      s.players.some(
+        (x) => x.alignment === "evil" && ability(x) === "spy" && works(x),
+      )
+    );
   }
 
   // Everyone the Demon attacks tonight: the Shabaloth 2 players; the Po
@@ -1117,17 +1511,20 @@ export class SimpleStrategy {
     return [this.demon(s, p)];
   }
 
-  // A player's kill priority (DEMON_KILL_PRIORITY in data.js): good players by
-  // the character they've publicly claimed (null if unknown); evil players by
-  // their true character, raised to a public "med"/"high" bluff's level
-  // unless their own level is "avoid".
-  priorityLevel(x) {
-    const claimLevel = x.claimKnown
-      ? (DEMON_KILL_PRIORITY[x.claim] ?? "low")
-      : null;
+  // A player's kill priority (DEMON_KILL_PRIORITY in data.js) to evil
+  // player p: good players by the character they've claimed to p (null if
+  // unknown; see claimTo()), or by their true character when p's team has
+  // a working Spy (see spyWorks()); evil players by their true character,
+  // raised to a public "med"/"high" bluff's level unless their own level is
+  // "avoid".
+  priorityLevel(s, x, p) {
+    const claim = claimHeard(x, p);
+    const claimLevel = claim ? (DEMON_KILL_PRIORITY[claim] ?? "low") : null;
 
     if (x.alignment !== "evil") {
-      return claimLevel;
+      return this.spyWorks(s, p)
+        ? (DEMON_KILL_PRIORITY[x.role] ?? "low")
+        : claimLevel;
     }
 
     const rank = ["avoid", "low", "med", "high"];
@@ -1140,11 +1537,11 @@ export class SimpleStrategy {
       : own;
   }
 
-  // Picks from `pool` by priority, as the Demon does: check each level from
-  // high to low at its KILL_PRIORITY_CHANCE, never choosing "avoid" while
-  // anyone else is available; if no level fires, a good player who isn't
-  // avoided, then any good player, then anyone.
-  byPriority(s, pool, level = (x) => this.priorityLevel(x)) {
+  // Picks from `pool` by priority to p, as the Demon does: check each level
+  // from high to low at its KILL_PRIORITY_CHANCE, never choosing "avoid"
+  // while anyone else is available; if no level fires, a good player who
+  // isn't avoided, then any good player, then anyone.
+  byPriority(s, p, pool, level = (x) => this.priorityLevel(s, x, p)) {
     const notAvoided = pool.filter((x) => level(x) !== "avoid");
 
     for (const tier of ["high", "med", "low"]) {
@@ -1216,23 +1613,29 @@ export class SimpleStrategy {
     );
   }
 
-  // A Gambler guesses another living player is the character they claim, or
-  // (at GAMBLER_WILD_GUESS_CHANCE) takes a wild guess at any character on the
-  // script. Either can be wrong, and a wrong guess kills a working Gambler.
+  // A Gambler guesses another living player is the character they've
+  // claimed to them (see claimTo()), preferring players whose claim they
+  // know, or (at GAMBLER_WILD_GUESS_CHANCE, or with no claim to go on)
+  // takes a wild guess at any character on the script. Either can be
+  // wrong, and a wrong guess kills a working Gambler. (A Gambler bluffer
+  // guesses the same way.)
   gamble(s, p) {
+    const pool = this.fresh(p, "gamble", this.pickable(s, p));
+    const known = pool.filter((x) => claimHeard(x, p));
     const target = this.noted(
       p,
       "gamble",
-      pick(this.fresh(p, "gamble", this.pickable(s, p)), s.r),
+      pick(known.length ? known : pool, s.r),
     );
 
     if (!target) {
       return null;
     }
 
-    const wild = s.r() < GAMBLER_WILD_GUESS_CHANCE;
+    const claim = claimHeard(target, p);
+    const wild = !claim || s.r() < GAMBLER_WILD_GUESS_CHANCE;
 
-    return { target, role: wild ? pick(s.script.ids, s.r) : target.claim };
+    return { target, role: wild ? pick(s.script.ids, s.r) : claim };
   }
 
   // An Artist asks "Is any of these 1–3 players <evil / the Demon / a Minion
@@ -1409,24 +1812,45 @@ export class SimpleStrategy {
     return pick(info.length ? info : inPlay, s.r);
   }
 
-  // The Juggler guesses up to 5 living players' characters: what they claim
-  // (at JUGGLER_CLAIM_GUESS_CHANCE), otherwise another plausible character:
-  // one somebody is claiming, or one of the evil team's bluffs.
+  // The Juggler guesses up to 5 living players' characters, players whose
+  // claim they know first (see claimTo()): what they claim (at
+  // JUGGLER_CLAIM_GUESS_CHANCE), otherwise another plausible character: one
+  // they've heard somebody claim, or one of the evil team's bluffs. (A
+  // Juggler bluffer guesses the same way.)
   juggle(s, p) {
     const plausible = [
-      ...new Set([...s.players.map((y) => y.claim), ...(s.demonBluffs ?? [])]),
+      ...new Set([
+        ...s.players.map((y) => claimHeard(y, p)).filter(Boolean),
+        ...(s.demonBluffs ?? []),
+      ]),
     ];
+    const others = this.others(s, p);
+    const known = others.filter((x) => claimHeard(x, p));
+    const picks = [
+      ...sample(known, 5, s.r),
+      ...sample(
+        others.filter((x) => !known.includes(x)),
+        5,
+        s.r,
+      ),
+    ].slice(0, 5);
 
-    return sample(this.others(s, p), 5, s.r).map((x) => ({
-      id: x.id,
-      role:
-        s.r() < JUGGLER_CLAIM_GUESS_CHANCE
-          ? x.claim
-          : (pick(
-              plausible.filter((id) => id !== x.claim),
-              s.r,
-            ) ?? x.claim),
-    }));
+    return picks.map((x) => {
+      const claim = claimHeard(x, p);
+
+      return {
+        id: x.id,
+        role:
+          claim && s.r() < JUGGLER_CLAIM_GUESS_CHANCE
+            ? claim
+            : (pick(
+                plausible.filter((id) => id !== claim),
+                s.r,
+              ) ??
+              claim ??
+              pick(s.script.ids, s.r)),
+      };
+    });
   }
 
   // A dying Klutz picks a player they believe is good: one their information
@@ -1453,7 +1877,7 @@ export class SimpleStrategy {
 
     for (const m of p.memories) {
       for (const id of m.targets ?? []) {
-        const type = stanceOn(s, m, byId(s, id));
+        const type = stanceOn(s, m, byId(s, id), p);
 
         if (type) {
           (type === "trust" ? trusted : suspected).add(id);
@@ -1558,6 +1982,7 @@ export class SimpleStrategy {
         ? pick(this.fresh(p, "cerenovus", teammates), s.r)
         : this.byPriority(
             s,
+            p,
             this.fresh(
               p,
               "cerenovus",
@@ -1624,8 +2049,8 @@ export class SimpleStrategy {
     );
     const voices = good.filter(
       (x) =>
-        x.claimKnown &&
-        (FIRST_NIGHT_INFO.includes(x.claim) || ONGOING_INFO.includes(x.claim)),
+        FIRST_NIGHT_INFO.includes(claimHeard(x, p)) ||
+        ONGOING_INFO.includes(claimHeard(x, p)),
     );
     const target = this.noted(
       p,
@@ -1726,11 +2151,12 @@ export class SimpleStrategy {
         !x.alive &&
         !x.undead &&
         !x.human &&
-        x.claimKnown &&
-        team(x.claim) === "townsfolk",
+        team(claimHeard(x, p)) === "townsfolk",
     );
     const info = dead.filter(
-      (x) => FIRST_NIGHT_INFO.includes(x.claim) || ONGOING_INFO.includes(x.claim),
+      (x) =>
+        FIRST_NIGHT_INFO.includes(claimHeard(x, p)) ||
+        ONGOING_INFO.includes(claimHeard(x, p)),
     );
 
     if (p.alignment === "evil" || !dead.length) {
@@ -1751,12 +2177,11 @@ export class SimpleStrategy {
         !x.alive &&
         !x.undead &&
         !x.human &&
-        x.claimKnown &&
         x.alignment === "good" &&
-        team(x.claim) === "townsfolk",
+        team(claimHeard(x, p)) === "townsfolk",
     );
     const accusers = dead.filter((x) =>
-      (s.statements ?? []).some(
+      [...(s.statements ?? []), ...(p.heard ?? [])].some(
         (st) =>
           st.byId === x.id &&
           st.type === "suspicious" &&
@@ -1795,7 +2220,7 @@ export class SimpleStrategy {
     );
     const decoys = good.filter((x) => x.role !== "lunatic");
 
-    return this.byPriority(s, decoys.length ? decoys : good);
+    return this.byPriority(s, p, decoys.length ? decoys : good);
   }
 
   // The Ogre (on their first night) joins the team of someone they don't
@@ -1811,6 +2236,7 @@ export class SimpleStrategy {
   lunatic(s, p) {
     return this.byPriority(
       s,
+      p,
       untwinned(s, this.others(s, p)).filter((x) => !teammate(p, x)),
     );
   }

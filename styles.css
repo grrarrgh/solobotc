@@ -696,6 +696,42 @@ input {
   border-color: #6f86c9;
 }
 
+.phase-nominations {
+  border-color: #c9a86f;
+}
+
+/* Before nominations open early: Start nominations, or Keep talking. */
+.confirm-dialog {
+  width: min(420px, calc(100vw - 32px));
+  text-align: center;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* The final reveal's "Who lied to you". */
+.lies {
+  margin: 6px 0 14px;
+  padding-left: 18px;
+}
+
+.lies li {
+  margin: 4px 0;
+}
+
+.lie-day {
+  color: #b69455;
+  font-weight: 700;
+}
+
+.phase-nomination {
+  border-color: #f0cf83;
+}
+
 .phase-dusk h2 {
   color: #a9bcf2;
 }
@@ -888,6 +924,23 @@ input {
   white-space: nowrap;
 }
 
+/* Your chance to lower your hand before the votes are counted. */
+.hand-toggle {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 48px);
+  transform: translateX(-50%);
+  z-index: 3;
+  padding: 4px 10px;
+  border: 1px solid #f0cf83;
+  border-radius: 6px;
+  background: #2a2117;
+  color: #f0cf83;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 /* A vote that was raised but didn't count (e.g. a Butler's). */
 .vote-hand.not-counted {
   opacity: 0.3;
@@ -983,4 +1036,28 @@ input {
 
 .mark[hidden] {
   display: none;
+}
+
+/* The end of a conversation: Share My Info, Leave conversation. */
+.conversation-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+
+.conversation-controls[hidden] {
+  display: none;
+}
+
+/* Nominate and Request nomination: their own row, at the bottom. */
+.nomination-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #343a45;
 }

@@ -32,3 +32,31 @@ export function shuffle(a, r = Math.random) {
 export const sample = (a, n, r = Math.random) => shuffle(a, r).slice(0, n);
 
 export const byId = (s, id) => s.players.find((x) => x.id === id);
+
+// A counter that orders what's said, in public and in private, so the
+// latest word wins (see claimTo(), heardAbout()).
+export const tick = (s) => (s.tick = (s.tick ?? 0) + 1);
+
+// The character `viewer` knows player x claims, first-hand: x's latest
+// public claim, or what x told them in private (see strategy told()),
+// whichever was said last. Null if x hasn't said. With no viewer, only the
+// public claim. (You never claim in public: only to the NPCs you tell; see
+// engine tell().)
+export function claimTo(x, viewer = null) {
+  const told = x && viewer?.toldMe?.[x.id];
+
+  if (!x || x.human) {
+    return told?.claim ?? null;
+  }
+
+  const open = x.claimKnown ? (x.publicClaim ?? x.claim) : null;
+
+  return told && (!open || told.at > (x.publicAt ?? 0)) ? told.claim : open;
+}
+
+// What `viewer` has heard player x claims: first-hand (see claimTo()) or,
+// failing that, passed on by someone else (see strategy told()). What they
+// decide by (who to kill, protect or guess), but not what they weigh as
+// evidence.
+export const claimHeard = (x, viewer) =>
+  claimTo(x, viewer) ?? (x && viewer?.secondHand?.[x.id]?.claim) ?? null;

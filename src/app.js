@@ -10,6 +10,8 @@ import {
   ABILITIES,
   VOTE_COUNT_DELAY_MS,
   VOTE_TICK_MS,
+  HAND_WAIT_MS,
+  NOMINATIONS_DELAY_MS,
   CLAIM_ALERT_HOLD_MS,
   CLAIM_ALERT_FADE_MS,
   PERF_LOGGING,
@@ -22,6 +24,7 @@ import {
 import { createState } from "./setup.js";
 import { ability } from "./storyteller.js";
 import { Engine } from "./engine.js";
+import { claimTo } from "./strategy.js";
 import { byId } from "./util.js";
 
 const $ = (id) => document.getElementById(id);
@@ -195,6 +198,7 @@ function start() {
     e.start();
 
     selectedPlayerId = null;
+    talkingTo = null;
     marks = {};
     cardsShown = 0;
     alertSeen.clear();
@@ -258,7 +262,9 @@ function circle() {
 
   $("circle").innerHTML = s.players
     .map((p, i) => {
-      const token = p.human || p.claimKnown ? name(p.claim) : "Unknown";
+      // (What they've told you, or said in public: see claimTo().)
+      const claim = p.human ? p.claim : claimTo(p, e.human());
+      const token = claim ? name(claim) : "Unknown";
       const mark = markFor(p.id);
 
       return `
@@ -284,7 +290,7 @@ function circle() {
           }
 
           <span class="token ${
-            p.claimKnown || p.human ? `role-${alignment(p.claim)}` : "unknown"
+            claim ? `role-${alignment(claim)}` : "unknown"
           } ${token.length > 10 ? "long" : ""}">
             ${esc(token)}
           </span>
@@ -338,6 +344,11 @@ function circle() {
         if (s.pending) {
           pickAtNight(b.dataset.id);
         } else {
+          // (Choosing someone else ends any conversation.)
+          if (b.dataset.id !== talkingTo) {
+            talkingTo = null;
+          }
+
           selectedPlayerId = b.dataset.id;
           $("answer").textContent = "";
         }
@@ -371,12 +382,60 @@ function aim(hand, angle, instant = false) {
   }
 }
 
-// Runs a nomination (`fn` calls the engine), then shows its vote: clock hands
-// fade in over the clock tower, the small hand on the nominator and the
-// large hand on the nominee; after 2 seconds the large hand ticks clockwise
-// round the circle (starting after the nominee, ending on them), raising
-// each voter's hand; then the skull marks the nominee if they're now marked
-// for execution, and the clock tower returns.
+// Your hand during a vote: it starts up, and a button under the clock lets
+// you lower it (or raise it again) for HAND_WAIT_MS, counting down the
+// seconds. Resolves to whether it's up.
+function handChoice(c) {
+  return new Promise((done) => {
+    const seat = c.querySelector(`[data-id="${s.humanId}"]`);
+    let up = true;
+    let left = Math.ceil(HAND_WAIT_MS / 1000);
+
+    c.insertAdjacentHTML(
+      "beforeend",
+      '<button id="hand-toggle" type="button" class="hand-toggle"></button>',
+    );
+
+    const b = $("hand-toggle");
+    const show = () => {
+      b.textContent = `${up ? "✋ Lower hand" : "Raise hand"} (${left})`;
+      seat?.querySelector(".vote-hand.mine")?.remove();
+
+      if (up) {
+        seat?.insertAdjacentHTML("afterbegin", '<span class="vote-hand mine">✋</span>');
+      }
+    };
+
+    b.onclick = () => {
+      up = !up;
+      show();
+    };
+
+    show();
+
+    const timer = setInterval(() => {
+      left--;
+
+      if (left > 0) {
+        show();
+        return;
+      }
+
+      clearInterval(timer);
+      b.remove();
+      seat?.querySelector(".vote-hand.mine")?.remove();
+      done(up);
+    }, 1000);
+  });
+}
+
+// Runs a nomination (`fn` calls the engine, leaving the vote waiting), then
+// shows its vote: clock hands fade in over the clock tower, the small hand
+// on the nominator and the large hand on the nominee; you get HAND_WAIT_MS
+// to lower your hand (see handChoice()), and the votes are cast; then the
+// large hand ticks clockwise round the circle (starting after the nominee,
+// ending on them), raising each voter's hand; then the skull marks the
+// nominee if they're now marked for execution, and the clock tower returns.
 async function runVote(fn) {
   if (voteAnim) {
     return;
@@ -397,13 +456,16 @@ async function runVote(fn) {
   selectedPlayerId = null;
 
   // The Virgin (or a Witch curse ending the game) settles it without a vote.
-  if (!result.records.length || s.phase !== "day") {
+  if (!result.pending || s.phase !== "day") {
     render();
     return;
   }
 
   voteAnim = { previousBlock, before, revealed: new Set() };
   render();
+
+  // Anyone who came clean before the vote (a card) is heard first.
+  await cardsClosed();
 
   const c = $("circle");
   const hour = c.querySelector(".hand.hour");
@@ -422,8 +484,14 @@ async function runVote(fn) {
   tally.textContent = `0 / ${result.needed} needed`;
   c.classList.add("voting");
 
-  // Let the hands fade in (0.4s), then pause before counting starts.
-  await sleep(400 + VOTE_COUNT_DELAY_MS);
+  // Let the hands fade in (0.4s), then pause before counting starts: long
+  // enough for you to lower your hand, if you can vote.
+  await sleep(400);
+
+  const hand = e.canVote() ? await handChoice(c) : false;
+
+  result = e.castVotes(hand);
+  await sleep(VOTE_COUNT_DELAY_MS);
 
   for (let k = 1; k <= n; k++) {
     const p = s.players[(start + k) % n];
@@ -613,6 +681,34 @@ function showScript() {
 // A public log line without its "Day 3 — " prefix.
 const dayless = (text) => text.replace(/^Day\s+\d+\s*[:—-]?\s*/i, "");
 
+// Each card's heading (before ": Day N"). A nomination card shows who came
+// clean before the vote.
+const PHASE_TITLES = {
+  dawn: "☀️ Dawn",
+  dusk: "🌙 Dusk",
+  nomination: "🗣️ Before the vote",
+  nominations: "⚖️ Nominations",
+};
+
+// Resolves once no card is showing (after the last one is closed, and the
+// town square has been redrawn).
+function cardsClosed() {
+  return new Promise((done) => {
+    const wait = () => {
+      const d = $("phase-dialog");
+
+      if (!d.open) {
+        done();
+        return;
+      }
+
+      d.addEventListener("close", () => setTimeout(wait), { once: true });
+    };
+
+    wait();
+  });
+}
+
 // The next dawn / dusk card the engine made (s.phaseCards), if none is
 // showing: the public log lines from that change of phase, as the Public Log
 // shows them. Pressing anywhere closes it (and shows the next, if any).
@@ -627,7 +723,7 @@ function showPhaseCard() {
   cardsShown++;
   d.className = `script-dialog phase-dialog phase-${card.kind}`;
   $("phase-sheet").innerHTML = `
-    <h2>${card.kind === "dawn" ? "☀️ Dawn" : "🌙 Dusk"}: Day ${card.day}</h2>
+    <h2>${PHASE_TITLES[card.kind]}: Day ${card.day}</h2>
     <ul class="phase-lines">
       ${card.lines
         .map((x) => `<li class="log-entry">${colourPlayers(dayless(x))}</li>`)
@@ -712,6 +808,9 @@ function setMark(guess) {
 const EVENT_TAGS = {
   information: "Info",
   conversation: "Talk",
+  talks: "NPC talks",
+  cover: "Cover story",
+  come_clean: "Came clean",
   vote_result: "Vote",
   end_day: "End day",
   game_over: "Game over",
@@ -955,6 +1054,40 @@ function timeline(r) {
     <div class="timeline">${html}</div>`;
 }
 
+// What each kind of lie told to you looks like in the final reveal.
+const LIE_TEXT = {
+  bluff: (by, x) =>
+    `${by} told you they're the ${roleLink(x.said)}: they were the ${roleLink(x.truth)}.`,
+  hide: (by, x) =>
+    `${by} told you they're the ${roleLink(x.said)}: they were hiding the ${roleLink(x.truth)}.`,
+  bait: (by, x) =>
+    `${by} told you they're the ${roleLink(x.said)} to bait the Demon: they were the ${roleLink(x.truth)}.`,
+  distorted: (by, x, about) =>
+    `${by} said ${about} told them they're the ${roleLink(x.said)}: ${about} had said the ${roleLink(x.truth)}.`,
+  fake: (by, x) =>
+    `${by} faked coming clean as the ${roleLink(x.said)}: they were the ${roleLink(x.truth)}.`,
+};
+
+// "Who lied to you": every lie an NPC told you (or faked in public), by day,
+// with the truth.
+function liesSection(r) {
+  const label = (id) => colourPlayers(byId(s, id)?.label ?? id);
+  const items = r.lies.map(
+    (x) =>
+      `<li><span class="lie-day">Day ${x.day}</span> ${LIE_TEXT[x.kind](
+        label(x.byId),
+        x,
+        x.aboutId ? label(x.aboutId) : "",
+      )}</li>`,
+  );
+
+  return `<h3>Who lied to you</h3>${
+    items.length
+      ? `<ul class="lies">${items.join("")}</ul>`
+      : "<p>Nobody lied to you.</p>"
+  }`;
+}
+
 // Whether this game's end has been shown (the panels collapse just once).
 let shownGameOver = false;
 
@@ -990,6 +1123,7 @@ function reveal() {
   </div>`;
 
   $("roles").innerHTML = grimoire(r);
+  $("lies").innerHTML = liesSection(r);
   $("audit").innerHTML = timeline(r);
   $("audit").classList.toggle("key-only", keyOnly);
 
@@ -1185,11 +1319,13 @@ function draw() {
 
   $("selected-player").innerHTML = t ? colourPlayers(`Selected: ${t.label}`) : "";
 
-  $("talk").textContent = t
-    ? `Conversations: ${talk.used}/${talk.limit}; ${talk.remaining} remaining${
-        talk.already ? "; already asked this player" : ""
-      }.`
-    : "";
+  $("talk").textContent = !t
+    ? ""
+    : s.nominationsOpen
+      ? "Nominations are open: no more conversations today."
+      : `Conversations: ${talk.used}/${talk.limit}; ${talk.remaining} remaining${
+          talk.already ? "; already asked this player" : ""
+        }.`;
 
   // (Before the seats: a ⚠ waits while a card covers them.)
   showPhaseCard();
@@ -1211,18 +1347,27 @@ function draw() {
     h.alive &&
     h.savantDay !== s.day
   );
-  $("ask").disabled = !t || talk.already || !talk.remaining;
+  // (Gone once you've asked them today.)
+  $("ask").hidden = !t || talk.already;
+  $("ask").disabled = !t || !talk.remaining || s.nominationsOpen;
+  // The end of the conversation you're in: Share My Info (once a day, before
+  // nominations open) and Leave conversation.
+  const talking = Boolean(t) && t.id === talkingTo && s.phase === "day";
+
+  $("conversation-controls").hidden = !talking;
+  $("share-info").hidden =
+    !talking || s.nominationsOpen || (s.toldToday ?? []).includes(t.id);
   // Each player can nominate and be nominated once a day. You can always ask
   // an NPC to nominate instead (the only way once you're dead). Nothing can
-  // be pressed while a vote is being counted.
+  // be pressed while a vote is being counted, or NPCs are nominating.
   // Dead players can be nominated too.
-  const blocked = !t || e.nominatedToday(t.id) || !!voteAnim;
+  const blocked = !t || e.nominatedToday(t.id) || !!voteAnim || nominating;
 
   $("nominate").hidden = !h.alive;
   $("nominate").disabled = blocked || s.dayNominators.includes(h.id);
   $("request-nomination").hidden = false;
   $("request-nomination").disabled = blocked;
-  $("pass").disabled = !!voteAnim;
+  $("pass").disabled = !!voteAnim || nominating;
   // While a vote is being counted, this shows how things stood before it.
   const block = voteAnim ? voteAnim.before.block : s.block;
   const marked = block?.nomineeId ? e.player(block.nomineeId) : null;
@@ -1419,21 +1564,154 @@ $("start").onclick = start;
 $("ask").onclick = () => {
   try {
     $("answer").innerHTML = linkRoles(e.ask(selectedPlayerId));
+    talkingTo = selectedPlayerId;
+    render();
+  } catch (err) {
+    $("answer").textContent = err.message;
+    return;
+  }
+
+  // Your last conversation: nominations open by themselves, a moment later.
+  if (!e.talkStatus().remaining) {
+    const game = s;
+
+    setTimeout(() => {
+      if (s === game && !s.nominationsOpen && !voteAnim && !nominating) {
+        openNominations(false);
+      }
+    }, NOMINATIONS_DELAY_MS);
+  }
+};
+
+// Share My Info: you tell them your character and what you've learned.
+$("share-info").onclick = () => {
+  try {
+    const said = e.tell(talkingTo, e.human().claim, true);
+
+    $("answer").insertAdjacentHTML(
+      "beforeend",
+      `\n\n${linkRoles(`You told them:\n${said}`)}`,
+    );
     render();
   } catch (err) {
     $("answer").textContent = err.message;
   }
 };
 
+$("leave-conversation").onclick = () => {
+  talkingTo = null;
+  selectedPlayerId = null;
+  $("answer").textContent = "";
+  render();
+};
+
+// ── Nominations ──────────────────────────────────────────────
+
+// The NPC you're in a conversation with (asked, and not yet left), if any.
+let talkingTo = null;
+
+// True while NPCs are making their nominations (see npcNominations()).
+let nominating = false;
+
+// Asks before nominations open while you still have conversations left:
+// resolves to true to go ahead, false to keep talking.
+function confirmOpen() {
+  const d = $("confirm-dialog");
+
+  $("confirm-text").textContent =
+    "Start nominations? You won't be able to talk to any more players today.";
+
+  return new Promise((done) => {
+    $("confirm-yes").onclick = () => {
+      d.close();
+      done(true);
+    };
+    $("confirm-no").onclick = () => {
+      d.close();
+      done(false);
+    };
+    d.oncancel = () => done(false);
+    d.showModal();
+  });
+}
+
+// Opens nominations ("Nominations are open" card), asking first if you
+// could still talk to someone (`ask`), then lets the NPCs nominate (unless
+// `then` is false: you're about to nominate yourself). Resolves to whether
+// they're open.
+async function openNominations(ask = true, then = true) {
+  if (!s.nominationsOpen) {
+    if (ask && e.talkStatus().remaining && !(await confirmOpen())) {
+      return false;
+    }
+
+    e.openNominations();
+    render();
+  }
+
+  if (then) {
+    await npcNominations();
+  }
+
+  return true;
+}
+
+// NPCs make their nominations, one vote at a time (see engine
+// npcNomination()), each after any card is closed.
+async function npcNominations() {
+  if (nominating) {
+    return;
+  }
+
+  nominating = true;
+  render();
+
+  try {
+    while (s.phase === "day" && !s.winner) {
+      await cardsClosed();
+
+      if (voteAnim) {
+        break;
+      }
+
+      const next = e.npcNomination();
+
+      if (!next) {
+        break;
+      }
+
+      await runVote(() => next);
+    }
+  } finally {
+    nominating = false;
+    render();
+  }
+}
+
+// Your nomination (or request): nominations open first (asking, if you
+// could still talk), then your vote, then any NPC nominations.
+async function yourNomination(fn) {
+  const id = selectedPlayerId;
+
+  if (!(await openNominations(true, false))) {
+    return;
+  }
+
+  selectedPlayerId = id;
+  await runVote(() => fn(id));
+  await npcNominations();
+}
+
 // Your Good / Evil mark on the selected player.
 document.querySelectorAll("#mark [data-guess]").forEach((b) => {
   b.onclick = () => setMark(b.dataset.guess);
 });
 
-$("nominate").onclick = () => runVote(() => e.nominate(selectedPlayerId));
+// (null: the vote waits for your hand; see runVote().)
+$("nominate").onclick = () => yourNomination((id) => e.nominate(id, null));
 
 $("request-nomination").onclick = () =>
-  runVote(() => e.requestNomination(selectedPlayerId));
+  yourNomination((id) => e.requestNomination(id, null));
 
 $("slay").onclick = () => {
   try {
@@ -1502,7 +1780,14 @@ $("savant").onclick = () => {
   }
 };
 
-$("pass").onclick = () => {
+$("pass").onclick = async () => {
+  // Nominations come before the end of the day: this opens them (asking,
+  // if you could still talk), and the NPCs nominate; then End day again.
+  if (!s.nominationsOpen) {
+    await openNominations();
+    return;
+  }
+
   try {
     e.endDay();
     selectedPlayerId = null;

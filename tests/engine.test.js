@@ -23,7 +23,7 @@ import {
 } from "../src/data.js";
 import { createState, infoTarget } from "../src/setup.js";
 import { Engine } from "../src/engine.js";
-import { SimpleStrategy, speak, isTwin } from "../src/strategy.js";
+import { SimpleStrategy, speak, isTwin, claimTo } from "../src/strategy.js";
 import {
   ravenInfo,
   artistInfo,
@@ -316,10 +316,13 @@ test("what NPCs say when asked is recorded for others to weigh", () => {
     targets: [baron.id],
   });
 
-  new Engine(s).ask(chef.id);
+  // Told to the Butler in private: only the Butler hears it.
+  const butler = s.players[2];
+
+  new SimpleStrategy().told(s, chef, butler);
 
   assert.ok(
-    s.statements.some(
+    butler.heard.some(
       (x) =>
         x.byId === chef.id &&
         x.targetId === baron.id &&
@@ -327,6 +330,28 @@ test("what NPCs say when asked is recorded for others to weigh", () => {
         x.source === "info",
     ),
   );
+  assert.equal(butler.toldMe[chef.id].claim, "chef");
+  assert.ok(!s.statements.some((x) => x.byId === chef.id));
+});
+
+test("what NPCs tell you is heard by no NPC, and doesn't make their claim public", () => {
+  const s = base("statements-private");
+  const [human, chef, , baron] = s.players;
+
+  chef.memories.push({
+    night: 1,
+    role: "investigator",
+    text: `One of ${baron.label} and Player 3 is the Baron.`,
+    targets: [baron.id],
+  });
+
+  new Engine(s).ask(chef.id);
+
+  assert.ok(!s.statements.some((x) => x.byId === chef.id));
+  assert.ok(!s.players.some((x) => x.heard?.length));
+  assert.equal(chef.claimKnown, false);
+  assert.equal(claimTo(chef), null);
+  assert.equal(claimTo(chef, human), "chef"); // you know it
 });
 
 test("evil NPCs vote for a teammate only when it can't change the outcome", () => {
@@ -2255,7 +2280,7 @@ function playOut(raw, seats, seed) {
   const s = createState(raw, seats, seed);
   const e = new Engine(s);
   const expected =
-    /No conversation slots|Already asked|Nobody is able|Already nominated|already nominated today|Savant unavailable/;
+    /No conversation slots|Already asked|Nobody is able|Already nominated|already nominated today|Savant unavailable|Nominations are open/;
   const attempt = (fn) => {
     try {
       fn();
@@ -2291,6 +2316,13 @@ function playOut(raw, seats, seed) {
       attempt(() =>
         e.human().alive ? e.nominate(target.id) : e.requestNomination(target.id),
       );
+
+      // Then any NPC nominations (your hand up).
+      while (s.phase === "day" && !s.winner && e.npcNomination()) {
+        if (s.pendingVote) {
+          e.castVotes(true);
+        }
+      }
     } else if (s.phase === "day") {
       e.endDay();
     }
@@ -2746,9 +2778,10 @@ test("a player the Cerenovus made mad claims that character for a day", () => {
 
   e.start();
 
-  // The Mayor has no night information to make up.
+  // The Mayor has no night information to make up. (Then what other NPCs
+  // told them.)
   assert.equal(
-    e.ask(chef.id),
+    e.ask(chef.id).split("\n").slice(0, 3).join("\n"),
     "I claim Mayor.\nI have no stored information.\nI have nothing else to add.",
   );
   assert.equal(chef.claim, "mayor");
@@ -3285,12 +3318,12 @@ test("NPCs announce madness changes, but only to a claim they made in public", (
   const said = (x) => s.publicLog.some((line) => line.includes(x));
 
   e.start();
-  e.ask(chef.id); // the Chef claims Chef in public on Day 1
+  e.claimPublicly(chef); // the Chef claims Chef in public on Day 1
   e.endDay();
 
   assert.ok(said(`Day 2 — ${chef.label} now claims to be the Mayor.`));
 
-  e.ask(chef.id); // ...and Mayor on Day 2, while mad
+  e.claimPublicly(chef); // ...and Mayor on Day 2, while mad
   e.endDay();
 
   assert.ok(
@@ -3529,7 +3562,7 @@ test("made mad again about something else, they say what they were mad as yester
   const e = new Engine(s, strat);
 
   e.start();
-  e.ask(chef.id); // claims Mayor in public while mad
+  e.claimPublicly(chef); // claims Mayor in public while mad
   e.endDay();
 
   assert.equal(chef.claim, "oracle");
@@ -3539,7 +3572,7 @@ test("made mad again about something else, they say what they were mad as yester
     ),
   );
 
-  e.ask(chef.id); // claims Oracle in public while mad
+  e.claimPublicly(chef); // claims Oracle in public while mad
   e.endDay();
 
   assert.equal(chef.claim, "chef");
@@ -6028,4 +6061,328 @@ test("unprompted public claims flag the NPC (claimAlert); answering you doesn't"
   e.claimPublicly(butler);
   e.claimPublicly(chef);
   assert.ok(chef.claimAlert > butler.claimAlert);
+});
+
+// ── NPC conversations ───────────────────────────────────────
+
+test("each NPC talks in private to as many NPCs a day as you can, new people first", () => {
+  const s = createState(script, 10, "npc-talks");
+  const e = new Engine(s);
+
+  e.start();
+  settle(e);
+
+  const npcs = s.players.filter((x) => !x.human);
+  const limit = e.talkLimit();
+
+  // Day 1: everyone talked to `limit` different NPCs, and learned their claim.
+  for (const p of npcs) {
+    const talked = Object.keys(p.talkedTo ?? {});
+
+    assert.equal(talked.length, limit);
+    assert.ok(!talked.includes(p.id) && !talked.includes(s.humanId));
+
+    for (const id of talked) {
+      assert.ok(p.toldMe[id], `${p.label} learned ${id}'s claim`);
+    }
+  }
+
+  // None of it is public, and nobody's claim was announced by it.
+  assert.ok(!s.publicLog.some((x) => /talked to/.test(x)));
+
+  e.endDay();
+  settle(e);
+
+  // Day 2: new people before anyone they've talked to.
+  for (const p of npcs) {
+    const days = Object.values(p.talkedTo);
+    const fresh = Math.min(limit, npcs.length - 1 - limit);
+
+    assert.ok(days.filter((d) => d === 2).length >= Math.min(limit, fresh));
+    assert.equal(Object.keys(p.talkedTo).length, Math.min(npcs.length - 1, 2 * limit));
+  }
+});
+
+test("NPCs weigh what they're told in private, and only the listener does", () => {
+  const s = base("private-weigh");
+  const [, chef, butler, baron] = s.players;
+  const strat = new SimpleStrategy();
+
+  // The Baron tells the Chef (only) that they're the Chef.
+  baron.claim = "chef";
+  strat.told(s, baron, chef);
+
+  assert.ok(
+    strat.evidence(s, chef, baron).reasons.some((x) => /claim the Chef, but I'm the Chef/.test(x)),
+  );
+  assert.equal(claimTo(baron, butler), null);
+  assert.equal(strat.evidence(s, butler, baron).score, 0);
+});
+
+test("when you ask, an NPC passes on the claims other NPCs told them", () => {
+  const s = base("passed-on");
+  const [, chef, butler, baron] = s.players;
+  const strat = new SimpleStrategy();
+
+  strat.told(s, butler, chef);
+  strat.told(s, baron, chef);
+
+  const said = new Engine(s, strat).ask(chef.id);
+
+  assert.ok(said.includes("What others have told me:"));
+  assert.ok(said.includes(`${butler.label} told me they're the Butler.`));
+  assert.ok(said.includes(`${baron.label} told me they're the ${name(baron.claim)}.`));
+});
+
+test("the Demon goes after true characters only with a working Spy, with some cover kills", () => {
+  const s = base("spy-kills");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron, imp] = s.players;
+
+  role(chef, "empath", "good"); // a "high" priority, though nobody knows it
+  chef.claim = "empath";
+
+  s.r = () => 0.5; // high fires (0.75); cover doesn't (0.3)
+  assert.equal(strat.priorityLevel(s, chef, imp), null); // no Spy, no claim heard
+
+  role(baron, "spy", "evil");
+  assert.equal(strat.priorityLevel(s, chef, imp), "high");
+  assert.equal(strat.demon(s, imp), chef);
+
+  // A poisoned Spy sees nothing.
+  baron.poisoned = true;
+  assert.equal(strat.priorityLevel(s, chef, imp), null);
+  baron.poisoned = false;
+
+  // Cover: a less valuable good player instead.
+  s.r = () => 0;
+  assert.equal(strat.demon(s, imp), butler);
+});
+
+test("without a Spy, the Demon goes after the claims it has heard", () => {
+  const s = base("heard-kills");
+  const strat = new SimpleStrategy();
+  const [, chef, , , imp] = s.players;
+
+  chef.claim = "empath";
+  assert.equal(strat.priorityLevel(s, chef, imp), null);
+
+  strat.told(s, chef, imp);
+  assert.equal(strat.priorityLevel(s, chef, imp), "high");
+});
+
+// ── Your hand in a vote ─────────────────────────────────────
+
+test("a vote can wait for your hand, and a lowered hand doesn't vote", () => {
+  const s = base("lower-hand");
+  const e = new Engine(s);
+  const [human, , butler, baron] = s.players;
+
+  const waiting = e.nominate(butler.id, null);
+
+  assert.equal(waiting.pending, true);
+  assert.ok(s.pendingVote);
+  assert.throws(() => e.endDay(), /Finish the vote first/);
+
+  const result = e.castVotes(false);
+  const mine = result.records.find((r) => r.playerId === human.id);
+
+  assert.equal(mine.attempted, false);
+  assert.equal(s.pendingVote, null);
+  assert.ok(!s.voteHistory.at(-1).voterIds.includes(human.id));
+
+  // Raised (the default when nominating straight through), it votes.
+  const up = e.requestNomination(baron.id);
+
+  assert.equal(up.records.find((r) => r.playerId === human.id).attempted, true);
+});
+
+test("dead, you keep your ghost vote by lowering your hand", () => {
+  const s = base("ghost-hand");
+  const e = new Engine(s);
+  const [human, , butler, baron] = s.players;
+
+  human.alive = false;
+
+  e.requestNomination(butler.id, null);
+  e.castVotes(false);
+  assert.equal(human.ghost, true);
+  assert.equal(e.canVote(), true);
+
+  e.requestNomination(baron.id, null);
+  e.castVotes(true);
+  assert.equal(human.ghost, false);
+  assert.equal(e.canVote(), false);
+});
+
+// ── Cover stories, coming clean, distortion ─────────────────
+
+// A 7-player game (above COME_CLEAN_ALIVE) on Day 1.
+function coverGame(seed) {
+  const s = createState(script, 8, seed);
+
+  s.players = s.players.slice(0, 7);
+  s.seats = 7;
+  s.twins = null;
+  Object.assign(s, {
+    phase: "day",
+    night: 1,
+    day: 1,
+    winner: null,
+    publicLog: [],
+    privateLog: [],
+    audit: [],
+    auditId: 1,
+    talked: [],
+    talkDay: 1,
+    demonBluffs: [],
+  });
+
+  const roles = [
+    ["mayor", "good"],
+    ["empath", "good"],
+    ["soldier", "good"],
+    ["chef", "good"],
+    ["butler", "good"],
+    ["baron", "evil"],
+    ["imp", "evil"],
+  ];
+
+  s.players.forEach((p, i) => role(p, ...roles[i]));
+  return s;
+}
+
+test("good NPCs hide a valuable character, or bait the Demon with one", () => {
+  const s = coverGame("cover-pick");
+  const [, empath, soldier, chef] = s.players;
+  const strat = new SimpleStrategy();
+
+  s.r = () => 0; // always within the chance
+
+  const hide = strat.coverFor(s, empath);
+  const bait = strat.coverFor(s, soldier);
+
+  assert.equal(hide.kind, "hide");
+  assert.ok(["low", "avoid"].includes(DEMON_KILL_PRIORITY[hide.as] ?? "low"));
+  assert.equal(bait.kind, "bait");
+  assert.equal(DEMON_KILL_PRIORITY[bait.as], "high");
+  assert.equal(strat.coverFor(s, chef), null); // neither valuable nor bait
+
+  // Never a character in play.
+  const inPlay = s.players.flatMap((x) => [x.role, x.shown]);
+
+  assert.ok(!inPlay.includes(hide.as) && !inPlay.includes(bait.as));
+});
+
+test("a hider tells most people their cover, and those they trust the truth", () => {
+  const s = coverGame("cover-tell");
+  const [human, empath, soldier, , , , imp] = s.players;
+  const strat = new SimpleStrategy();
+
+  empath.cover = { kind: "hide", as: "recluse", night: 1, human: false };
+  empath.memories = [
+    { night: 1, role: "empath", text: "Empath number: 0.", targets: [soldier.id] },
+  ];
+
+  strat.told(s, empath, imp);
+  strat.told(s, empath, soldier); // vouched for by their 0
+
+  assert.equal(imp.toldMe[empath.id].claim, "recluse");
+  assert.ok(!(imp.heard ?? []).some((x) => x.source === "info"));
+  assert.equal(soldier.toldMe[empath.id].claim, "empath");
+
+  // You, this time, get the cover too (decided once).
+  const said = new Engine(s, strat).ask(empath.id);
+
+  assert.match(said, /^I claim Recluse\.\nI have no stored information\./);
+  assert.equal(claimTo(empath, human), "recluse");
+  assert.equal(claimTo(empath), null); // nothing in public
+});
+
+test("a nominated hider comes clean before the vote, on a card", () => {
+  const s = coverGame("cover-nominated");
+  const [, empath] = s.players;
+  const e = new Engine(s);
+
+  empath.cover = { kind: "hide", as: "recluse", night: 1 };
+  empath.memories = [{ night: 1, role: "empath", text: "Empath number: 0.", targets: [] }];
+  s.r = () => 0;
+
+  e.nominate(empath.id, null);
+
+  const card = s.phaseCards.at(-1);
+
+  assert.equal(card.kind, "nomination");
+  assert.equal(
+    card.lines[0],
+    `Day 1 — ${empath.label} comes clean: "I was hiding as the Recluse; I'm really the Empath. Night 1: My number is 0."`,
+  );
+  assert.equal(empath.cover, null);
+  assert.equal(claimTo(empath), "empath");
+  assert.ok(s.pendingVote); // the vote still waits for your hand
+});
+
+test("a nominated evil NPC may fake coming clean, once", () => {
+  const s = coverGame("cover-fake");
+  const baron = s.players[5];
+  const e = new Engine(s);
+
+  baron.claim = "chef";
+  s.r = () => 0;
+
+  e.nominate(baron.id);
+
+  assert.equal(DEMON_KILL_PRIORITY[baron.claim], "high");
+  assert.equal(claimTo(baron), baron.claim);
+  assert.ok(baron.cameClean.fake);
+  assert.ok(s.publicLog.some((x) => x.includes(`${baron.label} comes clean: "I was hiding as the Chef;`)));
+});
+
+test("a dead player with a cover story comes clean at dawn", () => {
+  const s = coverGame("cover-dead");
+  const [, , soldier] = s.players;
+  const e = new Engine(s);
+
+  soldier.cover = { kind: "bait", as: "fortuneteller", night: 1, memories: [] };
+  soldier.alive = false;
+  e.dawnComeClean();
+
+  assert.ok(
+    s.publicLog.some((x) =>
+      x.includes(`said I was the Fortune Teller to bait the Demon; I'm really the Soldier.`),
+    ),
+  );
+  assert.equal(soldier.cover, null);
+});
+
+test("good NPCs count a changed story against a player, less once they came clean", () => {
+  const s = coverGame("cover-story");
+  const [, empath, , chef] = s.players;
+  const strat = new SimpleStrategy();
+
+  chef.toldMe = { [empath.id]: { claim: "recluse", at: 1 } };
+  Object.assign(empath, { claimKnown: true, publicClaim: "empath", publicAt: 2 });
+
+  const before = strat.evidence(s, chef, empath);
+
+  assert.ok(before.reasons.some((x) => /told me they're the Recluse/.test(x)));
+
+  empath.cameClean = { day: 1, from: "recluse" };
+  assert.ok(strat.evidence(s, chef, empath).score < before.score);
+});
+
+test("an evil NPC distorts what the scapegoat told them, the same way each time", () => {
+  const s = coverGame("distort");
+  const [, , , chef, , baron] = s.players;
+  const strat = new SimpleStrategy();
+
+  s.scapegoat = chef.id;
+  baron.toldMe = { [chef.id]: { claim: "chef", at: 1 } };
+  s.r = () => 0;
+
+  const first = strat.passedOn(s, baron);
+
+  s.r = () => 0.99;
+  assert.deepEqual(strat.passedOn(s, baron), first);
+  assert.ok(!first[0].includes("the Chef."));
 });

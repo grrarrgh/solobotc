@@ -7,7 +7,7 @@ import {
   team,
   alignment,
 } from "./data.js";
-import { byId, pick, sample, shuffle } from "./util.js";
+import { byId, pick, sample, shuffle, claimHeard } from "./util.js";
 
 // Drunk: the Drunk themselves, anyone made drunk "from now on" (by a
 // Sweetheart's death or a Philosopher choosing their character), and anyone
@@ -852,8 +852,9 @@ function trueInfo(s, p, role, strat) {
 const INFO_ROLES = [...FIRST_NIGHT_INFO, ...ONGOING_INFO];
 
 // The good NPC the evil team agrees to frame. Kept until they die, then a new
-// one is chosen, preferring good NPCs who have publicly claimed an
-// information role (the voices the human is most likely to trust).
+// one is chosen, preferring good NPCs the evil team knows claim an
+// information role, in public or told one of them in private (the voices
+// the human is most likely to trust).
 //
 // A living Lunatic is always the scapegoat: the evil team knows who they are.
 export function scapegoat(s) {
@@ -874,7 +875,10 @@ export function scapegoat(s) {
     return current;
   }
 
-  const voices = good.filter((x) => x.claimKnown && INFO_ROLES.includes(x.claim));
+  const evilTeam = s.players.filter((x) => x.alignment === "evil");
+  const voices = good.filter((x) =>
+    [null, ...evilTeam].some((e) => INFO_ROLES.includes(claimHeard(x, e))),
+  );
   const next = pick(voices.length ? voices : good, s.r);
 
   s.scapegoat = next?.id ?? null;
