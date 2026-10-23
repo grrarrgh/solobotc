@@ -6,7 +6,7 @@ import {
 } from "./data.js";
 import { works, who, lean } from "./storyteller.js";
 import { heard, speak } from "./strategy.js";
-import { pick } from "./util.js";
+import { pick, whose, claimHeard } from "./util.js";
 
 // Onion Pies characters, mixed into Engine.prototype (see engine.js), so
 // `this` is the Engine.
@@ -147,8 +147,19 @@ export const onionPies = {
   // An NPC Pixie becomes "mad" about the Townsfolk they learned on Night 1:
   // from Day 1 they claim it (with made-up information to match; see
   // strategy ask()), so they can gain its ability.
+  //
+  // A Pixie who gained the ability in the night says so now (see
+  // pixieGains()).
   pixieMadness() {
     const s = this.s;
+
+    for (const p of s.players.filter((x) => x.pixieNews)) {
+      p.pixieNews = false;
+
+      if (p.alive) {
+        this.pixieAnnounces(p);
+      }
+    }
 
     for (const p of s.players.filter(
       (x) =>
@@ -168,7 +179,8 @@ export const onionPies = {
   // ── Death triggers ─────────────────────────────────────────
 
   // When the holder of a mad Pixie's character dies, a working Pixie gains
-  // their ability.
+  // their ability, and (an NPC) says in public they were the Pixie: now, or
+  // at dawn if it's night.
   pixieGains(dead) {
     for (const p of this.s.players.filter(
       (x) =>
@@ -188,23 +200,74 @@ export const onionPies = {
         )} ability.`,
         { playerId: p.id, role: dead.role },
       );
+
+      if (p.human) {
+        continue;
+      }
+
+      if (this.s.phase === "day") {
+        this.pixieAnnounces(p);
+      } else {
+        p.pixieNews = true;
+      }
     }
+  },
+
+  // A mad Pixie who gained the ability says in public they were the Pixie,
+  // and claims it from now on.
+  pixieAnnounces(p) {
+    const s = this.s;
+    const role = name(p.gained);
+    const said = ` says: "I was the Pixie, mad about being the ${role}. I now have the ${role} ability."`;
+
+    p.claim = "pixie";
+    this.claimPublicly(p);
+    s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
+    this.audit("pixie", `${p.label}${said}`, { playerId: p.id, role: p.gained });
   },
 
   // A player died by execution: each living Cannibal gains their ability.
   // If they were evil, the Cannibal is told a good ability (the one the
   // executee claimed, if any) and is poisoned until a good player dies by
   // execution. They don't learn the character, only whose ability it is.
+  //
+  // An evil player bluffing the Cannibal "gains" it too: the good character
+  // the executee claimed, as far as they know (else any good one), so their
+  // made-up information follows it from tonight (see bluffInfo()).
   cannibals(dead) {
     const s = this.s;
+    const goods = s.script.ids.filter(
+      (id) => alignment(id) === "good" && id !== "cannibal",
+    );
+
+    for (const b of s.players.filter(
+      (x) =>
+        x.alive &&
+        x !== dead &&
+        !x.human &&
+        x.alignment === "evil" &&
+        x.role !== "cannibal" &&
+        x.claim === "cannibal",
+    )) {
+      const said = claimHeard(dead, b);
+
+      b.bluffGained = goods.includes(said) ? said : pick(goods, s.r);
+      b.bluffGainedNight = s.night + 1;
+      b.cannibalFrom = dead.id;
+
+      this.audit(
+        "cannibal",
+        `${b.label} (bluffing Cannibal) says they have ${whose(dead)} ability: ${name(
+          b.bluffGained,
+        )}.`,
+        { playerId: b.id, fromId: dead.id, role: b.bluffGained, bluff: true },
+      );
+    }
 
     for (const c of s.players.filter(
       (x) => x.alive && x !== dead && x.role === "cannibal",
     )) {
       const evil = dead.alignment === "evil";
-      const goods = s.script.ids.filter(
-        (id) => alignment(id) === "good" && id !== "cannibal",
-      );
       const was = c.cannibalPoison;
 
       c.gained = evil
@@ -215,6 +278,7 @@ export const onionPies = {
       // A first-night ability (the Chef, the Librarian...) is used tonight.
       c.gainedNight = s.night + 1;
       c.cannibalPoison = evil ? `eating ${who(dead)}` : null;
+      c.cannibalFrom = dead.id;
 
       // Poisoned now; or, with a good player executed, no longer (unless
       // something else poisoned them).
@@ -228,7 +292,7 @@ export const onionPies = {
 
       this.audit(
         "cannibal",
-        `${c.label} (Cannibal) has ${dead.label}'s ability: ${name(c.gained)}${
+        `${c.label} (Cannibal) has ${whose(dead)} ability: ${name(c.gained)}${
           evil ? ", poisoned until a good player dies by execution" : ""
         }.`,
         { playerId: c.id, fromId: dead.id, role: c.gained, poisoned: evil },

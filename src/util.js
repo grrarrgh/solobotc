@@ -33,6 +33,13 @@ export const sample = (a, n, r = Math.random) => shuffle(a, r).slice(0, n);
 
 export const byId = (s, id) => s.players.find((x) => x.id === id);
 
+// A player's label as a possessive: "Player 4's", or "your" for you (whose
+// label is "You").
+export const whose = (p) => (p.human ? "your" : `${p.label}'s`);
+
+// The same, starting a sentence: "Player 4's", or "Your".
+export const Whose = (p) => (p.human ? "Your" : `${p.label}'s`);
+
 // A counter that orders what's said, in public and in private, so the
 // latest word wins (see claimTo(), heardAbout()).
 export const tick = (s) => (s.tick = (s.tick ?? 0) + 1);

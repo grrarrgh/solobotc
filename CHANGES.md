@@ -2,6 +2,16 @@
 
 Newest first.
 
+## Bug Fixes: NPC Nominations, Cannibal & Pixie Claims, "You's"
+
+- NPC nominations only happen once nominations are open. Before, if you used your last conversation and the day ended within NOMINATIONS_DELAY_MS (say, a Virgin execution), the delayed opening went off on the next day, so NPCs nominated before you'd talked to anyone. The delay now only opens nominations on the same day, and the engine refuses NPC nominations until they're open.
+- Cannibal bluffers: an evil player bluffing the Cannibal now "gains" the executee's ability too (the good character they claimed, as far as the bluffer knows; else any good one), and makes up information for it from that night, a first-night ability the night after, like a real Cannibal. Before, they never had any information after an execution. A Cannibal (real or bluffing) also says whose ability they have ("I have Player 7's ability, since they were executed.").
+- Pixie:
+  - A mad Pixie who dies before gaining the ability says so in public: "Player 9 reveals they were the Pixie, mad about being the Fortune Teller." Before, they went on claiming the character (next to their real Pixie information) after death.
+  - A mad Pixie who gains the ability (its holder died) says so in public, at once, or at dawn if it happened at night: 'Player 9 says: "I was the Pixie, mad about being the Fortune Teller. I now have the Fortune Teller ability."' They claim the Pixie from then on.
+  - With a Pixie on the script, two players claiming the same Townsfolk may just be a mad Pixie, so it counts for PIXIE_DOUBLE_CLAIM_FACTOR (0.4, in src/data.js) of the usual weight, and the reason says "(a Pixie could explain it)". A mad Pixie no longer holds it against the real one: they know they're out there.
+- log.txt: lines about you say "Your false information..." and "your Sailor choice", not "You's".
+
 ## New Features: NPC Nominations, Telling NPCs, Second-Hand Claims, Who Lied to You
 
 - Nominations open once a day: when you've had all your conversations, they open by themselves after NOMINATIONS_DELAY_MS (2000, in src/data.js), with a "⚖️ Nominations" card ("Nominations are open."). Nominating (or asking for a nomination, or End day) before then asks first: "Start nominations? You won't be able to talk to any more players today." (Start nominations / Keep talking). Once they're open, there are no more conversations that day. End day before nominations opens them; press it again to end the day.

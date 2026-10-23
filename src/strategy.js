@@ -42,6 +42,7 @@ import {
   COME_CLEAN_ALIVE,
   DISTORT_CHANCE,
   NPC_NOMINATE_EVIDENCE,
+  PIXIE_DOUBLE_CLAIM_FACTOR,
 } from "./data.js";
 import {
   ability,
@@ -528,19 +529,28 @@ export class SimpleStrategy {
     const twins = (a, b) => isTwin(s, a) && isTwin(s, b);
     const claim = claimTo(t, p);
 
+    // (With a Pixie on the script, a double-claimed Townsfolk may just be
+    // a mad Pixie: it counts for less. A mad Pixie knows the real one is out
+    // there, so they don't hold it against them.)
+    const pixie =
+      s.script.ids.includes("pixie") && team(claim) === "townsfolk"
+        ? PIXIE_DOUBLE_CLAIM_FACTOR
+        : 1;
+    const maybe = pixie < 1 ? " (a Pixie could explain it)" : "";
+
     if (claim && !twins(p, t)) {
-      if (claim === p.claim) {
+      if (claim === p.claim && !(p.pixieMad && !p.gained)) {
         add(
-          W.claimsMyCharacter,
-          `they claim the ${name(claim)}, but I'm the ${name(claim)}`,
+          W.claimsMyCharacter * pixie,
+          `they claim the ${name(claim)}, but I'm the ${name(claim)}${maybe}`,
         );
       }
 
       for (const x of s.players) {
         if (x !== t && x !== p && claimTo(x, p) === claim && !twins(x, t)) {
           add(
-            W.doubleClaim,
-            `they and ${who(x)} both claim the ${name(claim)}`,
+            W.doubleClaim * pixie,
+            `they and ${who(x)} both claim the ${name(claim)}${maybe}`,
           );
         }
       }
@@ -743,11 +753,32 @@ export class SimpleStrategy {
     return this.infoOpinion(s, p) ?? general;
   }
 
-  // Once dead, the Mutant (no longer at risk of execution) can claim to be
-  // the Mutant, and so can an evil player who took the Mutant bluff. Other
-  // evil players stick to their bluffs.
+  // A Cannibal (or an evil player bluffing one) says whose ability they
+  // have: "I have Player 7's ability, since they were executed." (A real
+  // Cannibal isn't told the character.)
+  cannibalLine(s, p, claim) {
+    const from = claim === "cannibal" && byId(s, p.cannibalFrom);
+
+    return from
+      ? `I have ${from.human ? "your" : `${from.label}'s`} ability, since they were executed.`
+      : null;
+  }
+
+  // The character a dead player now admits to, if any (else null): the
+  // Mutant (no longer at risk of execution), and so does an evil player who
+  // took the Mutant bluff; a mad Pixie who never gained the ability (the
+  // madness can't matter any more). Other evil players stick to their
+  // bluffs.
   revealsWhenDead(p) {
-    return !p.alive && (p.role === "mutant" || p.bluff === "mutant");
+    if (p.alive) {
+      return null;
+    }
+
+    if (p.role === "mutant" || p.bluff === "mutant") {
+      return "mutant";
+    }
+
+    return p.role === "pixie" && p.pixieMad && !p.gained ? "pixie" : null;
   }
 
   // "I haven't used my X ability yet." for a living NPC whose claimed
@@ -1152,6 +1183,12 @@ export class SimpleStrategy {
           `I woke up as the ${name(c.to)} on Night ${c.night}; before that I was the ${name(c.from)}.`,
       ),
       twin && `${twin.label} is my twin, and I am the good twin.`,
+      !mad && !hidden && this.cannibalLine(s, p, a.claim),
+      !mad &&
+        !hidden &&
+        a.claim === "pixie" &&
+        p.gained &&
+        `I have the ${name(p.gained)} ability.`,
       details,
       !mad && !hidden && this.unusedAbility(copy ? copy.twin : p),
       opinion.text,

@@ -383,6 +383,11 @@ export const EVIDENCE_WEIGHT = {
   passedOnOtherwise: 0.5, // passed on a claim that isn't what that player told me
 };
 
+// With a Pixie on the script, two players claiming the same Townsfolk may
+// just be a mad Pixie (see onion.js), so a double claim of a Townsfolk
+// (claimsMyCharacter, doubleClaim) counts this much of its usual weight.
+export const PIXIE_DOUBLE_CLAIM_FACTOR = 0.4;
+
 // NPC nominations: once nominations open, an NPC whose suspect has at least
 // this much evidence against them (see EVIDENCE_WEIGHT) nominates them,
 // saying why: strongest case first, at most half the living players

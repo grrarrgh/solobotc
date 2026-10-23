@@ -1571,12 +1571,22 @@ $("ask").onclick = () => {
     return;
   }
 
-  // Your last conversation: nominations open by themselves, a moment later.
+  // Your last conversation: nominations open by themselves, a moment later
+  // (only if it's still that day, and they haven't opened already).
   if (!e.talkStatus().remaining) {
     const game = s;
+    const day = s.day;
 
     setTimeout(() => {
-      if (s === game && !s.nominationsOpen && !voteAnim && !nominating) {
+      if (
+        s === game &&
+        s.phase === "day" &&
+        s.day === day &&
+        !s.winner &&
+        !s.nominationsOpen &&
+        !voteAnim &&
+        !nominating
+      ) {
         openNominations(false);
       }
     }, NOMINATIONS_DELAY_MS);
@@ -1659,7 +1669,7 @@ async function openNominations(ask = true, then = true) {
 // NPCs make their nominations, one vote at a time (see engine
 // npcNomination()), each after any card is closed.
 async function npcNominations() {
-  if (nominating) {
+  if (nominating || !s.nominationsOpen) {
     return;
   }
 

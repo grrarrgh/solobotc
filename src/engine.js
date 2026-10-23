@@ -1243,14 +1243,20 @@ export class Engine {
   // Abilities that trigger "when you learn that you died".
   learnsDeath(p) {
     // A dead Mutant (or Mutant bluffer) is no longer at risk of execution,
-    // so they reveal it.
-    if (!p.human && this.strat.revealsWhenDead?.(p) && p.claim !== "mutant") {
-      p.claim = "mutant";
+    // and a dead mad Pixie's madness no longer matters, so they reveal it.
+    const reveal = !p.human && this.strat.revealsWhenDead?.(p);
+
+    if (reveal && p.claim !== reveal) {
+      // (A Pixie says what they were mad about being.)
+      const what = `the ${name(reveal)}${
+        reveal === "pixie" ? `, mad about being the ${name(p.pixieRole)}` : ""
+      }`;
+
+      p.claim = reveal;
+      p.cover = null;
       this.claimPublicly(p);
-      this.s.publicLog.push(
-        `Day ${this.s.day} — ${p.label} reveals they were the Mutant.`,
-      );
-      this.audit("mutant", `${p.label} revealed they were the Mutant.`, {
+      this.s.publicLog.push(`Day ${this.s.day} — ${p.label} reveals they were ${what}.`);
+      this.audit(reveal, `${p.label} revealed they were ${what}.`, {
         playerId: p.id,
       });
     }
@@ -1336,9 +1342,11 @@ export class Engine {
 
     s.talked.push(id);
 
-    // A dead Mutant (or Mutant bluffer) now claims the Mutant.
-    if (this.strat.revealsWhenDead?.(p)) {
-      p.claim = "mutant";
+    // A dead Mutant (or Mutant bluffer, or mad Pixie) now says so.
+    const reveal = this.strat.revealsWhenDead?.(p);
+
+    if (reveal) {
+      p.claim = reveal;
     }
 
     // (In private: only you learn their claim; see claimTo().)
@@ -1449,15 +1457,13 @@ export class Engine {
   // nominated today, of a nominee nobody has; at most half the living
   // players (rounded down) a day. They say why, on the card before the
   // vote, and the vote waits for your hand (see runNomination()). Null if
-  // nobody nominates.
+  // nobody nominates, or nominations aren't open (see openNominations()).
   npcNomination() {
     const s = this.s;
 
-    if (s.phase !== "day" || s.winner || s.pendingVote) {
+    if (!s.nominationsOpen || s.phase !== "day" || s.winner || s.pendingVote) {
       return null;
     }
-
-    this.openNominations();
 
     if ((s.npcNominations ?? 0) >= Math.floor(this.alive().length / 2)) {
       return null;
@@ -1512,9 +1518,11 @@ export class Engine {
         .slice(0, limit);
 
       for (const t of picks) {
-        // (A dead Mutant now claims the Mutant, as they would to you.)
-        if (this.strat.revealsWhenDead?.(t)) {
-          t.claim = "mutant";
+        // (A dead Mutant, or mad Pixie, now says so, as they would to you.)
+        const reveal = this.strat.revealsWhenDead?.(t);
+
+        if (reveal) {
+          t.claim = reveal;
         }
 
         this.strat.told(s, t, p);

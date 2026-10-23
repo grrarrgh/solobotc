@@ -7,7 +7,7 @@ import {
   team,
   alignment,
 } from "./data.js";
-import { byId, pick, sample, shuffle, claimHeard } from "./util.js";
+import { byId, pick, sample, shuffle, claimHeard, whose, Whose } from "./util.js";
 
 // Drunk: the Drunk themselves, anyone made drunk "from now on" (by a
 // Sweetheart's death or a Philosopher choosing their character), and anyone
@@ -430,7 +430,7 @@ export function infoMode(s, p, deadOk = false) {
     p.alive &&
     !(team(p.role) === "townsfolk" && vortoxActive(s))
   ) {
-    leanNote(s, `${p.label}'s false information is random, not framing.`);
+    leanNote(s, `${Whose(p)} false information is random, not framing.`);
   }
 
   if (team(p.role) === "townsfolk" && vortoxActive(s)) {
@@ -474,7 +474,7 @@ export function sageInfo(s, p, mode) {
       ? [
           d,
           pick(
-            steer(s, others, killHelps, `the other player ${p.label}'s Sage sees`),
+            steer(s, others, killHelps, `the other player ${whose(p)} Sage sees`),
             s.r,
           ),
         ]
@@ -741,7 +741,7 @@ function trueInfo(s, p, role, strat) {
         nameable(s, p).filter((x) => x.id !== real.id),
         (x) =>
           role === "investigator" ? killHelps(x) : x.alignment,
-        `the other player ${p.label}'s ${name(role)} sees`,
+        `the other player ${whose(p)} ${name(role)} sees`,
       ),
       s.r,
     );
@@ -1442,9 +1442,20 @@ export function madInfo(s, p, role, strat) {
 // the Demon's claim when their role allows it; otherwise a working Spy has
 // seen the Grimoire and tells the truth, and every other evil player lies.
 export function bluffInfo(s, p, strat) {
-  // A Philosopher bluffer reports for the character they "gained".
-  const role = p.claim === "philosopher" ? p.bluffGained : p.claim;
+  // A Philosopher or Cannibal bluffer reports for the character they
+  // "gained" (nothing until they have one); a first-night one the night
+  // after they gain it, as a real Cannibal would.
+  const gains = ["philosopher", "cannibal"].includes(p.claim);
+  const role = gains ? p.bluffGained : p.claim;
   const spy = p.role === "spy" && works(p);
+  const gainedTonight =
+    p.claim === "cannibal" &&
+    p.bluffGainedNight === s.night &&
+    FIRST_NIGHT.includes(role);
+
+  if (!role) {
+    return null;
+  }
 
   if (role === "snakecharmer") {
     const t = strat.snake(s, p);
@@ -1523,7 +1534,7 @@ export function bluffInfo(s, p, strat) {
     return guess ? gamblerInfo(s, guess.target, guess.role) : null;
   }
 
-  if (!actsTonight(role, s.night)) {
+  if (!actsTonight(role, s.night) && !gainedTonight) {
     return null;
   }
 

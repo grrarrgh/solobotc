@@ -12,6 +12,7 @@ import {
   FIRST_NIGHT_INFO_SHARE,
   ONGOING_INFO_SHARE,
   EVIDENCE_WEIGHT,
+  PIXIE_DOUBLE_CLAIM_FACTOR,
   HUMAN_NOMINATION_BONUS,
   GOOD_VOTE_CHANCE,
   GOOD_VOTE_EVIDENCE_STEP,
@@ -3187,10 +3188,10 @@ test("once dead, a Mutant (or Mutant bluffer) claims the Mutant; other evil keep
   assert.equal(mutant.claim, "mutant");
 
   // The Baron took the Mutant bluff: now dead, they claim it.
-  assert.equal(strat.revealsWhenDead(baron), true);
+  assert.equal(strat.revealsWhenDead(baron), "mutant");
 
   // The Imp sticks to their bluff, dead or alive.
-  assert.equal(strat.revealsWhenDead(imp), false);
+  assert.equal(strat.revealsWhenDead(imp), null);
   assert.ok(strat.ask(s, imp).startsWith("I claim Savant."));
 });
 
@@ -6385,4 +6386,122 @@ test("an evil NPC distorts what the scapegoat told them, the same way each time"
   s.r = () => 0.99;
   assert.deepEqual(strat.passedOn(s, baron), first);
   assert.ok(!first[0].includes("the Chef."));
+});
+
+// ── Bug fixes: NPC nominations, Cannibal bluffs, "You's" ────
+
+test("NPCs only nominate once nominations are open", () => {
+  const s = coverGame("npc-nominate-open");
+  const e = new Engine(s);
+  const strat = e.strat;
+  const [, empath, , chef] = s.players;
+
+  // A strong case, ready to nominate.
+  strat.nomination = (_, p) =>
+    p === empath ? { target: chef, score: 5, reasons: ["my information points at them"] } : null;
+
+  assert.equal(e.npcNomination(), null);
+  assert.ok(!s.nominationsOpen);
+  assert.equal(s.nominated.length, 0);
+
+  e.openNominations();
+
+  const r = e.npcNomination();
+
+  assert.ok(r.pending);
+  assert.ok(s.publicLog.includes(`Day 1 — ${empath.label} nominates ${chef.label}: "My information points at them."`));
+});
+
+test("an evil Cannibal bluffer gains the executee's claimed ability, and bluffs with it", () => {
+  const { s, p, strat, e } = opNight("cannibal-bluff", [null, null, "chef"]);
+  const [, , chef, baron] = p;
+
+  baron.claim = "cannibal";
+  baron.bluff = "cannibal";
+  strat.demon = () => null;
+
+  e.night();
+  s.phase = "day";
+  e.claimPublicly(chef); // the town knows them as the Chef
+  e.execute(chef);
+
+  assert.equal(baron.bluffGained, "chef");
+  assert.equal(baron.cannibalFrom, chef.id);
+
+  // The next night they "learn" a Chef number (a first-night ability).
+  s.night++;
+  e.night();
+  assert.ok(baron.memories.some((m) => m.night === 2 && /^Chef number/.test(m.text)));
+
+  const said = e.strat.ask(s, baron);
+
+  assert.match(said, /^I claim Cannibal\./);
+  assert.ok(said.includes(`I have ${chef.label}'s ability, since they were executed.`));
+});
+
+test("log lines about you say 'your', not 'You's'", () => {
+  for (const seed of ["you-1", "you-2", "you-3", "you-4"]) {
+    const { e } = playOut(op, 10, seed);
+
+    assert.ok(!e.debugLog().includes("You's"), seed);
+  }
+});
+
+test("a dead mad Pixie admits to being the Pixie", () => {
+  const { s, p, e } = opNight("pixie-dead", [null, "pixie", "fortuneteller"]);
+  const [, pixie] = p;
+
+  Object.assign(pixie, { pixieMad: true, pixieRole: "fortuneteller", claim: "fortuneteller" });
+  s.phase = "day";
+  s.day = 1;
+  e.execute(pixie);
+
+  assert.equal(pixie.claim, "pixie");
+  assert.ok(
+    s.publicLog.includes(
+      `Day 1 — ${pixie.label} reveals they were the Pixie, mad about being the Fortune Teller.`,
+    ),
+  );
+});
+
+test("with a Pixie on the script, a double-claimed Townsfolk counts for less", () => {
+  const { s, p, strat } = opNight("pixie-double", [null, "fortuneteller", "chef"]);
+  const [, ft, chef, baron] = p;
+
+  s.phase = "day";
+  baron.claim = "fortuneteller";
+  ft.toldMe = { [baron.id]: { claim: "fortuneteller", at: 1 } };
+
+  const withPixie = strat.evidence(s, ft, baron);
+
+  assert.equal(withPixie.score, EVIDENCE_WEIGHT.claimsMyCharacter * PIXIE_DOUBLE_CLAIM_FACTOR);
+  assert.match(withPixie.reasons[0], /a Pixie could explain it/);
+
+  s.script = { ...s.script, ids: s.script.ids.filter((id) => id !== "pixie") };
+  assert.equal(strat.evidence(s, ft, baron).score, EVIDENCE_WEIGHT.claimsMyCharacter);
+
+  // A mad Pixie knows the real one is out there.
+  s.script = { ...s.script, ids: [...s.script.ids, "pixie"] };
+  Object.assign(chef, { role: "pixie", pixieMad: true, pixieRole: "fortuneteller", claim: "fortuneteller" });
+  chef.toldMe = { [ft.id]: { claim: "fortuneteller", at: 1 } };
+  assert.equal(strat.evidence(s, chef, ft).score, 0);
+});
+
+test("a Pixie who gains the ability says in public they were the Pixie", () => {
+  const { s, p, e } = opNight("pixie-gains", [null, "pixie", "fortuneteller"]);
+  const [, pixie, ft] = p;
+
+  Object.assign(pixie, { pixieMad: true, pixieRole: "fortuneteller", claim: "fortuneteller" });
+  s.phase = "day";
+  s.day = 1;
+  e.execute(ft);
+
+  assert.equal(pixie.gained, "fortuneteller");
+  assert.equal(claimTo(pixie), "pixie");
+  assert.ok(
+    s.publicLog.includes(
+      `Day 1 — ${pixie.label} says: "I was the Pixie, mad about being the Fortune Teller. I now have the Fortune Teller ability."`,
+    ),
+  );
+  assert.match(e.strat.ask(s, pixie), /^I claim Pixie\.\n[\s\S]*I have the Fortune Teller ability\./);
 });

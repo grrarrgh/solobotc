@@ -27,7 +27,7 @@ import {
   choiceInfo,
   gossipInfo,
 } from "./storyteller.js";
-import { pick } from "./util.js";
+import { pick, whose, Whose } from "./util.js";
 
 // Minions keep acting after death if the Vigormortis killed them.
 const acts = (x) => x.alive || x.vigor;
@@ -281,7 +281,7 @@ export const badMoonRising = {
         "sailor",
         `The Storyteller makes ${
           drunk ? drunk.label : "nobody"
-        } drunk until dusk (${sailor.label}'s Sailor choice)${why}.`,
+        } drunk until dusk (${whose(sailor)} Sailor choice)${why}.`,
         { actorId: sailor.id, targetId: target.id, drunkId: drunk?.id ?? null },
       );
     }
@@ -336,7 +336,7 @@ export const badMoonRising = {
       s,
       [sailor, target],
       (x) => (x === target ? killHelps(target) : target.alignment),
-      `who ${sailor.label}'s Sailor choice makes drunk`,
+      `who ${whose(sailor)} Sailor choice makes drunk`,
     );
 
     return {
@@ -788,7 +788,7 @@ export const badMoonRising = {
 
       this.audit(
         "gossip",
-        `${p.label}'s Gossip statement was true: ${
+        `${Whose(p)} Gossip statement was true: ${
           t ? `${t.label} dies` : "nobody can die"
         }.`,
         { actorId: p.id, targetId: t?.id ?? null },
@@ -1154,7 +1154,7 @@ export const badMoonRising = {
     }
 
     s.minstrelUntil = s.night + 1;
-    s.minstrelBy = `${who(m)}, after ${p.label}'s execution`;
+    s.minstrelBy = `${who(m)}, after ${whose(p)} execution`;
 
     for (const x of s.players.filter((y) => y.role !== "minstrel")) {
       x.drunkTonight = true;
