@@ -1051,7 +1051,12 @@ input {
   display: none;
 }
 
-/* Nominate and Request nomination: their own row, at the bottom. */
+/* Nominate and Request nomination: their own row, at the bottom (once
+   nominations have started). */
+.nomination-controls[hidden] {
+  display: none;
+}
+
 .nomination-controls {
   display: flex;
   flex-wrap: wrap;

@@ -11,7 +11,6 @@ import {
   VOTE_COUNT_DELAY_MS,
   VOTE_TICK_MS,
   HAND_WAIT_MS,
-  NOMINATIONS_DELAY_MS,
   CLAIM_ALERT_HOLD_MS,
   CLAIM_ALERT_FADE_MS,
   PERF_LOGGING,
@@ -1347,8 +1346,8 @@ function draw() {
     h.alive &&
     h.savantDay !== s.day
   );
-  // (Gone once you've asked them today.)
-  $("ask").hidden = !t || talk.already;
+  // (Gone once you've asked them today, or nominations have started.)
+  $("ask").hidden = !t || talk.already || s.nominationsOpen;
   $("ask").disabled = !t || !talk.remaining || s.nominationsOpen;
   // The end of the conversation you're in: Share My Info (once a day, before
   // nominations open) and Leave conversation.
@@ -1363,6 +1362,14 @@ function draw() {
   // Dead players can be nominated too.
   const blocked = !t || e.nominatedToday(t.id) || !!voteAnim || nominating;
 
+  // Nominations wait for you to start them (Start Nominations); then you
+  // can nominate, and end the day.
+  const open = s.phase === "day" && s.nominationsOpen;
+
+  $("start-nominations").hidden = open || s.phase !== "day";
+  $("start-nominations").disabled = !!voteAnim || nominating;
+  $("nomination-controls").hidden = !open;
+  $("pass").hidden = !open;
   $("nominate").hidden = !h.alive;
   $("nominate").disabled = blocked || s.dayNominators.includes(h.id);
   $("request-nomination").hidden = false;
@@ -1568,28 +1575,6 @@ $("ask").onclick = () => {
     render();
   } catch (err) {
     $("answer").textContent = err.message;
-    return;
-  }
-
-  // Your last conversation: nominations open by themselves, a moment later
-  // (only if it's still that day, and they haven't opened already).
-  if (!e.talkStatus().remaining) {
-    const game = s;
-    const day = s.day;
-
-    setTimeout(() => {
-      if (
-        s === game &&
-        s.phase === "day" &&
-        s.day === day &&
-        !s.winner &&
-        !s.nominationsOpen &&
-        !voteAnim &&
-        !nominating
-      ) {
-        openNominations(false);
-      }
-    }, NOMINATIONS_DELAY_MS);
   }
 };
 
@@ -1701,16 +1686,17 @@ async function npcNominations() {
 // Your nomination (or request): nominations open first (asking, if you
 // could still talk), then your vote, then any NPC nominations.
 async function yourNomination(fn) {
-  const id = selectedPlayerId;
-
-  if (!(await openNominations(true, false))) {
+  if (!s.nominationsOpen) {
     return;
   }
 
-  selectedPlayerId = id;
-  await runVote(() => fn(id));
+  await runVote(() => fn(selectedPlayerId));
   await npcNominations();
 }
+
+// Start Nominations: the nomination phase begins (asking first if you could
+// still talk to someone), and NPCs make theirs.
+$("start-nominations").onclick = () => openNominations();
 
 // Your Good / Evil mark on the selected player.
 document.querySelectorAll("#mark [data-guess]").forEach((b) => {
@@ -1790,14 +1776,7 @@ $("savant").onclick = () => {
   }
 };
 
-$("pass").onclick = async () => {
-  // Nominations come before the end of the day: this opens them (asking,
-  // if you could still talk), and the NPCs nominate; then End day again.
-  if (!s.nominationsOpen) {
-    await openNominations();
-    return;
-  }
-
+$("pass").onclick = () => {
   try {
     e.endDay();
     selectedPlayerId = null;

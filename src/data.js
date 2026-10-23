@@ -504,10 +504,6 @@ export const COURTIER_CORRECT_CHANCE = 0.35;
 // and nominee before the large hand starts counting votes.
 export const VOTE_COUNT_DELAY_MS = 500;
 
-// How long (in ms) after your last conversation of the day before
-// nominations open by themselves.
-export const NOMINATIONS_DELAY_MS = 2000;
-
 // Vote: how long (in ms) you have to lower your hand (it starts raised)
 // before the votes are counted. Skipped when you can't vote (dead, with your
 // ghost vote spent).

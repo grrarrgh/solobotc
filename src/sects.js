@@ -24,6 +24,7 @@ import {
   snakeInfo,
   madInfo,
   who,
+  bluffing,
 } from "./storyteller.js";
 import { pick } from "./util.js";
 
@@ -689,14 +690,15 @@ export const sectsAndViolets = {
   },
 
   // The night after juggling, the Juggler learns how many guesses were
-  // right. An evil Juggler bluffer "learns" a number too.
+  // right. A Juggler bluffer "learns" a number too.
   jugglerNight() {
     const s = this.s;
 
     for (const p of s.players.filter((x) => x.juggle?.night === s.night)) {
       const { guesses } = p.juggle;
 
-      if (p.alignment === "good") {
+      // (A bluffer, even a good one such as a mad Pixie, makes it up.)
+      if (ability(p) === "juggler" && p.alignment === "good") {
         this.remember(p, jugglerInfo(s, guesses, infoMode(s, p)));
       } else {
         const spy = p.role === "spy" && works(p);
@@ -743,7 +745,7 @@ export const sectsAndViolets = {
     }
   },
 
-  // NPC Savants (and evil Savant bluffers) visit the Storyteller each day.
+  // NPC Savants (and Savant bluffers; see bluffing()) visit the Storyteller each day.
   npcSavants() {
     const s = this.s;
 
@@ -752,12 +754,11 @@ export const sectsAndViolets = {
         !x.human &&
         x.alive &&
         x.savantDay !== s.day &&
-        (ability(x) === "savant" ||
-          (x.alignment === "evil" && x.claim === "savant")),
+        (ability(x) === "savant" || bluffing(x, "savant")),
     )) {
       p.savantDay = s.day;
 
-      if (p.alignment === "good") {
+      if (ability(p) === "savant" && p.alignment === "good") {
         this.remember(p, savantInfo(s, p, infoMode(s, p)));
       } else {
         const spy = p.role === "spy" && works(p);
@@ -791,7 +792,7 @@ export const sectsAndViolets = {
     return info.text;
   },
 
-  // On Day 1, NPC Jugglers (and evil Juggler bluffers) publicly guess up to 5
+  // On Day 1, NPC Jugglers (and Juggler bluffers) publicly guess up to 5
   // players' characters.
   npcJugglers() {
     const s = this.s;
@@ -803,8 +804,7 @@ export const sectsAndViolets = {
         !x.human &&
         x.alive &&
         !x.juggled &&
-        (ability(x) === "juggler" ||
-          (x.alignment === "evil" && x.claim === "juggler")),
+        (ability(x) === "juggler" || bluffing(x, "juggler")),
     )) {
       const guesses = this.strat.juggle(s, p);
 
@@ -844,11 +844,7 @@ export const sectsAndViolets = {
     // evil Sage bluffer "learns" a false pair (true for the Spy).
     if (cause === "demon" && ability(p) === "sage") {
       this.remember(p, sageInfo(s, p, infoMode(s, p, true)));
-    } else if (
-      cause === "demon" &&
-      p.alignment === "evil" &&
-      p.claim === "sage"
-    ) {
+    } else if (cause === "demon" && bluffing(p, "sage")) {
       this.rememberBluff(
         p,
         sageInfo(s, p, p.role === "spy" && !p.poisoned ? "truth" : "lie"),
@@ -919,7 +915,7 @@ export const sectsAndViolets = {
 
     if (
       !p.human &&
-      (p.role === "klutz" || (p.alignment === "evil" && p.claim === "klutz"))
+      (p.role === "klutz" || bluffing(p, "klutz"))
     ) {
       this.klutz(p, p.role === "klutz" && sober);
     }

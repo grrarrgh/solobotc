@@ -26,6 +26,7 @@ import {
   who,
   choiceInfo,
   gossipInfo,
+  bluffing,
 } from "./storyteller.js";
 import { pick, whose, Whose } from "./util.js";
 
@@ -932,9 +933,7 @@ export const badMoonRising = {
         !x.human &&
         x.alive &&
         x.gossipDay !== s.day &&
-        (ability(x) === "gossip" ||
-          ((x.alignment === "evil" || x.role === "lunatic") &&
-            x.claim === "gossip")),
+        (ability(x) === "gossip" || bluffing(x, "gossip")),
     )) {
       const said = this.strat.gossip(s, p, late);
 

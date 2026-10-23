@@ -24,10 +24,10 @@ picks a new one.
   choice, pick player(s) in the town square and press **Select**.
 - **Day:** click a player to **Ask** them, in private, what they claim and think
   (and what other players have told them); then **Share My Info** (your
-  character and what you've learned) or **Leave conversation**. Once you've used your conversations, nominations open,
-  and NPCs nominate the players they strongly suspect, saying why. You can
-  **Nominate** a player, or **Request nomination** (ask someone else to
-  nominate them). Before a vote, anyone who decides to come clean about a cover story
+  character and what you've learned) or **Leave conversation**. When you're
+  done talking, press **Start Nominations**: NPCs nominate the players they
+  strongly suspect, saying why, and you can **Nominate** a player, or
+  **Request nomination** (ask someone else to nominate them). Before a vote, anyone who decides to come clean about a cover story
   says so on a card; click anywhere to continue. Your hand goes up for the
   vote unless you press **Lower hand** in the few seconds before the votes
   are counted. NPCs can lie, good ones included: some hide a valuable
@@ -59,8 +59,7 @@ comment explaining it. These include:
 - how often good NPCs hide or bait (`HIDE_CHANCE`, `BAIT_CHANCE`), when they
   come clean (`COME_CLEAN_*`), and how often evil NPCs fake it or lie about
   what they heard (`FAKE_CLEAN_CHANCE`, `DISTORT_CHANCE`);
-- when nominations open (`NOMINATIONS_DELAY_MS`) and how sure an NPC must be
-  to nominate (`NPC_NOMINATE_EVIDENCE`);
+- how sure an NPC must be to nominate (`NPC_NOMINATE_EVIDENCE`);
 - the vote animation speed (`VOTE_COUNT_DELAY_MS`, `VOTE_TICK_MS`), and how
   long you have to lower your hand (`HAND_WAIT_MS`);
 - the characters the human can't be dealt (`FORBIDDEN_HUMAN`).

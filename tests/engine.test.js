@@ -6505,3 +6505,29 @@ test("a Pixie who gains the ability says in public they were the Pixie", () => {
   );
   assert.match(e.strat.ask(s, pixie), /^I claim Pixie\.\n[\s\S]*I have the Fortune Teller ability\./);
 });
+
+test("a mad Pixie or the Lunatic acts out a claimed character, to no effect", () => {
+  const { s, p, strat, e } = opNight("pixie-slayer", [null, "pixie", "slayer"]);
+  const [, pixie, slayer, baron, imp] = p;
+
+  Object.assign(pixie, { pixieMad: true, pixieRole: "slayer", claim: "slayer" });
+  Object.assign(slayer, { shotUsed: true }); // (the real one has shot)
+  strat.slay = (_, x) => (x === pixie ? imp : null);
+  s.phase = "day";
+  s.day = 3;
+
+  e.npcShots();
+
+  assert.equal(pixie.shotUsed, true);
+  assert.equal(imp.alive, true); // no effect
+  assert.ok(s.publicLog.includes(`Day 3 — ${pixie.label} claims Slayer and shoots ${imp.label}.`));
+
+  // The Lunatic bluffing the Artist asks, and hears made-up information.
+  role(baron, "lunatic", "good");
+  baron.claim = "artist";
+  strat.artist = (_, x) => (x === baron ? { targets: [imp.id], question: "demon" } : null);
+  e.npcArtists();
+
+  assert.equal(baron.artistUsed, true);
+  assert.ok(baron.memories.some((m) => m.role === "artist" && m.functioning === false));
+});

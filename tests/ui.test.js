@@ -75,6 +75,7 @@ test("a Request nomination button is wired to the engine", () => {
 
 test("a vote waits for you to lower your hand before counting", () => {
   assert.match(app, /e\.nominate\(id, null\)/);
+  assert.match(app, /\$\("start-nominations"\)\.onclick/);
   assert.match(app, /handChoice\(c\)/);
   assert.match(app, /e\.castVotes\(hand\)/);
   assert.match(app, /HAND_WAIT_MS/);
@@ -85,7 +86,8 @@ test("nominations open after your conversations, with a confirm if you start ear
   assert.match(html, /id="confirm-dialog"/);
   assert.match(html, /id="confirm-yes"[^>]*>Start nominations</);
   assert.match(html, /id="confirm-no"[^>]*>Keep talking</);
-  assert.match(app, /NOMINATIONS_DELAY_MS/);
+  assert.match(html, /id="start-nominations"[^>]*>Start Nominations</);
+  assert.doesNotMatch(app, /setTimeout\([^)]*openNominations/);
   assert.match(app, /e\.openNominations\(\)/);
   assert.match(app, /e\.npcNomination\(\)/);
   assert.match(app, /Nominations are open/);
@@ -138,6 +140,9 @@ test("nominations animate clock hands, mark with a skull, and End day executes",
   assert.match(css, /\.circle\.voting \.clocktower/);
   assert.match(html, /id="block-status"/);
   assert.doesNotMatch(html, /id="request-nomination" hidden/);
+  // Nominate and Request nomination only once nominations have started.
+  assert.match(html, /id="nomination-controls" class="nomination-controls" hidden/);
+  assert.match(css, /\.nomination-controls\[hidden\]/);
 });
 
 test("game over: the status says Game Over!, and the logs collapse", () => {

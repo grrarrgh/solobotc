@@ -31,6 +31,7 @@ import {
   lean,
   leanText,
   madInfo,
+  bluffing,
 } from "./storyteller.js";
 import {
   SimpleStrategy,
@@ -822,14 +823,12 @@ export class Engine {
     );
   }
 
-  // At dawn, NPC Artists (and evil NPCs bluffing Artist) ask their question.
+  // At dawn, NPC Artists (and NPCs bluffing Artist; see bluffing()) ask their question.
   npcArtists() {
     const s = this.s;
 
     for (const p of s.players) {
-      const claimsArtist =
-        ability(p) === "artist" ||
-        (p.alignment === "evil" && p.claim === "artist");
+      const claimsArtist = ability(p) === "artist" || bluffing(p, "artist");
 
       if (s.winner || p.human || !p.alive || p.artistUsed || !claimsArtist) {
         continue;
@@ -843,7 +842,7 @@ export class Engine {
 
       p.artistUsed = true;
 
-      if (p.alignment === "good") {
+      if (ability(p) === "artist" && p.alignment === "good") {
         this.remember(
           p,
           artistInfo(s, ask.targets, ask.question, infoMode(s, p)),
@@ -1263,8 +1262,7 @@ export class Engine {
 
     if (
       !p.human &&
-      (p.role === "moonchild" ||
-        (p.alignment === "evil" && p.claim === "moonchild"))
+      (p.role === "moonchild" || bluffing(p, "moonchild"))
     ) {
       this.moonchild(p);
     }
@@ -1431,8 +1429,9 @@ export class Engine {
 
   // ── Nominations ────────────────────────────────────────────
 
-  // Nominations open (once a day; the first nomination opens them too):
-  // no more conversations today. A card says so.
+  // Nominations open (once a day, when you press Start Nominations; the
+  // first nomination opens them too): no more conversations today. A card
+  // says so.
   openNominations() {
     const s = this.s;
 
@@ -2262,7 +2261,7 @@ export class Engine {
     return false;
   }
 
-  // At dawn, NPC Slayers (and evil NPCs bluffing Slayer) may shoot once.
+  // At dawn, NPC Slayers (and NPCs bluffing Slayer; see bluffing()) may shoot once.
   npcShots() {
     const s = this.s;
 
@@ -2271,9 +2270,7 @@ export class Engine {
         return;
       }
 
-      const claimsSlayer =
-        ability(p) === "slayer" ||
-        (p.alignment === "evil" && p.claim === "slayer");
+      const claimsSlayer = ability(p) === "slayer" || bluffing(p, "slayer");
 
       if (p.human || !p.alive || p.shotUsed || !claimsSlayer) {
         continue;

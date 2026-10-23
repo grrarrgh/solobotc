@@ -65,7 +65,9 @@
         <!-- Always available during the day, with or without a selection. -->
         <div id="day-controls" class="day-controls" hidden>
           <p id="block-status"></p>
-          <button id="pass" type="button">End day</button>
+          <!-- Nominations wait for you: then End day. -->
+          <button id="start-nominations" type="button">Start Nominations</button>
+          <button id="pass" type="button" hidden>End day</button>
           <button id="savant" type="button" hidden>Visit the Storyteller</button>
           <p id="day-answer"></p>
         </div>
@@ -112,7 +114,8 @@
             </span>
           </div>
 
-          <div id="nomination-controls" class="nomination-controls">
+          <!-- Once nominations have started. -->
+          <div id="nomination-controls" class="nomination-controls" hidden>
             <button id="nominate">Nominate</button>
             <button id="request-nomination">Request nomination</button>
           </div>
