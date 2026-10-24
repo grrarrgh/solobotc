@@ -108,6 +108,12 @@ export const pixie = {
     const said = ` says: "I was the Pixie, mad about being the ${role}. I now have the ${role} ability."`;
 
     p.claim = "pixie";
+
+    // (Made mad today, they go back to the Pixie when it ends.)
+    if (p.mad?.previous) {
+      p.mad.previous = "pixie";
+    }
+
     this.claimPublicly(p);
     s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
     this.audit("pixie", `${p.label}${said}`, {

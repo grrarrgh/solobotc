@@ -285,9 +285,10 @@ export function createState(
   }
 
   // The Lunatic is shown a Demon, but not the one in play.
+  // (Never Legion: they'd think most players were on their team.)
   const demonToken =
     pick(
-      pool("demon").filter((x) => x !== demons[0]),
+      pool("demon").filter((x) => x !== demons[0] && x !== "legion"),
       r,
     ) ??
     demons[0] ??

@@ -759,6 +759,11 @@ export class SimpleStrategy {
       add(W.damselGuess, "they guessed the Damsel in public, as only a Minion would");
     }
 
+    // They voted for an execution that failed (Legion): only evil voted.
+    if ((s.failedExecutions ?? []).some((f) => f.voterIds.includes(t.id))) {
+      add(W.failedExecution, "they voted for an execution that failed, so they're evil");
+    }
+
     // Their claimed ability visibly failed (see engine failed()).
     for (const f of s.failures ?? []) {
       if (f.id === t.id) {
@@ -2324,7 +2329,8 @@ export class SimpleStrategy {
     }
 
     const rank = ["avoid", "low", "med", "high"];
-    const own = DEMON_KILL_PRIORITY[x.role] ?? "avoid";
+    // (A good character the Mezepheles turned evil is a teammate now.)
+    const own = x.turnedEvil ? "avoid" : (DEMON_KILL_PRIORITY[x.role] ?? "avoid");
 
     return own !== "avoid" &&
       ["med", "high"].includes(claimLevel) &&

@@ -300,6 +300,7 @@ export const EVIDENCE_WEIGHT = {
   abilityFailed: 1.5, // their claimed ability visibly failed (a Virgin, a Monk's protection)
   abilityUnused: 0.5, // late on, still hasn't used a public ability they claim (Slayer, Juggler)
   damselGuess: 6, // guessed the Damsel in public: only a Minion's guess counts
+  failedExecution: 6, // voted for an execution that failed (Legion): only evil voted
 };
 
 // With a Pixie on the script, a double claim of a Townsfolk might be a mad

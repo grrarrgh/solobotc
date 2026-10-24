@@ -567,7 +567,9 @@ async function runVote(fn) {
 
   // (Cast, with your hand as it was when the clock hand reached you.)
   result = e.castVotes(hand);
-  tally.textContent = `${result.count} / ${result.needed} needed`;
+  tally.textContent = result.failed
+    ? "Execution failed"
+    : `${result.count} / ${result.needed} needed`;
 
   await sleep(600);
 

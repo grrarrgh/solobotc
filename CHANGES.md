@@ -13,7 +13,7 @@ Newest first.
   - Bluffs: every Legion is told the same bluffs, half as many as there are Legion, rounded up (7 Legion: 4 bluffs). When the game has an Outsider, 1 of them is an Outsider, and the rest are Townsfolk. Legion claim the bluffs first. Once they're taken, the rest claim a Townsfolk no teammate claims, which may be in play. A Lunatic in a Legion game still gets 3 bluffs of their own, never one of the Legion's.
   - Strong Townsfolk: at least LEGION_STRONG_SHARE (0.6, rounded up) of the Townsfolk dealt are strong ones against Legion, when the script has them, and you're dealt one where possible. They're marked `vsLegion` in src/characters/catalog.js: those who learn who's good or evil (Village Idiot, Seamstress, Oracle, Noble, Empath, Chef, Fortune Teller, Dreamer, Artist, Savant, Fisherman), those who can win outright (Slayer, Mayor), and the Philosopher, who can gain any of them.
   - Each night*, the Storyteller chooses who dies (src/characters/demon/legion.js). It helps the side lean() names; with no lean, nobody dies at LEGION_NO_DEATH_CHANCE, else a Legion at LEGION_SELF_CHANCE, else a good NPC. It's never you, and never the last Legion. The Monk, Soldier, Mayor and the Exorcist work against it as against any Demon.
-  - Executions fail if only evil voted: a vote with enough hands to mark the nominee, all of them evil, is counted as 0.
+  - Executions fail if only evil voted: a vote with enough hands to mark the nominee, all of them evil, counts for nothing. The clock and the Public Log say "Execution failed" ("Player 10 nominated Player 6: 6 votes (5 needed); Execution failed."). That's public, so good NPCs know everyone who voted is evil (EVIDENCE_WEIGHT.failedExecution, 6), and say so when they nominate them.
   - An executed Legion dies and the game goes on while another lives (a dead Demon only ends the game when no other Demon lives).
   - Legion registers as a Minion too: to the Investigator, the Town Crier and the Clockmaker.
   - Legion NPCs vote to execute another Legion at LEGION_SACRIFICE_VOTE_CHANCE while more than 2 live: they're many, and good can't reach the votes alone.
@@ -27,7 +27,10 @@ Newest first.
   - Legion & Minstrel: an executed Legion registers as a Minion to the Minstrel at LEGION_MINSTREL_CHANCE. Everyone but the Minstrel and Legion is drunk, and the Minstrel learns it was Legion.
   - Pit-Hag & Village Idiot: listed, but it never arises, since the Pit-Hag only turns good players into Outsiders.
   - The Mezepheles and High Priestess have no jinxes.
-- Mayor (bug fix, all scripts): an NPC Mayor now wins for good with 3 alive and no execution. Before, only a human Mayor could, and you're never dealt the Mayor, so it never happened.
+- Mayor (bug fix, all scripts): an NPC Mayor now wins for their team with 3 alive and no execution: good, or evil if the Mezepheles turned them. Before, only a human Mayor could, and you're never dealt the Mayor, so it never happened.
+- A player the Mezepheles turns evil is never the Demon's kill (they're on its team now). A Philosopher or Cannibal turned evil keeps bluffing the ability they really gained, instead of "gaining" another.
+- The Lunatic is never shown Legion. The Lunatic lists their "Minions" with commas ("My Minions were Player 9, Player 10 and Player 12.").
+- Public announcements (bug fixes, all scripts with the Cerenovus): a Pixie who gains their ability, or an evil player who fakes coming clean, on a day the Cerenovus made them mad, now keeps that claim when the madness ends. Before, they went back to their old claim at dusk, and the next dawn announced they "woke up as" it.
 
 ## Improvements: Evil Cannibal Bluffs
 

@@ -8839,6 +8839,13 @@ test("Legion: an execution fails if only evil players voted", () => {
 
   assert.equal(only.count, 0);
   assert.equal(only.marked, false);
+  assert.ok(only.failed);
+  assert.match(s.publicLog.at(-1), /: 3 votes \(3 needed\); Execution failed\.$/);
+
+  // Good NPCs now know everyone who voted is evil.
+  assert.ok(
+    new SimpleStrategy().evidence(s, chef, l1).reasons.some((x) => /execution that failed/.test(x)),
+  );
 
   // With a good vote (yours), it counts.
   assert.ok(e.requestNomination(l1.id, true).marked);
@@ -8968,4 +8975,31 @@ test("Trust Redux's night order has its new characters", () => {
   for (const id of ["mezepheles", "legion", "villageidiot", "highpriestess"]) {
     assert.ok(other.some((x) => x.id === id), id);
   }
+});
+
+test("a Lunatic is never shown Legion", () => {
+  for (let seed = 0; seed < 300; seed++) {
+    const s = createState(tr, 8 + (seed % 8), `lunatic-token-${seed}`);
+
+    for (const p of s.players.filter((x) => x.role === "lunatic")) {
+      assert.notEqual(p.shown, "legion", `seed ${seed}`);
+    }
+  }
+});
+
+test("an evil Mayor (turned by the Mezepheles) wins for evil with 3 alive and no execution", () => {
+  const s = base("evil-mayor", tr);
+
+  role(s.players[0], "chef", "good");
+  role(s.players[1], "mayor", "good");
+  s.players[1].alignment = "evil";
+  s.players[1].turnedEvil = 2;
+  s.players[2].alive = false;
+  s.players[3].alive = false;
+
+  const e = new Engine(s);
+
+  assert.equal(new SimpleStrategy().priorityLevel(s, s.players[1], s.players[4]), "avoid");
+  e.endDay();
+  assert.equal(s.winner, "evil");
 });

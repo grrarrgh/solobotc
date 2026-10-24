@@ -661,6 +661,11 @@ export class Engine {
 
       // A Philosopher bluffer "gains" an in-play Townsfolk on their first
       // night (implying its real holder is drunk), then bluffs as it.
+      // (A Philosopher the Mezepheles turned evil keeps what they gained.)
+      if (["philosopher", "cannibal"].includes(p.claim) && p.gained && !p.bluffGained) {
+        p.bluffGained = p.gained;
+      }
+
       if (p.claim === "philosopher" && !p.bluffGained) {
         const role = this.strat.philosopherBluff(s, p);
 
@@ -1580,6 +1585,11 @@ export class Engine {
     p.bluff = role;
     p.memories = memories;
     p.cameClean = { day: s.day, from: was, fake: true };
+
+    // (Made mad today, they go back to this claim when it ends.)
+    if (p.mad?.previous) {
+      p.mad.previous = role;
+    }
     lied(s, { kind: "fake", byId: p.id, said: role, truth: p.role });
     this.claimPublicly(p);
     heard(s, p, memories);
@@ -2052,10 +2062,18 @@ export class Engine {
     const threshold = Math.ceil(this.alive().length / 2);
 
     // (Executions fail if only evil voted: Legion. Only a vote that would
-    // mark the nominee is counted as 0.)
-    this.legionVeto(records, needed);
-
+    // mark the nominee is counted as 0, and the town hears it failed.)
+    const hands = records.filter((x) => x.counted).length;
+    const failed = this.legionVeto(records, needed);
     const count = records.filter((x) => x.counted).length;
+
+    if (failed) {
+      (s.failedExecutions ??= []).push({
+        day: s.day,
+        nomineeId: id,
+        voterIds: records.filter((x) => x.attempted).map((x) => x.playerId),
+      });
+    }
 
     // Who nominated and voted for whom is public: good NPCs weigh it.
     (s.voteHistory ??= []).push({
@@ -2076,7 +2094,9 @@ export class Engine {
       s.block = { nomineeId: null, count };
     }
 
-    const outcome = marked
+    const outcome = failed
+      ? "Execution failed"
+      : marked
       ? `${n.label} is marked for execution`
       : !enough
         ? "not enough votes"
@@ -2084,7 +2104,7 @@ export class Engine {
           ? `a tie${leader ? ` with ${leader.label}` : ""}, so nobody is marked`
           : `fewer than the ${previous.count} votes to beat`;
 
-    const result = { ...base, count, threshold, needed, marked, records };
+    const result = { ...base, count, threshold, needed, marked, records, failed };
 
     s.lastVote = result;
 
@@ -2094,9 +2114,12 @@ export class Engine {
       result,
     );
 
+    // (A failed execution says how many hands went up.)
+    const shown = failed ? hands : count;
+
     s.publicLog.push(
-      `Day ${s.day} — ${nominator.label} nominated ${n.label}: ${count} vote${
-        count === 1 ? "" : "s"
+      `Day ${s.day} — ${nominator.label} nominated ${n.label}: ${shown} vote${
+        shown === 1 ? "" : "s"
       } (${threshold} needed); ${outcome}.`,
     );
 
@@ -2240,11 +2263,13 @@ export class Engine {
     } else if (this.vortoxDay()) {
       this.phaseCard("dusk", from);
       return;
-    } else if (
-      this.alive().length === 3 &&
-      s.players.some((x) => x.alive && ability(x) === "mayor" && works(x))
-    ) {
-      this.finish("good", "Mayor final-three victory.");
+    } else if (this.alive().length === 3) {
+      // ("Your team wins": a Mayor the Mezepheles turned evil wins for evil.)
+      const mayor = s.players.find((x) => x.alive && ability(x) === "mayor" && works(x));
+
+      if (mayor) {
+        this.finish(mayor.alignment, "Mayor final-three victory.");
+      }
     }
 
     this.mastermindEnd(p);

@@ -47,7 +47,11 @@ export const lunatic = {
         !x.lunaticRevealed,
     )) {
       const team = p.lunaticTeam.map((id) => this.player(id));
-      const list = bySeat(team).map((x) => x.label).join(" and ");
+      const labels = bySeat(team).map((x) => x.label);
+      const list =
+        labels.length < 2
+          ? labels.join("")
+          : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
       const said = ` says: "I was the Lunatic: I thought I was the ${name(
         p.shown,
       )}. My Minions were ${list}."`;

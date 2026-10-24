@@ -45,7 +45,7 @@ export const isMinion = (p) => team(p.role) === "minion" || p.role === "legion";
 // Minion shown the Magician too (see strategy fooledBy()) doesn't know
 // which of the two it is, so goes by one of them, decided once.
 export function demonTo(s, p) {
-  const d = s.players.find((x) => (x.alive || x.undead) && isDemon(x));
+  const d = s.players.find((x) => x.alive && isDemon(x));
   const magician = s.players.find((x) => x.magicianTrick && x.alive);
 
   if (!d || !magician || team(p.role) !== "minion" || claimHeard(magician, p) === "magician") {
