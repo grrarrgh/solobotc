@@ -9303,3 +9303,15 @@ test("a Village Idiot and a High Priestess never get the same player twice while
     assert.equal(new Set(seen).size, 3, `${role}: ${seen}`);
   }
 });
+
+test("Legion never kills a good player at night once only 2 good players are left", () => {
+  for (let seed = 0; seed < 40; seed++) {
+    // You, 1 good NPC and 3 Legion.
+    const { s, p, e } = trNight(`legion-good-min-${seed}`, [null, null, "legion", "legion", "legion"], 3);
+
+    s.revived = [];
+    e.legionNight();
+
+    assert.ok(p[1].alive, `seed ${seed}`);
+  }
+});

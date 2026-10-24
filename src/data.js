@@ -484,12 +484,16 @@ export const MEZEPHELES_NIGHTS = [2, 3];
 
 // Legion: most players are Legion (half the seats, rounded down, plus
 // LEGION_MAJORITY), with no Minions. Each night* the Storyteller chooses who
-// dies (see characters/demon/legion.js): helping the side lean() names, else
-// nobody at LEGION_NO_DEATH_CHANCE, else a Legion at LEGION_SELF_CHANCE, else
-// a good NPC.
+// dies (see characters/demon/legion.js), steering for a final 3 with 1
+// Legion: nobody, a Legion or a good NPC, whichever leaves the Legion
+// closest to that path, or at random among those within LEGION_STEER_SLACK
+// (a Legion's worth is about 1) of the closest.
 export const LEGION_MAJORITY = 1;
-export const LEGION_NO_DEATH_CHANCE = 0.2;
-export const LEGION_SELF_CHANCE = 0.5;
+export const LEGION_STEER_SLACK = 0.35;
+// Legion never kills a good player at night once only this many good
+// players are alive (you included): good needs 2 to win, executing the
+// Legion one by one (evil wins with 2 alive).
+export const LEGION_GOOD_MIN = 2;
 // In a Legion game, at least this share of the Townsfolk dealt (rounded up)
 // are strong ones against Legion (`vsLegion` in CHARACTERS: they learn who's
 // good or evil, or can win outright), when the script has them, and you're

@@ -1017,8 +1017,9 @@ export function shownBefore(s, p, role) {
 }
 
 // Whether the High Priestess would do well to talk to x: an evil player
-// (whose bluff may not hold up), or a good player whose information is
-// wrong (drunk or poisoned) or points at an evil player.
+// (whose bluff may not hold up), or a good player with information: true
+// (an Oracle's number counts, though it names nobody), or wrong (drunk or
+// poisoned, to be set right).
 function worthTalking(s, x) {
   if (x.alignment === "evil") {
     return true;
@@ -1027,7 +1028,7 @@ function worthTalking(s, x) {
   return x.memories.some(
     (m) =>
       m.functioning === false ||
-      (m.targets ?? []).some((id) => byId(s, id)?.alignment === "evil"),
+      (m.functioning && !/^No information\.?$/.test(m.text) && m.role !== "philosopher"),
   );
 }
 
@@ -1522,9 +1523,14 @@ function falseInfo(s, p, role, strat, helpEvil = false) {
         : sample(pool, 2, s.r);
     // (Vouching for the shield as the Townsfolk they claim, so their story
     // holds up, rather than a character neither claims.)
-    const said = cover && claimHeard(shield, p);
-    const vouched =
-      said && team(said) === PAIR_TEAM[role] && p.alignment === "evil" ? said : shown;
+    // (Or, if the shield claims something else, the other player's claim:
+    // the shield is then just the other one of the pair. With a random pair
+    // holding a teammate, as with Legion, the same.)
+    const vouchFor = cover ? [shield, cover] : pair.some((x) => x.alignment === "evil") ? pair : [];
+    const said = vouchFor
+      .map((x) => claimHeard(x, p))
+      .find((x) => x && team(x) === PAIR_TEAM[role]);
+    const vouched = said && p.alignment === "evil" ? said : shown;
 
     return vouched && pair.length === 2
       ? {
@@ -1613,10 +1619,15 @@ function falseInfo(s, p, role, strat, helpEvil = false) {
     }
 
     const ts = strat.ft(s, p);
+    // (An evil bluffer never says YES with a teammate among them.)
+    const yes =
+      p.alignment === "evil"
+        ? !ts.some((x) => x !== p && x.alignment === "evil")
+        : !fortuneYes(s, ts);
 
     return {
       targets: ts.map((x) => x.id),
-      text: fortuneText(!fortuneYes(s, ts), ts),
+      text: fortuneText(yes, ts),
     };
   }
 
@@ -1660,9 +1671,11 @@ function falseInfo(s, p, role, strat, helpEvil = false) {
         nameable(s, p).filter((x) => x.alignment === "evil"),
         s.r,
       ) ?? pick(nameable(s, p), s.r);
+    // (As the bluffer heard it: a claim they didn't hear could differ.)
+    const heardAs = claimHeard(g, p) ?? g.claim;
     const shown =
-      alignment(g.claim) === "good" && g.claim !== g.role
-        ? g.claim
+      alignment(heardAs) === "good" && heardAs !== g.role
+        ? heardAs
         : pick(
             goodRoles(s).filter((id) => id !== g.role),
             s.r,
@@ -1678,15 +1691,17 @@ function falseInfo(s, p, role, strat, helpEvil = false) {
       return { targets: [], text: "No information." };
     }
 
-    // Neither character is right.
+    // Neither character is right (unless the only evil character on the
+    // script is theirs, as with Legion).
     const good = pick(
       goodRoles(s).filter((id) => id !== t.role),
       s.r,
     );
-    const bad = pick(
-      evilRoles(s).filter((id) => id !== t.role),
-      s.r,
-    );
+    const bad =
+      pick(
+        evilRoles(s).filter((id) => id !== t.role),
+        s.r,
+      ) ?? pick(evilRoles(s), s.r);
 
     return {
       targets: [t.id],
@@ -2095,8 +2110,13 @@ function dreamerBluff(s, p, strat) {
     : pick(goodRoles(s).filter((id) => !claimed.has(id)), s.r) ?? pick(goodRoles(s), s.r);
   const inPlay = new Set(s.players.map((x) => x.role));
   const evils = evilRoles(s).filter((id) => !inPlay.has(id));
+  // (With every evil character in play, as with Legion, one that isn't
+  // theirs; failing that, any.)
   const bad =
-    pick(evils.filter((id) => !claimed.has(id)), s.r) ?? pick(evils, s.r);
+    pick(evils.filter((id) => !claimed.has(id)), s.r) ??
+    pick(evils, s.r) ??
+    pick(evilRoles(s).filter((id) => id !== t.role), s.r) ??
+    pick(evilRoles(s), s.r);
   // (Unless they've since claimed something else.)
   const pair = said?.includes(t.claim) ? said : shuffle([good, bad], s.r);
 
@@ -2223,14 +2243,18 @@ function madeUpChoice(s, p, role, strat, mode) {
 
 // Made-up but plausible information for a player who is "mad" (the
 // Cerenovus) about being `role`: what that character would have learned on
-// each night so far, with random answers. Choice characters (see CHOOSERS)
-// report choices; a Savant reports today's visit.
+// each night so far. Choice characters (see CHOOSERS) report choices; a
+// Savant reports today's visit. A good player's answers are random; an evil
+// player's (faking coming clean, or made mad as a fresh bluff) are made up
+// to help their team, as their bluffs are (see falseInfo()), never giving a
+// teammate away.
 //
 // A Cannibal or Philosopher has another character's ability (see
 // madGained()): its made-up information, from the night it's gained (a
 // first-night one, just that night), and the Philosopher's choice.
 export function madInfo(s, p, role, strat) {
   const out = [];
+  const evilSide = p.alignment === "evil";
 
   for (let night = 1; night <= s.night; night++) {
     const view = { ...s, night };
@@ -2247,7 +2271,7 @@ export function madInfo(s, p, role, strat) {
     }
 
     if (CHOOSERS.includes(used)) {
-      const m = madeUpChoice(view, p, used, strat, "random");
+      const m = madeUpChoice(view, p, used, strat, evilSide ? "lie" : "random");
 
       if (m) {
         out.push(m);
@@ -2261,13 +2285,17 @@ export function madInfo(s, p, role, strat) {
     }
 
     const { targets } = trueInfo(view, p, used, strat);
-    const info = unreliableInfo(view, p, used, targets);
+    const info = !evilSide
+      ? unreliableInfo(view, p, used, targets)
+      : used === "dreamer"
+        ? dreamerBluff(view, p, strat)
+        : falseInfo(view, p, used, strat);
 
     out.push({ night, role: used, ...info, trigger: "normal", functioning: false });
   }
 
   if (role === "savant") {
-    out.push(savantInfo(s, p, "random"));
+    out.push(evilSide ? savantBluff(s, p) : savantInfo(s, p, "random"));
   }
 
   return out;
