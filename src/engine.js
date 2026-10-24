@@ -1689,13 +1689,13 @@ export class Engine {
     }
   }
 
-  // Everyone's vote on nominee n, in seat order. Good players decide first,
-  // then evil players, who see how the vote is going (see strategy vote()).
+  // Who means to vote for nominee n, by id. Good players decide first, then
+  // evil players, who see how the vote is going (see strategy vote()).
   // `humanChoice`: the human picked the nominee (nominated, or asked for it).
   // `hand`: whether your hand is up (if you can vote).
-  votes(n, nominator = null, humanChoice = Boolean(nominator?.human), hand = true) {
+  intents(n, nominator = null, humanChoice = Boolean(nominator?.human), hand = true) {
     const s = this.s;
-    const intents = new Map();
+    const intents = {};
     const tally = {
       yes: 0,
       needed: this.votesNeeded(),
@@ -1713,50 +1713,77 @@ export class Engine {
         eligible && (v.human ? hand : this.strat.vote(s, v, n, { ...tally })),
       );
 
-      intents.set(v.id, attempted);
+      intents[v.id] = attempted;
       tally.yes += attempted ? 1 : 0;
     }
 
-    const records = s.players.map((v) => {
-      const attempted = intents.get(v.id);
+    return intents;
+  }
 
-      if (attempted && !s.dayVoters.includes(v.id)) {
-        s.dayVoters.push(v.id);
-      }
+  // The vote records for `intents`, in seat order: who raised a hand, and
+  // whose vote counts (a working Butler's only if their master voted).
+  tallied(intents) {
+    return this.s.players.map((v) => ({
+      playerId: v.id,
+      attempted: intents[v.id],
+      counted:
+        intents[v.id] &&
+        !(v.alive && ability(v) === "butler" && works(v) && !intents[v.master]),
+    }));
+  }
 
-      return {
-        playerId: v.id,
-        attempted,
-        counted: false,
-      };
-    });
+  // Everyone's vote on nominee n, in seat order (see intents()), cast: the
+  // voters are on record, and dead voters spend their ghost vote. With
+  // `decided` (the NPCs' intents, from openVote()), they stand, and only
+  // your hand is new.
+  votes(
+    n,
+    nominator = null,
+    humanChoice = Boolean(nominator?.human),
+    hand = true,
+    decided = null,
+  ) {
+    const s = this.s;
+    const intents = decided
+      ? { ...decided, [s.humanId]: Boolean(hand) }
+      : this.intents(n, nominator, humanChoice, hand);
+    const records = this.tallied(intents);
 
     for (const r of records) {
       const v = this.player(r.playerId);
 
-      if (!r.attempted) {
-        continue;
+      if (r.attempted && !s.dayVoters.includes(v.id)) {
+        s.dayVoters.push(v.id);
       }
-
-      // A working Butler's vote only counts if their master voted.
-      if (
-        v.alive &&
-        ability(v) === "butler" &&
-        works(v) &&
-        !intents.get(v.master)
-      ) {
-        continue;
-      }
-
-      r.counted = true;
 
       // Dead players spend their one ghost vote.
-      if (!v.alive) {
+      if (r.counted && !v.alive) {
         v.ghost = false;
       }
     }
 
     return records;
+  }
+
+  // The waiting vote's count starts: the NPCs decide now (seeing your hand
+  // as it is), and their votes stand (kept for castVotes()). Your hand can
+  // still change until the clock hand reaches you: call again with it to
+  // see the records as they'd be. Nothing is cast yet.
+  openVote(hand = false) {
+    const s = this.s;
+    const pending = s.pendingVote;
+
+    if (!pending) {
+      throw Error("No vote is waiting.");
+    }
+
+    const n = this.player(pending.nomineeId);
+    const nominator = this.player(pending.nominatorId);
+    const up = Boolean(hand) && this.canVote();
+
+    pending.intents ??= this.intents(n, nominator, nominator.human || pending.requested, up);
+
+    return this.tallied({ ...pending.intents, [s.humanId]: up });
   }
 
   // Each player can only be nominated once per day.
@@ -1942,11 +1969,13 @@ export class Engine {
       nomineeId: id,
     };
     const needed = this.votesNeeded();
+    // (The NPCs' votes stand, if the count has started: see openVote().)
     const records = this.votes(
       n,
       nominator,
       nominator.human || pending.requested,
       hand && this.canVote(),
+      pending.intents ?? null,
     );
     const count = records.filter((x) => x.counted).length;
 

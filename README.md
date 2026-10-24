@@ -6,19 +6,11 @@ on the good team; every other seat is an NPC, and the game is the Storyteller.
 
 ## Playing
 
-You need [Node.js](https://nodejs.org/) (any recent version).
-
-```sh
-npm start
-```
-
-Then open <http://localhost:8000>. (On Windows PowerShell, use `npm.cmd start`
-if `npm` is blocked. Any static file server also works; the page can't be
-opened straight from disk because it loads its scripts as modules.)
-
-Pick the number of seats, a script and a seed, then press **Start**. The same
-seed and settings always deal and play out the same game; **Random Seed**
-picks a new one.
+Navigate to <https://grrarrgh.github.io/solobotc/> 
+- Select your seat size (number of players)
+- Select your script
+- Click "Random Seed"
+- Press start
 
 - **Night:** the Storyteller tells you what you learn. If your character makes a
   choice, pick player(s) in the town square and press **Select**.
@@ -29,9 +21,10 @@ picks a new one.
   player, **Request nomination** (ask someone else to nominate them), or press
   **NPC nominations X** to let the next of the X NPCs who want to nominate do
   so, saying why. Before a vote, anyone who decides to come clean about a cover story
-  says so on a card; click anywhere to continue. Your hand goes up for the
-  vote unless you press **Lower hand** in the few seconds before the votes
-  are counted. NPCs can lie, good ones included: some hide a valuable
+  says so on a card; click anywhere to continue. Your hand starts lowered:
+  press **Raise hand** to vote (and **Lower hand** to take it back), in the
+  few seconds before the count or as the clock hand ticks round, until it
+  reaches you and counts your vote. NPCs can lie, good ones included: some hide a valuable
   character or claim one to bait the Demon.
   Some characters add buttons (Slayer, Artist, Savant, Gossip, Amnesiac,
   Fisherman, Puzzlemaster). If a Boomdandy is executed, you have 10
@@ -53,7 +46,7 @@ middle of the town square for the whole script.
 Everyone Can Play, Sects & Violets, Bad Moon Rising, Onion Pies, Catfishing
 and Extension Cord, in the official script-tool JSON format. Travellers
 aren't supported: a script's Travellers are left out (`TRAVELLERS` in
-`src/data.js`). Fabled (such as the Sentinel) are Storyteller rules, never
+`src/characters/catalog.js`). Fabled (such as the Sentinel) are Storyteller rules, never
 dealt (`FABLED`). Jinxes between a script's characters are listed on its
 script sheet (`JINXES`).
 
@@ -82,11 +75,14 @@ in its record in `CHARACTERS`. These include:
   long you have to lower your hand (`HAND_WAIT_MS`);
 - the characters the human can't be dealt (`notForHuman`).
 
+> **If you don't want to spoil yourself don't look too deep into it as it would give you pointers on how the Evil Team "behaves"**
+
 ## Code
 
 | File | What it does |
 | --- | --- |
-| `src/data.js` | Every character (`CHARACTERS`: name, team, ability text and its settings), role counts and the tuning constants |
+| `src/characters/catalog.js` | Every character (`CHARACTERS`: name, team, ability text and its settings), and the Travellers left out |
+| `src/data.js` | Role counts, jinxes and the tuning constants, in sections (re-exports the catalogue) |
 | `src/setup.js` | Deals a new game from a script, seat count and seed |
 | `src/engine.js` | Runs nights, days, NPC conversations, nominations, deaths and win checks |
 | `src/characters/` | Each character's own mechanics, one file per character, by team (`townsfolk/`, `outsider/`, `minion/`, `demon/`), mixed into the engine |
@@ -105,3 +101,9 @@ npm run check   # syntax-check every file in src/
 ```
 
 Changes are listed in [`CHANGES.md`](CHANGES.md), newest first.
+
+## Acknowledgements
+
+This is not affiliated with The Pandemonium Institute. All roles and characters are the property of Steven Medway and The Pandemonium Institute.
+
+Blood on the Clocktower is a trademark of Steven Medway and The Pandemonium Institute.

@@ -7745,6 +7745,41 @@ test("the Demon's Barber swap helps evil: a strong ability off a believed player
   assert.match(p[4].barberWhy, /no swap helps evil enough/);
 });
 
+test("the NPCs' votes stand once the count starts; your hand can change until it's cast", () => {
+  const s = createState(script, 10, "vote-live");
+  const e = new Engine(s);
+
+  e.start();
+  s.phase = "day";
+  s.day = 1;
+
+  const n = s.players.find((x) => !x.human);
+
+  e.nominate(n.id, null);
+
+  const before = e.openVote(false);
+  const mine = (records) => records.find((r) => r.playerId === s.humanId);
+
+  assert.equal(mine(before).attempted, false);
+  // Raising your hand changes only your record.
+  const after = e.openVote(true);
+
+  assert.equal(mine(after).attempted, true);
+  assert.deepEqual(
+    after.filter((r) => r.playerId !== s.humanId).map((r) => r.attempted),
+    before.filter((r) => r.playerId !== s.humanId).map((r) => r.attempted),
+  );
+
+  // Cast with your hand up: the NPCs' votes are the ones decided above.
+  const result = e.castVotes(true);
+
+  assert.deepEqual(
+    result.records.map((r) => r.attempted),
+    after.map((r) => r.attempted),
+  );
+  assert.equal(result.count, after.filter((r) => r.counted).length);
+});
+
 test("a Pit-Hag's Damsel tells the Minions she's in play", () => {
   const { s, p, e } = cfNight("pithag-damsel", [null, null, null, "pithag"], 2);
 

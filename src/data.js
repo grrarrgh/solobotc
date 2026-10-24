@@ -1,712 +1,10 @@
-// Every character, from any script: any of them can share a game (a script
-// is just a list of these ids; see scripts/). Each record holds all the game
-// needs to know about that character, so a character from another edition
-// is added here (and, if its ability needs the Engine, in
-// src/characters/<team>/<id>.js):
-//   name, team ("townsfolk", "outsider", "minion", "demon", or "fabled": a
-//     Storyteller's rule for the game, never dealt; see FABLED), ability (the
-//     official text, shown on the script sheet; "*" means "not the first
-//     night");
-//   info: "first" (learns something on the first night only) or "ongoing"
-//     (keeps learning on later nights; see FIRST_NIGHT_INFO_SHARE);
-//   kill: how keen the Demon is to kill them (see DEMON_KILL_PRIORITY);
-//   outsiders: how it changes the Outsiders dealt (see OUTSIDER_MODIFIERS);
-//   oncePerGame: when NPCs use the ability (see ONCE_PER_GAME);
-//   publicInfo: chance an NPC shares their information in public (see
-//     PUBLIC_INFO_CHANCE);
-//   bait, neverHides, neverHiddenAs: cover stories (see BAIT_ROLES);
-//   protects: a protection character (see PROTECTION_ROLES);
-//   notForHuman: never dealt to you (see FORBIDDEN_HUMAN).
-export const CHARACTERS = {
-  washerwoman: {
-    name: "Washerwoman",
-    team: "townsfolk",
-    ability: "You start knowing that 1 of 2 players is a particular Townsfolk.",
-    info: "first",
-    kill: "med",
-    publicInfo: 0.5,
-  },
-  librarian: {
-    name: "Librarian",
-    team: "townsfolk",
-    ability:
-      "You start knowing that 1 of 2 players is a particular Outsider. (Or that zero are in play.)",
-    info: "first",
-    kill: "med",
-    publicInfo: 0.5,
-  },
-  investigator: {
-    name: "Investigator",
-    team: "townsfolk",
-    ability: "You start knowing that 1 of 2 players is a particular Minion.",
-    info: "first",
-    kill: "med",
-    publicInfo: 0.4,
-  },
-  chef: {
-    name: "Chef",
-    team: "townsfolk",
-    ability: "You start knowing how many pairs of evil players there are.",
-    info: "first",
-    kill: "med",
-    publicInfo: 0.6,
-  },
-  empath: {
-    name: "Empath",
-    team: "townsfolk",
-    ability:
-      "Each night, you learn how many of your 2 alive neighbours are evil.",
-    info: "ongoing",
-    kill: "high",
-  },
-  fortuneteller: {
-    name: "Fortune Teller",
-    team: "townsfolk",
-    ability:
-      "Each night, choose 2 players: you learn if either is a Demon. There is a good player that registers as a Demon to you.",
-    info: "ongoing",
-    kill: "high",
-  },
-  undertaker: {
-    name: "Undertaker",
-    team: "townsfolk",
-    ability: "Each night*, you learn which character died by execution today.",
-    info: "ongoing",
-    kill: "high",
-  },
-  monk: {
-    name: "Monk",
-    team: "townsfolk",
-    ability:
-      "Each night*, choose a player (not yourself): they are safe from the Demon tonight.",
-    kill: "high",
-    protects: true,
-  },
-  ravenkeeper: {
-    name: "Ravenkeeper",
-    team: "townsfolk",
-    ability:
-      "If you die at night, you are woken to choose a player: you learn their character.",
-    kill: "low", // learns a character when killed at night
-    publicInfo: 0.7,
-    bait: true,
-    notForHuman: true,
-  },
-  virgin: {
-    name: "Virgin",
-    team: "townsfolk",
-    ability:
-      "The 1st time you are nominated, if the nominator is a Townsfolk, they are executed immediately.",
-    kill: "low",
-    neverHiddenAs: true,
-    notForHuman: true,
-  },
-  slayer: {
-    name: "Slayer",
-    team: "townsfolk",
-    ability:
-      "Once per game, during the day, publicly choose a player: if they are the Demon, they die.",
-    kill: "med",
-    oncePerGame: { AFTER_DAY: 2, START_CHANCE: 0.2, STEP_CHANCE: 0.2 }, // day
-  },
-  soldier: {
-    name: "Soldier",
-    team: "townsfolk",
-    ability: "You are safe from the Demon.",
-    kill: "avoid",
-    bait: true,
-    protects: true,
-    notForHuman: true,
-  },
-  mayor: {
-    name: "Mayor",
-    team: "townsfolk",
-    ability:
-      "If only 3 players live & no execution occurs, your team wins. If you die at night, another player might die instead.",
-    kill: "avoid",
-    bait: true,
-    notForHuman: true,
-  },
-  clockmaker: {
-    name: "Clockmaker",
-    team: "townsfolk",
-    ability:
-      "You start knowing how many steps from the Demon to its nearest Minion.",
-    info: "first",
-    kill: "med",
-    publicInfo: 0.6,
-  },
-  grandmother: {
-    name: "Grandmother",
-    team: "townsfolk",
-    ability:
-      "You start knowing a good player & their character. If the Demon kills them, you die too.",
-    info: "first",
-    kill: "med",
-    publicInfo: 0.4,
-  },
-  gambler: {
-    name: "Gambler",
-    team: "townsfolk",
-    ability:
-      "Each night*, choose a player & guess their character: if you guess wrong, you die.",
-    kill: "low",
-    notForHuman: true,
-  },
-  artist: {
-    name: "Artist",
-    team: "townsfolk",
-    ability:
-      "Once per game, during the day, privately ask the Storyteller any yes/no question.",
-    kill: "med",
-    oncePerGame: { AFTER_DAY: 1, START_CHANCE: 0.5, STEP_CHANCE: 0.25 }, // day
-  },
-  fool: {
-    name: "Fool",
-    team: "townsfolk",
-    ability: "The 1st time you die, you don't.",
-    kill: "avoid",
-    bait: true,
-    neverHiddenAs: true,
-    notForHuman: true,
-  },
-  dreamer: {
-    name: "Dreamer",
-    team: "townsfolk",
-    ability:
-      "Each night, choose a player (not yourself or Travellers): you learn 1 good & 1 evil character, 1 of which is correct.",
-    info: "ongoing",
-    kill: "high",
-  },
-  snakecharmer: {
-    name: "Snake Charmer",
-    team: "townsfolk",
-    ability:
-      "Each night, choose an alive player: a chosen Demon swaps characters & alignments with you & is then poisoned.",
-    kill: "high", // could swap with the Demon
-    notForHuman: true,
-  },
-  mathematician: {
-    name: "Mathematician",
-    team: "townsfolk",
-    ability:
-      "Each night, you learn how many players' abilities worked abnormally (since dawn) due to another character's ability.",
-    info: "ongoing",
-    kill: "med",
-  },
-  flowergirl: {
-    name: "Flowergirl",
-    team: "townsfolk",
-    ability: "Each night*, you learn if a Demon voted today.",
-    info: "ongoing",
-    kill: "med",
-  },
-  towncrier: {
-    name: "Town Crier",
-    team: "townsfolk",
-    ability: "Each night*, you learn if a Minion nominated today.",
-    info: "ongoing",
-    kill: "med",
-  },
-  oracle: {
-    name: "Oracle",
-    team: "townsfolk",
-    ability: "Each night*, you learn how many dead players are evil.",
-    info: "ongoing",
-    kill: "high",
-  },
-  savant: {
-    name: "Savant",
-    team: "townsfolk",
-    ability:
-      "Each day, you may visit the Storyteller to learn 2 things in private: 1 is true & 1 is false.",
-    kill: "high",
-    neverHides: true,
-  },
-  seamstress: {
-    name: "Seamstress",
-    team: "townsfolk",
-    ability:
-      "Once per game, at night, choose 2 players (not yourself): you learn if they are the same alignment.",
-    kill: "med",
-    oncePerGame: { AFTER_DAY: 1, START_CHANCE: 0.5, STEP_CHANCE: 0.25 }, // night
-    publicInfo: 0.5,
-  },
-  philosopher: {
-    name: "Philosopher",
-    team: "townsfolk",
-    ability:
-      "Once per game, at night, choose a good character: gain that ability. If this character is in play, they are drunk.",
-    kill: "med",
-    oncePerGame: { AFTER_DAY: 1, START_CHANCE: 1, STEP_CHANCE: 0 }, // night
-    notForHuman: true,
-  },
-  juggler: {
-    name: "Juggler",
-    team: "townsfolk",
-    ability:
-      "On your 1st day, publicly guess up to 5 players' characters. That night, you learn how many you got correct.",
-    kill: "med",
-    publicInfo: 0.6,
-    notForHuman: true,
-  },
-  sage: {
-    name: "Sage",
-    team: "townsfolk",
-    ability: "If the Demon kills you, you learn that it is 1 of 2 players.",
-    kill: "avoid", // learns the Demon is 1 of 2 players
-    publicInfo: 0.8,
-    bait: true,
-    notForHuman: true,
-  },
-  sailor: {
-    name: "Sailor",
-    team: "townsfolk",
-    ability:
-      "Each night, choose an alive player: either you or they are drunk until dusk. You can't die.",
-    kill: "avoid", // can't die
-    bait: true,
-    protects: true,
-  },
-  chambermaid: {
-    name: "Chambermaid",
-    team: "townsfolk",
-    ability:
-      "Each night, choose 2 alive players (not yourself): you learn how many woke tonight due to their ability.",
-    info: "ongoing",
-    kill: "high",
-  },
-  exorcist: {
-    name: "Exorcist",
-    team: "townsfolk",
-    ability:
-      "Each night*, choose a player (different to last night): the Demon, if chosen, learns who you are then doesn't wake tonight.",
-    kill: "high", // could stop the Demon waking
-  },
-  innkeeper: {
-    name: "Innkeeper",
-    team: "townsfolk",
-    ability:
-      "Each night*, choose 2 players: they can't die tonight, but 1 is drunk until dusk.",
-    kill: "high", // protects 2 players a night
-    protects: true,
-  },
-  gossip: {
-    name: "Gossip",
-    team: "townsfolk",
-    ability:
-      "Each day, you may make a public statement. Tonight, if it was true, a player dies.",
-    kill: "med",
-  },
-  courtier: {
-    name: "Courtier",
-    team: "townsfolk",
-    ability:
-      "Once per game, at night, choose a character: they are drunk for 3 nights & 3 days.",
-    kill: "med", // could make the Demon drunk
-    oncePerGame: { AFTER_DAY: 1, START_CHANCE: 0.4, STEP_CHANCE: 0.2 }, // night
-  },
-  professor: {
-    name: "Professor",
-    team: "townsfolk",
-    ability:
-      "Once per game, at night*, choose a dead player: if they are a Townsfolk, they are resurrected.",
-    kill: "high", // could bring back an information Townsfolk
-    oncePerGame: { AFTER_DAY: 2, START_CHANCE: 0.5, STEP_CHANCE: 0.25 }, // night
-  },
-  minstrel: {
-    name: "Minstrel",
-    team: "townsfolk",
-    ability:
-      "When a Minion dies by execution, all other players (except Travellers) are drunk until dusk tomorrow.",
-    kill: "low",
-  },
-  tealady: {
-    name: "Tea Lady",
-    team: "townsfolk",
-    ability: "If both your alive neighbours are good, they can't die.",
-    kill: "med", // her good neighbours can't die
-    protects: true,
-  },
-  pacifist: {
-    name: "Pacifist",
-    team: "townsfolk",
-    ability: "Executed good players might not die.",
-    kill: "low",
-  },
-  noble: {
-    name: "Noble",
-    team: "townsfolk",
-    ability: "You start knowing 3 players, 1 and only 1 of which is evil.",
-    info: "first",
-    kill: "med",
-    publicInfo: 0.5,
-  },
-  pixie: {
-    name: "Pixie",
-    team: "townsfolk",
-    ability:
-      "You start knowing 1 in-play Townsfolk. If you were mad that you were this character, you gain their ability when they die.",
-    kill: "med",
-    neverHiddenAs: true,
-    notForHuman: true,
-  },
-  balloonist: {
-    name: "Balloonist",
-    team: "townsfolk",
-    ability:
-      "Each night, you learn a player of a different character type than last night. [+0 or +1 Outsider]",
-    info: "ongoing",
-    kill: "med",
-    outsiders: [0, 1],
-  },
-  amnesiac: {
-    name: "Amnesiac",
-    team: "townsfolk",
-    ability:
-      "You do not know what your ability is. Each day, privately guess what it is: you learn how accurate you are.",
-    kill: "med", // a secret ability (see characters/townsfolk/amnesiac.js)
-  },
-  fisherman: {
-    name: "Fisherman",
-    team: "townsfolk",
-    ability:
-      "Once per game, during the day, visit the Storyteller for some advice to help your team win.",
-    kill: "med",
-    oncePerGame: { AFTER_DAY: 1, START_CHANCE: 0.4, STEP_CHANCE: 0.3 }, // day
-  },
-  huntsman: {
-    name: "Huntsman",
-    team: "townsfolk",
-    ability:
-      "Once per game, at night, choose a living player: the Damsel, if chosen, becomes a not-in-play Townsfolk. [+the Damsel]",
-    kill: "med", // could save the Damsel
-    // (A guess: NPCs wait for the Damsel to tell them; see strategy huntsman().)
-    oncePerGame: { AFTER_DAY: 3, START_CHANCE: 0.3, STEP_CHANCE: 0.2 }, // night
-  },
-  puzzlemaster: {
-    name: "Puzzlemaster",
-    team: "townsfolk",
-    ability:
-      "1 player is drunk, even if you die. If you guess (once) who it is, learn the Demon player, but guess wrong & get false info.",
-    kill: "med", // could learn the Demon
-    oncePerGame: { AFTER_DAY: 2, START_CHANCE: 0.4, STEP_CHANCE: 0.2 }, // day
-  },
-  cannibal: {
-    name: "Cannibal",
-    team: "townsfolk",
-    ability:
-      "You have the ability of the recently killed executee. If they are evil, you are poisoned until a good player dies by execution.",
-    kill: "med", // gains the executed player's ability
-  },
-  butler: {
-    name: "Butler",
-    team: "outsider",
-    ability:
-      "Each night, choose a player (not yourself): tomorrow, you may only vote if they are voting too.",
-    kill: "low",
-  },
-  drunk: {
-    name: "Drunk",
-    team: "outsider",
-    ability:
-      "You do not know you are the Drunk. You think you are a Townsfolk character, but you are not.",
-    neverHiddenAs: true,
-    notForHuman: true,
-  },
-  recluse: {
-    name: "Recluse",
-    team: "outsider",
-    ability: "You might register as evil & as a Minion or Demon, even if dead.",
-    kill: "low",
-  },
-  saint: {
-    name: "Saint",
-    team: "outsider",
-    ability: "If you die by execution, your team loses.",
-    kill: "low",
-    neverHiddenAs: true,
-    notForHuman: true,
-  },
-  moonchild: {
-    name: "Moonchild",
-    team: "outsider",
-    ability:
-      "When you learn that you died, publicly choose 1 alive player. Tonight, if it was a good player, they die.",
-    kill: "avoid",
-    neverHiddenAs: true,
-    notForHuman: true,
-  },
-  mutant: {
-    name: "Mutant",
-    team: "outsider",
-    ability:
-      "If you are \"mad\" about being an Outsider, you might be executed.",
-    kill: "low",
-    neverHiddenAs: true,
-    notForHuman: true,
-  },
-  damsel: {
-    name: "Damsel",
-    team: "outsider",
-    ability:
-      "All Minions know a Damsel is in play. If a Minion publicly guesses you (once), your team loses.",
-    kill: "low", // the Minions want her alive, to guess her
-    neverHiddenAs: true,
-    notForHuman: true,
-  },
-  sweetheart: {
-    name: "Sweetheart",
-    team: "outsider",
-    ability: "When you die, 1 player is drunk from now on.",
-    kill: "med", // dying makes someone drunk
-    neverHiddenAs: true,
-  },
-  barber: {
-    name: "Barber",
-    team: "outsider",
-    ability:
-      "If you died today or tonight, the Demon may choose 2 players (not another Demon) to swap characters.",
-    kill: "med", // dying lets the Demon swap two characters
-    neverHiddenAs: true,
-  },
-  klutz: {
-    name: "Klutz",
-    team: "outsider",
-    ability:
-      "When you learn that you died, publicly choose 1 alive player: if they are evil, your team loses.",
-    kill: "avoid", // might pick an evil player... or might not
-    neverHiddenAs: true,
-    notForHuman: true,
-  },
-  tinker: {
-    name: "Tinker",
-    team: "outsider",
-    ability: "You might die at any time.",
-    kill: "low",
-    neverHiddenAs: true,
-    notForHuman: true,
-  },
-  goon: {
-    name: "Goon",
-    team: "outsider",
-    ability:
-      "Each night, the 1st player to choose you with their ability is drunk until dusk. You become their alignment.",
-    kill: "avoid", // makes the Demon drunk (and joins its team)
-    neverHiddenAs: true,
-    notForHuman: true,
-  },
-  lunatic: {
-    name: "Lunatic",
-    team: "outsider",
-    ability:
-      "You think you are a Demon, but you are not. The Demon knows who you are & who you choose at night.",
-    kill: "avoid", // thinks they're the Demon, and the Demon knows who they pick
-    neverHiddenAs: true,
-    notForHuman: true,
-  },
-  ogre: {
-    name: "Ogre",
-    team: "outsider",
-    ability:
-      "On your 1st night, choose a player (not yourself): you become their alignment (you don't know which) even if drunk or poisoned.",
-    kill: "low",
-    neverHiddenAs: true,
-    notForHuman: true,
-  },
-  poisoner: {
-    name: "Poisoner",
-    team: "minion",
-    ability:
-      "Each night, choose a player: they are poisoned tonight and tomorrow day.",
-    kill: "avoid",
-  },
-  spy: {
-    name: "Spy",
-    team: "minion",
-    ability:
-      "Each night, you see the Grimoire. You might register as good & as a Townsfolk or Outsider, even if dead.",
-    kill: "low",
-  },
-  scarletwoman: {
-    name: "Scarlet Woman",
-    team: "minion",
-    ability:
-      "If there are 5 or more players alive & the Demon dies, you become the Demon.",
-    kill: "avoid", // the Demon's backup
-  },
-  baron: {
-    name: "Baron",
-    team: "minion",
-    ability: "There are extra Outsiders in play. [+2 Outsiders]",
-    kill: "low", // no ability left after setup
-    outsiders: 2,
-  },
-  assassin: {
-    name: "Assassin",
-    team: "minion",
-    ability:
-      "Once per game, at night*, choose a player: they die, even if for some reason they could not.",
-    kill: "low",
-    oncePerGame: { AFTER_DAY: 2, START_CHANCE: 0.3, STEP_CHANCE: 0.15 }, // night
-  },
-  devilsadvocate: {
-    name: "Devil's Advocate",
-    team: "minion",
-    ability:
-      "Each night, choose a living player (different to last night): if executed tomorrow, they don't die.",
-    kill: "avoid",
-  },
-  eviltwin: {
-    name: "Evil Twin",
-    team: "minion",
-    ability:
-      "You & an opposing player know each other. If the good player is executed, evil wins. Good can't win if you both live.",
-    kill: "avoid",
-  },
-  witch: {
-    name: "Witch",
-    team: "minion",
-    ability:
-      "Each night, choose a player: if they nominate tomorrow, they die. If just 3 players live, you lose this ability.",
-    kill: "avoid",
-  },
-  cerenovus: {
-    name: "Cerenovus",
-    team: "minion",
-    ability:
-      "Each night, choose a player & a good character: they are \"mad\" they are this character tomorrow, or might be executed.",
-    kill: "avoid",
-  },
-  pithag: {
-    name: "Pit-Hag",
-    team: "minion",
-    ability:
-      "Each night*, choose a player & a character they become (if not-in-play). If a Demon is made, deaths tonight are arbitrary.",
-    kill: "avoid",
-  },
-  godfather: {
-    name: "Godfather",
-    team: "minion",
-    ability:
-      "You start knowing which Outsiders are in play. If 1 died today, choose a player tonight: they die. [−1 or +1 Outsider]",
-    kill: "avoid",
-    outsiders: [-1, 1],
-  },
-  mastermind: {
-    name: "Mastermind",
-    team: "minion",
-    ability:
-      "If the Demon dies by execution (ending the game), play for 1 more day. If a player is then executed, their team loses.",
-    kill: "avoid",
-  },
-  widow: {
-    name: "Widow",
-    team: "minion",
-    ability:
-      "On your 1st night, look at the Grimoire & choose a player: they are poisoned. 1 good player knows a Widow is in play.",
-    kill: "avoid",
-  },
-  boomdandy: {
-    name: "Boomdandy",
-    team: "minion",
-    ability:
-      "If you are executed, all but 3 players die. After a 10 to 1 countdown, the player with the most players pointing at them, dies.",
-    kill: "avoid",
-  },
-  marionette: {
-    name: "Marionette",
-    team: "minion",
-    ability:
-      "You think you are a good character, but you are not. The Demon knows who you are. [You neighbour the Demon]",
-    kill: "avoid", // thinks they're good: a hidden teammate
-  },
-  imp: {
-    name: "Imp",
-    team: "demon",
-    ability:
-      "Each night*, choose a player: they die. If you kill yourself this way, a Minion becomes the Imp.",
-  },
-  fanggu: {
-    name: "Fang Gu",
-    team: "demon",
-    ability:
-      "Each night*, choose a player: they die. The 1st Outsider this kills becomes an evil Fang Gu & you die instead. [+1 Outsider]",
-    outsiders: 1,
-  },
-  vigormortis: {
-    name: "Vigormortis",
-    team: "demon",
-    ability:
-      "Each night*, choose a player: they die. Minions you kill keep their ability & poison 1 Townsfolk neighbour. [−1 Outsider]",
-    outsiders: -1,
-  },
-  nodashii: {
-    name: "No Dashii",
-    team: "demon",
-    ability:
-      "Each night*, choose a player: they die. Your 2 Townsfolk neighbours are poisoned.",
-  },
-  vortox: {
-    name: "Vortox",
-    team: "demon",
-    ability:
-      "Each night*, choose a player: they die. Townsfolk abilities yield false info. Each day, if no-one is executed, evil wins.",
-  },
-  zombuul: {
-    name: "Zombuul",
-    team: "demon",
-    ability:
-      "Each night*, if no-one died today, choose a player: they die. The 1st time you die, you live but register as dead.",
-  },
-  pukka: {
-    name: "Pukka",
-    team: "demon",
-    ability:
-      "Each night, choose a player: they are poisoned. The previously poisoned player dies then becomes healthy.",
-  },
-  shabaloth: {
-    name: "Shabaloth",
-    team: "demon",
-    ability:
-      "Each night*, choose 2 players: they die. A dead player you chose last night might be regurgitated.",
-  },
-  po: {
-    name: "Po",
-    team: "demon",
-    ability:
-      "Each night*, you may choose a player: they die. If your last choice was no-one, choose 3 players tonight.",
-  },
-  sentinel: {
-    name: "Sentinel",
-    team: "fabled",
-    ability: "There might be 1 extra or 1 fewer Outsider in play.",
-    outsiders: [-1, 0, 1],
-  },
-};
+import { CHARACTERS, TRAVELLERS } from "./characters/catalog.js";
 
-// Travellers aren't supported: a script's Travellers are left out (as in a
-// game no Traveller joins).
-export const TRAVELLERS = [
-  "scapegoat",
-  "gunslinger",
-  "beggar",
-  "bureaucrat",
-  "thief",
-  "butcher",
-  "bonecollector",
-  "harlot",
-  "barista",
-  "deviant",
-  "apprentice",
-  "matron",
-  "judge",
-  "bishop",
-  "voudon",
-  "gangster",
-  "gnome",
-  "cacklejack",
-];
+// ── Characters ───────────────────────────────────────────────
+
+// Every character's record, and the Travellers left out, are in
+// src/characters/catalog.js (re-exported here).
+export { CHARACTERS, TRAVELLERS };
 
 // The ids of the characters whose record passes `test`, and each one's
 // `key` (for those that have it).
@@ -715,121 +13,6 @@ const each = (key) =>
   Object.fromEntries(
     where((c) => c[key] !== undefined).map((id) => [id, CHARACTERS[id][key]]),
   );
-
-// Jinxes: official rulings for characters whose abilities clash (from the
-// Djinn), shown on the script sheet when both are on it. Each is handled
-// where it applies:
-// - Spy or Widow & Damsel: the Damsel is poisoned (characters/outsider/damsel.js);
-// - Marionette & Huntsman, Marionette & Balloonist: the Marionette is never
-//   shown the Huntsman without the Damsel in play, and the Balloonist's
-//   Outsider "might" have been added (setup.js);
-// - Pit-Hag & Damsel: the Storyteller chooses who becomes the Damsel
-//   (characters/minion/pithag.js);
-// - Mathematician & Drunk or Marionette: their false information counts
-//   (storyteller.js mathCount());
-// - Mathematician & Lunatic: the Lunatic counts on a night they "attack"
-//   someone the Demon didn't (mathCount(); s.demonChose in abilities.js);
-// - Mathematician & Chambermaid: the Mathematician wakes each night before
-//   the Chambermaid learns who woke (engine resolveNight()), so she can
-//   detect them;
-// - Cannibal & Butler: the Cannibal learns they have the Butler ability;
-//   Cannibal & Juggler: an executed Juggler's count goes to the living
-//   Cannibal that night (characters/townsfolk/cannibal.js, juggler.js);
-// - Recluse & Ogre: an Ogre who chooses the Recluse becomes evil and knows
-//   it; Spy & Ogre: an Ogre who chooses the Spy becomes evil
-//   (characters/outsider/ogre.js);
-// - Recluse & Sage: at RECLUSE_SAGE_CHANCE the Sage is shown the Recluse in
-//   the Demon's place (storyteller.js sageInfo());
-// - Mastermind & Vigormortis: a Mastermind the Vigormortis killed keeps
-//   their ability when it dies (characters/demon/vigormortis.js,
-//   characters/minion/mastermind.js);
-// - Pit-Hag & Goon: a Goon the Pit-Hag made from an evil player never turns
-//   good (abilities.js chose()); Pit-Hag & Ogre: an Ogre only chooses on
-//   Night 1, before the Pit-Hag acts, so a made one never turns good;
-// - Scarlet Woman & Fang Gu: a Fang Gu that jumps leaves no second Demon
-//   (characters/demon/fanggu.js).
-export const JINXES = [
-  { ids: ["spy", "damsel"], text: "If the Spy is (or has been) in play, the Damsel is poisoned." },
-  { ids: ["widow", "damsel"], text: "If the Widow is (or has been) in play, the Damsel is poisoned." },
-  {
-    ids: ["marionette", "huntsman"],
-    text: "If the Marionette thinks that they are the Huntsman, the Damsel was added during setup.",
-  },
-  {
-    ids: ["marionette", "balloonist"],
-    text: "If the Marionette thinks that they are the Balloonist, an Outsider might have been added during setup.",
-  },
-  {
-    ids: ["pithag", "damsel"],
-    text: "If a Pit-Hag creates a Damsel, the Storyteller chooses which player it is.",
-  },
-  {
-    ids: ["mathematician", "drunk"],
-    text: "The Mathematician learns if the Drunk's ability yielded false info or failed to work properly.",
-  },
-  {
-    ids: ["mathematician", "marionette"],
-    text: "The Mathematician learns if the Marionette's ability yielded false info or failed to work properly.",
-  },
-  {
-    ids: ["mathematician", "chambermaid"],
-    text: "The Chambermaid can detect if the Mathematician will wake tonight.",
-  },
-  {
-    ids: ["mathematician", "lunatic"],
-    text: "The Mathematician learns if the Lunatic attacks a different player than the real Demon attacked.",
-  },
-  {
-    ids: ["cannibal", "butler"],
-    text: "If the Cannibal gains the Butler ability, the Cannibal learns this.",
-  },
-  {
-    ids: ["cannibal", "juggler"],
-    text: "If the Juggler guesses on their first day and dies by execution, tonight the living Cannibal learns how many guesses the Juggler got correct.",
-  },
-  { ids: ["recluse", "ogre"], text: "If the Recluse registers as evil to the Ogre, the Ogre learns that they are evil." },
-  { ids: ["recluse", "sage"], text: "The Recluse might register as the Demon to the Sage." },
-  { ids: ["spy", "ogre"], text: "The Spy registers as evil to the Ogre." },
-  {
-    ids: ["mastermind", "vigormortis"],
-    text: "A Mastermind that has their ability keeps it if the Vigormortis dies.",
-  },
-  {
-    ids: ["pithag", "goon"],
-    text: "If the Pit-Hag turns an evil player into the Goon, they can't turn good due to their own ability.",
-  },
-  {
-    ids: ["pithag", "ogre"],
-    text: "If the Pit-Hag turns an evil player into the Ogre, they can't turn good due to their own ability.",
-  },
-  {
-    ids: ["scarletwoman", "fanggu"],
-    text: "If there would be two Demons, one of which was the Scarlet Woman, the Scarlet Woman remains the Scarlet Woman.",
-  },
-];
-
-// The Recluse and Sage jinx: a Demon-killed Sage, with a living Recluse in
-// play, is shown the Recluse in the Demon's place at this chance.
-export const RECLUSE_SAGE_CHANCE = 0.5;
-
-// The Barber's swap: the Demon swaps the 2 good NPCs whose swap helps evil
-// most, judging by what they claim (see strategy barber()). Each claimed
-// character is worth BARBER_VALUE[its kill priority] to good (an Outsider,
-// BARBER_OUTSIDER_VALUE; a spent once-per-game ability, half), counted by
-// how far the town believes its player: BARBER_CONFIRMED_WEIGHT if
-// confirmed, less BARBER_SUSPECTED_WEIGHT for each good NPC who suspects
-// them (or once, as the scapegoat), never below BARBER_MIN_WEIGHT. So evil
-// gains by moving strong abilities off believed players onto doubted ones.
-// A swap into a character that starts knowing something (the Chef...)
-// costs BARBER_NEW_INFO_COST, weighted the same way: they learn it tonight.
-// The Demon doesn't swap unless it gains at least BARBER_MIN_GAIN.
-export const BARBER_VALUE = { top: 4, high: 3, med: 2, low: 1, avoid: 2 };
-export const BARBER_OUTSIDER_VALUE = -1;
-export const BARBER_CONFIRMED_WEIGHT = 2;
-export const BARBER_SUSPECTED_WEIGHT = 0.25;
-export const BARBER_MIN_WEIGHT = 0.25;
-export const BARBER_NEW_INFO_COST = 1.5;
-export const BARBER_MIN_GAIN = 0.5;
 
 // Fabled (`team: "fabled"`): a script's rules for the Storyteller, never
 // dealt. They're kept out of the script's characters (see parseScript());
@@ -841,10 +24,144 @@ export const ROLES = Object.fromEntries(
   Object.entries(CHARACTERS).map(([id, c]) => [id, [c.name, c.team]]),
 );
 
+// Official ability text (`ability` in CHARACTERS), shown on the script
+// sheet. "*" means "not the first night".
+export const ABILITIES = each("ability");
+
+export const name = (id) => ROLES[id]?.[0] ?? id;
+export const team = (id) => ROLES[id]?.[1];
+export const alignment = (id) =>
+  ["townsfolk", "outsider"].includes(team(id)) ? "good" : "evil";
+
+
+// ── Setup: seats and dealing ─────────────────────────────────
+
+// The number of seats selected on the setup screen when the page opens.
+export const DEFAULT_SEATS = 12;
+
+// seats: [townsfolk, outsiders, minions, demons]
+export const COUNTS = {
+  8: [5, 1, 1, 1],
+  9: [5, 2, 1, 1],
+  10: [7, 0, 2, 1],
+  11: [7, 1, 2, 1],
+  12: [7, 2, 2, 1],
+  13: [9, 0, 3, 1],
+  14: [9, 1, 3, 1],
+  15: [9, 2, 3, 1],
+};
+
 // Characters that change the number of Outsiders dealt at setup (`outsiders`
 // in CHARACTERS). (A list is a choice: the Godfather deals 1 fewer or 1
 // more, at random; the Sentinel, a Fabled, 1 fewer, the same or 1 more.)
 export const OUTSIDER_MODIFIERS = each("outsiders");
+
+// Roles the human can't be dealt (`notForHuman` in CHARACTERS): their
+// abilities depend on things the solo human never faces (night choices,
+// night attacks, being nominated, public claims), or could turn you evil.
+export const FORBIDDEN_HUMAN = new Set(where((c) => c.notForHuman));
+
+
+// ── Jinxes ───────────────────────────────────────────────────
+
+// Official rulings for characters whose abilities clash (from the Djinn),
+// shown on the script sheet when both are on it. Each notes where it's
+// handled.
+export const JINXES = [
+  // characters/outsider/damsel.js
+  { ids: ["spy", "damsel"], text: "If the Spy is (or has been) in play, the Damsel is poisoned." },
+  // characters/outsider/damsel.js
+  { ids: ["widow", "damsel"], text: "If the Widow is (or has been) in play, the Damsel is poisoned." },
+  // never shown the Huntsman without the Damsel (setup.js)
+  {
+    ids: ["marionette", "huntsman"],
+    text: "If the Marionette thinks that they are the Huntsman, the Damsel was added during setup.",
+  },
+  // the Outsider "might" have been added (setup.js)
+  {
+    ids: ["marionette", "balloonist"],
+    text: "If the Marionette thinks that they are the Balloonist, an Outsider might have been added during setup.",
+  },
+  // characters/minion/pithag.js
+  {
+    ids: ["pithag", "damsel"],
+    text: "If a Pit-Hag creates a Damsel, the Storyteller chooses which player it is.",
+  },
+  // counted when it fails (storyteller.js mathCount())
+  {
+    ids: ["mathematician", "drunk"],
+    text: "The Mathematician learns if the Drunk's ability yielded false info or failed to work properly.",
+  },
+  // counted when it fails (storyteller.js mathCount())
+  {
+    ids: ["mathematician", "marionette"],
+    text: "The Mathematician learns if the Marionette's ability yielded false info or failed to work properly.",
+  },
+  // the Mathematician wakes before she learns (engine resolveNight())
+  {
+    ids: ["mathematician", "chambermaid"],
+    text: "The Chambermaid can detect if the Mathematician will wake tonight.",
+  },
+  // counted on a stray "attack" (mathCount(); s.demonChose in abilities.js)
+  {
+    ids: ["mathematician", "lunatic"],
+    text: "The Mathematician learns if the Lunatic attacks a different player than the real Demon attacked.",
+  },
+  // characters/townsfolk/cannibal.js
+  {
+    ids: ["cannibal", "butler"],
+    text: "If the Cannibal gains the Butler ability, the Cannibal learns this.",
+  },
+  // the count goes to the Cannibal (cannibal.js, juggler.js)
+  {
+    ids: ["cannibal", "juggler"],
+    text: "If the Juggler guesses on their first day and dies by execution, tonight the living Cannibal learns how many guesses the Juggler got correct.",
+  },
+  // the Ogre turns evil and knows it (characters/outsider/ogre.js)
+  { ids: ["recluse", "ogre"], text: "If the Recluse registers as evil to the Ogre, the Ogre learns that they are evil." },
+  // at RECLUSE_SAGE_CHANCE (storyteller.js sageInfo())
+  { ids: ["recluse", "sage"], text: "The Recluse might register as the Demon to the Sage." },
+  // characters/outsider/ogre.js
+  { ids: ["spy", "ogre"], text: "The Spy registers as evil to the Ogre." },
+  // characters/demon/vigormortis.js, characters/minion/mastermind.js
+  {
+    ids: ["mastermind", "vigormortis"],
+    text: "A Mastermind that has their ability keeps it if the Vigormortis dies.",
+  },
+  // never turns good (abilities.js chose())
+  {
+    ids: ["pithag", "goon"],
+    text: "If the Pit-Hag turns an evil player into the Goon, they can't turn good due to their own ability.",
+  },
+  // an Ogre only chooses on Night 1, before the Pit-Hag acts
+  {
+    ids: ["pithag", "ogre"],
+    text: "If the Pit-Hag turns an evil player into the Ogre, they can't turn good due to their own ability.",
+  },
+  // a jumping Fang Gu never passes it on (characters/demon/fanggu.js)
+  {
+    ids: ["scarletwoman", "fanggu"],
+    text: "If there would be two Demons, one of which was the Scarlet Woman, the Scarlet Woman remains the Scarlet Woman.",
+  },
+];
+
+// The Recluse and Sage jinx: the chance a Demon-killed Sage is shown a
+// living Recluse in the Demon's place.
+export const RECLUSE_SAGE_CHANCE = 0.5;
+
+
+// ── The Storyteller ──────────────────────────────────────────
+
+// The Storyteller steers for a final 3 of you, 1 good NPC and 1 evil player
+// (with you dead, 1 good; with a Zombuul, a final 2; see lean() in
+// src/storyteller.js). When evil is more than this many players ahead of
+// that path, its choices help good; that far behind, evil. (Who pair
+// information shows, whether misinformation frames or is random, random
+// deaths, and the Sailor, Sweetheart, Pacifist, Tinker and Shabaloth.)
+export const FINAL_THREE_MARGIN = 0.5;
+
+
+// ── Information ──────────────────────────────────────────────
 
 // Townsfolk who learn something on the first night only, and those who keep
 // learning on later nights (`info` in CHARACTERS). Setup deals at least a share of each (see
@@ -852,162 +169,74 @@ export const OUTSIDER_MODIFIERS = each("outsiders");
 export const FIRST_NIGHT_INFO = where((c) => c.info === "first");
 export const ONGOING_INFO = where((c) => c.info === "ongoing");
 
-// How many of the Townsfolk dealt are information characters: at least this
-// share (0–1) of the Townsfolk slots for each group, rounded to the nearest
-// whole number, when the script has enough of them. Setup alternates
-// between the groups until each has its share, then fills the rest of the
-// Townsfolk slots at random (which may add more). E.g. at 0.3, 7 Townsfolk
-// get at least 2 of each (0.3 × 7 = 2.1), and 9 Townsfolk at least 3.
-// (Outsiders, Minions and the Demon aren't counted.)
+// Setup deals at least this share of the Townsfolk slots (rounded) to each
+// kind of information character, when the script has them: at 0.3, 7
+// Townsfolk get at least 2 of each.
 export const FIRST_NIGHT_INFO_SHARE = 0.3;
 export const ONGOING_INFO_SHARE = 0.3;
 
-// Chance (0–1) that each Minion also learns the Demon's three bluffs.
-// Adjust here: 0 = Minions never know them, 1 = they always do.
-export const MINION_BLUFF_CHANCE = 1;
+// With this many seats or more, NPCs (and bluffers) may say first-night or
+// spent-ability information in public the morning they get it, at each
+// character's `publicInfo` chance.
+export const PUBLIC_INFO_MIN_SEATS = 12;
+export const PUBLIC_INFO_CHANCE = each("publicInfo");
 
-// When NPCs use their once-per-game abilities (and evil NPCs "use" bluffed
-// ones). Never before AFTER_DAY (a day for day abilities, a night for night
-// ones); then START_CHANCE that day, rising by STEP_CHANCE each day after
-// (capped at 100%). E.g. the Slayer: Day 1 0%, Day 2 20%, Day 3 40%, ...
-// Day 6 onwards 100%. Set for each character as `oncePerGame` in
-// CHARACTERS. (The Juggler always juggles on their first day, as their
-// ability says.)
-export const ONCE_PER_GAME = each("oncePerGame");
+// Each night, the chance the Poisoner picks you (not two nights running);
+// otherwise they pick as usual, and still might.
+export const HUMAN_POISON_CHANCE = 0.10;
 
-// How the Demon picks its nightly kill. It "finds" a good player's character
-// when they have claimed it in public or told the Demon in private (see
-// NPC conversations in engine.js), or, with a working Spy on its team, from
-// the Grimoire; it always knows its own Minions' characters. It checks the priority levels from high to low: at each level
-// with someone to kill, it attacks one of them at that level's chance, else
-// moves down a level. "avoid" characters are never attacked while anyone else
-// is available. If no level fires, it attacks any good NPC it isn't avoiding;
-// with no good NPC left to attack, any random NPC.
-// "top" is above every character: a good player the town is sure of
-// (confirmed "certain" or "likely"; see engine confirm()), who can't be framed.
-export const KILL_PRIORITY_CHANCE = {
-  top: 0.9,
-  avoid: 0,
-  low: 0.25,
-  med: 0.5,
-  high: 0.75,
+// When an evil NPC passes on what a player the team wants discredited told
+// them (see strategy told()), the chance it's a lie (always the same one).
+export const DISTORT_CHANCE = 0.25;
+
+// Yes/no questions an Artist can ask the Storyteller about a player.
+export const ARTIST_QUESTIONS = {
+  evil: "evil",
+  demon: "the Demon",
+  minion: "a Minion",
+  outsider: "an Outsider",
+  townsfolk: "a Townsfolk",
 };
 
+
+// ── Bluffs and cover stories ─────────────────────────────────
+
+// The chance each Minion also learns the Demon's 3 bluffs.
+export const MINION_BLUFF_CHANCE = 1;
+
 // Cover stories: on Day 1, some good NPCs claim a character they aren't
-// (see strategy coverFor()), and keep it up until they come clean.
-// HIDE_CHANCE: a good NPC with a character the Demon most wants dead ("high"
-//   below) hides it, claiming a safe ("low" or "avoid") character instead,
-//   with no information, so the Demon looks elsewhere.
-// BAIT_CHANCE: a good NPC with a character in BAIT_ROLES (`bait`; one that survives
-//   a night kill, or gains from it) claims a "high" character instead, with
-//   made-up information, to draw the Demon's attack.
-// Either way they tell the truth to players their own information vouches
-// for, and to you at COVER_TELL_HUMAN_CHANCE (decided once). The cover
-// character is never in play, claimed, or one of the Demon's bluffs.
-export const HIDE_CHANCE = 0.25;
-export const BAIT_CHANCE = 0.25;
-export const COVER_TELL_HUMAN_CHANCE = 0.5;
-export const BAIT_ROLES = where((c) => c.bait);
-// Characters that never hide or are never used as a bait (`neverHides`: they
-// act in public every day), and characters a hider never pretends to be
-// (`neverHiddenAs`: they'd draw a nomination, or need a public act to back
-// them up).
+// (never one in play, claimed or a Demon bluff) until they come clean, and
+// tell the truth to players their information vouches for (see strategy
+// coverFor()).
+export const HIDE_CHANCE = 0.25; // a "high" character claims a "low" or "avoid" one, with no information
+export const BAIT_CHANCE = 0.25; // a BAIT_ROLES character claims a "high" one, with made-up information
+export const COVER_TELL_HUMAN_CHANCE = 0.5; // they tell you the truth too (decided once)
+export const BAIT_ROLES = where((c) => c.bait); // survive, or gain from, a night kill
+// Never hide or bait (`neverHides`: they act in public every day); never
+// pretended to (`neverHiddenAs`: they'd draw a nomination, or need a public act).
 export const HIDE_NEVER = where((c) => c.neverHides);
 export const HIDE_NEVER_AS = where((c) => c.neverHiddenAs);
 
-// Outsiders who never claim to be what they are while alive: the Mutant
-// ("mad" they're not one) and the Damsel (hiding from the Minions). They
-// claim a Townsfolk instead: any on the script, as they only know their own
-// character (and one made a Mutant or Damsel later keeps the Townsfolk they
-// were claiming; see setup.js, claimFor()). They admit to it once dead (see
-// strategy revealsWhenDead()).
+// Outsiders who claim a Townsfolk while alive, and admit it once dead: the
+// Mutant ("mad" they're not one) and the Damsel (hiding from the Minions).
+// See claimFor() and strategy revealsWhenDead().
 export const HIDDEN_OUTSIDERS = ["mutant", "damsel"];
 
-// The evil team only knows its 3 bluffs are out of play. An evil player
-// whose bluff is a Mutant or Damsel (which can't be claimed openly) keeps it
-// at HIDDEN_BLUFF_CHANCE, hiding behind a Townsfolk that might be in play;
-// otherwise they take another of the bluffs, or with none free, bluff a
-// Townsfolk that might be in play. A team with a Spy or Widow has seen the
-// Grimoire, so it hides behind a Townsfolk that isn't in play.
+// The chance an evil player whose bluff is a Mutant or Damsel keeps it,
+// hiding behind a Townsfolk (one not in play, if a Spy or Widow saw the
+// Grimoire); otherwise they take another bluff.
 export const HIDDEN_BLUFF_CHANCE = 0.25;
 
 // Coming clean: a player with a cover story says in public what they really
-// are, with all their information:
-// - at dawn, once they're dead (nothing left to protect), or with
-//   COME_CLEAN_ALIVE or fewer players alive;
-// - at dawn, a hider whose information last night points at someone, at
-//   COME_CLEAN_URGENT_CHANCE;
-// - before the vote, when they're nominated (COME_CLEAN_NOMINATED_CHANCE),
-//   or a player their information vouches for or points at is
-//   (COME_CLEAN_NOMINATION_CHANCE). A card shows it before you vote.
-// FAKE_CLEAN_CHANCE: an evil NPC who's nominated fakes it once, claiming
-//   they were hiding a "high" character (a free Demon bluff if there is
-//   one), with made-up information.
-export const COME_CLEAN_ALIVE = 5;
-export const COME_CLEAN_URGENT_CHANCE = 0.5;
-export const COME_CLEAN_NOMINATED_CHANCE = 0.9;
-export const COME_CLEAN_NOMINATION_CHANCE = 0.5;
-export const FAKE_CLEAN_CHANCE = 0.3;
+// are, with all their information (at dawn once they're dead, or as below).
+export const COME_CLEAN_ALIVE = 5; // at dawn, with this few alive
+export const COME_CLEAN_URGENT_CHANCE = 0.5; // at dawn, a hider whose information last night points at someone
+export const COME_CLEAN_NOMINATED_CHANCE = 0.9; // before the vote, when they're nominated...
+export const COME_CLEAN_NOMINATION_CHANCE = 0.5; // ...or someone their information vouches for or points at is
+export const FAKE_CLEAN_CHANCE = 0.3; // a nominated evil NPC fakes it (once), as a "high" character
 
-// DISTORT_CHANCE: when an evil NPC passes on to another NPC what a player
-// told them (see strategy told()), and that player is one the evil team
-// wants to discredit (its scapegoat, or someone who accused one of them),
-// it's a lie at this chance: a different character, the same lie every
-// time.
-export const DISTORT_CHANCE = 0.25;
 
-// SPY_COVER_CHANCE: with a working Spy, the Demon knows every character, so
-// it could always kill the most valuable. To keep the Spy hidden, this is
-// its chance each night to kill a less valuable ("low") good player instead.
-export const SPY_COVER_CHANCE = 0.3;
-
-// Kill priority for each character (`kill` in CHARACTERS; unlisted good
-// characters: "low"; unlisted Minions: "avoid"). Ongoing information and
-// protection are the biggest threats; a Minion it kills can make the Demon
-// look good, but the useful ones are avoided.
-export const DEMON_KILL_PRIORITY = each("kill");
-
-// DEMON_STAR_PASS_CHANCE: chance the Demon kills itself to pass the Demon to
-// a Minion, on a night after it was nominated and survived.
-export const DEMON_STAR_PASS_CHANCE = 0.75;
-
-// The Vigormortis's kill priority for its own Minions: a Minion it kills
-// keeps their ability (and poisons a Townsfolk neighbour), so it's keen to.
-export const VIGORMORTIS_MINION_PRIORITY = "high";
-
-// Chance an NPC Gambler makes a wild guess (a random character on the
-// script) instead of guessing the character their target claims. A wrong
-// guess kills a working Gambler.
-export const GAMBLER_WILD_GUESS_CHANCE = 0.25;
-
-// Chance that an evil NPC's suspicion (and Slayer, Moonchild and Artist
-// targets) points at the evil team's shared scapegoat, when one is alive.
-export const SCAPEGOAT_CHANCE = 0.8;
-
-// How NPCs vote on a nomination.
-// GOOD_VOTE_CHANCE: a good NPC's chance to vote when nothing makes them lean
-//   either way. Each point of public evidence against the nominee (see
-//   evidence() in src/strategy.js) adds GOOD_VOTE_EVIDENCE_STEP, between
-//   GOOD_VOTE_MIN and GOOD_VOTE_MAX. They vote at GOOD_VOTE_MAX for someone
-//   they suspect and GOOD_VOTE_MIN for someone they trust.
-// HUMAN_NOMINATION_BONUS: added to a good NPC's chance when you nominated.
-//   (In the final 3, or 2 with a Zombuul, good NPCs always vote for the
-//   player you nominate or ask to have nominated: see vote().)
-// EVIL_VOTE_CHANCE: an evil NPC's chance to vote for a good nominee.
-// EVIL_TEAMMATE_VOTE_CHANCE: an evil NPC's chance to vote for a teammate,
-//   which they only do when their vote can't change the outcome (the
-//   nominee already has the votes needed, or can't reach them).
-// GHOST_VOTE_ALIVE: a dead player keeps their one ghost vote until this
-//   many players (or fewer) are alive, unless it's the vote that would
-//   mark the nominee; then they spend it on the player they suspect.
-export const GHOST_VOTE_ALIVE = 5;
-export const GOOD_VOTE_CHANCE = 0.5;
-export const GOOD_VOTE_EVIDENCE_STEP = 0.15;
-export const GOOD_VOTE_MIN = 0.1;
-export const GOOD_VOTE_MAX = 0.9;
-export const HUMAN_NOMINATION_BONUS = 0.1;
-export const EVIL_VOTE_CHANCE = 0.85;
-export const EVIL_TEAMMATE_VOTE_CHANCE = 0.5;
+// ── Suspicion and evidence ───────────────────────────────────
 
 // How much each thing a good NPC has seen in public counts towards
 // suspecting a player (see evidence() in src/strategy.js). Negative weights
@@ -1043,169 +272,184 @@ export const EVIDENCE_WEIGHT = {
   damselGuess: 6, // guessed the Damsel in public: only a Minion's guess counts
 };
 
-// With a Pixie on the script, two players claiming the same Townsfolk may
-// just be a mad Pixie (see characters/townsfolk/pixie.js), so a double claim
-// of a Townsfolk (claimsMyCharacter, doubleClaim) counts this much of its
-// usual weight.
+// With a Pixie on the script, a double claim of a Townsfolk might be a mad
+// Pixie, so it counts this much of its usual weight.
 export const PIXIE_DOUBLE_CLAIM_FACTOR = 0.4;
 
-// NPC nominations: once nominations open, an NPC whose suspect has at least
-// this much evidence against them (see EVIDENCE_WEIGHT) nominates them,
-// saying why: strongest case first, at most half the living players
-// (rounded down) a day, each NPC once.
-export const NPC_NOMINATE_EVIDENCE = 3;
-
-// TRUST_EVIDENCE: an NPC trusts a player with this much evidence for them
-// (a score this low or lower; see EVIDENCE_WEIGHT), or whom their own
-// information vouches for. They say so when you ask ("Who I trust").
+// An NPC trusts a player with an evidence score this low, or whom their own
+// information vouches for ("Who I trust").
 export const TRUST_EVIDENCE = -1;
 
-// The evidence a good NPC needs before it changes who they suspect (less,
-// and they stick with their hunch). At 1, one player's say-so (0.5) isn't
-// enough, so the town doesn't all pile onto the first accusation.
+// The evidence a good NPC needs to suspect a player (less, and they keep
+// their hunch): at 1, one player's say-so (0.5) isn't enough.
 export const EVIDENCE_TO_SUSPECT = 1;
 
-// You, the human, can be misinformed like anyone else (though you're never
-// dealt the Drunk: see notForHuman).
-// HUMAN_POISON_CHANCE: each night, the chance the Poisoner picks you (not
-//   two nights running). Otherwise they pick as usual, and can still pick you.
-export const HUMAN_POISON_CHANCE = 0.10;
+// The chance an evil NPC's suspicion (and Slayer, Moonchild and Artist
+// targets) is the team's scapegoat, while one lives.
+export const SCAPEGOAT_CHANCE = 0.8;
 
-// Witch, Pit-Hag and Cerenovus NPC behaviour.
-// WITCH_HUMAN_CHANCE: chance the Witch curses the human (the player most
-//   likely to nominate) rather than a random good NPC.
+
+// ── Nominations and voting ───────────────────────────────────
+
+// An NPC nominates their suspect with this much evidence against them,
+// saying why: strongest case first, each NPC once, at most half the living
+// players a day.
+export const NPC_NOMINATE_EVIDENCE = 3;
+
+// How NPCs vote (see strategy vote()). A good NPC votes at GOOD_VOTE_CHANCE,
+// plus GOOD_VOTE_EVIDENCE_STEP a point of evidence against the nominee,
+// from GOOD_VOTE_MIN (someone they trust) to GOOD_VOTE_MAX (their suspect).
+// In the final 3, they always vote for your pick.
+export const GHOST_VOTE_ALIVE = 5; // the dead keep their ghost vote until this few live (unless it's the deciding vote on their suspect)
+export const GOOD_VOTE_CHANCE = 0.5;
+export const GOOD_VOTE_EVIDENCE_STEP = 0.15;
+export const GOOD_VOTE_MIN = 0.1;
+export const GOOD_VOTE_MAX = 0.9;
+export const HUMAN_NOMINATION_BONUS = 0.1; // added when you nominated
+export const EVIL_VOTE_CHANCE = 0.85; // an evil NPC, for a good nominee
+export const EVIL_TEAMMATE_VOTE_CHANCE = 0.5; // ...for a teammate, only when it can't change the outcome
+
+// Round Robin (once per game, with nominations open and this few alive):
+// every player from Seat 1 says their character and information in public,
+// evil NPCs and a living Damsel bluffing (see engine roundRobin()).
+export const ROUND_ROBIN_ALIVE = 4;
+
+
+// ── The Demon's kill ─────────────────────────────────────────
+
+// The Demon's kill (see strategy demon()): from the top priority down, it
+// attacks someone at a level at that level's chance, else tries the next
+// (none fire: any good NPC; "avoid" only if no-one else is left). "top" is
+// a good player the town is sure of. It knows characters from claims, its
+// own Minions, and the Grimoire with a working Spy.
+export const KILL_PRIORITY_CHANCE = {
+  top: 0.9,
+  avoid: 0,
+  low: 0.25,
+  med: 0.5,
+  high: 0.75,
+};
+
+// Each character's kill priority (`kill` in CHARACTERS; unlisted good
+// characters: "low"; unlisted Minions: "avoid").
+export const DEMON_KILL_PRIORITY = each("kill");
+
+// With a working Spy, the chance each night the Demon kills a "low" good
+// player instead of the most valuable, to keep the Spy hidden.
+export const SPY_COVER_CHANCE = 0.3;
+
+// The chance the Demon kills itself to pass to a Minion, the night after it
+// was nominated and survived.
+export const DEMON_STAR_PASS_CHANCE = 0.75;
+
+// The Vigormortis's kill priority for its own Minions: a Minion it kills
+// keeps their ability (and poisons a Townsfolk neighbour), so it's keen to.
+export const VIGORMORTIS_MINION_PRIORITY = "high";
+
+
+// ── Character abilities ──────────────────────────────────────
+
+// When NPCs use once-per-game abilities (`oncePerGame` in CHARACTERS): not
+// before AFTER_DAY, then at START_CHANCE, rising by STEP_CHANCE a day. E.g.
+// the Slayer: Day 2 20%, Day 3 40%... (The Juggler always juggles on Day 1.)
+export const ONCE_PER_GAME = each("oncePerGame");
+
+// The chance an NPC Gambler guesses a random character, not their target's
+// claim.
+export const GAMBLER_WILD_GUESS_CHANCE = 0.25;
+
+// The chance an NPC Juggler guesses a player's claim, not a random character.
+export const JUGGLER_CLAIM_GUESS_CHANCE = 0.5;
+
+// The chance a good NPC Courtier chooses an evil character really in play
+// (a bluffer never does).
+export const COURTIER_CORRECT_CHANCE = 0.35;
+
+// The chance the Witch curses you (the likeliest nominator), not a good NPC.
 export const WITCH_HUMAN_CHANCE = 0.2;
 
-// PITHAG_EVIL_CHANCE: chance the Pit-Hag changes an evil teammate into a
-//   not-in-play character of the same kind (Minion or Demon) instead of
-//   turning a good NPC into an Outsider.
-// CERENOVUS_EVIL_CHANCE: chance the Cerenovus makes an evil teammate mad
-//   (about a good character not in play) instead of a good NPC.
-export const PITHAG_EVIL_CHANCE = 0.25;
-export const CERENOVUS_EVIL_CHANCE = 0.2;
+// The chance the Pit-Hag or Cerenovus picks an evil teammate, not a good NPC.
+export const PITHAG_EVIL_CHANCE = 0.25; // into another Minion or Demon, not in play
+export const CERENOVUS_EVIL_CHANCE = 0.2; // made mad about a good character not in play
 
-// When the Pit-Hag makes a Demon, that night's death is random instead of
-// the Demon's kill: any living NPC except the Demon. This is the chance
-// that nobody dies that night instead.
+// The night the Pit-Hag makes a Demon, the death is random: the chance
+// nobody dies.
 export const PITHAG_NO_DEATH_CHANCE = 0.3;
 
-// The Storyteller steers for a final 3 of the human, 1 good NPC and 1 evil
-// player: the evil team should shrink from its starting size to 1 as the
-// town shrinks to 3 (see lean() in src/storyteller.js). Once the human is
-// dead, the final 3 only needs 1 good player (so 1 or 2 evil); with a
-// Zombuul, it's a final 2. When evil is more than FINAL_THREE_MARGIN players
-// ahead of that path, the Storyteller's choices help good; that far behind,
-// they help evil. Those choices: which
-// other player a Washerwoman, Librarian, Investigator or Sage sees; whether
-// a drunk or poisoned player's information frames good players or is just
-// random; who the Gossip, Pit-Hag and Mayor's bounce kill; Pacifist saves,
-// Tinker deaths, Shabaloth regurgitation, the Sweetheart's drunk and the
-// Sailor's drunk when no kill is at stake.
-export const FINAL_THREE_MARGIN = 0.5;
-
-// The Marionette: from Night 2, the Demon may tell its Marionette who they
-// are, when evil is losing (the Storyteller is helping evil; see lean() in
-// src/storyteller.js) or at least MARIONETTE_HEAT of the living good NPCs
-// suspect the Demon: then at MARIONETTE_REVEAL_CHANCE a night. A Marionette
-// who knows plays for evil, drawing suspicion away from the Demon.
+// From Night 2, the Demon tells its Marionette who they are (who then plays
+// for evil) at MARIONETTE_REVEAL_CHANCE a night, when evil is losing or at
+// least MARIONETTE_HEAT of good NPCs suspect the Demon.
 export const MARIONETTE_HEAT = 0.3;
 export const MARIONETTE_REVEAL_CHANCE = 0.5;
 
-// Sailor, Pacifist, Tinker and Shabaloth Storyteller choices.
-// The Sailor: the Storyteller decides who is drunk (the Sailor or the player
-// they chose) when it first matters: an attack on either of them, their
-// pick using an ability, or dawn. When the choice decides whether an attack
-// kills, the Storyteller favours good: a good victim lives, an evil one
-// dies. Otherwise:
-// SAILOR_DRUNK_SELF_CHANCE: chance the Sailor (rather than the player they
-//   chose) is drunk until dusk.
-// SAILOR_LATE_ALIVE, SAILOR_LATE_DRUNK_CHANCE: with fewer than
-//   SAILOR_LATE_ALIVE players alive, the Sailor is drunk at this chance
-//   whatever is at stake, so their ability usually fails.
-// PACIFIST_SAVE_CHANCE: chance an executed good player doesn't die while a
-//   working Pacifist lives.
-// TINKER_DEATH_CHANCE: each night, the chance a working Tinker dies.
-// SHABALOTH_REGURGITATE_CHANCE: each night, the chance a dead player the
-//   Shabaloth chose last night comes back to life.
-export const SAILOR_DRUNK_SELF_CHANCE = 0.3;
-export const SAILOR_LATE_ALIVE = 6;
-export const SAILOR_LATE_DRUNK_CHANCE = 0.7;
-export const PACIFIST_SAVE_CHANCE = 0.5;
-export const TINKER_DEATH_CHANCE = 0.1;
-export const SHABALOTH_REGURGITATE_CHANCE = 0.25;
+// Storyteller choices. (The Sailor's drunk is decided when it first
+// matters; if it decides an attack, a good victim lives, an evil one dies.)
+export const SAILOR_DRUNK_SELF_CHANCE = 0.3; // otherwise, the Sailor (not their pick) is drunk
+export const SAILOR_LATE_ALIVE = 6; // with fewer alive than this...
+export const SAILOR_LATE_DRUNK_CHANCE = 0.7; // ...the Sailor is drunk at this chance, whatever's at stake
+export const PACIFIST_SAVE_CHANCE = 0.5; // an executed good player survives
+export const TINKER_DEATH_CHANCE = 0.1; // each night
+export const SHABALOTH_REGURGITATE_CHANCE = 0.25; // each night, last night's dead pick comes back
 
-// Gossip, Po and Lunatic NPC behaviour (and sinking a kill).
-// GOSSIP_CHANCE: the chance an NPC Gossip (or Gossip bluffer) makes their
-//   public statement at dawn. One who hasn't by the end of the day makes it
-//   then, before any execution: they gossip every day.
-// PO_CHARGE_CHANCE: each night, the chance the Po chooses no-one, to kill 3
-//   the next night.
-// LUNATIC_FOLLOW_CHANCE: the Demon learns who the Lunatic chose to "kill";
-//   the chance it kills them, so the Lunatic keeps believing.
+// The chance an NPC Gossip makes their statement at dawn (else at the end of
+// the day: they gossip every day).
 export const GOSSIP_CHANCE = 0.4;
 
-// Sinking a kill: on a night when an evil player is publicly claiming one
-// of PROTECTION_ROLES (`protects` in CHARACTERS), the chance the Demon kills nobody, so the claimed
-// protection looks like it worked.
+// Sinking a kill: the chance the Demon kills nobody while an evil player
+// claims one of PROTECTION_ROLES (`protects`), so it looks like it worked.
 export const PROTECTION_ROLES = where((c) => c.protects);
 export const SINK_KILL_CHANCE = 0.2;
-export const PO_CHARGE_CHANCE = 0.25;
-export const LUNATIC_FOLLOW_CHANCE = 0.5;
+export const PO_CHARGE_CHANCE = 0.25; // each night, the Po chooses no-one, to kill 3 the next
+export const LUNATIC_FOLLOW_CHANCE = 0.5; // the Demon kills the Lunatic's pick, so they keep believing
 
-// The Damsel hides (claiming a Townsfolk that isn't in play) until she
-// dies, except to a player claiming the Huntsman she doesn't suspect, whom
-// she tells in private (see strategy damselTo()); good players never pass
-// that on. NPC Minions know she's in play (from Night 1) and hunt for her;
-// each guesses once, in public, at dawn (one guess a dawn for the team),
-// from DAMSEL_GUESS_FROM_DAY; or, any day, when their Demon is about to be
-// executed (at End day, before the execution): a last chance, so they guess
-// their best candidate below without the chances. A guess that misses gives
-// the Minion away (see EVIDENCE_WEIGHT.damselGuess), so they guess:
-// - at once, a player they've found out: one who told a teammate bluffing
-//   the Huntsman that she's the Damsel;
-// - at DAMSEL_CLAIM_CHANCE a day, a player who says they're the Damsel
-//   (perhaps a decoy: see DAMSEL_DECOY_CHANCE);
-// - at DAMSEL_HIDER_CHANCE a day, a player claiming one of the Demon's
-//   bluffs (which the Minions know aren't in play, so that player is hiding
-//   something: likely the Damsel, or a Mutant);
-// - with DAMSEL_GUESS_ALIVE or fewer players alive, at DAMSEL_GUESS_CHANCE a
-//   day, a player claiming an Outsider, else any good player.
-// (A team bluffing the Damsel knows there's none, so it never guesses.)
-// DAMSEL_DECOY_CHANCE: with the Damsel on the script, a good NPC (not the
-//   Damsel, nor a "high" character, who hides instead) claims the Damsel as
-//   a cover story on Day 1, so a Minion wastes its guess on them and gives
-//   itself away. At most one decoy at a time. They tell a Huntsman the truth.
+// The Damsel hides behind a Townsfolk, telling only a Huntsman she trusts.
+// Each NPC Minion guesses her once, in public, at dawn (one a dawn for the
+// team) from DAMSEL_GUESS_FROM_DAY; or, any day, as a last chance (without
+// the chances below) when their Demon is about to be executed. They guess a
+// player a teammate bluffing the Huntsman found out, else at a chance a day
+// (see strategy damselGuess()):
 export const DAMSEL_GUESS_FROM_DAY = 3;
-export const DAMSEL_CLAIM_CHANCE = 0.4;
-export const DAMSEL_DECOY_CHANCE = 0.15;
-export const DAMSEL_HIDER_CHANCE = 0.5;
-export const DAMSEL_GUESS_ALIVE = 5;
-export const DAMSEL_GUESS_CHANCE = 0.5;
+export const DAMSEL_CLAIM_CHANCE = 0.4; // a player who says they're the Damsel
+export const DAMSEL_HIDER_CHANCE = 0.5; // a player claiming a Demon bluff (not in play, so hiding)
+export const DAMSEL_GUESS_ALIVE = 5; // with this few alive...
+export const DAMSEL_GUESS_CHANCE = 0.5; // ...a player claiming an Outsider, else anyone unconfirmed
+export const DAMSEL_DECOY_CHANCE = 0.15; // a good NPC claims the Damsel on Day 1, to waste a guess (one at a time)
 
-// The Boomdandy wants to be executed (all but 3 die, and the countdown
-// rarely finds the Demon), and so does the evil team, from
-// BOOMDANDY_FROM_DAY: while less than BOOMDANDY_HEAT of the living good
-// NPCs suspect the Demon, an evil NPC nominates the Boomdandy (making up a
-// reason) and evil NPCs vote for them at BOOMDANDY_VOTE_CHANCE; with the
-// Demon under more suspicion than that (the countdown could find it), at
-// BOOMDANDY_HOT_VOTE_CHANCE, and nobody evil nominates them.
+// From BOOMDANDY_FROM_DAY, the evil team wants its Boomdandy executed: while
+// less than BOOMDANDY_HEAT of good NPCs suspect the Demon, one nominates it
+// and they vote at BOOMDANDY_VOTE_CHANCE; above that (the countdown might
+// find the Demon), nobody nominates it, and at BOOMDANDY_HOT_VOTE_CHANCE.
 export const BOOMDANDY_FROM_DAY = 2;
 export const BOOMDANDY_HEAT = 0.3;
 export const BOOMDANDY_VOTE_CHANCE = 0.9;
 export const BOOMDANDY_HOT_VOTE_CHANCE = 0.3;
 
-// COURTIER_CORRECT_CHANCE: the chance a good NPC Courtier chooses a Demon
-//   or Minion character that's really in play (alive); otherwise they choose
-//   one that isn't. (An evil Courtier bluffer always chooses one that isn't.)
-export const COURTIER_CORRECT_CHANCE = 0.35;
+// The Barber's swap: the Demon swaps the 2 good NPCs whose swap moves the
+// most claimed ability off believed players onto doubted ones (see strategy
+// barber()), or nobody, if it gains less than BARBER_MIN_GAIN.
+export const BARBER_VALUE = { top: 4, high: 3, med: 2, low: 1, avoid: 2 }; // a claim's worth to good, by kill priority (half once spent)
+export const BARBER_OUTSIDER_VALUE = -1; // an Outsider's
+export const BARBER_CONFIRMED_WEIGHT = 2; // belief in a confirmed player (others 1)...
+export const BARBER_SUSPECTED_WEIGHT = 0.25; // ...less this for each good NPC who suspects them (or as scapegoat)...
+export const BARBER_MIN_WEIGHT = 0.25; // ...never below this
+export const BARBER_NEW_INFO_COST = 1.5; // a swap into a "start knowing" character: they learn it tonight
+export const BARBER_MIN_GAIN = 0.5;
+
+
+// ── Timings and display ──────────────────────────────────────
 
 // Vote animation: how long (in ms) the clock hands point at the nominator
 // and nominee before the large hand starts counting votes.
 export const VOTE_COUNT_DELAY_MS = 500;
 
-// Vote: how long (in ms) you have to lower your hand (it starts raised)
-// before the votes are counted. Skipped when you can't vote (dead, with your
-// ghost vote spent).
+// Vote animation: how long (in ms) the large hand takes per seat as it
+// counts votes. (A voter's hand goes up just before the clock hand arrives.)
+export const VOTE_TICK_MS = 350;
+
+// Vote: how long (in ms) you have to raise your hand (it starts lowered)
+// before the votes are counted; you can still raise or lower it as they're
+// counted, until the clock hand reaches you. Skipped when you can't vote
+// (dead, with your ghost vote spent).
 export const HAND_WAIT_MS = 3000;
 
 // The Boomdandy's countdown: how long (in ms) you have to select the living
@@ -1213,26 +457,6 @@ export const HAND_WAIT_MS = 3000;
 // pointing at them dies (with nobody selected, you don't point). It's paused
 // while a dawn / dusk card is up.
 export const BOOM_WAIT_MS = 10000;
-
-// Round Robin: once per game, once nominations are open on a day with
-// ROUND_ROBIN_ALIVE or fewer players alive, you can press Round Robin: from
-// Seat 1, every player, living or dead, says in public their character and
-// information. You say your claim and what you've learned; good NPCs tell
-// the truth (dropping any cover story), except a living Damsel; evil NPCs
-// and a living Damsel keep to their bluffs.
-export const ROUND_ROBIN_ALIVE = 4;
-
-// Vote animation: how long (in ms) the large hand takes per seat as it
-// counts votes. (A voter's hand goes up just before the clock hand arrives.)
-export const VOTE_TICK_MS = 200;
-
-// Performance timing (for finding lag): with PERF_LOGGING on, the game times
-// every click (until the next frame is drawn), each redraw of the page, and
-// any long task the browser reports. Anything that takes PERF_SLOW_MS or
-// more is written to the browser console ("[perf] ..."); a summary is added
-// to the end of log.txt, and soloPerf() in the console prints it any time.
-export const PERF_LOGGING = true;
-export const PERF_SLOW_MS = 50;
 
 // Town square: the ⚠ on an NPC who just claimed their character in public
 // without being asked (sharing information, a Gossip statement, a Slayer
@@ -1249,23 +473,6 @@ export const TOWN_SQUARE_SIZE = 1;
 export const TOWN_SQUARE_SIZE_STEP = 0.1;
 export const TOWN_SQUARE_SIZE_MIN = 0.6;
 export const TOWN_SQUARE_SIZE_MAX = 1.5;
-
-// Chance an NPC Juggler guesses a player's claimed character; otherwise they
-// guess a random character on the script.
-export const JUGGLER_CLAIM_GUESS_CHANCE = 0.5;
-
-// Official ability text (`ability` in CHARACTERS), shown on the script
-// sheet. "*" means "not the first night".
-export const ABILITIES = each("ability");
-
-// Yes/no questions an Artist can ask the Storyteller about a player.
-export const ARTIST_QUESTIONS = {
-  evil: "evil",
-  demon: "the Demon",
-  minion: "a Minion",
-  outsider: "an Outsider",
-  townsfolk: "a Townsfolk",
-};
 
 // Each seat's colour for player names in the town square and the public log,
 // in seat order (seat 1 is you). No reds or blues (they mark evil and good
@@ -1288,35 +495,13 @@ export const PLAYER_COLOURS = [
   "#d6a8e0", // lilac
 ];
 
-// In bigger games (PUBLIC_INFO_MIN_SEATS or more seats), NPCs with
-// first-night information, or information from an ability that's now spent,
-// may say it publicly the morning they get it (evil bluffers share their
-// bluffed information the same way). The chance for each character is
-// `publicInfo` in CHARACTERS.
-export const PUBLIC_INFO_MIN_SEATS = 12;
-export const PUBLIC_INFO_CHANCE = each("publicInfo");
 
-// The number of seats selected on the setup screen when the page opens.
-export const DEFAULT_SEATS = 12;
+// ── Debugging ────────────────────────────────────────────────
 
-// seats: [townsfolk, outsiders, minions, demons]
-export const COUNTS = {
-  8: [5, 1, 1, 1],
-  9: [5, 2, 1, 1],
-  10: [7, 0, 2, 1],
-  11: [7, 1, 2, 1],
-  12: [7, 2, 2, 1],
-  13: [9, 0, 3, 1],
-  14: [9, 1, 3, 1],
-  15: [9, 2, 3, 1],
-};
-
-// Roles the human can't be dealt (`notForHuman` in CHARACTERS): their
-// abilities depend on things the solo human never faces (night choices,
-// night attacks, being nominated, public claims), or could turn you evil.
-export const FORBIDDEN_HUMAN = new Set(where((c) => c.notForHuman));
-
-export const name = (id) => ROLES[id]?.[0] ?? id;
-export const team = (id) => ROLES[id]?.[1];
-export const alignment = (id) =>
-  ["townsfolk", "outsider"].includes(team(id)) ? "good" : "evil";
+// Performance timing (for finding lag): with PERF_LOGGING on, the game times
+// every click (until the next frame is drawn), each redraw of the page, and
+// any long task the browser reports. Anything that takes PERF_SLOW_MS or
+// more is written to the browser console ("[perf] ..."); a summary is added
+// to the end of log.txt, and soloPerf() in the console prints it any time.
+export const PERF_LOGGING = true;
+export const PERF_SLOW_MS = 50;

@@ -387,60 +387,70 @@ function aim(hand, angle, instant = false) {
   }
 }
 
-// Your hand during a vote: it starts up, and a button under the clock lets
-// you lower it (or raise it again) for HAND_WAIT_MS, counting down the
-// seconds. Resolves to whether it's up.
+// Your hand during a vote: it starts lowered, and one button under the
+// clock raises or lowers it: for HAND_WAIT_MS before the count starts
+// (counting down the seconds, `ready`), then as the votes are counted,
+// until the clock hand reaches you and counts it. `up()` says whether
+// it's up now; `lock()` ends your choice and says whether it's up.
 function handChoice(c) {
-  return new Promise((done) => {
-    const seat = c.querySelector(`[data-id="${s.humanId}"]`);
-    let up = true;
-    let left = Math.ceil(HAND_WAIT_MS / 1000);
+  const seat = c.querySelector(`[data-id="${s.humanId}"]`);
+  let up = false;
+  let left = Math.ceil(HAND_WAIT_MS / 1000);
 
-    c.insertAdjacentHTML(
-      "beforeend",
-      '<button id="hand-toggle" type="button" class="hand-toggle"></button>',
-    );
+  c.insertAdjacentHTML(
+    "beforeend",
+    '<button id="hand-toggle" type="button" class="hand-toggle"></button>',
+  );
 
-    const b = $("hand-toggle");
-    const show = () => {
-      b.textContent = `${up ? "✋ Lower hand" : "Raise hand"} (${left})`;
-      seat?.querySelector(".vote-hand.mine")?.remove();
+  const b = $("hand-toggle");
+  const show = () => {
+    b.textContent = `${up ? "Lower hand" : "✋ Raise hand"}${left > 0 ? ` (${left})` : ""}`;
+    seat?.querySelector(".vote-hand.mine")?.remove();
 
-      if (up) {
-        seat?.insertAdjacentHTML("afterbegin", '<span class="vote-hand mine">✋</span>');
-      }
-    };
+    if (up) {
+      seat?.insertAdjacentHTML("afterbegin", '<span class="vote-hand mine">✋</span>');
+    }
+  };
 
-    b.onclick = () => {
-      up = !up;
-      show();
-    };
-
+  b.onclick = () => {
+    up = !up;
     show();
+  };
 
+  show();
+
+  const ready = new Promise((done) => {
     const timer = setInterval(() => {
       left--;
+      show();
 
-      if (left > 0) {
-        show();
-        return;
+      if (left <= 0) {
+        clearInterval(timer);
+        done();
       }
-
-      clearInterval(timer);
-      b.remove();
-      seat?.querySelector(".vote-hand.mine")?.remove();
-      done(up);
     }, 1000);
   });
+
+  return {
+    ready,
+    up: () => up,
+    lock() {
+      b.remove();
+      seat?.querySelector(".vote-hand.mine")?.remove();
+      return up;
+    },
+  };
 }
 
 // Runs a nomination (`fn` calls the engine, leaving the vote waiting), then
 // shows its vote: clock hands fade in over the clock tower, the small hand
 // on the nominator and the large hand on the nominee; you get HAND_WAIT_MS
-// to lower your hand (see handChoice()), and the votes are cast; then the
-// large hand ticks clockwise round the circle (starting after the nominee,
-// ending on them), raising each voter's hand; then the skull marks the
-// nominee if they're now marked for execution, and the clock tower returns.
+// to raise your hand (see handChoice()), and the NPCs decide (openVote());
+// then the large hand ticks clockwise round the circle (starting after the
+// nominee, ending on them), raising each voter's hand; you can still raise
+// or lower yours until it reaches you, and then the votes are cast; then
+// the skull marks the nominee if they're now marked for execution, and the
+// clock tower returns.
 async function runVote(fn) {
   if (voteAnim) {
     return;
@@ -490,21 +500,28 @@ async function runVote(fn) {
   c.classList.add("voting");
 
   // Let the hands fade in (0.4s), then pause before counting starts: long
-  // enough for you to lower your hand, if you can vote.
+  // enough for you to raise your hand, if you can vote.
   await sleep(400);
 
-  const hand = e.canVote() ? await handChoice(c) : false;
+  const choice = e.canVote() ? handChoice(c) : null;
 
-  result = e.castVotes(hand);
+  await choice?.ready;
+
+  // The NPCs' votes, decided now; yours, until the clock hand reaches you.
+  let records = e.openVote(choice?.up() ?? false);
+  let hand = false;
+
   await sleep(VOTE_COUNT_DELAY_MS);
 
   for (let k = 1; k <= n; k++) {
     const p = s.players[(start + k) % n];
-    const record = result.records.find((x) => x.playerId === p.id);
     const seat = c.querySelector(`[data-id="${p.id}"]`);
+    // (Yours is already showing, and can change until you're counted.)
+    const yours = p.human && choice;
+    let record = records.find((x) => x.playerId === p.id);
 
     // A voter's hand goes up before the clock hand reaches them...
-    if (record?.attempted) {
+    if (record?.attempted && !yours) {
       seat?.insertAdjacentHTML(
         "afterbegin",
         `<span class="vote-hand ${record.counted ? "" : "not-counted"}">✋</span>`,
@@ -518,6 +535,21 @@ async function runVote(fn) {
 
     await sleep(VOTE_TICK_MS);
 
+    // (Your vote is settled now the clock hand has reached you: the button
+    // goes, and your hand stays as it was.)
+    if (yours) {
+      hand = choice.lock();
+      records = e.openVote(hand);
+      record = records.find((x) => x.playerId === p.id);
+
+      if (record.attempted) {
+        seat?.insertAdjacentHTML(
+          "afterbegin",
+          `<span class="vote-hand ${record.counted ? "" : "not-counted"}">✋</span>`,
+        );
+      }
+    }
+
     // ...and is counted as it passes over them.
     if (record?.counted) {
       voteAnim.revealed.add(p.id);
@@ -526,6 +558,10 @@ async function runVote(fn) {
       seat?.querySelector(".vote-hand")?.classList.add("counted");
     }
   }
+
+  // (Cast, with your hand as it was when the clock hand reached you.)
+  result = e.castVotes(hand);
+  tally.textContent = `${result.count} / ${result.needed} needed`;
 
   await sleep(600);
 

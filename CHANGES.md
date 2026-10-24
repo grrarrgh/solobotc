@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Code Maintenance
+
+- src/data.js is organised into sections, each with a header: Characters; Setup: seats and dealing; Jinxes; The Storyteller; Information; Bluffs and cover stories; Suspicion and evidence; Nominations and voting; The Demon's kill; Character abilities; Timings and display; Debugging. No setting changed, only where it sits.
+- The character catalogue (`CHARACTERS`, `TRAVELLERS`) moved from src/data.js to src/characters/catalog.js. data.js re-exports it, so nothing that imports it changed.
+- src/data.js comments are shorter: no comment runs past 6 lines. Each setting's detail sits on its own line, and each jinx notes where it's handled, next to its entry in JINXES (instead of a list above them). No setting changed.
+
 ## New Features: Damsel Guess Timing, Logging, Boomdandy Countdown Timer & Round Robin Death Shroud & Jinxes
 
 - Death shroud: a dead player's seat has the death shroud (images/death-shroud.png) hanging from the top of it for the rest of the game, behind the text, so you can still read what they claimed. The text in front gets a dark shadow. (serve.js now serves .png files.)
@@ -18,6 +24,7 @@ Newest first.
 - Mathematician & Marionette (and Drunk): the Mathematician now also counts a Marionette or Drunk whose pretend ability failed on a night they woke to choose (a Monk, Innkeeper, Sailor...), not only one who got information.
 - Ravenkeeper: never chooses you (good or evil).
 - Cannibal & Pixie: a Cannibal who eats the Pixie now learns an in-play Townsfolk that night ("Pixie: the Chef is in play."), like any other first-night ability they gain. Before, they learned nothing.
+- Voting: your hand starts lowered, and one button under the clock raises or lowers it ("✋ Raise hand" / "Lower hand"). You can press it in the few seconds before the count (HAND_WAIT_MS) and as the votes are counted, while the clock hand ticks round, until it reaches your seat and counts your vote (then the button goes). The NPCs decide when the count starts, seeing your hand as it is then (engine `openVote()`), and their votes stand. Your vote is cast as the clock hand reaches you.
 - Barber: the Demon's swap now helps evil (strategy barber(), BARBER_* in src/data.js). Judging by what players claim, it values each character's ability to good (by kill priority; Outsiders count against good; a spent once-per-game ability counts for half) and weighs each player by how much the town believes them (more if confirmed, less for each good NPC who suspects them or as the scapegoat). It swaps the 2 good NPCs whose swap moves the most ability off believed players onto doubted ones, counting it against a swap that gives good a "start knowing" ability. With nothing worth BARBER_MIN_GAIN, it swaps nobody. The log says why ("(why: Player 6 (claims the Sweetheart, believed 0.75) and Player 8 (claims the Savant, believed 1): evil gains 1)").
 - First-night abilities start the night someone gains them: eaten by the Cannibal, swapped in by the Barber, or made by the Pit-Hag (`startsTonight()`, from `p.gainedNight`). "Start knowing" information (Chef, Washerwoman, Pixie...) comes that night. A new Widow looks at the Grimoire and poisons, a new Godfather learns the Outsiders, a new Ogre chooses, and a Puzzlemaster's puzzle starts if there wasn't one. Before, players swapped by the Barber or made by the Pit-Hag never used them.
 - You're never dealt the Drunk (`notForHuman`); HUMAN_DRUNK_CHANCE is gone. You can still be made drunk (Sailor, Courtier, Puzzlemaster...) or poisoned.
