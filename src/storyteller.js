@@ -66,14 +66,17 @@ export const ability = (p) =>
     : (p.gained ?? p.role);
 
 // Whether NPC p acts out `role` in public without having its ability: an
-// evil player (or the Lunatic) bluffing it, or a mad Pixie claiming it (see
+// evil player (or the Lunatic) bluffing it, or a mad Pixie claiming it (a
+// real one, or a Drunk or Marionette shown the Pixie; see
 // characters/townsfolk/pixie.js). They use it as a real one would, to no
 // effect, and any information it gives them is made up.
 export const bluffing = (p, role) =>
   !p.human &&
   p.claim === role &&
   ability(p) !== role &&
-  (p.alignment === "evil" || p.role === "lunatic" || (p.role === "pixie" && p.pixieMad));
+  (p.alignment === "evil" ||
+    p.role === "lunatic" ||
+    ((p.role === "pixie" || p.shown === "pixie") && p.pixieMad));
 
 // A player and their character, for the log: "Player 4, the Poisoner".
 export const who = (x) => `${x.label}, the ${name(x.role)}`;

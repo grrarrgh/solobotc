@@ -153,14 +153,16 @@ export function createState(
   let demons = sample(pool("demon"), 1, r);
 
   // Legion: most players are Legion (see LEGION_MAJORITY), with no Minions.
-  // The rest are good: Townsfolk and Outsiders, in the usual proportion.
+  // The rest are good: any mix of Townsfolk and Outsiders, as the
+  // Storyteller likes. Here, a random number of Outsiders from 0 to the
+  // standard count for the seats (at 12: 0, 1 or 2 of the 5).
   if (demons[0] === "legion") {
     const legion = Math.floor(seats / 2) + LEGION_MAJORITY;
     const good = seats - legion;
 
     mins = [];
     demons = Array(legion).fill("legion");
-    o = Math.round((o * good) / (t + o));
+    o = Math.min(Math.floor(r() * (o + 1)), good - 1);
     t = good - o;
   }
   const shift = [...mins, ...demons, ...script.fabled].reduce((n, id) => {

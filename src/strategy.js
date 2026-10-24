@@ -983,7 +983,7 @@ export class SimpleStrategy {
       return hidden;
     }
 
-    return (p.role === "pixie" || p.bluff === "pixie") &&
+    return (p.role === "pixie" || p.shown === "pixie" || p.bluff === "pixie") &&
       p.pixieMad &&
       !p.gained &&
       !p.bluffGained
@@ -2654,15 +2654,20 @@ export class SimpleStrategy {
   }
 
   // The Seamstress (once per game, timed by ONCE_PER_GAME.seamstress)
-  // compares someone they suspect with another player.
+  // compares someone they suspect with another player. Never a player they
+  // know claims the Recluse (who might register as evil, wasting the one
+  // use), while there's anyone else to choose.
   seamstress(s, p) {
     if (!this.onceReady(s, "seamstress", s.night)) {
       return null;
     }
 
-    const a = this.suspect(s, p, this.others(s, p));
+    const all = this.others(s, p);
+    const others = all.filter((x) => claimHeard(x, p) !== "recluse");
+    const pool = others.length >= 2 ? others : all;
+    const a = this.suspect(s, p, pool);
     const b = pick(
-      this.others(s, p).filter((x) => x !== a),
+      pool.filter((x) => x !== a),
       s.r,
     );
 

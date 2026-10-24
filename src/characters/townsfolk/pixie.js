@@ -23,7 +23,8 @@ export const pixie = {
       (x) =>
         x.alive &&
         !x.human &&
-        (x.role === "pixie" || pixieBluffer(x)) &&
+        // (Or a Drunk or Marionette shown the Pixie: they think they are.)
+        (x.role === "pixie" || x.shown === "pixie" || pixieBluffer(x)) &&
         x.pixieRole &&
         !x.pixieMad,
     )) {
@@ -40,7 +41,11 @@ export const pixie = {
       this.audit(
         "pixie",
         `${p.label} (${
-          p.role === "pixie" ? "Pixie" : `${name(p.role)}, bluffing Pixie`
+          p.role === "pixie"
+            ? "Pixie"
+            : p.shown === "pixie"
+              ? `${name(p.role)}, who thinks they're the Pixie`
+              : `${name(p.role)}, bluffing Pixie`
         }) is mad that they are the ${name(p.pixieRole)}, and claims it.`,
         { playerId: p.id, role: p.pixieRole },
       );

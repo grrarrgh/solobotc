@@ -8813,9 +8813,14 @@ test("Legion share half as many bluffs as there are Legion, 1 an Outsider when t
       const outsiders = s.players.filter((p) => team(p.role) === "outsider").length;
       const bluffOutsiders = s.demonBluffs.filter((id) => team(id) === "outsider").length;
       const inPlay = new Set(s.players.map((p) => p.role));
+      // (The Drunk and Lunatic are never bluffs: with every other Outsider
+      // in play, there's none to give.)
+      const spare = s.script.ids.some(
+        (id) => team(id) === "outsider" && !["drunk", "lunatic"].includes(id) && !inPlay.has(id),
+      );
 
       assert.equal(s.demonBluffs.length, Math.ceil(legion.length / 2), `${seats} seats`);
-      assert.equal(bluffOutsiders, outsiders ? 1 : 0, `${seats} seats`);
+      assert.equal(bluffOutsiders, outsiders && spare ? 1 : 0, `${seats} seats`);
       assert.ok(s.demonBluffs.every((id) => !inPlay.has(id)));
       assert.ok(legion.every((p) => p.bluffs.length === s.demonBluffs.length));
     }
@@ -9187,4 +9192,54 @@ test("a good player claiming the Cannibal without it 'eats' the executee as they
   assert.match(said, new RegExp(`I have ${noble.label}'s ability, since they were executed\.`));
   assert.match(said, /Night 2: One of .+ is evil\./);
   assert.ok(mutant.hideInfo.memories.every((m) => m.functioning === false));
+});
+
+test("an NPC Seamstress never chooses a player they know claims the Recluse", () => {
+  for (let seed = 0; seed < 40; seed++) {
+    const { s, p, strat } = trNight(`seam-recluse-${seed}`, [null, "seamstress", "recluse"], 2);
+    const recluse = p[2];
+
+    recluse.claimKnown = true;
+    recluse.publicClaim = "recluse";
+    strat.onceReady = () => true;
+
+    const picks = strat.seamstress(s, p[1]);
+
+    assert.equal(picks.length, 2);
+    assert.ok(!picks.includes(recluse), `seed ${seed}`);
+  }
+});
+
+test("Legion games deal a random number of Outsiders, from 0 to the standard count", () => {
+  const raw = tr.filter((x) => !["imp", "vigormortis"].includes(x.id));
+  const seen = new Set();
+
+  for (let seed = 0; seed < 120; seed++) {
+    const s = createState(raw, 12, `legion-outsiders-${seed}`);
+    const outsiders = s.players.filter((p) => team(p.startRole) === "outsider").length;
+
+    assert.ok(outsiders >= 0 && outsiders <= COUNTS[12][1], `seed ${seed}`);
+    seen.add(outsiders);
+  }
+
+  assert.deepEqual([...seen].sort(), [0, 1, 2]);
+});
+
+test("a Drunk shown the Pixie acts as a Pixie: mad about their Townsfolk, never claiming the Pixie while alive", () => {
+  const { s, p, e } = trNight("drunk-pixie", [null, "drunk", "highpriestess"]);
+  const drunk = p[1];
+
+  drunk.shown = "pixie";
+  drunk.claim = "pixie";
+  e.night();
+
+  assert.ok(drunk.pixieRole);
+  assert.equal(drunk.pixieMad, true);
+  assert.equal(drunk.claim, drunk.pixieRole);
+  assert.ok(!/Pixie/.test(e.ask(drunk.id)));
+
+  // Once dead, they say what they thought they were.
+  s.phase = "day";
+  e.execute(drunk);
+  assert.ok(s.publicLog.some((x) => x.includes("reveals they were the Pixie")));
 });
