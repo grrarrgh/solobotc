@@ -833,6 +833,67 @@ button:disabled {
   color: #ddd;
 }
 
+/* The script popup's Night order / Characters button: in the top corner,
+   where it stays as the sheet scrolls under it. */
+.night-order-toggle {
+  position: sticky;
+  top: 0;
+  float: right;
+  z-index: 1;
+  margin: -6px -10px 0 12px;
+  padding: 5px 12px;
+  border: 1px solid #b69455;
+  border-radius: 999px;
+  background: #2c313b;
+  color: #f0cf83;
+  font-size: 0.8rem;
+  font-weight: 700;
+  box-shadow: 0 2px 8px #000a;
+  cursor: pointer;
+}
+
+.night-order-toggle svg {
+  width: 1.15em;
+  height: 1.15em;
+  margin-right: 3px;
+  vertical-align: -0.22em;
+}
+
+.night-order-toggle:hover,
+.night-order-toggle:focus-visible {
+  background: #3b3428;
+}
+
+.night-order-list {
+  margin: 0;
+  padding-left: 1.8em;
+}
+
+.night-order-list li {
+  margin-top: 7px;
+  color: #ddd;
+}
+
+.night-order-list li::marker {
+  color: #888;
+  font-size: 0.85em;
+}
+
+.night-order-list b.role-good {
+  color: #64b5f6;
+}
+
+.night-order-list b.role-evil {
+  color: #ef6b72;
+}
+
+/* Dusk, Minion info, Demon info, Dawn: the Storyteller's steps. */
+.night-order-list .night-step,
+.night-order-list .night-step b {
+  color: #f0cf83;
+  font-style: italic;
+}
+
 .script-footnote {
   margin-top: 16px;
   color: #999;

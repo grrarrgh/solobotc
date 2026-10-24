@@ -2,6 +2,11 @@
 
 Newest first.
 
+## New Feature: Night Order
+
+- Script sheet: a **Night order** button (with a crescent moon) in the top corner of the script popup, which stays there as the script scrolls. Pressing it shows the script's night order: who the Storyteller wakes on the first night and on other nights, in the official order, numbered, with a reminder of what each does, and the Dusk, Minion info, Demon info and Dawn steps. Only the script's characters are listed; characters who don't wake at night are left out. The button then reads **Characters**, to go back. Pressing anywhere else still closes the popup.
+- The order and reminders are in src/characters/nightorder.js (`FIRST_NIGHT`, `OTHER_NIGHTS`, `nightOrder()`), for every character the game has.
+
 ## Bug Fixes: Madness, Ravenkeeper, Evil Votes & Bluffs, Amnesiac, Death Shroud
 
 - Cerenovus madness in the debug log: the Player states Claims column shows it ("Fortune Teller (mad as Ravenkeeper)"). Before, a mad claim never showed (madness starts at dawn and ends at dusk, between tables), except at Game Over, where it looked like a real claim.

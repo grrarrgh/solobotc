@@ -33,6 +33,7 @@ import {
   amnesiacShape,
 } from "./characters/townsfolk/amnesiac.js";
 import { claimTo } from "./strategy.js";
+import { NIGHT_STEPS, nightOrder } from "./characters/nightorder.js";
 import { byId } from "./util.js";
 
 const $ = (id) => document.getElementById(id);
@@ -341,7 +342,7 @@ function circle() {
     </div>`,
   );
 
-  $("clocktower").onclick = showScript;
+  $("clocktower").onclick = () => showScript();
 
   $("circle")
     .querySelectorAll("[data-id]:not(:disabled)")
@@ -688,6 +689,11 @@ const CLOCKTOWER_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true">
   <rect x="14" y="58" width="36" height="4" rx="1" fill="#b69455" />
 </svg>`;
 
+// A crescent moon, in the clock tower's gold, for the Night order button.
+const MOON_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" fill="#f0cf83" />
+</svg>`;
+
 const TEAMS = [
   ["townsfolk", "Townsfolk"],
   ["outsider", "Outsiders"],
@@ -696,9 +702,57 @@ const TEAMS = [
   ["fabled", "Fabled"],
 ];
 
-// Opens a popup listing the script's characters and abilities by team, its
-// Fabled, and the jinxes between its characters (see JINXES).
-function showScript() {
+// Opens the script popup: the characters (see scriptSheet()), or, with
+// `nights`, the night order (see nightSheet()). The button in its top corner
+// switches between them.
+function showScript(nights = false) {
+  $("script-sheet").innerHTML = nights ? nightSheet() : scriptSheet();
+  $("night-order").innerHTML = nights
+    ? "📜 Characters"
+    : `${MOON_SVG} Night order`;
+  $("night-order").onclick = (ev) => {
+    // (Pressing anywhere else on the popup closes it.)
+    ev.stopPropagation();
+    showScript(!nights);
+  };
+
+  if (!$("script-dialog").open) {
+    $("script-dialog").showModal();
+  }
+
+  $("script-dialog").scrollTop = 0;
+}
+
+// The script's night order: who wakes on the first night, and on the others,
+// in order, with what happens (see characters/nightorder.js).
+function nightSheet() {
+  const { first, other } = nightOrder(s.script.ids);
+  const list = (steps) =>
+    `<ol class="night-order-list">
+      ${steps
+        .map(({ id, text }) => {
+          const step = id in NIGHT_STEPS;
+          const who = step ? NIGHT_STEPS[id] : name(id);
+
+          return `<li class="${step ? "night-step" : ""}"><b class="${
+            step ? "" : `role-${alignment(id)}`
+          }">${esc(who)}</b> <span>${esc(text)}</span></li>`;
+        })
+        .join("")}
+    </ol>`;
+
+  return `<h2>Night order</h2>
+    <p class="script-author">${esc(s.script.meta.name)}</p>
+    <h3>First night</h3>
+    ${list(first)}
+    <h3>Other nights</h3>
+    ${list(other)}
+    <p class="script-footnote">Minion and Demon info: 7 or more players. Characters not listed don't wake at night.</p>`;
+}
+
+// The script's characters and abilities by team, its Fabled, and the jinxes
+// between its characters (see JINXES).
+function scriptSheet() {
   const { meta } = s.script;
   const ids = [...s.script.ids, ...(s.script.fabled ?? [])];
   const jinxes = JINXES.filter((j) => j.ids.every((id) => ids.includes(id)));
@@ -719,7 +773,7 @@ function showScript() {
       : "";
   }).join("");
 
-  $("script-sheet").innerHTML = `<h2>${esc(meta.name)}</h2>
+  return `<h2>${esc(meta.name)}</h2>
     ${meta.author ? `<p class="script-author">by ${esc(meta.author)}</p>` : ""}
     ${sections}
     ${
@@ -736,8 +790,6 @@ function showScript() {
         : ""
     }
     <p class="script-footnote">* Not the first night.</p>`;
-
-  $("script-dialog").showModal();
 }
 
 // Groups log lines by their "Day N" prefix, newest first.

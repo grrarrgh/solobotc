@@ -32,6 +32,12 @@ import {
   amnesiacShape,
 } from "../src/characters/townsfolk/amnesiac.js";
 import { logNames } from "../src/log.js";
+import {
+  NIGHT_STEPS,
+  FIRST_NIGHT,
+  OTHER_NIGHTS,
+  nightOrder,
+} from "../src/characters/nightorder.js";
 import { Engine } from "../src/engine.js";
 import { SimpleStrategy, speak, isTwin, claimTo, stanceOn } from "../src/strategy.js";
 import {
@@ -8433,4 +8439,46 @@ test("an evil Savant bluffer's statements never hurt their team and are never re
 
   // Some are true.
   assert.ok(truths > 0);
+});
+
+test("a script's night order lists its characters in the official order, with the night's steps", () => {
+  const tb = nightOrder(script.map((x) => x.id ?? x).filter((id) => id !== "_meta"));
+  const first = tb.first.map((x) => x.id);
+  const other = tb.other.map((x) => x.id);
+
+  assert.deepEqual(first, [
+    "dusk",
+    "minioninfo",
+    "demoninfo",
+    "poisoner",
+    "washerwoman",
+    "librarian",
+    "investigator",
+    "chef",
+    "empath",
+    "fortuneteller",
+    "butler",
+    "spy",
+    "dawn",
+  ]);
+  assert.deepEqual(other, [
+    "dusk",
+    "poisoner",
+    "monk",
+    "scarletwoman",
+    "imp",
+    "ravenkeeper",
+    "empath",
+    "fortuneteller",
+    "undertaker",
+    "butler",
+    "spy",
+    "dawn",
+  ]);
+  assert.ok(tb.first.every((x) => x.text));
+
+  // Every character it names is one the game has.
+  for (const [id] of [...FIRST_NIGHT, ...OTHER_NIGHTS]) {
+    assert.ok(id in ROLES || id in NIGHT_STEPS, id);
+  }
 });

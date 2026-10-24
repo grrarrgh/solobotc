@@ -249,3 +249,10 @@ test("dawn / dusk cards close on any press; a fading ⚠ marks unprompted claims
   assert.match(app, /CLAIM_ALERT_FADE_MS/);
   assert.match(css, /@keyframes claim-alert-fade/);
 });
+
+test("the script popup has a Night order button that stays in its top corner", () => {
+  assert.match(html, /<dialog id="script-dialog"[^>]*>\s*(<!--[\s\S]*?-->\s*)?<button type="button" id="night-order"/);
+  assert.match(css, /\.night-order-toggle \{[^}]*position: sticky;[^}]*top: 0;/);
+  // (Pressing it switches views; it doesn't close the popup.)
+  assert.match(app, /\$\("night-order"\)\.onclick = \(ev\) => \{\s*\/\/[^\n]*\n\s*ev\.stopPropagation\(\);/);
+});

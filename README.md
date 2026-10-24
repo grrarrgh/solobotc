@@ -14,7 +14,9 @@ Go to <https://grrarrgh.github.io/solobotc/>, then:
 4. Press **Start**.
 
 Click a character name anywhere to read its ability, or the clock tower in
-the middle of the town square for the whole script.
+the middle of the town square for the whole script. The **Night order**
+button in the script's top corner shows who wakes, in order, on the first
+night and the others.
 
 ### Night
 
@@ -104,6 +106,7 @@ in its record in `CHARACTERS`. These include:
 | File | What it does |
 | --- | --- |
 | `src/characters/catalog.js` | Every character (`CHARACTERS`: name, team, ability text and its settings), and the Travellers left out |
+| `src/characters/nightorder.js` | The night order (first night, other nights) shown on the script sheet |
 | `src/data.js` | Role counts, jinxes and the tuning constants, in sections (re-exports the catalogue) |
 | `src/setup.js` | Deals a new game from a script, seat count and seed |
 | `src/engine.js` | Runs nights, days, NPC conversations, nominations, deaths and win checks |
