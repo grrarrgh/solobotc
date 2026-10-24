@@ -6,7 +6,8 @@ import { pick } from "../../util.js";
 // so `this` is the Engine.
 export const vigormortis = {
   // A Minion the Vigormortis kills keeps their ability, and poisons one of
-  // their Townsfolk neighbours (for as long as the Vigormortis lives).
+  // their Townsfolk neighbours, alive or dead (see townsfolkNeighbours()),
+  // for as long as the Vigormortis lives.
   vigormortisKill(d, t) {
     const s = this.s;
 

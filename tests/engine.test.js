@@ -2547,6 +2547,24 @@ test("the No Dashii poisons its nearest Townsfolk on each side", () => {
   assert.equal(butler.poisoned, false);
 });
 
+test("a dead Townsfolk is still the No Dashii's neighbour: the poison doesn't pass them", () => {
+  const strat = new SimpleStrategy();
+  const { s, e } = nightTwo("nodashii-dead", strat);
+  const [human, chef, butler, baron, nodashii] = s.players;
+
+  role(nodashii, "nodashii", "evil");
+  role(butler, "monk", "good");
+
+  // Anticlockwise: the Baron, then the Monk (dead), then the Chef.
+  butler.alive = false;
+  e.night();
+
+  assert.equal(butler.poisoned, true);
+  assert.equal(chef.poisoned, false);
+  assert.equal(human.poisoned, true);
+  assert.equal(baron.poisoned, false);
+});
+
 test("the first Outsider a Fang Gu kills becomes the Fang Gu instead", () => {
   const strat = new SimpleStrategy();
   const { s, e } = nightTwo("fanggu", strat);
@@ -2588,6 +2606,28 @@ test("a Minion the Vigormortis kills keeps their ability and poisons a Townsfolk
   e.endDay();
 
   assert.equal(poisoned.poisoned, true);
+});
+
+test("the Vigormortis's poison can land on a dead Townsfolk neighbour", () => {
+  for (let seed = 0; seed < 10; seed++) {
+    const strat = new SimpleStrategy();
+    const { s, e } = nightTwo(`vigormortis-dead-${seed}`, strat);
+    const [human, chef, butler, baron] = s.players;
+
+    role(s.players[4], "vigormortis", "evil");
+    role(butler, "monk", "good");
+    butler.alive = false;
+    strat.demon = () => baron;
+
+    e.night();
+
+    // The Baron's Townsfolk neighbours: the dead Monk, and past the
+    // Vigormortis, you. Never the Chef behind the Monk.
+    const poisoned = byId(s, s.lastingPoison[0].id);
+
+    assert.ok([butler, human].includes(poisoned), poisoned.label);
+    assert.notEqual(poisoned, chef);
+  }
 });
 
 test("a Snake Charmer who picks the Demon swaps with them", () => {

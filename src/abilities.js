@@ -22,7 +22,9 @@ export const living = (x) => x.alive || x.undead;
 // protection, coming back to life, madness, claims), mixed into
 // Engine.prototype (see engine.js), so `this` is the Engine.
 export const abilities = {
-  // The nearest living Townsfolk on each side of p.
+  // The nearest Townsfolk on each side of p, alive or dead: a dead one
+  // doesn't pass the No Dashii's (or the Vigormortis's) poison on to the
+  // next. (Outsiders, Minions and the Demon are skipped.)
   townsfolkNeighbours(p) {
     const a = this.s.players;
     const n = a.length;
@@ -33,7 +35,7 @@ export const abilities = {
       for (let k = 1; k < n; k++) {
         const q = a[(i + d * k + n) % n];
 
-        if (q.alive && team(q.role) === "townsfolk") {
+        if (team(q.role) === "townsfolk") {
           if (!out.includes(q)) {
             out.push(q);
           }

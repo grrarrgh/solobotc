@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Bug Fix: No Dashii & Vigormortis Poison
+
+- No Dashii: its 2 Townsfolk neighbours are the nearest Townsfolk on each side, alive or dead, as the official rules have it. A dead Townsfolk keeps the poison; it no longer passes on to the next living Townsfolk beyond them. (Outsiders, Minions and the Demon are still skipped.)
+- Vigormortis: the same for the Townsfolk neighbour a killed Minion poisons: it can be a dead one, and never a living Townsfolk behind them.
+
 ## New Feature: Night Order
 
 - Script sheet: a **Night order** button (with a crescent moon) in the top corner of the script popup, which stays there as the script scrolls. Pressing it shows the script's night order: who the Storyteller wakes on the first night and on other nights, in the official order, numbered, with a reminder of what each does, and the Dusk, Minion info, Demon info and Dawn steps. Only the script's characters are listed; characters who don't wake at night are left out. The button then reads **Characters**, to go back. Pressing anywhere else still closes the popup.
