@@ -2,6 +2,20 @@
 
 Newest first.
 
+## Fixes: Round Robin Log, Dreamer Bluffs, Evil Twin & Widow
+
+- Round Robin: the Public Log shows it as one entry, in seat order, from the "Round Robin:" line to the last seat. (Before, each player was a separate line, so the newest-first log showed it backwards, with the "Round Robin:" line last.)
+- An evil player bluffing the Dreamer (or a Philosopher who "gained" it) no longer reuses a drunk Dreamer's lie, which contradicted every claim it named. Each dream is now the character the player claims, or an evil character nobody is in play as or claims. It never gives away the evil team's characters, and dreaming the same player again gives the same pair while that player's claim stands.
+- An Evil Twin whose good twin is you says "You are my Evil Twin." (not "You is my Evil Twin.").
+- The Widow: a Widow already couldn't poison herself (the engine drops that pick), but when you were the Widow (made one by the Pit-Hag), the pick made for you could be you, and then nobody was poisoned. It now never picks the Widow.
+
+## New Features: Amnesiac Abilities & Guessing
+
+- Amnesiac: 3 more secret abilities, so the Storyteller picks from 6 (AMNESIAC_ABILITIES in src/characters/townsfolk/amnesiac.js): if either alive neighbour is the Demon (YES / NO), how many alive neighbours are evil, and how many pairs of evil players sit next to each other (both "Amnesiac number: 1."). Drunk or poisoned, each gives a wrong answer like the Empath's and Chef's do. Once an NPC Amnesiac knows their ability, a YES about the Demon or a non-zero neighbour count makes them suspect their neighbours.
+- Amnesiac guesses: 12 to choose from, 3 of each kind of information (YES or NO, a player, 2 players, a number). New decoys: the Demon voted today, a player who isn't the Demon, 2 players 1 of which is the Demon, how many steps the Demon is from you.
+- Amnesiac questions: instead of guessing, you can ask the Storyteller one yes/no question a day about your ability ("Is my ability about who is good or evil?", "…about the Demon?", "…about my neighbours?"). The answer is always true.
+- The dropdown is gone. The Amnesiac panel shows the questions, then the guesses as buttons grouped by kind. The group that looks like your latest information is open and marked "like your information"; the others fold under "Other kinds of information". Questions and guesses you've made stay on the panel, greyed out, with the Storyteller's answer. The panel is gone once you've guessed right.
+
 ## Code Maintenance
 
 - src/data.js is organised into sections, each with a header: Characters; Setup: seats and dealing; Jinxes; The Storyteller; Information; Bluffs and cover stories; Suspicion and evidence; Nominations and voting; The Demon's kill; Character abilities; Timings and display; Debugging. No setting changed, only where it sits.

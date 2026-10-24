@@ -31,10 +31,10 @@ SHOTS="$(powershell -NoProfile -Command '[Environment]::GetFolderPath("Desktop")
 
 ```bash
 node .claude/skills/run-solobotc/driver.mjs "$SHOTS" <<'EOF'
-# You're dealt the Amnesiac on this seed: make a guess.
+# You're dealt the Amnesiac on this seed: make a guess (or click [data-question="demon"] to ask instead).
 start 7 12 Catfishing
 eval document.getElementById("private").innerText
-click #amnesiac
+click [data-guess="evilpairs"]
 eval document.getElementById("day-answer").innerText
 shot guess #day-controls
 EOF

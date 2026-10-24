@@ -1108,3 +1108,60 @@ button:disabled {
   padding-top: 8px;
   border-top: 1px solid #343a45;
 }
+
+/* The Amnesiac's day: a question or a guess about your secret ability.
+   Guesses are grouped by what their information looks like; the group
+   like your latest information is picked out. */
+.amnesiac-controls[hidden] {
+  display: none;
+}
+
+.amnesiac-controls {
+  max-width: 650px;
+  margin: 8px auto 0;
+  padding-top: 8px;
+  border-top: 1px solid #343a45;
+}
+
+.amnesiac-controls h4 {
+  margin: 4px 0 6px;
+  color: #f0cf83;
+}
+
+.amnesiac-questions,
+.amnesiac-guesses fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.amnesiac-guesses fieldset {
+  margin: 8px 0;
+  border: 1px solid #343a45;
+  border-radius: 10px;
+}
+
+.amnesiac-guesses fieldset.like {
+  border-color: #b69455;
+}
+
+.amnesiac-guesses legend {
+  padding: 0 6px;
+  color: #aab;
+  font-size: 14px;
+}
+
+.amnesiac-guesses .like legend {
+  color: #f0cf83;
+}
+
+.amnesiac-controls button {
+  flex: 1 1 260px;
+  text-align: left;
+}
+
+.amnesiac-guesses summary {
+  cursor: pointer;
+  color: #aab;
+  font-size: 14px;
+}

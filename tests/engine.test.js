@@ -24,6 +24,13 @@ import {
   alignment,
 } from "../src/data.js";
 import { createState, infoTarget } from "../src/setup.js";
+import {
+  AMNESIAC_ABILITIES,
+  AMNESIAC_GUESSES,
+  AMNESIAC_QUESTIONS,
+  AMNESIAC_SHAPES,
+  amnesiacShape,
+} from "../src/characters/townsfolk/amnesiac.js";
 import { logNames } from "../src/log.js";
 import { Engine } from "../src/engine.js";
 import { SimpleStrategy, speak, isTwin, claimTo, stanceOn } from "../src/strategy.js";
@@ -7050,6 +7057,58 @@ test("the Widow poisons a player (never herself) for the rest of the game, and a
   assert.ok(!self.s.widowPick);
 });
 
+test("a good Widow (you, made one by the Pit-Hag) never picks herself", () => {
+  for (let seed = 0; seed < 30; seed++) {
+    const { s, p, strat } = cfNight(`widow-you-${seed}`, ["widow"]);
+
+    p.slice(1).forEach((x) => (x.alignment = "evil"));
+    assert.notEqual(strat.widow(s, p[0]), p[0]);
+  }
+});
+
+test("an evil Dreamer bluffer's dreams hold up against the town's claims", () => {
+  for (let seed = 0; seed < 20; seed++) {
+    const { s, p, strat } = cfNight(`dream-bluff-${seed}`, [null, null, null, "baron", "imp"]);
+    // (Claims on the script.)
+    const good = s.script.ids.filter((id) => alignment(id) === "good");
+
+    s.script.ids.push("dreamer");
+    p.forEach((x, i) => (x.claim = good[i]));
+    p[3].claim = "dreamer";
+
+    const inPlay = new Set(p.map((x) => x.role));
+    const seen = {};
+
+    for (let night = 1; night <= 5; night++) {
+      s.night = night;
+
+      const info = bluffInfo(s, p[3], strat);
+      const t = byId(s, info.targets[0]);
+      const [, a, b] = info.text.match(/ is the (.+) or the (.+)\.$/);
+      const ids = [a, b].map((x) => Object.keys(ROLES).find((id) => name(id) === x));
+
+      // The character they claim, and an evil one nobody is.
+      assert.ok(ids.includes(t.claim), `seed ${seed}: ${info.text}`);
+      assert.ok(
+        ids.some((id) => alignment(id) === "evil" && !inPlay.has(id)),
+        `seed ${seed}: ${info.text}`,
+      );
+      // The same player dreamed again: the same pair.
+      if (seen[t.id]) {
+        assert.equal(info.text.replace(/^\w+ /, ""), seen[t.id]);
+      }
+
+      seen[t.id] = info.text.replace(/^\w+ /, "");
+    }
+  }
+});
+
+test("an Evil Twin whose good twin is you says \"You are my Evil Twin\"", () => {
+  const { s, p } = cfNight("twin-you", []);
+
+  assert.equal(speak(evilTwinInfo(s, p[0]).text), "You are my Evil Twin.");
+});
+
 test("the evil team knows the characters the Widow saw on Night 1, not later changes", () => {
   const { s, p, e, strat } = cfNight("widow-grim", [null, "empath", null, "widow"]);
 
@@ -7101,7 +7160,7 @@ test("the Amnesiac's information doesn't say what it means, and guesses say how 
   assert.equal(stanceOn(s, p[1].memories[0], byId(s, info.targets[0]), p[1]), "trust");
 
   // Every secret ability works, true or not.
-  for (const key of ["neighbours", "goodplayer", "evilpair"]) {
+  for (const key of Object.keys(AMNESIAC_ABILITIES)) {
     for (const mode of ["truth", "lie", "random"]) {
       const g = cfNight(`amnesiac-${key}-${mode}`, [null, "amnesiac"]);
 
@@ -7111,7 +7170,11 @@ test("the Amnesiac's information doesn't say what it means, and guesses say how 
       const m = nightInfo(g.s, g.p[1], g.strat);
 
       assert.equal(amnesiacKey(g.s, g.p[1]), key);
-      assert.match(m.text, /^Amnesiac: (YES|NO|(You|Player \d+)( and Player \d+)?)\.$/);
+      assert.match(
+        m.text,
+        /^Amnesiac( number: \d|: (YES|NO|(You|Player \d+)( and Player \d+)?))\.$/,
+      );
+      assert.equal(amnesiacShape(m.text), AMNESIAC_ABILITIES[key].shape);
     }
   }
 });
@@ -7124,6 +7187,55 @@ test("the human Amnesiac guesses once a day", () => {
   s.day = 1;
   assert.match(e.amnesiac("neighbours"), /: correct\.$/);
   assert.throws(() => e.amnesiac("goodplayer"), /Amnesiac unavailable/);
+
+  // Once they know, there's nothing more to guess.
+  s.day = 2;
+  assert.ok(!e.amnesiacOpen());
+});
+
+test("the Amnesiac can ask a yes/no question about their ability instead of guessing", () => {
+  const { s, p, e } = cfNight("amnesiac-question", ["amnesiac"]);
+
+  p[0].amnesiac = "demonneighbour";
+  s.phase = "day";
+  s.day = 1;
+  assert.match(e.amnesiacQuestion("demon"), /: YES\.$/);
+  assert.throws(() => e.amnesiac("demonneighbour"), /Amnesiac unavailable/);
+  s.day = 2;
+  assert.match(e.amnesiacQuestion("alignment"), /: NO\.$/);
+  s.day = 3;
+  assert.match(e.amnesiac("demonvoted"), /: close\.$/);
+  assert.deepEqual(p[0].amnesiacAsked, { demon: true, alignment: false });
+  assert.deepEqual(p[0].amnesiacSaid, { demonvoted: "close" });
+
+  // Every ability and decoy is about something a question can ask, and
+  // there are 3 guesses of each shape.
+  for (const g of Object.values(AMNESIAC_GUESSES)) {
+    assert.ok(g.about.length && g.about.every((q) => q in AMNESIAC_QUESTIONS));
+  }
+
+  for (const shape of Object.keys(AMNESIAC_SHAPES)) {
+    assert.equal(
+      Object.values(AMNESIAC_GUESSES).filter((g) => g.shape === shape).length,
+      3,
+    );
+  }
+});
+
+test("the Amnesiac's new abilities tell the truth when healthy", () => {
+  // Imp, Amnesiac, Washerwoman: the Imp is one of the Amnesiac's neighbours.
+  const g = cfNight("amnesiac-new", ["imp", "amnesiac", "washerwoman"]);
+  const me = g.p[1];
+  const said = (key) => {
+    me.amnesiac = key;
+
+    return nightInfo(g.s, me, g.strat).text;
+  };
+
+  assert.equal(said("demonneighbour"), "Amnesiac: YES.");
+  assert.equal(said("evilneighbours"), "Amnesiac number: 1.");
+  assert.match(said("evilpairs"), /^Amnesiac number: \d\.$/);
+  assert.equal(speak(said("evilneighbours")), "My number is 1.");
 });
 
 // ── Extension Cord ───────────────────────────────────────────
@@ -8003,6 +8115,9 @@ test("Round Robin: once, with 4 or fewer alive, everyone says their character an
   assert.match(of(p[3]), /: "I am the Empath\./);
   assert.ok(s.liesToYou.some((l) => l.byId === p[3].id && l.said === "empath"));
   assert.equal(s.phaseCards.at(-1).kind, "roundrobin");
+  // In the Public Log as one entry, in seat order.
+  assert.equal(s.publicLog.at(-1), [lines[0], ...lines.slice(1).map((x) => x.replace(/^Day 2 — /, ""))].join("\n"));
+  assert.ok(!s.publicLog.slice(0, -1).some((x) => lines.includes(x)));
 
   // Once per game.
   assert.equal(e.roundRobinReady(), false);

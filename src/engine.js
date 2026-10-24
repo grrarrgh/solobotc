@@ -1549,7 +1549,8 @@ export class Engine {
   // NPCs weigh like anything said in public. A good NPC tells the truth,
   // coming clean if they have a cover story (see comeClean()), except a
   // living Damsel; she and evil NPCs say what they'd say in public (see
-  // strategy answer()): their bluff. It all goes on a card for you.
+  // strategy answer()): their bluff. It all goes on a card for you, and in
+  // the Public Log as one entry, in seat order.
   roundRobin() {
     const s = this.s;
 
@@ -1563,10 +1564,11 @@ export class Engine {
 
     s.roundRobinDay = s.day;
 
-    const intro = this.announce(
+    const lines = [
       `Day ${s.day} — Round Robin: from Seat 1, every player says their character and information.`,
-    );
-    const lines = [s.publicLog[intro]];
+    ];
+    // (Coming clean adds its own Public Log line: gathered up below.)
+    const from = s.publicLog.length;
     const said = (claim, memories) =>
       [
         `I am the ${name(claim)}.`,
@@ -1613,9 +1615,13 @@ export class Engine {
       // (You're always good: what you share helps the NPCs' suspicions.)
       this.claimPublicly(p);
       heard(s, p, memories);
-      s.publicLog.push(line);
       lines.push(line);
     }
+
+    s.publicLog.splice(from);
+    s.publicLog.push(
+      [lines[0], ...lines.slice(1).map((x) => x.replace(/^Day \d+ — /, ""))].join("\n"),
+    );
 
     this.audit(
       "round_robin",

@@ -796,7 +796,8 @@ export function puzzleInfo(s, p, t, mode) {
 export const evilTwinInfo = (s, twin) => ({
   night: s.night,
   role: "eviltwin",
-  text: `Evil Twin: ${twin.label} is your Evil Twin.`,
+  // (The Evil Twin repeats this naming the good twin, who may be you.)
+  text: `Evil Twin: ${twin.label} ${twin.human ? "are" : "is"} your Evil Twin.`,
   targets: [twin.id],
   trigger: "normal",
   functioning: true,
@@ -905,6 +906,12 @@ const amnesiacPlayers = (ts) =>
   ts.length
     ? { targets: ts.map((x) => x.id), text: `Amnesiac: ${listLabels(ts)}.` }
     : { targets: [], text: "No information." };
+const amnesiacNumber = (n, ts = []) => ({
+  targets: ts.map((x) => x.id),
+  text: `Amnesiac number: ${n}.`,
+});
+// Whether a player registers as the Demon (as the Recluse might).
+const demonish = (x) => isDemon(x) || x.role === "recluse";
 const pixieText = (role) => `Pixie: the ${name(role)} is in play.`;
 
 // The Townsfolk a Pixie can learn: those in play, or (`notInPlay`) those
@@ -1078,6 +1085,18 @@ function trueInfo(s, p, role, strat) {
 
     if (key === "neighbours") {
       return amnesiacYes(neigh(s, p).some(evil), neigh(s, p));
+    }
+
+    if (key === "demonneighbour") {
+      return amnesiacYes(neigh(s, p).some(demonish), neigh(s, p));
+    }
+
+    if (key === "evilneighbours") {
+      return amnesiacNumber(empathCount(s, p), neigh(s, p));
+    }
+
+    if (key === "evilpairs") {
+      return amnesiacNumber(chefCount(s));
     }
 
     if (key === "goodplayer") {
@@ -1459,6 +1478,20 @@ function falseInfo(s, p, role, strat, helpEvil = false) {
       return amnesiacYes(!neigh(s, p).some(evil), neigh(s, p));
     }
 
+    if (key === "demonneighbour") {
+      return amnesiacYes(!neigh(s, p).some(demonish), neigh(s, p));
+    }
+
+    if (key === "evilneighbours") {
+      return amnesiacNumber(wrongNumber(s, empathCount(s, p)), neigh(s, p));
+    }
+
+    if (key === "evilpairs") {
+      const n = chefCount(s);
+
+      return amnesiacNumber(n > 0 ? n - 1 : n + 1);
+    }
+
     if (key === "goodplayer") {
       const t =
         pick(named.filter((x) => x.alignment === "evil"), s.r) ??
@@ -1633,9 +1666,13 @@ function unreliableInfo(s, p, role, targets) {
     const key = amnesiacKey(s, p);
     const others = s.players.filter((x) => x.id !== p.id);
 
-    return key === "neighbours"
+    const shape = AMNESIAC_ABILITIES[key].shape;
+
+    return shape === "yesno"
       ? amnesiacYes(s.r() < 0.5, neigh(s, p))
-      : amnesiacPlayers(sample(others, key === "goodplayer" ? 1 : 2, s.r));
+      : shape === "number"
+        ? amnesiacNumber(Math.floor(s.r() * 3), key === "evilneighbours" ? neigh(s, p) : [])
+        : amnesiacPlayers(sample(others, shape === "player" ? 1 : 2, s.r));
   }
 
   if (role === "flowergirl") {
@@ -1732,6 +1769,35 @@ function secretInfo(s, p, info) {
         known: info.known ?? Boolean(p.amnesiacKnown),
       }
     : info;
+}
+
+// An evil player bluffing the Dreamer: the player they dream is the
+// character they claim, or an evil character not in play (so it doesn't give
+// away the evil team's characters) and not claimed, so their story holds up
+// against the town's claims. The same player dreamed again gets the same pair, while their
+// claim stands.
+function dreamerBluff(s, p, strat) {
+  const t = strat.dream(s, p);
+
+  if (!t) {
+    return { targets: [], text: "No information." };
+  }
+
+  const claimed = new Set(s.players.map((x) => x.claim));
+  const said = (p.dreamBluffs ??= {})[t.id];
+  const good = goodRoles(s).includes(t.claim)
+    ? t.claim
+    : pick(goodRoles(s).filter((id) => !claimed.has(id)), s.r) ?? pick(goodRoles(s), s.r);
+  const inPlay = new Set(s.players.map((x) => x.role));
+  const evils = evilRoles(s).filter((id) => !inPlay.has(id));
+  const bad =
+    pick(evils.filter((id) => !claimed.has(id)), s.r) ?? pick(evils, s.r);
+  // (Unless they've since claimed something else.)
+  const pair = said?.includes(t.claim) ? said : shuffle([good, bad], s.r);
+
+  p.dreamBluffs[t.id] = pair;
+
+  return { targets: [t.id], text: dreamText(t, ...pair) };
 }
 
 // A Minion bluffing a first-night role uses it to back up the Demon's claim:
@@ -1880,6 +1946,7 @@ export function madInfo(s, p, role, strat) {
 // What an evil NPC reports for the role they are bluffing. A Minion backs up
 // the Demon's claim when their role allows it; otherwise a working Spy has
 // seen the Grimoire and tells the truth, and every other evil player lies.
+// An evil Dreamer bluffer (see dreamerBluff()) goes by what players claim.
 export function bluffInfo(s, p, strat) {
   // A Philosopher or Cannibal bluffer reports for the character they
   // "gained" (nothing until they have one); a first-night one the night
@@ -1936,7 +2003,11 @@ export function bluffInfo(s, p, strat) {
   const truthful = !confirm && p.role === "spy" && works(p);
   const { text, targets } =
     confirm ??
-    (truthful ? trueInfo(s, p, role, strat) : falseInfo(s, p, role, strat));
+    (truthful
+      ? trueInfo(s, p, role, strat)
+      : role === "dreamer"
+        ? dreamerBluff(s, p, strat)
+        : falseInfo(s, p, role, strat));
 
   // (A bluffer "knows" what their Amnesiac information means.)
   return secretInfo(s, p, {

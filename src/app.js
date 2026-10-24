@@ -26,7 +26,12 @@ import {
 import { createState } from "./setup.js";
 import { ability } from "./storyteller.js";
 import { Engine } from "./engine.js";
-import { AMNESIAC_GUESSES } from "./characters/townsfolk/amnesiac.js";
+import {
+  AMNESIAC_GUESSES,
+  AMNESIAC_QUESTIONS,
+  AMNESIAC_SHAPES,
+  amnesiacShape,
+} from "./characters/townsfolk/amnesiac.js";
 import { claimTo } from "./strategy.js";
 import { byId } from "./util.js";
 
@@ -1352,6 +1357,49 @@ function perfReport() {
   ].join("\n");
 }
 
+// The Amnesiac's choices: questions (with any answers so far), then
+// guesses grouped by shape. The group like your latest information is open;
+// the others fold away under "Other kinds of information". Guesses already
+// made show what the Storyteller said.
+function renderAmnesiac(h) {
+  const asked = h.amnesiacAsked ?? {};
+  const said = h.amnesiacSaid ?? {};
+  const latest = h.memories
+    .filter((m) => m.role === "amnesiac")
+    .map((m) => amnesiacShape(m.text))
+    .filter(Boolean)
+    .at(-1);
+  const group = (shape) => {
+    const choices = Object.entries(AMNESIAC_GUESSES)
+      .filter(([, g]) => g.shape === shape)
+      .map(([k, g]) =>
+        k in said
+          ? `<button type="button" disabled>${esc(g.text)} <b>${said[k]}</b></button>`
+          : `<button type="button" data-guess="${k}">${esc(g.text)}</button>`,
+      )
+      .join("");
+    const tag = shape === latest ? " · like your information" : "";
+
+    return `<fieldset class="${shape === latest ? "like" : ""}"><legend>${esc(AMNESIAC_SHAPES[shape])}${tag}</legend>${choices}</fieldset>`;
+  };
+  const others = Object.keys(AMNESIAC_SHAPES)
+    .filter((k) => k !== latest)
+    .map(group)
+    .join("");
+
+  $("amnesiac-questions").innerHTML = Object.entries(AMNESIAC_QUESTIONS)
+    .map(([k, q]) =>
+      k in asked
+        ? `<button type="button" disabled>${esc(q)} <b>${asked[k] ? "YES" : "NO"}</b></button>`
+        : `<button type="button" data-question="${k}">${esc(q)}</button>`,
+    )
+    .join("");
+
+  $("amnesiac-guesses").innerHTML = latest
+    ? `${group(latest)}<details><summary>Other kinds of information</summary>${others}</details>`
+    : others;
+}
+
 // Redraws the page (timed: see PERF_LOGGING).
 function render() {
   const t0 = performance.now();
@@ -1431,11 +1479,12 @@ function draw() {
     h.alive &&
     h.savantDay !== s.day
   );
-  $("amnesiac-controls").hidden = !(
-    ability(h) === "amnesiac" &&
-    h.alive &&
-    h.amnesiacDay !== s.day
-  );
+  $("amnesiac-controls").hidden = !e.amnesiacOpen();
+
+  if (e.amnesiacOpen()) {
+    renderAmnesiac(h);
+  }
+
   // (Gone once you've asked them today, or nominations have started.)
   $("ask").hidden = !t || talk.already || s.nominationsOpen;
   $("ask").disabled = !t || !talk.remaining || s.nominationsOpen;
@@ -1877,9 +1926,19 @@ $("savant").onclick = () => {
   }
 };
 
-$("amnesiac").onclick = () => {
+$("amnesiac-controls").onclick = (ev) => {
+  const b = ev.target.closest("button");
+
+  if (!b || b.disabled) {
+    return;
+  }
+
   try {
-    $("day-answer").innerHTML = linkRoles(e.amnesiac($("amnesiac-guess").value));
+    $("day-answer").innerHTML = linkRoles(
+      b.dataset.question
+        ? e.amnesiacQuestion(b.dataset.question)
+        : e.amnesiac(b.dataset.guess),
+    );
     render();
   } catch (err) {
     $("day-answer").textContent = err.message;
@@ -1971,10 +2030,6 @@ $("seats").value = DEFAULT_SEATS;
 
 $("artist-question").innerHTML = Object.entries(ARTIST_QUESTIONS)
   .map(([k, v]) => `<option value="${k}">Is this player ${esc(v)}?</option>`)
-  .join("");
-
-$("amnesiac-guess").innerHTML = Object.entries(AMNESIAC_GUESSES)
-  .map(([k, v]) => `<option value="${k}">${esc(v.text)}</option>`)
   .join("");
 
 $("gossip-question").innerHTML = Object.entries(ARTIST_QUESTIONS)

@@ -177,7 +177,7 @@ export function speak(text) {
     .replace(/^(chose|protected|guessed|asked|gained|said) /, "I $1 ")
     .replace(/^shown /, "I was shown ")
     .replace(/^your /, "my ")
-    .replace(/ is your /, " is my ");
+    .replace(/ (is|are) your /, " $1 my ");
 
   return said.charAt(0).toUpperCase() + said.slice(1);
 }
@@ -231,9 +231,19 @@ function infoStance(m) {
           ? /: YES\.$/.test(t)
             ? "suspicious"
             : "trust"
-          : m.amnesiac === "goodplayer"
-            ? "trust"
-            : "suspicious";
+          : m.amnesiac === "demonneighbour"
+            ? /: YES\.$/.test(t)
+              ? "suspicious"
+              : null
+            : m.amnesiac === "evilneighbours"
+              ? /number: 0\./.test(t)
+                ? "trust"
+                : "suspicious"
+              : m.amnesiac === "evilpairs"
+                ? null
+                : m.amnesiac === "goodplayer"
+                  ? "trust"
+                  : "suspicious";
     // Their own pick (who to protect, or their master) tells them nothing.
     case "monk":
     case "butler":
@@ -1938,7 +1948,8 @@ export class SimpleStrategy {
     // (Never herself: she's evil, but a Widow is never her own pick.)
     const npcs = good.filter((x) => !x.human && x !== p);
     const info = npcs.filter((x) => ONGOING_INFO.includes(ability(x)));
-    const human = good.find((x) => x.human);
+    // (You, unless you're the Widow: the Pit-Hag can make you one.)
+    const human = good.find((x) => x.human && x !== p);
 
     if (human && s.r() < HUMAN_POISON_CHANCE) {
       return human;

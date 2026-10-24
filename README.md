@@ -6,39 +6,61 @@ on the good team; every other seat is an NPC, and the game is the Storyteller.
 
 ## Playing
 
-Navigate to <https://grrarrgh.github.io/solobotc/> 
-- Select your seat size (number of players)
-- Select your script
-- Click "Random Seed"
-- Press start
+Go to <https://grrarrgh.github.io/solobotc/>, then:
 
-- **Night:** the Storyteller tells you what you learn. If your character makes a
-  choice, pick player(s) in the town square and press **Select**.
-- **Day:** click a player to **Ask** them, in private, what they claim, what
-  they learned and who they trust or suspect; then **Share My Info** (your
-  character and what you've learned) or **Leave conversation**. When you're
-  done talking, press **Start Nominations**. Then you can **Nominate** a
-  player, **Request nomination** (ask someone else to nominate them), or press
-  **NPC nominations X** to let the next of the X NPCs who want to nominate do
-  so, saying why. Before a vote, anyone who decides to come clean about a cover story
-  says so on a card; click anywhere to continue. Your hand starts lowered:
-  press **Raise hand** to vote (and **Lower hand** to take it back), in the
-  few seconds before the count or as the clock hand ticks round, until it
-  reaches you and counts your vote. NPCs can lie, good ones included: some hide a valuable
-  character or claim one to bait the Demon.
-  Some characters add buttons (Slayer, Artist, Savant, Gossip, Amnesiac,
-  Fisherman, Puzzlemaster). If a Boomdandy is executed, you have 10
-  seconds to select the player you point at before night falls. With 4 or
-  fewer players alive and nominations open, **Round Robin** (once per game)
-  has every player, from Seat 1, say their character and information in
-  public. Dead players
-  can be nominated too. Press **End day** to
-  execute whoever is marked for execution (💀) and go to night.
-- **Game over:** the **Final reveal** shows the Grimoire and a timeline of the
-  whole game; **Download log.txt** saves it.
+1. Choose the number of seats.
+2. Choose a script.
+3. Click **Random Seed**.
+4. Press **Start**.
 
-Click a character name anywhere to read its ability, or the clock tower in the
-middle of the town square for the whole script.
+Click a character name anywhere to read its ability, or the clock tower in
+the middle of the town square for the whole script.
+
+### Night
+
+The Storyteller tells you what you learn. If your character makes a choice,
+pick player(s) in the town square and press **Select**.
+
+### Day
+
+**Talk.** Click a player and **Ask** them, in private, what they claim,
+what they learned, and who they trust or suspect. Then **Share My Info**
+(your character and what you've learned) or **Leave conversation**.
+
+> NPCs can lie, good ones included: some hide a valuable character, or
+> claim one to bait the Demon.
+
+**Nominate.** When you're done talking, press **Start Nominations**. Then:
+
+- **Nominate** a player (dead players can be nominated too);
+- **Request nomination**: ask someone else to nominate them;
+- **NPC nominations X**: the next of the X NPCs who want to nominate does
+  so, saying why.
+
+Before a vote, anyone who comes clean about a cover story says so on a
+card; click anywhere to continue.
+
+**Vote.** Your hand starts lowered. Press **Raise hand** to vote (and
+**Lower hand** to take it back) before the count, or as the clock hand ticks
+round, until it reaches you.
+
+**End the day.** Press **End day** to execute whoever is marked for
+execution (💀) and go to night.
+
+**Extras:**
+
+- Some characters add their own buttons: Slayer, Artist, Savant, Gossip,
+  Amnesiac, Fisherman, Puzzlemaster.
+- If a Boomdandy is executed, you have 10 seconds to select the player you
+  point at before night falls.
+- **Round Robin** (once per game, with 4 or fewer players alive and
+  nominations open): every player, from Seat 1, says their character and
+  information in public.
+
+### Game over
+
+The **Final reveal** shows the Grimoire and a timeline of the whole game;
+**Download log.txt** saves it.
 
 ## Scripts
 
