@@ -2,6 +2,30 @@
 
 Newest first.
 
+## Bug Fixes: Pixie Claims & Evil Bluffs
+
+- A Pixie never learns the Pixie (that already held), and never claims the Pixie while alive: only once dead, or once they've been changed into another character. The same goes for anyone bluffing the Pixie: an evil player, and now the Lunatic too. Checked over 325 games on Onion Pies, Extension Cord and Trust Redux.
+- A Pixie who gains their ability keeps claiming that character (now truly theirs) and says nothing of the Pixie. Before, they said in public: "I was the Pixie, mad about being the X. I now have the X ability," and claimed the Pixie from then on. An evil Pixie bluffer who "gains" it does the same.
+- Asked, a living Pixie leaves out their Night 1 information ("Pixie: the X is in play."), which would give them away (`spoken()` in src/strategy.js). So does an Evil Twin repeating a good twin who's the Pixie. In the Round Robin, a living Pixie gives their character's claim.
+- A Pixie (or Pixie bluffer) the Cerenovus made mad on Night 1 went back to claiming the Pixie when the madness ended, and explained "I am actually the Pixie." The madness started before they took on their character, so the Pixie was the claim it went back to. They now go back to their character.
+- A Lunatic whose bluff was the Pixie claimed the Pixie all game. They now act like any other Pixie bluffer: mad about a Townsfolk, until they die.
+- The Cerenovus never makes anyone mad they're the Pixie (nor the Drunk, Mutant or Damsel, as before): nobody claims those openly while alive.
+- Bluffs, checked for every good character on nights 1 to 4: an evil bluffer reports information whenever the real character would, and so does a good player made mad or with a cover story (made up at random). That already held. What an evil bluffer said could point at their own team, though: 54 bluffs across 24 test games (every character, 4 nights each), down to 1 (the Exorcist case below).
+  - A working Spy tells the truth (it has seen the Grimoire), except when the truth points at a teammate (a Fortune Teller's YES on the Imp, an Investigator's Minion, a Noble's 3 with the Imp...). Then it bluffs like any other evil player (`givesAway()` in src/storyteller.js).
+  - Other evil bluffers no longer frame the Spy: they know it's on their team, though it registers as good to information. A Noble's 3, a Village Idiot's "evil", and an Amnesiac's pair now go by who's really evil.
+  - An evil Empath or Amnesiac bluffer next to a teammate says 0, or NO ("Is a neighbour evil?", "Is a neighbour the Demon?"). Before, a number above 0, or a YES, pointed at the teammate. (This came up most with Legion.)
+  - An evil Washerwoman bluffer vouching for a teammate names the Townsfolk that teammate claims, so the two stories match. Before, it was any Townsfolk, which neither of the pair claimed, so both looked like liars.
+  - An evil Exorcist bluffer never "chooses" a teammate, unless there's nobody else to choose.
+- A good Mutant or Damsel, hiding behind a Townsfolk claim, now makes up that Townsfolk's information, at random, as a good player's cover story does (`hiddenInfo()` in src/strategy.js). It's kept from day to day, with each night's added in the morning. Before, they claimed (say) the Village Idiot but said "I have no stored information.", which gave them away (67 of 69 test games where they claimed a Townsfolk that learns something). Once dead they say what they were, as before. An evil player bluffing the Mutant or Damsel already made up information for their Townsfolk.
+- Made-up information for the Cannibal and Philosopher: anyone claiming one without its ability gave no information at all, even after executions. That's a good player with a cover story, one made mad by the Cerenovus, a mad Pixie, or a hiding Mutant or Damsel. Now, through `madGained()` in src/storyteller.js:
+  - A made-up Cannibal works like an evil Cannibal bluffer's, but its information is random rather than helping evil. At each execution, every living good NPC notes whose ability they'd "eat", and as what: the character they heard the executee claim then (or, if they never heard one, an information character chosen once). Claiming the Cannibal, they say "I have Player 5's ability, since they were executed.", and make up that character's information from the next night (a first-night ability gives just that night's).
+  - A made-up Philosopher "gains" a good information character on Night 1 (chosen once, so it never changes) and makes up its information from then on.
+  - Never the Pixie: making up a Pixie's information would give them away.
+- A hiding Mutant or Damsel never claims a Townsfolk nobody claims openly (the Pixie, the Virgin, the Fool; `neverHiddenAs`), nor does an evil player who keeps the Mutant or Damsel bluff.
+- A working Spy bluffing the Amnesiac checked whether the truth gave a teammate away without knowing what the Amnesiac's information meant, so it let a neighbour count through that pointed at a teammate. It now checks it the way the town reads it.
+- A Cannibal the Mezepheles turned evil bluffs the ability they last ate, from the night they ate it, so a first-night one (the Noble, the Librarian) gives its information that night. Before, they kept bluffing the first ability they ate and never got the first-night information, so they said "I have no stored information." (6 of 69 test Cannibals who'd eaten an information character). A Philosopher turned evil does the same.
+- An evil Noble bluffer always names 3 players. In an 8-seat Legion game there are only 2 good players they can name (never you, and never a Demon, which every Legion is), so they name another Legion too (`falseNoble()` in src/storyteller.js). Before, they said "No information." With any other Demon, and in Legion games of 9 seats or more, they already named 3.
+
 ## New Script: Trust Redux
 
 - New script: Trust Redux (scripts/Trust Redux_1_0_0.json), with 5 new characters. The others were already in the game.

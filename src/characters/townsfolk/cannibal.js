@@ -17,6 +17,12 @@ export const cannibal = {
   // An evil player bluffing the Cannibal "gains" it too, so their made-up
   // information follows it from tonight (see bluffInfo()): the executee's
   // character as best they know it (see eatenAs()).
+  //
+  // So does every other living good NPC, in case they claim the Cannibal
+  // without its ability (a cover story, madness, a mad Pixie, a hiding
+  // Mutant or Damsel): the character they heard the executee claim, if
+  // any, for their made-up (random) information (see storyteller
+  // madGained()).
   cannibals(dead) {
     const s = this.s;
     const goods = s.script.ids.filter(
@@ -45,6 +51,17 @@ export const cannibal = {
         )}.`,
         { playerId: b.id, fromId: dead.id, role: b.bluffGained, bluff: true },
       );
+    }
+
+    for (const x of s.players.filter(
+      (y) =>
+        y.alive && y !== dead && !y.human && y.alignment === "good" && y.role !== "cannibal",
+    )) {
+      (x.madCannibal ??= []).push({
+        night: s.night + 1,
+        fromId: dead.id,
+        as: claimHeard(dead, x),
+      });
     }
 
     for (const c of s.players.filter(

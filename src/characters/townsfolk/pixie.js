@@ -1,6 +1,11 @@
 import { name } from "../../data.js";
-import { ability, works, bluffing } from "../../storyteller.js";
+import { works } from "../../storyteller.js";
 import { claimHeard } from "../../strategy.js";
+
+// An NPC pretending to be the Pixie: an evil player, or the Lunatic, whose
+// bluff it is.
+const pixieBluffer = (x) =>
+  !x.human && (x.alignment === "evil" || x.role === "lunatic") && x.bluff === "pixie";
 
 // The Pixie, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -9,30 +14,28 @@ export const pixie = {
   // from Day 1 they claim it (with made-up information to match; see
   // strategy ask()), so they can gain its ability. An evil Pixie bluffer
   // does the same with the one they "learned", so they act like one.
-  //
-  // A Pixie who gained the ability in the night says so now (see
-  // pixieGains()).
+  // Either way, they never claim the Pixie while alive (see strategy
+  // revealsWhenDead()).
   pixieMadness() {
     const s = this.s;
-
-    for (const p of s.players.filter((x) => x.pixieNews)) {
-      p.pixieNews = false;
-
-      if (p.alive) {
-        this.pixieAnnounces(p);
-      }
-    }
 
     for (const p of s.players.filter(
       (x) =>
         x.alive &&
         !x.human &&
-        (x.role === "pixie" || (x.alignment === "evil" && x.claim === "pixie")) &&
+        (x.role === "pixie" || pixieBluffer(x)) &&
         x.pixieRole &&
         !x.pixieMad,
     )) {
       p.pixieMad = true;
-      p.claim = p.pixieRole;
+
+      // (Made mad by the Cerenovus today too: that claim stands, and they go
+      // back to the Pixie's character when it ends, never to the Pixie.)
+      if (p.mad?.day === s.day && p.mad.previous) {
+        p.mad.previous = p.pixieRole;
+      } else {
+        p.claim = p.pixieRole;
+      }
 
       this.audit(
         "pixie",
@@ -45,8 +48,8 @@ export const pixie = {
   },
 
   // When the holder of a mad Pixie's character dies, a working Pixie gains
-  // their ability, and (an NPC) says in public they were the Pixie: now, or
-  // at dawn if it's night.
+  // their ability. They keep claiming that character (now truly theirs),
+  // and say nothing of the Pixie.
   pixieGains(dead) {
     for (const p of this.s.players.filter(
       (x) =>
@@ -66,59 +69,27 @@ export const pixie = {
         )} ability.`,
         { playerId: p.id, role: dead.role },
       );
-
-      if (p.human) {
-        continue;
-      }
-
-      if (this.s.phase === "day") {
-        this.pixieAnnounces(p);
-      } else {
-        p.pixieNews = true;
-      }
     }
 
     // An evil Pixie bluffer "gains" it too, when someone they know claimed
-    // (or was) that character dies, and says so the same way.
+    // (or was) that character dies, and goes on bluffing it.
     for (const p of this.s.players.filter(
       (x) =>
         x.alive &&
-        !x.human &&
-        x.alignment === "evil" &&
-        x.bluff === "pixie" &&
+        pixieBluffer(x) &&
         x.pixieMad &&
         !x.bluffGained &&
         (dead.role === x.pixieRole || claimHeard(dead, x) === x.pixieRole),
     )) {
       p.bluffGained = p.pixieRole;
 
-      if (this.s.phase === "day") {
-        this.pixieAnnounces(p);
-      } else {
-        p.pixieNews = true;
-      }
+      this.audit(
+        "pixie",
+        `${dead.label} died: ${p.label} (${name(p.role)}, bluffing the Pixie) "gains" the ${name(
+          p.pixieRole,
+        )} ability.`,
+        { playerId: p.id, role: p.pixieRole },
+      );
     }
-  },
-
-  // A mad Pixie who gained the ability says in public they were the Pixie,
-  // and claims it from now on.
-  pixieAnnounces(p) {
-    const s = this.s;
-    const role = name(p.gained ?? p.bluffGained);
-    const said = ` says: "I was the Pixie, mad about being the ${role}. I now have the ${role} ability."`;
-
-    p.claim = "pixie";
-
-    // (Made mad today, they go back to the Pixie when it ends.)
-    if (p.mad?.previous) {
-      p.mad.previous = "pixie";
-    }
-
-    this.claimPublicly(p);
-    s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
-    this.audit("pixie", `${p.label}${said}`, {
-      playerId: p.id,
-      role: p.gained ?? p.bluffGained,
-    });
   },
 };

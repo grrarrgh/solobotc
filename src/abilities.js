@@ -7,6 +7,7 @@ import {
   SINK_KILL_CHANCE,
   alignment,
   HIDDEN_OUTSIDERS,
+  HIDE_NEVER_AS,
 } from "./data.js";
 import { ability, works, madInfo, isDemon } from "./storyteller.js";
 import { speak, heard } from "./strategy.js";
@@ -286,10 +287,12 @@ export const abilities = {
       return p.role;
     }
 
-    return team(p.claim) === "townsfolk"
+    return team(p.claim) === "townsfolk" && !HIDE_NEVER_AS.includes(p.claim)
       ? p.claim
       : (pick(
-          s.script.ids.filter((id) => team(id) === "townsfolk"),
+          s.script.ids.filter(
+            (id) => team(id) === "townsfolk" && !HIDE_NEVER_AS.includes(id),
+          ),
           s.r,
         ) ?? p.claim);
   },

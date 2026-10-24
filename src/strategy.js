@@ -489,6 +489,19 @@ export const sure = (s) =>
 const explained = (x, role) =>
   x.cameClean?.from === role || (x.madAbout ?? []).includes(role);
 
+// What p says of their information: all of it, except that a living Pixie
+// (or Pixie bluffer) who claims another character keeps quiet about the
+// Pixie's (see characters/townsfolk/pixie.js).
+//
+// A living good Mutant or Damsel hiding behind a Townsfolk claim gives the
+// information they made up for it instead (see hiddenInfo()).
+export const spoken = (p) =>
+  p.alive && p.hideInfo && p.claim === p.hideInfo.as
+    ? p.hideInfo.memories
+    : p.alive && p.claim !== "pixie"
+      ? p.memories.filter((m) => m.role !== "pixie")
+      : p.memories;
+
 // How a player is named in a reason: "you" for the human.
 const who = (x) => (x.human ? "you" : x.label);
 const whose = (x) => (x.human ? "your" : `${x.label}'s`);
@@ -942,7 +955,11 @@ export class SimpleStrategy {
   // have: "I have Player 7's ability, since they were executed." (A real
   // Cannibal isn't told the character.)
   cannibalLine(s, p, claim) {
-    const from = claim === "cannibal" && byId(s, p.cannibalFrom);
+    // (Or, claiming it without its ability, the last executee they "ate":
+    // see engine cannibals().)
+    const from =
+      claim === "cannibal" &&
+      byId(s, p.role === "cannibal" || p.alignment === "evil" ? p.cannibalFrom : p.madCannibal?.at(-1)?.fromId);
 
     return from
       ? `I have ${from.human ? "your" : `${from.label}'s`} ability, since they were executed.`
@@ -1032,7 +1049,7 @@ export class SimpleStrategy {
       ? {
           twin,
           // (Naming, and pointing at, the good twin.)
-          memories: twin.memories.map((m) =>
+          memories: spoken(twin).map((m) =>
             m.role === "eviltwin"
               ? { ...m, text: evilTwinInfo(s, twin).text, targets: [twin.id] }
               : m,
@@ -1134,7 +1151,7 @@ export class SimpleStrategy {
       ? (mad.memories ?? [])
       : copy
         ? copy.memories
-        : p.memories;
+        : spoken(p);
     const opinion = mad
       ? (this.infoOpinion(s, { ...p, memories }) ?? {
           text: "I have nothing else to add.",
@@ -1255,6 +1272,19 @@ export class SimpleStrategy {
     );
 
     c.memories = [...(c.memories ?? []), ...fresh];
+  }
+
+  // A good Mutant or Damsel hiding behind a Townsfolk claim (see
+  // HIDDEN_OUTSIDERS) makes up that Townsfolk's information, at random, as
+  // a cover story would: kept from day to day, tonight's added each morning
+  // (afresh if their claim changed). See spoken().
+  hiddenInfo(s, p) {
+    const h = p.hideInfo?.as === p.claim ? p.hideInfo : (p.hideInfo = { as: p.claim, memories: null });
+    const fresh = madInfo(s, p, h.as, this).filter(
+      (m) => !h.memories || (m.night === s.night && !m.day),
+    );
+
+    h.memories = [...(h.memories ?? []), ...fresh];
   }
 
   // Whether p, with a cover story, tells listener `to` the truth: a player
@@ -1438,12 +1468,7 @@ export class SimpleStrategy {
           `I woke up as the ${name(c.to)} on Night ${c.night}; before that I was the ${name(c.from)}.`,
       ),
       twin && `${twin.label} is my twin, and I am the good twin.`,
-      !mad && !hidden && this.cannibalLine(s, p, a.claim),
-      !mad &&
-        !hidden &&
-        a.claim === "pixie" &&
-        (p.gained ?? p.bluffGained) &&
-        `I have the ${name(p.gained ?? p.bluffGained)} ability.`,
+      this.cannibalLine(s, p, a.claim),
       details,
       this.courtierLine(s, memories),
       !mad && !hidden && this.unusedAbility(copy ? copy.twin : p),
@@ -2903,7 +2928,8 @@ export class SimpleStrategy {
   // The Cerenovus picks a good NPC the way the Demon picks its kills, and
   // makes them mad about a good character that isn't who they are (their
   // true character, the one they think they are, or their claim; never the
-  // Drunk).
+  // Drunk, the Mutant, the Damsel or the Pixie, none of which is ever
+  // claimed openly while alive).
   //
   // At CERENOVUS_EVIL_CHANCE it instead makes an evil teammate mad about a
   // good character that isn't in play: a fresh bluff for a day, after which
@@ -2935,7 +2961,7 @@ export class SimpleStrategy {
         s.script.ids.filter(
           (id) =>
             alignment(id) === "good" &&
-            !["drunk", ...HIDDEN_OUTSIDERS].includes(id) &&
+            !["drunk", "pixie", ...HIDDEN_OUTSIDERS].includes(id) &&
             !own.includes(id) &&
             (!evil || !tokens.has(id)),
         ),
@@ -3022,13 +3048,12 @@ export class SimpleStrategy {
   // bluffer.)
   exorcist(s, p) {
     const last = p.lastPicks?.exorcist ?? [];
-    const pool = this.fresh(
-      p,
-      "exorcist",
-      untwinned(s, this.pickable(s, p)).filter(
-        (x) => !x.human && !last.includes(x.id),
-      ),
+    const all = untwinned(s, this.pickable(s, p)).filter(
+      (x) => !x.human && !last.includes(x.id),
     );
+    // (An evil bluffer never "chooses" a teammate: that points at them.)
+    const others = sideOf(p) === "evil" ? all.filter((x) => !teammate(p, x)) : [];
+    const pool = this.fresh(p, "exorcist", others.length ? others : all);
 
     return this.noted(
       p,

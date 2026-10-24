@@ -12,6 +12,7 @@ import {
   FABLED,
   HIDDEN_OUTSIDERS,
   HIDDEN_BLUFF_CHANCE,
+  HIDE_NEVER_AS,
   VILLAGE_IDIOT_EXTRAS,
   MEZEPHELES_NIGHTS,
   LEGION_MAJORITY,
@@ -485,7 +486,10 @@ export function createState(
     p.claim = HIDDEN_OUTSIDERS.includes(p.bluff)
       ? (pick(
           pool("townsfolk").filter(
-            (x) => !taken.has(x) && !(grimoire && tokens.has(x)),
+            (x) =>
+              !taken.has(x) &&
+              !(grimoire && tokens.has(x)) &&
+              !HIDE_NEVER_AS.includes(x),
           ),
           r,
         ) ?? "chef")
@@ -536,11 +540,16 @@ export function createState(
   // The Mutant is "mad" that they're not an Outsider, and the Damsel hides
   // from the Minions: they claim a Townsfolk (see HIDDEN_OUTSIDERS). (The
   // Damsel tells a Huntsman the truth: see strategy damselTo().) They don't
-  // know what's in play: any Townsfolk on the script.
+  // know what's in play: any Townsfolk on the script (but never one nobody
+  // claims openly, like the Pixie or Virgin: see HIDE_NEVER_AS).
   for (const p of players.filter(
     (x) => HIDDEN_OUTSIDERS.includes(x.role) && !x.human,
   )) {
-    p.claim = pick(pool("townsfolk"), r) ?? p.claim;
+    p.claim =
+      pick(
+        pool("townsfolk").filter((x) => !HIDE_NEVER_AS.includes(x)),
+        r,
+      ) ?? p.claim;
   }
 
   // The Evil Twin is paired with a good player; they know each other. The

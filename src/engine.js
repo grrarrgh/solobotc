@@ -12,6 +12,7 @@ import {
   ROUND_ROBIN_ALIVE,
   TRUST_EVIDENCE,
   EVIDENCE_TO_SUSPECT,
+  HIDDEN_OUTSIDERS,
 } from "./data.js";
 import {
   nightInfo,
@@ -44,6 +45,7 @@ import {
   claimHeard,
   claimTo,
   lied,
+  spoken,
 } from "./strategy.js";
 import { byId, bySeat, pick, shuffle } from "./util.js";
 import { formatLog, logNames } from "./log.js";
@@ -661,9 +663,12 @@ export class Engine {
 
       // A Philosopher bluffer "gains" an in-play Townsfolk on their first
       // night (implying its real holder is drunk), then bluffs as it.
-      // (A Philosopher the Mezepheles turned evil keeps what they gained.)
-      if (["philosopher", "cannibal"].includes(p.claim) && p.gained && !p.bluffGained) {
+      // (A Philosopher or Cannibal the Mezepheles turned evil bluffs what
+      // they really gained, and from when: a Cannibal's changes with each
+      // execution, and a first-night ability is used the night it's gained.)
+      if (["philosopher", "cannibal"].includes(p.claim) && p.turnedEvil && p.gained) {
         p.bluffGained = p.gained;
+        p.bluffGainedNight = p.gainedNight;
       }
 
       if (p.claim === "philosopher" && !p.bluffGained) {
@@ -1486,6 +1491,15 @@ export class Engine {
       if (p.cover) {
         this.strat.coverInfo(s, p);
       }
+
+      // (A good Mutant or Damsel makes up their Townsfolk's information.)
+      if (
+        HIDDEN_OUTSIDERS.includes(p.role) &&
+        sideOf(p) === "good" &&
+        team(p.claim) === "townsfolk"
+      ) {
+        this.strat.hiddenInfo(s, p);
+      }
     }
   }
 
@@ -1670,9 +1684,12 @@ export class Engine {
       if (p.human) {
         claim = p.claim;
         memories = p.memories;
+      } else if (truthful && p.pixieMad && p.alive) {
+        // (A living Pixie claims their character, never the Pixie.)
+        ({ claim, memories } = this.strat.answer(s, p));
       } else if (truthful) {
         claim = this.strat.revealsWhenDead?.(p) ?? p.claim;
-        memories = p.memories;
+        memories = spoken(p);
       } else {
         const a = this.strat.answer(s, p);
 

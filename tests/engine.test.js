@@ -58,6 +58,7 @@ import {
   infoMode,
   amnesiacKey,
   bluffInfo,
+  madInfo,
   lean,
   scapegoat,
   evilTwinInfo,
@@ -795,8 +796,9 @@ test("evil Empath and Fortune Teller bluffs contradict the truth", () => {
 
   new Engine(s, strat).start();
 
-  // The Spy's neighbours are the Butler and the Imp: one evil.
-  assert.equal(spy.memories[0].text, "Empath number: 1.");
+  // The Spy's neighbours are the Butler and the Imp: the truth (1) would
+  // point at the Imp, so the Spy says 0.
+  assert.equal(spy.memories[0].text, "Empath number: 0.");
 
   // Whichever two players the Imp names, the answer is the opposite of the
   // truth for them (only the red herring can make good players read YES).
@@ -1947,7 +1949,7 @@ test("the human is never dealt the Drunk", () => {
   }
 });
 
-test("an evil Empath bluffer keeps their number until a neighbour dies", () => {
+test("an evil Empath bluffer next to a teammate always says 0", () => {
   for (let i = 0; i < 20; i++) {
     const s = base(`empath-bluff-${i}`);
     const baron = s.players[3];
@@ -1966,16 +1968,45 @@ test("an evil Empath bluffer keeps their number until a neighbour dies", () => {
 
     s.night = 2;
     assert.equal(report(), first);
-    assert.notEqual(first, "Empath number: 1.");
+    assert.equal(first, "Empath number: 0.");
 
     // The Butler dies; the new neighbours are the Chef and the Imp.
     s.players[2].alive = false;
     s.night = 3;
+    assert.equal(report(), "Empath number: 0.");
+  }
+});
 
-    const after = report();
+test("an evil Empath bluffer with no teammate beside them keeps their number until a neighbour dies", () => {
+  for (let i = 0; i < 20; i++) {
+    const s = base(`empath-bluff-good-${i}`);
+    const imp = s.players[4];
+    const e = new Engine(s);
 
-    assert.notEqual(after, first);
-    assert.notEqual(after, "Empath number: 1.");
+    // (An evil player in the Chef's seat: their neighbours are you and the
+    // Butler, both good.)
+    const chef = s.players[1];
+
+    chef.alignment = "evil";
+    chef.claim = "empath";
+    imp.claimKnown = false;
+
+    const report = () => {
+      e.bluffs();
+      return chef.memories.at(-1).text;
+    };
+
+    s.night = 1;
+    const first = report();
+
+    s.night = 2;
+    assert.equal(report(), first);
+    assert.notEqual(first, "Empath number: 0.");
+
+    // The Butler dies; the new neighbours are you and the Baron (a teammate).
+    s.players[2].alive = false;
+    s.night = 3;
+    assert.equal(report(), "Empath number: 0.");
   }
 });
 
@@ -6717,23 +6748,39 @@ test("with a Pixie on the script, a double-claimed Townsfolk counts for less", (
   assert.equal(strat.evidence(s, chef, ft).score, 0);
 });
 
-test("a Pixie who gains the ability says in public they were the Pixie", () => {
+test("a Pixie who gains the ability keeps claiming that character, and never the Pixie while alive", () => {
   const { s, p, e } = opNight("pixie-gains", [null, "pixie", "fortuneteller"]);
   const [, pixie, ft] = p;
 
+  pixie.memories = [
+    { night: 1, role: "pixie", text: "Pixie: the Fortune Teller is in play.", targets: [] },
+  ];
   Object.assign(pixie, { pixieMad: true, pixieRole: "fortuneteller", claim: "fortuneteller" });
   s.phase = "day";
   s.day = 1;
   e.execute(ft);
 
   assert.equal(pixie.gained, "fortuneteller");
-  assert.equal(claimTo(pixie), "pixie");
-  assert.ok(
-    s.publicLog.includes(
-      `Day 1 — ${pixie.label} says: "I was the Pixie, mad about being the Fortune Teller. I now have the Fortune Teller ability."`,
-    ),
-  );
-  assert.match(e.strat.ask(s, pixie), /^I claim Pixie\.\n[\s\S]*I have the Fortune Teller ability\./);
+  assert.equal(pixie.claim, "fortuneteller");
+  assert.ok(!s.publicLog.some((x) => /Pixie/.test(x)));
+
+  // Asked, they claim the Fortune Teller, and keep quiet about the Pixie.
+  const said = e.strat.ask(s, pixie);
+
+  assert.match(said, /^I claim Fortune Teller\./);
+  assert.ok(!/Pixie/.test(said), said);
+});
+
+test("a Pixie made mad by the Cerenovus on Night 1 goes back to their character, never the Pixie", () => {
+  const { p, strat, e } = opNight("pixie-cerenovus", [null, "pixie", "fortuneteller"]);
+  const pixie = p[1];
+
+  p[3].role = "cerenovus";
+  strat.cerenovus = () => ({ target: pixie, role: "chef" });
+  e.night();
+
+  assert.equal(pixie.claim, "chef");
+  assert.equal(pixie.mad.previous, pixie.pixieRole);
 });
 
 test("a mad Pixie or the Lunatic acts out a claimed character, to no effect", () => {
@@ -9002,4 +9049,142 @@ test("an evil Mayor (turned by the Mezepheles) wins for evil with 3 alive and no
   assert.equal(new SimpleStrategy().priorityLevel(s, s.players[1], s.players[4]), "avoid");
   e.endDay();
   assert.equal(s.winner, "evil");
+});
+
+test("an evil Noble bluffer always names 3 players, even in an 8-seat Legion game", () => {
+  const raw = tr.filter((x) => !["imp", "vigormortis"].includes(x.id));
+  let bluffers = 0;
+
+  for (let seed = 0; seed < 60; seed++) {
+    const s = createState(raw, 8, `legion-noble-${seed}`);
+    const p = s.players.find((x) => x.role === "legion");
+
+    p.claim = "noble";
+
+    const info = bluffInfo(s, p, new SimpleStrategy());
+
+    bluffers++;
+    assert.match(info.text, /^Noble: one of .+ is evil\.$/, `seed ${seed}`);
+    assert.equal(info.targets.length, 3);
+    assert.ok(!info.targets.includes(s.humanId));
+  }
+
+  assert.ok(bluffers > 0);
+});
+
+test("the Cerenovus never makes anyone mad they're the Pixie", () => {
+  const strat = new SimpleStrategy();
+
+  for (let seed = 0; seed < 300; seed++) {
+    const s = createState(tr, 12, `cerenovus-pixie-${seed}`);
+    const c = s.players.find((p) => p.alignment === "evil" && !p.human);
+
+    s.phase = "night";
+    s.night = 1;
+
+    const choice = strat.cerenovus(s, c);
+
+    assert.notEqual(choice?.role, "pixie", `seed ${seed}`);
+  }
+});
+
+test("a good Mutant or Damsel hiding behind a Townsfolk makes up its information", () => {
+  for (const id of ["mutant", "damsel"]) {
+    const { s, p, e } = trNight(`hidden-info-${id}`, [null, id]);
+    const hider = p[1];
+
+    hider.claim = "noble";
+    e.night();
+
+    // Day 1: a Noble's Night 1 information, made up (at random).
+    const said = e.ask(hider.id);
+
+    assert.match(said, /^I claim Noble\./);
+    assert.match(said, /Night 1: One of .+ is evil\./, said);
+    assert.ok(hider.memories.every((m) => m.role !== "noble"));
+
+    // Once dead, they say what they were, with nothing made up.
+    hider.alive = false;
+    assert.deepEqual(e.strat.answer(s, hider).memories, []);
+  }
+});
+
+test("a Cannibal the Mezepheles turned evil bluffs the ability they last ate, from the night they ate it", () => {
+  const { s, p, e } = trNight("evil-cannibal", [null, "cannibal", "noble"], 2);
+  const [, c, noble] = p;
+
+  Object.assign(c, { alignment: "evil", turnedEvil: 2 });
+  s.phase = "day";
+  s.day = 2;
+  e.execute(noble);
+  assert.equal(c.gained, "noble");
+
+  // That night they "learn" as the Noble (a first-night ability).
+  s.night = 3;
+  e.bluffs();
+  assert.equal(c.bluffGained, "noble");
+  assert.match(c.memories.at(-1)?.text ?? "", /^Noble: one of /);
+});
+
+test("made-up Cannibal information follows the executions; a made-up Philosopher gains a character", () => {
+  const { s, p, strat, e } = trNight("made-up-cannibal", [null, "chef", "noble"], 1);
+  const [, liar, noble] = p;
+
+  e.night();
+  e.claimPublicly(noble);
+
+  // Nothing eaten yet: nothing to say.
+  assert.deepEqual(madInfo(s, liar, "cannibal", strat), []);
+
+  // The Noble is executed: the next night, made-up Noble information.
+  e.execute(noble);
+  s.night = 2;
+
+  const ate = madInfo(s, liar, "cannibal", strat);
+
+  assert.equal(ate.length, 1);
+  assert.match(ate[0].text, /^Noble: one of /);
+  assert.equal(ate[0].night, 2);
+
+  // A made-up Philosopher gains a good character with information on Night 1.
+  const phil = madInfo(s, liar, "philosopher", strat);
+
+  assert.match(phil[0].text, /^Philosopher: gained the .+ ability\.$/);
+  assert.equal(madInfo(s, liar, "philosopher", strat)[0].text, phil[0].text);
+});
+
+test("a hiding Mutant or Damsel never claims a Townsfolk nobody claims openly", () => {
+  for (let seed = 0; seed < 300; seed++) {
+    const s = createState(tr, 8 + (seed % 8), `hidden-claim-${seed}`);
+
+    for (const p of s.players.filter((x) => ["mutant", "damsel"].includes(x.role))) {
+      assert.ok(!["pixie", "virgin", "fool"].includes(p.claim), `seed ${seed}: ${p.claim}`);
+    }
+  }
+});
+
+test("a good player claiming the Cannibal without it 'eats' the executee as they heard them claim, and says whose ability", () => {
+  const { s, p, e } = trNight("good-cannibal", [null, "mutant", "noble"], 1);
+  const [, mutant, noble] = p;
+
+  e.night();
+  mutant.claim = "cannibal";
+  e.claimPublicly(noble);
+  e.execute(noble);
+
+  // Recorded at the execution: the Noble, as they claimed it.
+  assert.equal(mutant.madCannibal.at(-1).as, "noble");
+  assert.equal(mutant.madCannibal.at(-1).fromId, noble.id);
+
+  // The next day, the Cannibal line and made-up (random) Noble information.
+  s.night = 2;
+  s.day = 2;
+  s.talked = [];
+  e.strat.hiddenInfo(s, mutant);
+
+  const said = e.ask(mutant.id);
+
+  assert.match(said, new RegExp(`I have ${noble.label}'s ability, since they were executed\.`));
+  assert.match(said, /Night 2: One of .+ is evil\./);
+  assert.ok(mutant.hideInfo.memories.every((m) => m.functioning === false));
 });
