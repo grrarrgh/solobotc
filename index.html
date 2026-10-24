@@ -78,12 +78,21 @@
             <button id="npc-nominations" type="button">NPC nominations 0</button>
           </div>
           <button id="savant" type="button" hidden>Visit the Storyteller</button>
+          <button id="fisherman" type="button" hidden>Ask the Storyteller for advice</button>
           <span id="amnesiac-controls" hidden>
             <select id="amnesiac-guess" aria-label="Your guess"></select>
             <button id="amnesiac" type="button">Guess my ability</button>
           </span>
           <p id="day-answer"></p>
         </div>
+
+        <!-- The Boomdandy's countdown: select a living player and point. -->
+        <section id="boom-choice" class="night-choice" hidden>
+          <h3>💥 The Boomdandy's countdown: point at a living player</h3>
+          <p id="boom-pick"></p>
+          <button id="boom-point" type="button">Point at them</button>
+          <p id="boom-error"></p>
+        </section>
 
         <!-- Shown when the Storyteller wakes you for a night choice. -->
         <section id="night-choice" class="night-choice" hidden>
@@ -100,6 +109,7 @@
           <p id="talk"></p>
           <button id="ask">Ask</button>
           <button id="slay" hidden>Slay</button>
+          <button id="puzzle" hidden>Guess they're the puzzle's drunk</button>
           <span id="artist-controls" hidden>
             <select id="artist-question"></select>
             <button id="artist-ask">Ask Storyteller</button>

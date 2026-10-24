@@ -44,6 +44,16 @@ import {
   NPC_NOMINATE_EVIDENCE,
   PIXIE_DOUBLE_CLAIM_FACTOR,
   TRUST_EVIDENCE,
+  HIDDEN_OUTSIDERS,
+  DAMSEL_HIDER_CHANCE,
+  DAMSEL_CLAIM_CHANCE,
+  DAMSEL_DECOY_CHANCE,
+  BOOMDANDY_FROM_DAY,
+  BOOMDANDY_HEAT,
+  BOOMDANDY_VOTE_CHANCE,
+  BOOMDANDY_HOT_VOTE_CHANCE,
+  DAMSEL_GUESS_ALIVE,
+  DAMSEL_GUESS_CHANCE,
 } from "./data.js";
 import {
   ability,
@@ -56,6 +66,7 @@ import {
   isDemon,
   atFinal,
   works,
+  bluffing,
 } from "./storyteller.js";
 import { byId, pick, sample, claimTo, claimHeard, tick } from "./util.js";
 import {
@@ -102,6 +113,9 @@ const teammate = (p, x) =>
 export function abilityUsed(p, role) {
   const used = {
     slayer: p.shotUsed,
+    fisherman: p.fishermanUsed,
+    huntsman: p.huntsmanUsed,
+    puzzlemaster: p.puzzleUsed,
     artist: p.artistUsed,
     seamstress: p.seamUsed,
     juggler: p.juggled,
@@ -177,7 +191,16 @@ function infoStance(m) {
     case "moonchild":
       return /, who didn't die\.$/.test(t) ? "suspicious" : null;
     case "exorcist":
+    // (The Demon a Puzzlemaster learned; the Fisherman's evil player, or
+    // the 3 the Demon is among.)
+    case "puzzlemaster":
       return "suspicious";
+    case "fisherman":
+      return / is good: /.test(t)
+        ? "trust"
+        : / is evil\.$|The Demon is one of /.test(t)
+          ? "suspicious"
+          : null;
     // A Gambler who died guessing knows they were wrong.
     case "gambler":
       return /, and died\.$/.test(t) ? "suspicious" : "trust";
@@ -659,6 +682,12 @@ export class SimpleStrategy {
       );
     }
 
+    // They guessed the Damsel in public: only a Minion's guess counts (see
+    // characters/outsider/damsel.js).
+    if ((s.damselGuesses ?? []).some((g) => g.byId === t.id)) {
+      add(W.damselGuess, "they guessed the Damsel in public, as only a Minion would");
+    }
+
     // Their claimed ability visibly failed (see engine failed()).
     for (const f of s.failures ?? []) {
       if (f.id === t.id) {
@@ -841,8 +870,9 @@ export class SimpleStrategy {
   }
 
   // The character a dead player now admits to, if any (else null): the
-  // Mutant (no longer at risk of execution), and so does an evil player who
-  // took the Mutant bluff; a mad Pixie who never gained the ability (the
+  // Mutant (no longer at risk of execution) or the Damsel (her ability is
+  // gone), and so does an evil player who took that bluff (see
+  // HIDDEN_OUTSIDERS); a mad Pixie who never gained the ability (the
   // madness can't matter any more), and so does an evil Pixie bluffer, who
   // acts just like one. Other evil players stick to their bluffs.
   revealsWhenDead(p) {
@@ -850,8 +880,10 @@ export class SimpleStrategy {
       return null;
     }
 
-    if (p.role === "mutant" || p.bluff === "mutant") {
-      return "mutant";
+    const hidden = [p.role, p.bluff].find((x) => HIDDEN_OUTSIDERS.includes(x));
+
+    if (hidden) {
+      return hidden;
     }
 
     return (p.role === "pixie" || p.bluff === "pixie") &&
@@ -1029,7 +1061,33 @@ export class SimpleStrategy {
         })
       : this.opinion(s, p);
 
-    return { claim: mad ? mad.role : p.claim, memories, opinion, mad, copy };
+    return {
+      claim: mad ? mad.role : (this.damselTo(s, p, to) ?? p.claim),
+      memories,
+      opinion,
+      mad,
+      copy,
+    };
+  }
+
+  // The Damsel (hiding: see HIDDEN_OUTSIDERS) tells listener `to` the truth
+  // ("damsel") if they claim the Huntsman to her and she doesn't suspect
+  // them, so the Huntsman can find her. A Damsel bluffer does the same, to
+  // waste a real Huntsman's ability. Null otherwise.
+  damselTo(s, p, to) {
+    const damsel =
+      (p.role === "damsel" && sideOf(p) === "good") ||
+      (p.alignment === "evil" && p.bluff === "damsel");
+
+    if (!damsel || !p.alive || !to || claimHeard(to, p) !== "huntsman") {
+      return null;
+    }
+
+    const suspected =
+      p.suspicion?.targetId === to.id ||
+      (!to.human && this.evidence(s, p, to).score >= EVIDENCE_TO_SUSPECT);
+
+    return suspected ? null : "damsel";
   }
 
   // On Day 1, whether good NPC p takes a cover story, and which (null if
@@ -1051,11 +1109,24 @@ export class SimpleStrategy {
       sideOf(p) !== "good" ||
       isTwin(s, p) ||
       p.pixieMad ||
+      // (A Mutant or Damsel already hides behind a Townsfolk claim.)
+      HIDDEN_OUTSIDERS.includes(p.role) ||
       p.mad?.day === s.day ||
       // (Late enough to come clean already: see dawnComeClean().)
       s.players.filter((x) => x.alive).length <= COME_CLEAN_ALIVE
     ) {
       return null;
+    }
+
+    // A Damsel decoy (see DAMSEL_DECOY_CHANCE): at most one at a time.
+    if (
+      s.script.ids.includes("damsel") &&
+      p.role !== "damsel" &&
+      DEMON_KILL_PRIORITY[p.claim] !== "high" &&
+      !s.players.some((x) => x.cover?.kind === "decoy") &&
+      s.r() < DAMSEL_DECOY_CHANCE
+    ) {
+      return { kind: "decoy", as: "damsel", night: s.night };
     }
 
     const kind =
@@ -1107,6 +1178,11 @@ export class SimpleStrategy {
   // their own information vouches for, or you at COVER_TELL_HUMAN_CHANCE
   // (decided the first time you talk, and kept).
   truthTo(s, p, to) {
+    // (A Damsel decoy never fools a Huntsman into wasting their ability.)
+    if (p.cover.kind === "decoy" && to && claimHeard(to, p) === "huntsman") {
+      return true;
+    }
+
     if (to?.human) {
       p.cover.human ??= s.r() < COVER_TELL_HUMAN_CHANCE;
       return p.cover.human;
@@ -1167,7 +1243,13 @@ export class SimpleStrategy {
     for (const [id, x] of Object.entries(p.toldMe ?? {})) {
       const about = byId(s, id);
 
-      if (!about || about === to || about === p) {
+      // (A good player keeps a Damsel's secret.)
+      if (
+        !about ||
+        about === to ||
+        about === p ||
+        (x.claim === "damsel" && sideOf(p) === "good")
+      ) {
         continue;
       }
 
@@ -1397,6 +1479,23 @@ export class SimpleStrategy {
       return null;
     }
 
+    // (An evil NPC nominating their Boomdandy makes up a reason.)
+    const boom = this.boomPush(s, p);
+
+    if (boom) {
+      const claim = claimTo(boom, p);
+
+      return {
+        target: boom,
+        score: NPC_NOMINATE_EVIDENCE + 1,
+        reasons: [
+          claim
+            ? `they claim the ${name(claim)}, and I don't believe it`
+            : "they won't say what they are",
+        ],
+      };
+    }
+
     const sus = this.suspicion(s, p);
     const t = sus && byId(s, sus.targetId);
 
@@ -1438,6 +1537,16 @@ export class SimpleStrategy {
     }
 
     if (sideOf(v) === "evil") {
+      // (The Boomdandy, and its team, want it executed: see BOOMDANDY_*.)
+      if (this.boomdandy(s, v, n)) {
+        return (
+          s.r() <
+          (this.demonHeat(s) < BOOMDANDY_HEAT
+            ? BOOMDANDY_VOTE_CHANCE
+            : BOOMDANDY_HOT_VOTE_CHANCE)
+        );
+      }
+
       if (!teammate(v, n)) {
         return s.r() < EVIL_VOTE_CHANCE;
       }
@@ -1570,6 +1679,179 @@ export class SimpleStrategy {
     }
 
     return this.noted(p, "poison", pick(this.fresh(p, "poison", pool), s.r));
+  }
+
+  // ── Extension Cord ─────────────────────────────────────────
+
+  // Whether n is a Boomdandy evil NPC p wants executed (from
+  // BOOMDANDY_FROM_DAY): their living teammate (or p themself). (Not the
+  // Lunatic, whose team is imagined.)
+  boomdandy(s, p, n) {
+    return (
+      n.role === "boomdandy" &&
+      n.alive &&
+      !thinksEvil(p) &&
+      sideOf(p) === "evil" &&
+      teammate(p, n) &&
+      s.day >= BOOMDANDY_FROM_DAY
+    );
+  }
+
+  // The share (0 to 1) of the living good NPCs who suspect the Demon.
+  demonHeat(s) {
+    const d = s.players.find((x) => x.alive && isDemon(x));
+    const good = s.players.filter(
+      (x) => x.alive && !x.human && x.alignment === "good",
+    );
+
+    return d && good.length
+      ? good.filter((x) => x.suspicion?.targetId === d.id).length / good.length
+      : 0;
+  }
+
+  // The Boomdandy evil NPC p nominates today (see BOOMDANDY_*), or null:
+  // their teammate (not themself), while the Demon is under little
+  // suspicion.
+  boomPush(s, p) {
+    const b = s.players.find((x) => x !== p && this.boomdandy(s, p, x));
+
+    return b && !s.nominated.includes(b.id) && this.demonHeat(s) < BOOMDANDY_HEAT
+      ? b
+      : null;
+  }
+
+  // The Fisherman visits the Storyteller once (timed by
+  // ONCE_PER_GAME.fisherman). (A Fisherman bluffer the same.)
+  fisherman(s) {
+    return this.onceReady(s, "fisherman", s.day);
+  }
+
+  // Who a Puzzlemaster (once; timed by ONCE_PER_GAME.puzzlemaster) guesses
+  // their puzzle made drunk: a player claiming an information character
+  // (what the Storyteller would make drunk), they haven't guessed before;
+  // anyone else if nobody does. Null if not today.
+  puzzle(s, p) {
+    if (!this.onceReady(s, "puzzlemaster", s.day)) {
+      return null;
+    }
+
+    const pool = this.pickable(s, p);
+    const info = pool.filter((x) =>
+      [...FIRST_NIGHT_INFO, ...ONGOING_INFO].includes(claimHeard(x, p)),
+    );
+
+    return pick(info.length ? info : pool, s.r);
+  }
+
+  // The Huntsman (once) chooses a living player they think is the hidden
+  // Damsel: one who has said so, at once; otherwise (timed by
+  // ONCE_PER_GAME.huntsman) a player claiming a character nobody else
+  // claims, they don't trust or suspect, not confirmed (a hider claims
+  // something quiet); else anyone. Null if not tonight.
+  // (A Huntsman bluffer keeps the Damsel they found for the Minions' guess.)
+  huntsman(s, p) {
+    const evil = sideOf(p) === "evil";
+    const pool = this.pickable(s, p);
+    const told = pool.find((x) => claimHeard(x, p) === "damsel");
+
+    if (told && !evil) {
+      return told;
+    }
+
+    if (!this.onceReady(s, "huntsman", s.night)) {
+      return null;
+    }
+
+    const trusted = this.trusted(s, p);
+    const quiet = pool.filter(
+      (x) =>
+        x !== told &&
+        !trusted.has(x.id) &&
+        x.id !== p.suspicion?.targetId &&
+        !sure(s).includes(x.id),
+    );
+
+    return pick(quiet.length ? quiet : pool, s.r);
+  }
+
+  // An NPC Minion's one Damsel guess today (see DAMSEL_* in data.js), or
+  // null: never a teammate, nor a player the team has already guessed. A
+  // player who said they're the Damsel, at once; a player claiming one of
+  // the Demon's bluffs (not in play, so they're hiding) at
+  // DAMSEL_HIDER_CHANCE; late in the game (DAMSEL_GUESS_ALIVE), at
+  // DAMSEL_GUESS_CHANCE, one claiming an Outsider, else anyone unconfirmed.
+  // Never while the Spy or Widow jinx poisons her (the team knows: see
+  // characters/outsider/damsel.js), nor once she's said the Huntsman found
+  // her (see damselSaved()).
+  damselGuess(s, p) {
+    if (
+      !s.damselKnown ||
+      s.damselJinx ||
+      s.damselGone ||
+      p.damselGuessed ||
+      sideOf(p) !== "evil"
+    ) {
+      return null;
+    }
+
+    const missed = (s.damselGuesses ?? []).map((g) => g.targetId);
+    const pool = s.players.filter(
+      (x) => x.alive && x !== p && !teammate(p, x) && !missed.includes(x.id),
+    );
+    // (What the team's Huntsman bluffer was told in private: the real thing.)
+    const team_ = [p, ...s.players.filter((x) => x !== p && teammate(p, x))];
+    const found = pool.find((x) =>
+      team_.some((m) => m.claim === "huntsman" && m.toldMe?.[x.id]?.claim === "damsel"),
+    );
+
+    if (found) {
+      return found;
+    }
+
+    const claimed = pool.filter((x) => claimHeard(x, p) === "damsel");
+
+    if (claimed.length && s.r() < DAMSEL_CLAIM_CHANCE) {
+      return pick(claimed, s.r);
+    }
+
+    const bluffs = p.bluffs?.length ? p.bluffs : (s.demonBluffs ?? []);
+    const hiders = pool.filter((x) => bluffs.includes(claimHeard(x, p)));
+
+    if (hiders.length && s.r() < DAMSEL_HIDER_CHANCE) {
+      return pick(hiders, s.r);
+    }
+
+    if (
+      s.players.filter((x) => x.alive).length > DAMSEL_GUESS_ALIVE ||
+      s.r() >= DAMSEL_GUESS_CHANCE
+    ) {
+      return null;
+    }
+
+    const open = pool.filter((x) => !sure(s).includes(x.id));
+    const options = open.length ? open : pool;
+    const outsiders = options.filter((x) => team(claimHeard(x, p)) === "outsider");
+
+    return pick(outsiders.length ? outsiders : options, s.r);
+  }
+
+  // Who p points at in the Boomdandy's countdown, among the living
+  // (`pool`; never themselves, nor you, as NPCs never nominate or target
+  // you): a good player, their suspect; an evil one, a good player (never a
+  // teammate), the one most others point at so far (`counts`), so it dies.
+  boomPoint(s, p, pool, counts = {}) {
+    const npcs = pool.filter((x) => x !== p && !x.human);
+    const options = npcs.length ? npcs : pool.filter((x) => x !== p);
+
+    if (sideOf(p) === "good") {
+      return this.suspect(s, p, options) ?? pick(options, s.r);
+    }
+
+    const good = options.filter((x) => !teammate(p, x));
+    const most = Math.max(0, ...good.map((x) => counts[x.id] ?? 0));
+    const top = good.filter((x) => (counts[x.id] ?? 0) === most);
+
+    return pick(top.length ? top : options, s.r);
   }
 
   // The Widow (who has seen the Grimoire) poisons a good NPC with ongoing
@@ -2368,7 +2650,7 @@ export class SimpleStrategy {
         s.script.ids.filter(
           (id) =>
             alignment(id) === "good" &&
-            !["drunk", "mutant"].includes(id) &&
+            !["drunk", ...HIDDEN_OUTSIDERS].includes(id) &&
             !own.includes(id) &&
             (!evil || !tokens.has(id)),
         ),

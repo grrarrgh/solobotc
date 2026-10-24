@@ -28,7 +28,21 @@ export const pithag = {
     this.chose(h, choice.target);
 
     const effective = works(h);
-    const { target, role } = choice;
+    const { role } = choice;
+    // By their jinx, the Storyteller chooses who becomes a Damsel: a
+    // living good NPC (not a twin, nor the Demon).
+    const target =
+      role === "damsel" && effective
+        ? (pick(
+            untwinned(
+              s,
+              s.players.filter(
+                (x) => x.alive && !x.human && x.alignment === "good" && !isDemon(x),
+              ),
+            ),
+            s.r,
+          ) ?? choice.target)
+        : choice.target;
 
     this.audit(
       "pithag",
@@ -53,6 +67,11 @@ export const pithag = {
       // A good player learns a Widow is in play (see characters/minion/widow.js).
       if (role === "widow") {
         this.widowKnown();
+      }
+
+      // The Minions learn a Damsel is in play (see characters/outsider/damsel.js).
+      if (role === "damsel") {
+        this.damselKnown();
       }
 
       // Deaths tonight are arbitrary (see arbitraryDeath()).

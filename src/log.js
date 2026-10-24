@@ -100,7 +100,9 @@ function stateLines(players, rename) {
     }${p.gained ? ` (has ${name(p.gained)})` : ""}`,
     `${name(p.claim)}${
       p.cover
-        ? ` (${p.cover.kind === "hide" ? "hiding as" : "baiting as"} ${name(p.cover.as)})`
+        ? ` (${
+            { hide: "hiding as", bait: "baiting as", decoy: "a decoy as" }[p.cover.kind]
+          } ${name(p.cover.as)})`
         : ""
     }`,
     p.alignment,

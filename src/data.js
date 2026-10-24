@@ -3,7 +3,8 @@
 // needs to know about that character, so a character from another edition
 // is added here (and, if its ability needs the Engine, in
 // src/characters/<team>/<id>.js):
-//   name, team ("townsfolk", "outsider", "minion" or "demon"), ability (the
+//   name, team ("townsfolk", "outsider", "minion", "demon", or "fabled": a
+//     Storyteller's rule for the game, never dealt; see FABLED), ability (the
 //     official text, shown on the script sheet; "*" means "not the first
 //     night");
 //   info: "first" (learns something on the first night only) or "ongoing"
@@ -366,6 +367,31 @@ export const CHARACTERS = {
       "You do not know what your ability is. Each day, privately guess what it is: you learn how accurate you are.",
     kill: "med", // a secret ability (see characters/townsfolk/amnesiac.js)
   },
+  fisherman: {
+    name: "Fisherman",
+    team: "townsfolk",
+    ability:
+      "Once per game, during the day, visit the Storyteller for some advice to help your team win.",
+    kill: "med",
+    oncePerGame: { AFTER_DAY: 1, START_CHANCE: 0.4, STEP_CHANCE: 0.3 }, // day
+  },
+  huntsman: {
+    name: "Huntsman",
+    team: "townsfolk",
+    ability:
+      "Once per game, at night, choose a living player: the Damsel, if chosen, becomes a not-in-play Townsfolk. [+the Damsel]",
+    kill: "med", // could save the Damsel
+    // (A guess: NPCs wait for the Damsel to tell them; see strategy huntsman().)
+    oncePerGame: { AFTER_DAY: 3, START_CHANCE: 0.3, STEP_CHANCE: 0.2 }, // night
+  },
+  puzzlemaster: {
+    name: "Puzzlemaster",
+    team: "townsfolk",
+    ability:
+      "1 player is drunk, even if you die. If you guess (once) who it is, learn the Demon player, but guess wrong & get false info.",
+    kill: "med", // could learn the Demon
+    oncePerGame: { AFTER_DAY: 2, START_CHANCE: 0.4, STEP_CHANCE: 0.2 }, // day
+  },
   cannibal: {
     name: "Cannibal",
     team: "townsfolk",
@@ -416,6 +442,15 @@ export const CHARACTERS = {
     ability:
       "If you are \"mad\" about being an Outsider, you might be executed.",
     kill: "low",
+    neverHiddenAs: true,
+    notForHuman: true,
+  },
+  damsel: {
+    name: "Damsel",
+    team: "outsider",
+    ability:
+      "All Minions know a Damsel is in play. If a Minion publicly guesses you (once), your team loses.",
+    kill: "low", // the Minions want her alive, to guess her
     neverHiddenAs: true,
     notForHuman: true,
   },
@@ -571,6 +606,13 @@ export const CHARACTERS = {
       "On your 1st night, look at the Grimoire & choose a player: they are poisoned. 1 good player knows a Widow is in play.",
     kill: "avoid",
   },
+  boomdandy: {
+    name: "Boomdandy",
+    team: "minion",
+    ability:
+      "If you are executed, all but 3 players die. After a 10 to 1 countdown, the player with the most players pointing at them, dies.",
+    kill: "avoid",
+  },
   marionette: {
     name: "Marionette",
     team: "minion",
@@ -634,6 +676,12 @@ export const CHARACTERS = {
     ability:
       "Each night*, you may choose a player: they die. If your last choice was no-one, choose 3 players tonight.",
   },
+  sentinel: {
+    name: "Sentinel",
+    team: "fabled",
+    ability: "There might be 1 extra or 1 fewer Outsider in play.",
+    outsiders: [-1, 0, 1],
+  },
 };
 
 // Travellers aren't supported: a script's Travellers are left out (as in a
@@ -667,6 +715,47 @@ const each = (key) =>
     where((c) => c[key] !== undefined).map((id) => [id, CHARACTERS[id][key]]),
   );
 
+// Jinxes: official rulings for characters whose abilities clash (from the
+// Djinn), shown on the script sheet when both are on it. Each is handled
+// where it applies:
+// - Spy or Widow & Damsel: the Damsel is poisoned (characters/outsider/damsel.js);
+// - Marionette & Huntsman, Marionette & Balloonist: the Marionette is never
+//   shown the Huntsman without the Damsel in play, and the Balloonist's
+//   Outsider "might" have been added (setup.js);
+// - Pit-Hag & Damsel: the Storyteller chooses who becomes the Damsel
+//   (characters/minion/pithag.js);
+// - Mathematician & Drunk or Marionette: their false information counts
+//   (storyteller.js mathCount()).
+export const JINXES = [
+  { ids: ["spy", "damsel"], text: "If the Spy is (or has been) in play, the Damsel is poisoned." },
+  { ids: ["widow", "damsel"], text: "If the Widow is (or has been) in play, the Damsel is poisoned." },
+  {
+    ids: ["marionette", "huntsman"],
+    text: "If the Marionette thinks that they are the Huntsman, the Damsel was added during setup.",
+  },
+  {
+    ids: ["marionette", "balloonist"],
+    text: "If the Marionette thinks that they are the Balloonist, an Outsider might have been added during setup.",
+  },
+  {
+    ids: ["pithag", "damsel"],
+    text: "If a Pit-Hag creates a Damsel, the Storyteller chooses which player it is.",
+  },
+  {
+    ids: ["mathematician", "drunk"],
+    text: "The Mathematician learns if the Drunk's ability yielded false info or failed to work properly.",
+  },
+  {
+    ids: ["mathematician", "marionette"],
+    text: "The Mathematician learns if the Marionette's ability yielded false info or failed to work properly.",
+  },
+];
+
+// Fabled (`team: "fabled"`): a script's rules for the Storyteller, never
+// dealt. They're kept out of the script's characters (see parseScript());
+// the Sentinel changes the Outsiders dealt (see OUTSIDER_MODIFIERS).
+export const FABLED = where((c) => c.team === "fabled");
+
 // id: [display name, team]
 export const ROLES = Object.fromEntries(
   Object.entries(CHARACTERS).map(([id, c]) => [id, [c.name, c.team]]),
@@ -674,7 +763,7 @@ export const ROLES = Object.fromEntries(
 
 // Characters that change the number of Outsiders dealt at setup (`outsiders`
 // in CHARACTERS). (A list is a choice: the Godfather deals 1 fewer or 1
-// more, at random.)
+// more, at random; the Sentinel, a Fabled, 1 fewer, the same or 1 more.)
 export const OUTSIDER_MODIFIERS = each("outsiders");
 
 // Townsfolk who learn something on the first night only, and those who keep
@@ -745,6 +834,22 @@ export const BAIT_ROLES = where((c) => c.bait);
 // them up).
 export const HIDE_NEVER = where((c) => c.neverHides);
 export const HIDE_NEVER_AS = where((c) => c.neverHiddenAs);
+
+// Outsiders who never claim to be what they are while alive: the Mutant
+// ("mad" they're not one) and the Damsel (hiding from the Minions). They
+// claim a Townsfolk instead: any on the script, as they only know their own
+// character (and one made a Mutant or Damsel later keeps the Townsfolk they
+// were claiming; see setup.js, claimFor()). They admit to it once dead (see
+// strategy revealsWhenDead()).
+export const HIDDEN_OUTSIDERS = ["mutant", "damsel"];
+
+// The evil team only knows its 3 bluffs are out of play. An evil player
+// whose bluff is a Mutant or Damsel (which can't be claimed openly) keeps it
+// at HIDDEN_BLUFF_CHANCE, hiding behind a Townsfolk that might be in play;
+// otherwise they take another of the bluffs, or with none free, bluff a
+// Townsfolk that might be in play. A team with a Spy or Widow has seen the
+// Grimoire, so it hides behind a Townsfolk that isn't in play.
+export const HIDDEN_BLUFF_CHANCE = 0.25;
 
 // Coming clean: a player with a cover story says in public what they really
 // are, with all their information:
@@ -855,6 +960,7 @@ export const EVIDENCE_WEIGHT = {
   confirmedMaybe: -2, // partly: a Fool, Sailor or Pacifist saving an execution, a Tea Lady's neighbour surviving one, a Moonchild's pick dying, a Gossip's statement followed by a death
   abilityFailed: 1.5, // their claimed ability visibly failed (a Virgin, a Monk's protection)
   abilityUnused: 0.5, // late on, still hasn't used a public ability they claim (Slayer, Juggler)
+  damselGuess: 6, // guessed the Damsel in public: only a Minion's guess counts
 };
 
 // With a Pixie on the script, two players claiming the same Townsfolk may
@@ -968,6 +1074,45 @@ export const PROTECTION_ROLES = where((c) => c.protects);
 export const SINK_KILL_CHANCE = 0.2;
 export const PO_CHARGE_CHANCE = 0.25;
 export const LUNATIC_FOLLOW_CHANCE = 0.5;
+
+// The Damsel hides (claiming a Townsfolk that isn't in play) until she
+// dies, except to a player claiming the Huntsman she doesn't suspect, whom
+// she tells in private (see strategy damselTo()); good players never pass
+// that on. NPC Minions know she's in play (from Night 1) and hunt for her;
+// each guesses once, in public, at dawn (one guess a dawn for the team). A
+// guess that misses gives the Minion away (see EVIDENCE_WEIGHT.damselGuess),
+// so they guess:
+// - at once, a player they've found out: one who told a teammate bluffing
+//   the Huntsman that she's the Damsel;
+// - at DAMSEL_CLAIM_CHANCE a day, a player who says they're the Damsel
+//   (perhaps a decoy: see DAMSEL_DECOY_CHANCE);
+// - at DAMSEL_HIDER_CHANCE a day, a player claiming one of the Demon's
+//   bluffs (which the Minions know aren't in play, so that player is hiding
+//   something: likely the Damsel, or a Mutant);
+// - with DAMSEL_GUESS_ALIVE or fewer players alive, at DAMSEL_GUESS_CHANCE a
+//   day, a player claiming an Outsider, else any good player.
+// (A team bluffing the Damsel knows there's none, so it never guesses.)
+// DAMSEL_DECOY_CHANCE: with the Damsel on the script, a good NPC (not the
+//   Damsel, nor a "high" character, who hides instead) claims the Damsel as
+//   a cover story on Day 1, so a Minion wastes its guess on them and gives
+//   itself away. At most one decoy at a time. They tell a Huntsman the truth.
+export const DAMSEL_CLAIM_CHANCE = 0.4;
+export const DAMSEL_DECOY_CHANCE = 0.15;
+export const DAMSEL_HIDER_CHANCE = 0.5;
+export const DAMSEL_GUESS_ALIVE = 5;
+export const DAMSEL_GUESS_CHANCE = 0.5;
+
+// The Boomdandy wants to be executed (all but 3 die, and the countdown
+// rarely finds the Demon), and so does the evil team, from
+// BOOMDANDY_FROM_DAY: while less than BOOMDANDY_HEAT of the living good
+// NPCs suspect the Demon, an evil NPC nominates the Boomdandy (making up a
+// reason) and evil NPCs vote for them at BOOMDANDY_VOTE_CHANCE; with the
+// Demon under more suspicion than that (the countdown could find it), at
+// BOOMDANDY_HOT_VOTE_CHANCE, and nobody evil nominates them.
+export const BOOMDANDY_FROM_DAY = 2;
+export const BOOMDANDY_HEAT = 0.3;
+export const BOOMDANDY_VOTE_CHANCE = 0.9;
+export const BOOMDANDY_HOT_VOTE_CHANCE = 0.3;
 
 // COURTIER_CORRECT_CHANCE: the chance a good NPC Courtier chooses a Demon
 //   or Minion character that's really in play (alive); otherwise they choose

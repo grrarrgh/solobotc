@@ -33,7 +33,9 @@ picks a new one.
   vote unless you press **Lower hand** in the few seconds before the votes
   are counted. NPCs can lie, good ones included: some hide a valuable
   character or claim one to bait the Demon.
-  Some characters add buttons (Slayer, Artist, Savant, Gossip, Amnesiac). Dead players
+  Some characters add buttons (Slayer, Artist, Savant, Gossip, Amnesiac,
+  Fisherman, Puzzlemaster). If a Boomdandy is executed, you point at a
+  player in the countdown before night falls. Dead players
   can be nominated too. Press **End day** to
   execute whoever is marked for execution (💀) and go to night.
 - **Game over:** the **Final reveal** shows the Grimoire and a timeline of the
@@ -45,10 +47,12 @@ middle of the town square for the whole script.
 ## Scripts
 
 `scripts/` holds the scripts listed in `scripts/index.json`: Trouble Brewing,
-Everyone Can Play, Sects & Violets, Bad Moon Rising, Onion Pies and
-Catfishing, in the official script-tool JSON format. Travellers aren't
-supported: a script's Travellers are left out (`TRAVELLERS` in
-`src/data.js`).
+Everyone Can Play, Sects & Violets, Bad Moon Rising, Onion Pies, Catfishing
+and Extension Cord, in the official script-tool JSON format. Travellers
+aren't supported: a script's Travellers are left out (`TRAVELLERS` in
+`src/data.js`). Fabled (such as the Sentinel) are Storyteller rules, never
+dealt (`FABLED`). Jinxes between a script's characters are listed on its
+script sheet (`JINXES`).
 
 Characters don't belong to a script: a script is just a list of character
 ids, so a custom script can mix characters from any of these (say, the Imp

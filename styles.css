@@ -786,6 +786,14 @@ button:disabled {
   color: #ef6b72;
 }
 
+/* Fabled: the Storyteller's rules, on neither team. */
+.team-fabled,
+.role-fabled,
+.ability-list dt.role-fabled,
+.script-dialog h2.role-fabled {
+  color: #f0cf83;
+}
+
 .ability-list {
   margin: 0;
 }

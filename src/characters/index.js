@@ -11,10 +11,12 @@ import { cannibal } from "./townsfolk/cannibal.js";
 import { chambermaid } from "./townsfolk/chambermaid.js";
 import { courtier } from "./townsfolk/courtier.js";
 import { exorcist } from "./townsfolk/exorcist.js";
+import { fisherman } from "./townsfolk/fisherman.js";
 import { fool } from "./townsfolk/fool.js";
 import { gambler } from "./townsfolk/gambler.js";
 import { gossip } from "./townsfolk/gossip.js";
 import { grandmother } from "./townsfolk/grandmother.js";
+import { huntsman } from "./townsfolk/huntsman.js";
 import { innkeeper } from "./townsfolk/innkeeper.js";
 import { juggler } from "./townsfolk/juggler.js";
 import { minstrel } from "./townsfolk/minstrel.js";
@@ -23,6 +25,7 @@ import { pacifist } from "./townsfolk/pacifist.js";
 import { philosopher } from "./townsfolk/philosopher.js";
 import { pixie } from "./townsfolk/pixie.js";
 import { professor } from "./townsfolk/professor.js";
+import { puzzlemaster } from "./townsfolk/puzzlemaster.js";
 import { sage } from "./townsfolk/sage.js";
 import { sailor } from "./townsfolk/sailor.js";
 import { savant } from "./townsfolk/savant.js";
@@ -33,6 +36,7 @@ import { virgin } from "./townsfolk/virgin.js";
 
 import { barber } from "./outsider/barber.js";
 import { butler } from "./outsider/butler.js";
+import { damsel } from "./outsider/damsel.js";
 import { klutz } from "./outsider/klutz.js";
 import { lunatic } from "./outsider/lunatic.js";
 import { moonchild } from "./outsider/moonchild.js";
@@ -41,6 +45,7 @@ import { sweetheart } from "./outsider/sweetheart.js";
 import { tinker } from "./outsider/tinker.js";
 
 import { assassin } from "./minion/assassin.js";
+import { boomdandy } from "./minion/boomdandy.js";
 import { cerenovus } from "./minion/cerenovus.js";
 import { devilsadvocate } from "./minion/devilsadvocate.js";
 import { eviltwin } from "./minion/eviltwin.js";
@@ -67,10 +72,12 @@ export const characters = {
   chambermaid,
   courtier,
   exorcist,
+  fisherman,
   fool,
   gambler,
   gossip,
   grandmother,
+  huntsman,
   innkeeper,
   juggler,
   minstrel,
@@ -79,6 +86,7 @@ export const characters = {
   philosopher,
   pixie,
   professor,
+  puzzlemaster,
   sage,
   sailor,
   savant,
@@ -88,6 +96,7 @@ export const characters = {
   virgin,
   barber,
   butler,
+  damsel,
   klutz,
   lunatic,
   moonchild,
@@ -95,6 +104,7 @@ export const characters = {
   sweetheart,
   tinker,
   assassin,
+  boomdandy,
   cerenovus,
   devilsadvocate,
   eviltwin,

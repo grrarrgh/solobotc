@@ -65,6 +65,10 @@ const KEY_MOMENT_TYPES = new Set([
   "snakecharmer",
   "witch",
   "widow",
+  "damsel",
+  "huntsman",
+  "puzzlemaster",
+  "boomdandy",
   "pithag",
   "barber",
   "klutz",
@@ -229,6 +233,8 @@ export class Engine {
     this.pukkaLasting();
     this.cannibalLasting();
     this.widowLasting();
+    this.damselLasting();
+    this.puzzleDrunk();
     this.barberNight();
 
     s.pending = this.wakeHuman();
@@ -307,6 +313,12 @@ export class Engine {
         optional: true,
         prompt:
           "Once per game: choose a character to make drunk for 3 nights and 3 days, or skip tonight.",
+      },
+      huntsman: !h.huntsmanUsed && {
+        count: 1,
+        optional: true,
+        prompt:
+          "Once per game: choose a living player: if they are the Damsel, they become a Townsfolk not in play. Or skip tonight.",
       },
       professor: s.night > 1 &&
         !h.professorUsed && {
@@ -418,6 +430,7 @@ export class Engine {
     this.sailors();
     this.innkeepers();
     this.courtiers();
+    this.huntsmen();
     this.ogres();
     this.philosophers();
     this.snakeCharmers();
@@ -428,6 +441,7 @@ export class Engine {
     this.advocate();
 
     if (s.night === 1) {
+      this.damselFirstNight();
       this.godfatherFirstNight();
       this.pukkaFirstNight();
     }
@@ -514,6 +528,8 @@ export class Engine {
       this.npcArtists();
       this.moonchildDawn();
       this.npcSavants();
+      this.npcFishermen();
+      this.npcPuzzlemasters();
       this.npcAmnesiacs();
       this.npcJugglers();
       this.twinsAnnounce();
@@ -523,6 +539,7 @@ export class Engine {
       this.npcGossips();
       this.pixieMadness();
       this.marionetteDawn();
+      this.npcDamselGuesses();
       this.dawnComeClean();
       this.npcTalks();
     }
@@ -1385,7 +1402,9 @@ export class Engine {
           this.audit(
             "cover",
             `${p.label} (${name(p.claim)}) ${
-              p.cover.kind === "hide" ? "hides as" : "baits the Demon as"
+              { hide: "hides as", bait: "baits the Demon as", decoy: "is a decoy as" }[
+                p.cover.kind
+              ]
             } the ${name(p.cover.as)}.`,
             { playerId: p.id, ...p.cover },
           );
@@ -1439,7 +1458,9 @@ export class Engine {
     const why =
       kind === "hide"
         ? `I was hiding as the ${name(as)}; I'm really the ${name(p.claim)}.`
-        : `I said I was the ${name(as)} to bait the Demon; I'm really the ${name(p.claim)}.`;
+        : kind === "decoy"
+          ? `I said I was the ${name(as)} to draw a Minion's guess; I'm really the ${name(p.claim)}.`
+          : `I said I was the ${name(as)} to bait the Demon; I'm really the ${name(p.claim)}.`;
     // (Each sentence on its own line.)
     const line = `Day ${s.day} — ${p.label} comes clean: "${[why, ...info].join("\n")}"`;
 
@@ -1904,6 +1925,8 @@ export class Engine {
 
     // (A Zombuul that only registers as dead isn't really dead.)
     const dead = !living(p);
+    // (Whether the Boomdandy has their ability, before dying takes it.)
+    const boom = p.role === "boomdandy" && works(p);
 
     if (!dead) {
       s.lastExecution = p.id;
@@ -1947,6 +1970,8 @@ export class Engine {
       this.finish("evil", "Saint executed.");
     } else if (died && isDemon(p)) {
       this.successor(p, before, false, true);
+    } else if (died && boom) {
+      this.boom(p);
     } else if (died && !this.goodTwinExecuted(p)) {
       this.check();
     }
@@ -1963,6 +1988,10 @@ export class Engine {
 
     if (s.pendingVote) {
       throw Error("Finish the vote first.");
+    }
+
+    if (s.boom) {
+      throw Error("Point at a player first.");
     }
 
     this.audit("end_day", `You ended Day ${s.day}.`);
@@ -1982,6 +2011,12 @@ export class Engine {
 
     if (p) {
       this.execute(p);
+
+      // (The Boomdandy's countdown waits for you: see boomPoint().)
+      if (s.boom) {
+        this.phaseCard("dusk", from);
+        return;
+      }
     } else if (this.vortoxDay()) {
       this.phaseCard("dusk", from);
       return;

@@ -10,6 +10,9 @@ import {
   OUTSIDER_MODIFIERS,
   HUMAN_DRUNK_CHANCE,
   TRAVELLERS,
+  FABLED,
+  HIDDEN_OUTSIDERS,
+  HIDDEN_BLUFF_CHANCE,
   team,
   alignment,
   name,
@@ -63,20 +66,61 @@ function drawTownsfolk(pool, n, r) {
   return [...picked, ...sample(rest, n - picked.length, r)];
 }
 
+// The No Dashii poisons its nearest Townsfolk on each side, so the
+// Marionette (who isn't one) beside it pushes that poison along. The seat
+// next to the Demon (`di`) to swap the Marionette (`mi`) into that leaves
+// its two poisoned Townsfolk furthest away, counting seats both ways; a tie
+// at random. Never your seat (0).
+function marionetteSeat(roles, mi, di, r) {
+  const n = roles.length;
+  const reach = (order) => {
+    let total = 0;
+
+    for (const d of [-1, 1]) {
+      for (let k = 1; k < n; k++) {
+        if (team(order[(di + d * k + n) % n]) === "townsfolk") {
+          total += k;
+          break;
+        }
+      }
+    }
+
+    return total;
+  };
+  const options = [(di + n - 1) % n, (di + 1) % n]
+    .filter((i) => i !== 0)
+    .map((i) => {
+      const order = [...roles];
+
+      [order[mi], order[i]] = [order[i], order[mi]];
+
+      return { i, far: reach(order) };
+    });
+  const best = Math.max(...options.map((x) => x.far));
+
+  return pick(
+    options.filter((x) => x.far === best),
+    r,
+  )?.i;
+}
+
 export function parseScript(raw) {
   const meta = raw.find((x) => typeof x === "object" && x.id === "_meta") ?? {
       name: "Unnamed",
     },
     // Scripts list roles either as "id" strings or as { "id": ... } objects.
-    // (Travellers are left out: see TRAVELLERS.)
-    ids = raw
+    // (Travellers are left out: see TRAVELLERS. Fabled are kept apart: see
+    // FABLED.)
+    all = raw
       .map((x) => (typeof x === "string" ? x : x?.id))
       .filter((id) => id && id !== "_meta" && !TRAVELLERS.includes(id)),
+    ids = all.filter((id) => !FABLED.includes(id)),
+    fabled = all.filter((id) => FABLED.includes(id)),
     bad = ids.filter((x) => !ROLES[x]);
 
   if (bad.length) throw Error(`Unsupported: ${bad}`);
 
-  return { meta, ids };
+  return { meta, ids, fabled };
 }
 
 export function createState(
@@ -97,12 +141,12 @@ export function createState(
     pool = (t) => script.ids.filter((id) => team(id) === t);
 
   // Draw roles. Some characters change the Outsider count (the Baron +2,
-  // the Fang Gu +1, the Vigormortis -1, the Godfather -1 or +1), trading
-  // Townsfolk for Outsiders.
+  // the Fang Gu +1, the Vigormortis -1, the Godfather -1 or +1, the
+  // Sentinel Fabled -1, 0 or +1), trading Townsfolk for Outsiders.
   let [t, o, m] = base;
   const mins = sample(pool("minion"), m, r);
   const demons = sample(pool("demon"), 1, r);
-  const shift = [...mins, ...demons].reduce((n, id) => {
+  const shift = [...mins, ...demons, ...script.fabled].reduce((n, id) => {
     const k = OUTSIDER_MODIFIERS[id] ?? 0;
 
     return n + (Array.isArray(k) ? pick(k, r) : k);
@@ -112,15 +156,28 @@ export function createState(
   t -= outsiders - o;
   o = outsiders;
 
-  let roles = shuffle(
-    [
-      ...drawTownsfolk(pool("townsfolk"), t, r),
-      ...sample(pool("outsider"), o, r),
-      ...mins,
-      ...demons,
-    ],
-    r,
-  );
+  const townsfolk = drawTownsfolk(pool("townsfolk"), t, r);
+  const outsiderRoles = sample(pool("outsider"), o, r);
+
+  // The Huntsman brings the Damsel: she takes an Outsider's place, or (with
+  // no Outsiders) a Townsfolk's.
+  if (
+    townsfolk.includes("huntsman") &&
+    pool("outsider").includes("damsel") &&
+    !outsiderRoles.includes("damsel")
+  ) {
+    const others = townsfolk
+      .map((x, i) => (x === "huntsman" ? -1 : i))
+      .filter((i) => i >= 0);
+
+    if (outsiderRoles.length) {
+      outsiderRoles[Math.floor(r() * outsiderRoles.length)] = "damsel";
+    } else if (others.length) {
+      townsfolk[pick(others, r)] = "damsel";
+    }
+  }
+
+  let roles = shuffle([...townsfolk, ...outsiderRoles, ...mins, ...demons], r);
 
   // The human must get a good role that works in solo play.
   let safe = roles
@@ -153,21 +210,34 @@ export function createState(
 
   // The Drunk is shown a Townsfolk token that isn't in play; a human Drunk
   // is never shown a role that is unsafe in solo play.
-  const drunkToken = (human) => {
-    const k = unusedTF.findIndex((x) => !human || !FORBIDDEN_HUMAN.has(x));
+  // (The Marionette is never shown the Huntsman without the Damsel in play:
+  // see JINXES.)
+  const drunkToken = (human, puppet = false) => {
+    const k = unusedTF.findIndex(
+      (x) =>
+        (!human || !FORBIDDEN_HUMAN.has(x)) &&
+        !(puppet && x === "huntsman" && !roles.includes("damsel")),
+    );
     return k < 0 ? "chef" : unusedTF.splice(k, 1)[0];
   };
 
-  // The Marionette sits next to the Demon (never in your seat).
+  // The Marionette sits next to the Demon (never in your seat); everyone
+  // else stays where they were dealt. Next to the No Dashii, the side that
+  // pushes its poison furthest away (see marionetteSeat()).
   const mi = roles.indexOf("marionette");
   const di = roles.findIndex((x) => team(x) === "demon");
 
   if (mi > 0 && di >= 0) {
     const n = roles.length;
     const near = [(di + n - 1) % n, (di + 1) % n];
-    const seat = near.find((i) => i !== 0);
+    const seat =
+      roles[di] === "nodashii"
+        ? marionetteSeat(roles, mi, di, r)
+        : near.includes(mi)
+          ? mi
+          : near.find((i) => i !== 0);
 
-    if (!near.includes(mi) && seat !== undefined) {
+    if (seat !== undefined && seat !== mi) {
       [roles[mi], roles[seat]] = [roles[seat], roles[mi]];
     }
   }
@@ -185,7 +255,7 @@ export function createState(
     // The Marionette, like the Drunk, is shown a Townsfolk not in play.
     const shown =
       role === "drunk" || role === "marionette"
-        ? drunkToken(i === 0)
+        ? drunkToken(i === 0, role === "marionette")
         : role === "lunatic"
           ? demonToken
           : role;
@@ -223,6 +293,10 @@ export function createState(
       seamUsed: false,
       juggled: false,
       savantDay: 0,
+      fishermanUsed: false,
+      huntsmanUsed: false,
+      puzzleUsed: false,
+      damselGuessed: false, // a Minion's one Damsel guess
       mad: null, // { role, day, previous } from the Cerenovus
       memories: [],
       talks: [],
@@ -266,6 +340,9 @@ export function createState(
     .filter((x) => x.alignment === "evil" && x.role !== "marionette")
     .sort((a, b) => order(a) - order(b));
   const taken = new Set();
+  // (A Spy or Widow on the team has seen the Grimoire: see
+  // HIDDEN_BLUFF_CHANCE.)
+  const grimoire = evil.some((x) => ["spy", "widow"].includes(x.role));
 
   for (const p of evil) {
     const spy = p.role === "spy";
@@ -288,20 +365,62 @@ export function createState(
       team(p.role) === "demon" ? !firstNight(x) : firstNight(x),
     );
 
+    // With the Damsel dealt, a Minion who knows the bluffs takes the
+    // Huntsman if it's one: she may tell them who she is (see strategy
+    // damselTo()).
+    const fishing =
+      team(p.role) === "minion" &&
+      knows &&
+      roles.includes("damsel") &&
+      free.includes("huntsman");
+
+    // (With every bluff taken by a teammate, a Townsfolk that might be in
+    // play.)
     p.bluffs = knows ? demonBluffs : [];
-    p.bluff = pick(preferred, r) ?? pick(free, r) ?? pick(options, r) ?? "chef";
+    p.bluff = fishing
+      ? "huntsman"
+      : (pick(preferred, r) ??
+        pick(free, r) ??
+        pick(
+          pool("townsfolk").filter((x) => !taken.has(x)),
+          r,
+        ) ??
+        pick(options, r) ??
+        "chef");
+
+    // A Mutant or Damsel bluff can't be claimed openly: usually they take
+    // another bluff instead, or with none free, a Townsfolk that might be in
+    // play (see HIDDEN_BLUFF_CHANCE).
+    if (
+      HIDDEN_OUTSIDERS.includes(p.bluff) &&
+      !grimoire &&
+      r() >= HIDDEN_BLUFF_CHANCE
+    ) {
+      p.bluff =
+        pick(
+          free.filter((x) => x !== p.bluff && !HIDDEN_OUTSIDERS.includes(x)),
+          r,
+        ) ??
+        pick(
+          pool("townsfolk").filter((x) => !taken.has(x)),
+          r,
+        ) ??
+        p.bluff;
+    }
+
     taken.add(p.bluff);
 
-    // Like a real Mutant, a Mutant bluffer can't claim it openly: they claim
-    // a Townsfolk that isn't in play instead (and can admit to the Mutant
-    // once dead).
-    p.claim =
-      p.bluff === "mutant"
-        ? (pick(
-            pool("townsfolk").filter((x) => !tokens.has(x) && !taken.has(x)),
-            r,
-          ) ?? "chef")
-        : p.bluff;
+    // Like a real Mutant (or Damsel), one who keeps the bluff claims a
+    // Townsfolk instead (and can admit to it once dead): one that isn't in
+    // play if the team has seen the Grimoire, else any it isn't using.
+    p.claim = HIDDEN_OUTSIDERS.includes(p.bluff)
+      ? (pick(
+          pool("townsfolk").filter(
+            (x) => !taken.has(x) && !(grimoire && tokens.has(x)),
+          ),
+          r,
+        ) ?? "chef")
+      : p.bluff;
     taken.add(p.claim);
   }
 
@@ -331,14 +450,14 @@ export function createState(
     ).map((x) => x.id);
   }
 
-  // The Mutant is "mad" that they're not an Outsider: they claim a Townsfolk
-  // that isn't in play (and that no evil player is claiming).
-  for (const p of players.filter((x) => x.role === "mutant" && !x.human)) {
-    p.claim =
-      pick(
-        pool("townsfolk").filter((x) => !tokens.has(x) && !taken.has(x)),
-        r,
-      ) ?? p.claim;
+  // The Mutant is "mad" that they're not an Outsider, and the Damsel hides
+  // from the Minions: they claim a Townsfolk (see HIDDEN_OUTSIDERS). (The
+  // Damsel tells a Huntsman the truth: see strategy damselTo().) They don't
+  // know what's in play: any Townsfolk on the script.
+  for (const p of players.filter(
+    (x) => HIDDEN_OUTSIDERS.includes(x.role) && !x.human,
+  )) {
+    p.claim = pick(pool("townsfolk"), r) ?? p.claim;
   }
 
   // The Evil Twin is paired with a good player; they know each other. The

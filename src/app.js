@@ -19,6 +19,7 @@ import {
   TOWN_SQUARE_SIZE_STEP,
   TOWN_SQUARE_SIZE_MIN,
   TOWN_SQUARE_SIZE_MAX,
+  JINXES,
 } from "./data.js";
 import { createState } from "./setup.js";
 import { ability } from "./storyteller.js";
@@ -113,13 +114,14 @@ const TEAM_NAMES = {
   outsider: "Outsider",
   minion: "Minion",
   demon: "Demon",
+  fabled: "Fabled",
 };
 
 // Opens a popup describing one character; pressing the popup closes it.
 function showRole(id) {
   const ability = ABILITIES[id] ?? "";
 
-  $("role-sheet").innerHTML = `<h2 class="role-${alignment(id)}">${esc(name(id))}</h2>
+  $("role-sheet").innerHTML = `<h2 class="role-${team(id) === "fabled" ? "fabled" : alignment(id)}">${esc(name(id))}</h2>
     <p class="role-team team-${team(id)}">${esc(TEAM_NAMES[team(id)] ?? "")}</p>
     <p>${esc(ability)}</p>
     ${
@@ -647,11 +649,15 @@ const TEAMS = [
   ["outsider", "Outsiders"],
   ["minion", "Minions"],
   ["demon", "Demons"],
+  ["fabled", "Fabled"],
 ];
 
-// Opens a popup listing the script's characters and abilities by team.
+// Opens a popup listing the script's characters and abilities by team, its
+// Fabled, and the jinxes between its characters (see JINXES).
 function showScript() {
-  const { meta, ids } = s.script;
+  const { meta } = s.script;
+  const ids = [...s.script.ids, ...(s.script.fabled ?? [])];
+  const jinxes = JINXES.filter((j) => j.ids.every((id) => ids.includes(id)));
 
   const sections = TEAMS.map(([t, title]) => {
     const roles = ids.filter((id) => team(id) === t);
@@ -662,7 +668,7 @@ function showScript() {
           ${roles
             .map(
               (id) =>
-                `<dt class="role-${alignment(id)}">${esc(name(id))}</dt><dd>${esc(ABILITIES[id] ?? "")}</dd>`,
+                `<dt class="role-${t === "fabled" ? "fabled" : alignment(id)}">${esc(name(id))}</dt><dd>${esc(ABILITIES[id] ?? "")}</dd>`,
             )
             .join("")}
         </dl>`
@@ -672,6 +678,19 @@ function showScript() {
   $("script-sheet").innerHTML = `<h2>${esc(meta.name)}</h2>
     ${meta.author ? `<p class="script-author">by ${esc(meta.author)}</p>` : ""}
     ${sections}
+    ${
+      jinxes.length
+        ? `<h3>Jinxes</h3>
+        <dl class="ability-list">
+          ${jinxes
+            .map(
+              (j) =>
+                `<dt>${j.ids.map((id) => esc(name(id))).join(" & ")}</dt><dd>${esc(j.text)}</dd>`,
+            )
+            .join("")}
+        </dl>`
+        : ""
+    }
     <p class="script-footnote">* Not the first night.</p>`;
 
   $("script-dialog").showModal();
@@ -830,7 +849,11 @@ const eventTag = (type) =>
 // How each cause of death reads in the Grimoire.
 const CAUSES = { fanggu: "Fang Gu" };
 
-const DRUNK_FROM = { sweetheart: "Sweetheart", philosopher: "Philosopher" };
+const DRUNK_FROM = {
+  sweetheart: "Sweetheart",
+  philosopher: "Philosopher",
+  puzzlemaster: "Puzzlemaster",
+};
 
 // "Key moments only" survives re-renders of the reveal.
 let keyOnly = false;
@@ -1062,6 +1085,8 @@ const LIE_TEXT = {
     `${by} told you they're the ${roleLink(x.said)}: they were hiding the ${roleLink(x.truth)}.`,
   bait: (by, x) =>
     `${by} told you they're the ${roleLink(x.said)} to bait the Demon: they were the ${roleLink(x.truth)}.`,
+  decoy: (by, x) =>
+    `${by} told you they're the ${roleLink(x.said)} to draw a Minion's guess: they were the ${roleLink(x.truth)}.`,
   fake: (by, x) =>
     `${by} faked coming clean as the ${roleLink(x.said)}: they were the ${roleLink(x.truth)}.`,
 };
@@ -1339,8 +1364,20 @@ function draw() {
   renderMark(t);
   renderNightChoice();
 
-  $("actions").hidden = !!s.winner || !t || !!s.pending;
-  $("day-controls").hidden = !!s.winner || !!s.pending || s.phase !== "day";
+  $("actions").hidden = !!s.winner || !t || !!s.pending || !!s.boom;
+  $("day-controls").hidden =
+    !!s.winner || !!s.pending || !!s.boom || s.phase !== "day";
+  // The Boomdandy's countdown waits for you to point (see e.boomPoint()).
+  $("boom-choice").hidden = !s.boom || !!s.winner;
+  $("boom-pick").innerHTML = colourPlayers(
+    t?.alive ? `Pointing at: ${t.label}` : "Select a living player.",
+  );
+  $("boom-point").disabled = !t?.alive;
+  $("fisherman").hidden = !(
+    ability(h) === "fisherman" &&
+    h.alive &&
+    !h.fishermanUsed
+  );
   $("savant").hidden = !(
     ability(h) === "savant" &&
     h.alive &&
@@ -1395,6 +1432,11 @@ function draw() {
         : block
           ? `Tied at ${block.count} votes: nobody is marked for execution.`
           : "",
+  );
+  $("puzzle").hidden = !(
+    ability(h) === "puzzlemaster" &&
+    !h.puzzleUsed &&
+    h.alive
   );
   $("slay").hidden = !(
     ability(h) === "slayer" &&
@@ -1774,6 +1816,35 @@ $("amnesiac").onclick = () => {
     render();
   } catch (err) {
     $("day-answer").textContent = err.message;
+  }
+};
+
+$("fisherman").onclick = () => {
+  try {
+    $("day-answer").innerHTML = linkRoles(e.fisherman());
+    render();
+  } catch (err) {
+    $("day-answer").textContent = err.message;
+  }
+};
+
+$("puzzle").onclick = () => {
+  try {
+    $("answer").innerHTML = linkRoles(e.puzzlemaster(selectedPlayerId));
+    render();
+  } catch (err) {
+    $("answer").textContent = err.message;
+  }
+};
+
+$("boom-point").onclick = () => {
+  try {
+    e.boomPoint(selectedPlayerId);
+    selectedPlayerId = null;
+    $("boom-error").textContent = "";
+    render();
+  } catch (err) {
+    $("boom-error").textContent = err.message;
   }
 };
 

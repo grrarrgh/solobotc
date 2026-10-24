@@ -6,6 +6,7 @@ import {
   PROTECTION_ROLES,
   SINK_KILL_CHANCE,
   alignment,
+  HIDDEN_OUTSIDERS,
 } from "./data.js";
 import { ability, works, madInfo } from "./storyteller.js";
 import { speak, heard } from "./strategy.js";
@@ -56,7 +57,9 @@ export const abilities = {
   //
   // Every good NPC whose character changed in the night says so, and what
   // they were before, whether or not they'd claimed in public. (Evil players
-  // say nothing about a change: it wouldn't help them.)
+  // say nothing about a change: it wouldn't help them.) A Damsel the
+  // Huntsman found says she was the Damsel: the Minions can't win by
+  // guessing her now, so she has nothing left to hide.
   announceClaims() {
     const s = this.s;
 
@@ -68,32 +71,41 @@ export const abilities = {
       p.wasMad = null;
       p.dusk = null;
 
+      const saved = p.huntsmanSaved?.night === s.night;
+
       if (
         !p.human &&
         p.alive &&
         p.alignment === "good" &&
         dusk &&
-        dusk.role !== p.role &&
-        dusk.claim !== p.claim
+        (saved || (dusk.role !== p.role && dusk.claim !== p.claim))
       ) {
         // (A new character ends any cover story.)
         p.cover = null;
 
-        const said = ` says they woke up as the ${name(
-          p.claim,
-        )}; they were the ${name(dusk.claim)}.`;
+        const from = saved ? "damsel" : dusk.claim;
+        const said = saved
+          ? `: "I was the Damsel${
+              dusk.claim !== "damsel" ? `, hiding as the ${name(dusk.claim)}` : ""
+            }. The Huntsman chose me last night, and I woke up as the ${name(p.claim)}."`
+          : ` says they woke up as the ${name(p.claim)}; they were the ${name(dusk.claim)}.`;
 
         p.changes = [
           ...(p.changes ?? []),
-          { night: s.night, from: dusk.claim, to: p.claim, told: false },
+          { night: s.night, from, to: p.claim, told: false },
         ];
         this.claimPublicly(p);
         s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
         this.audit("claim", `${p.label}${said}`, {
           playerId: p.id,
-          from: dusk.claim,
+          from,
           to: p.claim,
         });
+
+        if (saved) {
+          this.damselSaved(p);
+        }
+
         continue;
       }
 
@@ -174,25 +186,22 @@ export const abilities = {
   },
 
   // What a player who just learned their (new) character claims: that
-  // character, except that a Mutant claims a Townsfolk not in play.
+  // character, except that a Mutant or Damsel (who doesn't know what's in
+  // play) keeps claiming the Townsfolk they claimed before, so nothing gives
+  // them away, or else any Townsfolk on the script (see HIDDEN_OUTSIDERS).
   claimFor(p) {
     const s = this.s;
 
-    if (p.role !== "mutant") {
+    if (!HIDDEN_OUTSIDERS.includes(p.role)) {
       return p.role;
     }
 
-    const used = new Set(s.players.flatMap((x) => [x.role, x.shown, x.claim]));
-    const townsfolk = s.script.ids.filter((id) => team(id) === "townsfolk");
-
-    return (
-      pick(
-        townsfolk.filter((id) => !used.has(id)),
-        s.r,
-      ) ??
-      pick(townsfolk, s.r) ??
-      p.claim
-    );
+    return team(p.claim) === "townsfolk"
+      ? p.claim
+      : (pick(
+          s.script.ids.filter((id) => team(id) === "townsfolk"),
+          s.r,
+        ) ?? p.claim);
   },
 
   // p woke tonight due to their ability (what the Chambermaid learns about).

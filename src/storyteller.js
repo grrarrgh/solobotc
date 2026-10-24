@@ -443,7 +443,9 @@ const dreamText = (t, a, b) =>
 
 // Players whose ability is working abnormally because of another character:
 // anyone poisoned or made drunk, and Townsfolk with information tonight
-// under the Vortox. (An approximation of the Mathematician's count.)
+// under the Vortox. (An approximation of the Mathematician's count.) By
+// their jinxes, a Drunk or Marionette whose information tonight is false
+// counts too.
 function mathCount(s, p) {
   const vortox = vortoxActive(s);
 
@@ -453,6 +455,8 @@ function mathCount(s, p) {
       (x.alive || x.vigor) &&
       (x.poisoned ||
         x.drunkFrom ||
+        (["drunk", "marionette"].includes(x.role) &&
+          actsTonight(ability(x), s.night)) ||
         (vortox &&
           team(x.role) === "townsfolk" &&
           actsTonight(ability(x), s.night))),
@@ -654,6 +658,117 @@ export function savantInfo(s, p, mode) {
     role: "savant",
     text: `Savant: one of these is true:\n"${said[0]}"\n"${said[1]}"`,
     targets: [],
+    trigger: "day",
+    functioning: mode === "truth",
+  };
+}
+
+// The Fisherman's tips: each a true and a false version ({ ids, text }),
+// never about the human. That a player is evil (a Minion; falsely, a good
+// player, the evil team's scapegoat first); that the Demon is one of 3
+// players (falsely, 3 who aren't); that a player is good, so not to execute
+// them (the scapegoat first; falsely, an evil player).
+function fishermanTips(s, p) {
+  const named = nameable(s, p).filter((x) => x.alive && !x.human);
+  const d = named.find(isDemon);
+  const good = named.filter((x) => !evil(x));
+  const goat = framed(s, p);
+  const scape = good.includes(goat) ? goat : pick(good, s.r);
+  const minion = pick(
+    named.filter((x) => evil(x) && !isDemon(x)),
+    s.r,
+  );
+  const shield = pick(
+    named.filter((x) => x.alignment === "evil"),
+    s.r,
+  );
+  const tip = (ts, text) => ts && { ids: ts.map((x) => x.id), text };
+  const three = d && [d, ...sample(named.filter((x) => x !== d), 2, s.r)];
+  const notThree = sample(
+    named.filter((x) => !isDemon(x)),
+    3,
+    s.r,
+  );
+  const demonIn = (ts) => `The Demon is one of ${listLabels(ts)}.`;
+
+  return [
+    minion &&
+      scape && {
+        yes: tip([minion], `${minion.label} is evil.`),
+        no: tip([scape], `${scape.label} is evil.`),
+      },
+    three?.length === 3 &&
+      notThree.length === 3 && {
+        yes: tip(three, demonIn(three)),
+        no: tip(notThree, demonIn(notThree)),
+      },
+    scape &&
+      shield && {
+        yes: tip([scape], `${scape.label} is good: don't execute them.`),
+        no: tip([shield], `${shield.label} is good: don't execute them.`),
+      },
+  ].filter(Boolean);
+}
+
+// The Fisherman's visit (once per game, by day): the Storyteller's advice,
+// one tip (see fishermanTips()): true, false ("lie": a Drunk, a poisoned
+// Fisherman, the Vortox, an evil bluffer) or either ("random").
+export function fishermanInfo(s, p, mode) {
+  const f = pick(fishermanTips(s, p), s.r);
+  const said = !f
+    ? null
+    : mode === "truth"
+      ? f.yes
+      : mode === "lie"
+        ? f.no
+        : s.r() < 0.5
+          ? f.yes
+          : f.no;
+
+  return {
+    day: s.day,
+    night: s.night,
+    role: "fisherman",
+    text: said
+      ? `Fisherman: the Storyteller's advice: ${said.text}`
+      : "Fisherman: the Storyteller has no advice.",
+    targets: said?.ids ?? [],
+    trigger: "day",
+    functioning: mode === "truth",
+  };
+}
+
+// The Puzzlemaster's guess (once): `t` is who they think their puzzle made
+// drunk (s.puzzle; see characters/townsfolk/puzzlemaster.js). A right guess
+// (working: `mode` "truth") learns the Demon; a wrong one, or a misinformed
+// Puzzlemaster's, a player who isn't the Demon (the evil team's scapegoat
+// first); "random", anyone. Never the human as the "Demon".
+export function puzzleInfo(s, p, t, mode) {
+  const right = s.puzzle?.drunkId === t.id;
+  const named = nameable(s, p).filter((x) => !x.human);
+  const d = s.players.find((x) => (x.alive || x.undead) && isDemon(x));
+  const goat = framed(s, p);
+  const wrong = named.filter((x) => !isDemon(x));
+  const shown =
+    mode === "truth" && right && d
+      ? d
+      : mode === "random"
+        ? pick(named, s.r)
+        : wrong.includes(goat)
+          ? goat
+          : pick(wrong, s.r);
+
+  return {
+    day: s.day,
+    night: s.night,
+    role: "puzzlemaster",
+    text: shown
+      ? `Puzzlemaster: guessed ${t.human ? "you are" : `${t.label} is`} drunk; the Demon is ${shown.label}.`
+      : `Puzzlemaster: guessed ${t.human ? "you are" : `${t.label} is`} drunk.`,
+    // (Only the "Demon": the guess says nothing about anyone.)
+    targets: shown ? [shown.id] : [],
+    guessId: t.id,
+    right,
     trigger: "day",
     functioning: mode === "truth",
   };
