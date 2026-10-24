@@ -7,7 +7,17 @@ import {
   team,
   alignment,
 } from "./data.js";
-import { byId, pick, sample, shuffle, claimHeard, whose, Whose } from "./util.js";
+import {
+  byId,
+  bySeat,
+  pick,
+  sample,
+  shuffle,
+  claimHeard,
+  whose,
+  Whose,
+} from "./util.js";
+import { logNames } from "./log.js";
 
 // Drunk: the Drunk themselves, anyone made drunk "from now on" (by a
 // Sweetheart's death or a Philosopher choosing their character), and anyone
@@ -172,6 +182,7 @@ export function leanNote(s, text) {
     type: "storyteller",
     text: `Storyteller (${lean(s) ?? "no lean"}): ${text}`,
     data: {},
+    names: logNames(s),
   });
 }
 
@@ -184,10 +195,28 @@ export function steer(s, pool, helps, what = null) {
   const better = side ? pool.filter((x) => helps(x) === side) : [];
 
   if (what && better.length && better.length < pool.length) {
-    leanNote(s, `${what}: one of ${better.map((x) => x.label).join(", ")}.`);
+    leanNote(s, `${what}: one of ${bySeat(better).map((x) => x.label).join(", ")}.`);
   }
 
   return better.length ? better : pool;
+}
+
+// Why a pick from `pool` narrowed by steer() (with the same `helps`) fell
+// where it did, for the log: the Storyteller's lean, and how many players
+// it chose from.
+export function steerWhy(s, pool, helps) {
+  const side = lean(s);
+  const n = pool.length;
+  const better = side ? pool.filter((x) => helps(x) === side).length : 0;
+  const lean_ = `Storyteller ${leanText(s).replace(/\.$/, "")}`;
+
+  return !side
+    ? `${lean_}; at random from ${n} eligible`
+    : !better
+      ? `${lean_}, but no eligible pick helps ${side}; at random from ${n}`
+      : better === n
+        ? `${lean_}; every eligible pick helps ${side}; at random from ${n}`
+        : `${lean_}; at random from the ${better} of ${n} eligible whose pick helps ${side}`;
 }
 
 // Which team a player's death helps.
@@ -226,7 +255,7 @@ function actsTonight(role, night) {
 }
 
 const fortuneText = (yes, ts) =>
-  `Fortune Teller: ${yes ? "YES" : "NO"} for ${ts
+  `Fortune Teller: ${yes ? "YES" : "NO"} for ${bySeat(ts)
     .map((x) => x.label)
     .join(" and ")}.`;
 
@@ -252,13 +281,17 @@ export const butlerInfo = (s, t) => ({
 
 // What a Gambler remembers about their guess. They never learn if it was
 // right, but they know a wrong guess when it kills them.
-export const gamblerInfo = (s, t, guess, died = false) => ({
+// (`self`: they guessed themselves, to be safe.)
+export const gamblerInfo = (s, t, guess, died = false, self = false) => ({
   night: s.night,
   role: "gambler",
-  text: `Gambler: guessed ${t.label} is the ${name(guess)}${
-    died ? ", and died" : ""
-  }.`,
-  targets: [t.id],
+  guess,
+  text: self
+    ? "Gambler: guessed myself, to be safe."
+    : `Gambler: guessed ${t.human ? "you are" : `${t.label} is`} the ${name(
+        guess,
+      )}${died ? ", and died" : ""}.`,
+  targets: self ? [] : [t.id],
   trigger: "normal",
   functioning: true,
 });
@@ -268,13 +301,24 @@ export const gamblerInfo = (s, t, guess, died = false) => ({
 export const artistTruth = (t, q) =>
   q === "evil" ? evil(t) : q === "demon" ? isDemon(t) : team(t.role) === q;
 
-const listLabels = (ts) =>
-  ts.length < 2
+// In seat order (see bySeat()).
+const listLabels = (players) => {
+  const ts = bySeat(players);
+
+  return ts.length < 2
     ? ts.map((x) => x.label).join("")
     : `${ts
         .slice(0, -1)
         .map((x) => x.label)
         .join(", ")} and ${ts.at(-1).label}`;
+};
+
+// "One of A and B is the X" (in seat order, so which is which doesn't show).
+const oneOf = (a, b, role) => {
+  const [x, y] = bySeat([a, b]);
+
+  return `One of ${x.label} and ${y.label} is ${name(role)}.`;
+};
 
 // The Storyteller's yes/no answer to an Artist asking about one or more
 // players ("is any of them ...?"). `mode` is "truth", "lie" (an evil bluffer,
@@ -466,7 +510,7 @@ export function seamstressInfo(s, a, b, mode) {
   return {
     night: s.night,
     role: "seamstress",
-    text: `Seamstress: ${a.label} and ${b.label} are ${
+    text: `Seamstress: ${listLabels([a, b])} are ${
       say ? "the same alignment" : "different alignments"
     }.`,
     targets: [a.id, b.id],
@@ -649,7 +693,7 @@ export function chambermaidInfo(s, a, b, mode) {
   return {
     night: s.night,
     role: "chambermaid",
-    text: `Chambermaid: ${said} of ${a.label} and ${b.label} woke tonight.`,
+    text: `Chambermaid: ${said} of ${listLabels([a, b])} woke tonight.`,
     targets: [a.id, b.id],
     trigger: "normal",
     functioning: mode === "truth",
@@ -665,6 +709,8 @@ export const choiceInfo = (s, role, verb, ts) => ({
     typeof ts === "string" ? `the ${name(ts)}` : listLabels(ts)
   }.`,
   targets: typeof ts === "string" ? [] : ts.map((x) => x.id),
+  // (The character chosen, for the Courtier: see strategy courtierLine().)
+  ...(typeof ts === "string" && { character: ts }),
   trigger: "normal",
   functioning: true,
 });
@@ -754,7 +800,7 @@ function trueInfo(s, p, role, strat) {
 
     return {
       targets: [real.id, fake.id],
-      text: `One of ${real.label} and ${fake.label} is ${name(real.role)}.`,
+      text: oneOf(real, fake, real.role),
     };
   }
 
@@ -1015,7 +1061,7 @@ function falseInfo(s, p, role, strat, helpEvil = false) {
     return shown && pair.length === 2
       ? {
           targets: pair.map((x) => x.id),
-          text: `One of ${pair[0].label} and ${pair[1].label} is ${name(shown)}.`,
+          text: oneOf(pair[0], pair[1], shown),
         }
       : { targets: [], text: "No matching character is in play." };
   }
@@ -1258,7 +1304,7 @@ function unreliableInfo(s, p, role, targets) {
       targets: pair.map((x) => x.id),
       text:
         shown && pair.length === 2
-          ? `One of ${pair[0].label} and ${pair[1].label} is ${name(shown)}.`
+          ? oneOf(pair[0], pair[1], shown)
           : "No matching character is in play.",
     };
   }
@@ -1404,7 +1450,7 @@ function confirmDemon(s, p, role) {
 
     return {
       targets: pair.map((x) => x.id),
-      text: `One of ${pair[0].label} and ${pair[1].label} is ${name(claim)}.`,
+      text: oneOf(pair[0], pair[1], claim),
     };
   }
 
@@ -1415,28 +1461,91 @@ function confirmDemon(s, p, role) {
   return null;
 }
 
+// Characters who choose each night, and what a player claiming one
+// without its ability (an evil bluffer, a "mad" player, or a good player's
+// cover story) says they chose tonight: an invented choice, or null if that
+// character doesn't choose tonight. (For the Chambermaid, also a number, by
+// `mode`: see infoMode().)
+const CHOOSERS = [
+  "snakecharmer",
+  "monk",
+  "chambermaid",
+  "sailor",
+  "exorcist",
+  "innkeeper",
+  "butler",
+  "gambler",
+];
+
+function madeUpChoice(s, p, role, strat, mode) {
+  if (role === "snakecharmer") {
+    const t = strat.snake(s, p);
+
+    return t ? snakeInfo(s, t) : null;
+  }
+
+  if (role === "monk") {
+    const t = s.night > 1 ? strat.monk(s, p) : null;
+
+    return t ? monkInfo(s, t) : null;
+  }
+
+  if (role === "chambermaid") {
+    const picks = strat.chambermaid(s, p);
+
+    return picks ? chambermaidInfo(s, picks[0], picks[1], mode) : null;
+  }
+
+  if (role === "sailor") {
+    const t = strat.sailor(s, p);
+
+    return t ? choiceInfo(s, "sailor", "chose", [t]) : null;
+  }
+
+  if (role === "exorcist") {
+    const t = s.night > 1 ? strat.exorcist(s, p) : null;
+
+    return t ? choiceInfo(s, "exorcist", "chose", [t]) : null;
+  }
+
+  if (role === "innkeeper") {
+    const picks = s.night > 1 ? strat.innkeeper(s, p) : null;
+
+    return picks ? choiceInfo(s, "innkeeper", "protected", picks) : null;
+  }
+
+  if (role === "butler") {
+    const t = strat.butler(s, p);
+
+    return t ? butlerInfo(s, t) : null;
+  }
+
+  if (role === "gambler") {
+    const guess = s.night > 1 ? strat.gamble(s, p) : null;
+
+    return guess
+      ? gamblerInfo(s, guess.target, guess.role, false, guess.self)
+      : null;
+  }
+
+  return null;
+}
+
 // Made-up but plausible information for a player who is "mad" (the
 // Cerenovus) about being `role`: what that character would have learned on
-// each night so far, with random answers. Choice characters (Monk, Butler,
-// Gambler) report choices; a Savant reports today's visit.
+// each night so far, with random answers. Choice characters (see CHOOSERS)
+// report choices; a Savant reports today's visit.
 export function madInfo(s, p, role, strat) {
   const out = [];
 
   for (let night = 1; night <= s.night; night++) {
     const view = { ...s, night };
 
-    if (role === "monk" || role === "butler" || role === "gambler") {
-      const t =
-        role === "gambler"
-          ? night > 1 && strat.gamble(view, p)
-          : (role === "butler" || night > 1) && strat[role](view, p);
+    if (CHOOSERS.includes(role)) {
+      const m = madeUpChoice(view, p, role, strat, "random");
 
-      if (role === "monk" && t) {
-        out.push(monkInfo(view, t));
-      } else if (role === "butler" && t) {
-        out.push(butlerInfo(view, t));
-      } else if (role === "gambler" && t) {
-        out.push(gamblerInfo(view, t.target, t.role));
+      if (m) {
+        out.push(m);
       }
 
       continue;
@@ -1481,12 +1590,6 @@ export function bluffInfo(s, p, strat) {
     return null;
   }
 
-  if (role === "snakecharmer") {
-    const t = strat.snake(s, p);
-
-    return t ? snakeInfo(s, t) : null;
-  }
-
   // Once per game, on a night of their choosing.
   if (role === "seamstress") {
     const picks = !p.seamUsed && strat.seamstress(s, p);
@@ -1498,40 +1601,6 @@ export function bluffInfo(s, p, strat) {
     p.seamUsed = true;
 
     return seamstressInfo(s, picks[0], picks[1], spy ? "truth" : "lie");
-  }
-
-  if (role === "monk") {
-    const t = s.night > 1 ? strat.monk(s, p) : null;
-
-    return t ? monkInfo(s, t) : null;
-  }
-
-  // Characters who choose: an invented choice (and, for the Chambermaid, a
-  // number: true for the Spy).
-  if (role === "chambermaid") {
-    const picks = strat.chambermaid(s, p);
-
-    return picks
-      ? chambermaidInfo(s, picks[0], picks[1], spy ? "truth" : "lie")
-      : null;
-  }
-
-  if (role === "sailor") {
-    const t = strat.sailor(s, p);
-
-    return t ? choiceInfo(s, "sailor", "chose", [t]) : null;
-  }
-
-  if (role === "exorcist") {
-    const t = s.night > 1 ? strat.exorcist(s, p) : null;
-
-    return t ? choiceInfo(s, "exorcist", "chose", [t]) : null;
-  }
-
-  if (role === "innkeeper") {
-    const picks = s.night > 1 ? strat.innkeeper(s, p) : null;
-
-    return picks ? choiceInfo(s, "innkeeper", "protected", picks) : null;
   }
 
   if (role === "courtier") {
@@ -1546,16 +1615,8 @@ export function bluffInfo(s, p, strat) {
     return choiceInfo(s, "courtier", "chose", id);
   }
 
-  if (role === "butler") {
-    const t = strat.butler(s, p);
-
-    return t ? butlerInfo(s, t) : null;
-  }
-
-  if (role === "gambler") {
-    const guess = s.night > 1 ? strat.gamble(s, p) : null;
-
-    return guess ? gamblerInfo(s, guess.target, guess.role) : null;
+  if (CHOOSERS.includes(role)) {
+    return madeUpChoice(s, p, role, strat, spy ? "truth" : "lie");
   }
 
   if (!actsTonight(role, s.night) && !gainedTonight) {

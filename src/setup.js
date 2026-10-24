@@ -14,6 +14,7 @@ import {
   name,
 } from "./data.js";
 import { rng, pick, sample, shuffle } from "./util.js";
+import { logNames } from "./log.js";
 
 // The number of each kind of information Townsfolk to deal among n
 // Townsfolk (see FIRST_NIGHT_INFO_SHARE and ONGOING_INFO_SHARE).
@@ -420,7 +421,7 @@ export function createState(
   };
 
   const setupLog = (type, text) =>
-    s.audit.push({ id: s.auditId++, group: "Setup", type, text });
+    s.audit.push({ id: s.auditId++, group: "Setup", type, text, names: logNames(s) });
 
   players.forEach((p) =>
     setupLog(

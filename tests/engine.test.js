@@ -24,6 +24,7 @@ import {
   alignment,
 } from "../src/data.js";
 import { createState, infoTarget } from "../src/setup.js";
+import { logNames } from "../src/log.js";
 import { Engine } from "../src/engine.js";
 import { SimpleStrategy, speak, isTwin, claimTo } from "../src/strategy.js";
 import {
@@ -1260,7 +1261,9 @@ test("the debug log records every night's player states and all interactions", (
     "[end_day] You ended Day 1.",
     "alive, poisoned",
     "Information tonight:",
-    `${chef.label}:  ${chef.memories[0].text}`,
+    // (Named by character in the log: see logNames().)
+    `${logNames(s)[chef.seat]}:`,
+    chef.memories[0].text,
   ]) {
     assert.ok(log.includes(text), `missing: ${text}`);
   }
@@ -2079,7 +2082,9 @@ test("the debug log shows who the evil team is framing", () => {
 
   const goat = s.players.find((x) => x.id === s.scapegoat);
 
-  assert.ok(e.debugLog().includes(`Evil team is framing: ${goat.label}`));
+  assert.ok(
+    e.debugLog().includes(`Evil team is framing: ${logNames(s)[goat.seat]}`),
+  );
 });
 
 // ── Opinions, kill priorities, Gambler ───────────────────────
@@ -2204,9 +2209,13 @@ test("an NPC Gambler can die by their own ability", () => {
 
   role(gambler, "gambler", "good");
 
-  // A wild guess (within GAMBLER_WILD_GUESS_CHANCE) at the first character
-  // on the script, about the first other player: "You are the Washerwoman"
-  // for the human Mayor, which is wrong.
+  // A hunch (within GAMBLER_WILD_GUESS_CHANCE): their good suspect is the
+  // first evil character on the script, which is wrong.
+  const suspect = s.players.find(
+    (x) => !x.human && x !== gambler && x.alive && x.alignment === "good",
+  );
+
+  gambler.suspicion = { targetId: suspect.id, day: s.day };
   s.r = () => 0;
 
   e.night();
@@ -4414,7 +4423,7 @@ test("the Chambermaid learns how many of 2 players woke tonight", () => {
 
   assert.equal(
     p[1].memories.at(-1).text,
-    `Chambermaid: 1 of ${p[4].label} and ${p[3].label} woke tonight.`,
+    `Chambermaid: 1 of ${p[3].label} and ${p[4].label} woke tonight.`,
   );
 
   const g = bmrNight("chambermaid-2", [null, "chambermaid"]);
@@ -5560,7 +5569,12 @@ test("misinformation in the log says who caused it (never shown to you)", () => 
   assert.ok(
     s.audit.some((x) => x.type === "information" && x.text.endsWith(cause)),
   );
-  assert.ok(log.includes(`${chef.memories[0].text} ${cause}`));
+  // (In the log, the Poisoner is named by character: see logNames().)
+  assert.ok(
+    log.includes(
+      `${chef.memories[0].text.replace(chef.label, logNames(s)[chef.seat])} (misinformation: poisoned by ${logNames(s)[baron.seat]})`,
+    ),
+  );
 
   // The human (a sober Chef) sees nothing of it.
   assert.ok(!s.privateLog.some((x) => x.includes("misinformation")));
@@ -6358,7 +6372,7 @@ test("a nominated hider comes clean before the vote, on a card", () => {
   assert.equal(card.kind, "nomination");
   assert.equal(
     card.lines[0],
-    `Day 1 — ${empath.label} comes clean: "I was hiding as the Recluse; I'm really the Empath. Night 1: My number is 0."`,
+    `Day 1 — ${empath.label} comes clean: "I was hiding as the Recluse; I'm really the Empath.\nNight 1: My number is 0."`,
   );
   assert.equal(empath.cover, null);
   assert.equal(claimTo(empath), "empath");
@@ -6717,4 +6731,72 @@ test("confirmations come in levels: certain, near certain, and maybe", () => {
   assert.equal(e.strat.priorityLevel(s, soldier, baron), "top");
   assert.notEqual(e.strat.priorityLevel(s, butler, baron), "top");
 
+});
+
+// ── Public failures, the Courtier's countdown, log names ─────
+
+test("an Exorcist (or Exorcist bluffer) never chooses the human", () => {
+  const s = base("exorcist-human");
+  const strat = new SimpleStrategy();
+  const exorcist = s.players[1];
+
+  role(exorcist, "exorcist", "good");
+  s.night = 2;
+
+  for (let i = 0; i < 40; i++) {
+    const r = rng(`exo-${i}`);
+
+    s.r = r;
+    exorcist.picked = {};
+    exorcist.lastPicks = {};
+    assert.ok(!strat.exorcist(s, exorcist)?.human);
+  }
+});
+
+test("a Moonchild whose pick didn't die says so in public at dawn", () => {
+  const s = base("moonchild-says");
+  const e = new Engine(s);
+  const [, moonchild, pick] = s.players;
+
+  role(moonchild, "moonchild", "good");
+  moonchild.alive = false;
+  s.moonPicks = [{ byId: moonchild.id, targetId: pick.id, day: 1 }];
+  s.day = 2;
+  e.moonchildDawn();
+
+  assert.ok(
+    s.publicLog.includes(
+      `Day 2 — ${moonchild.label} says: "As the Moonchild I chose ${pick.label}, and they didn't die."`,
+    ),
+  );
+  assert.equal(moonchild.memories.at(-1).text, `Moonchild: chose ${pick.label}, who didn't die.`);
+});
+
+test("a Courtier counts down how long their choice is drunk", () => {
+  const s = base("courtier-countdown");
+  const strat = new SimpleStrategy();
+  const chose = [{ night: 1, role: "courtier", character: "imp", text: "Courtier: chose the Imp." }];
+
+  s.day = 1;
+  assert.equal(
+    strat.courtierLine(s, chose),
+    "My choice, the Imp, is drunk for 2 more nights and 3 more days (counting today).",
+  );
+  s.day = 3;
+  assert.equal(strat.courtierLine(s, chose), "My choice, the Imp, is drunk for 1 more day (counting today).");
+  s.day = 4;
+  assert.equal(strat.courtierLine(s, chose), "My choice, the Imp, is no longer drunk.");
+});
+
+test("log.txt names players by character, with their claim in brackets", () => {
+  const s = base("log-names");
+  const e = new Engine(s);
+  const [human, chef, , baron] = s.players;
+
+  role(chef, "chef", "good");
+  role(baron, "baron", "evil");
+  baron.claim = "butler";
+  e.audit("test", `${baron.label} (Baron) chose ${chef.label}; ${human.label} saw.`);
+
+  assert.ok(e.debugLog().includes(`[test] Baron (Butler) chose Chef; You saw.`));
 });

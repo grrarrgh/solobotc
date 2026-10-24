@@ -53,6 +53,10 @@ export const professor = {
       if (lied) {
         info.text = `Professor: chose ${t.label}, who stayed dead.`;
         p.professorExposed = t.id;
+      } else if (!revived) {
+        // (Not a Townsfolk claim: it says nothing about them.)
+        info.text = `Professor: chose ${t.label}, who didn't come back.`;
+        p.professorFailed = t.id;
       }
 
       this.remember(p, info);
@@ -66,7 +70,8 @@ export const professor = {
   // them.
   //
   // A Professor whose choice came back says so too, and the town can
-  // believe them (almost: a Shabaloth brings players back too).
+  // believe them (almost: a Shabaloth brings players back too); so does one
+  // whose choice stayed dead without having claimed a Townsfolk.
   professorReveals() {
     const s = this.s;
 
@@ -100,6 +105,18 @@ export const professor = {
       s.exposed = [...new Set([...(s.exposed ?? []), t.id])];
       this.claimPublicly(p);
       heard(s, p, m ? [m] : []);
+      s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
+      this.audit("professor", `${p.label}${said}`, { playerId: p.id });
+    }
+
+    for (const p of s.players.filter(
+      (x) => !x.human && x.alive && x.professorFailed,
+    )) {
+      const t = this.player(p.professorFailed);
+      const said = ` says: "As the Professor I chose ${t.label}, and they didn't come back."`;
+
+      p.professorFailed = null;
+      this.claimPublicly(p);
       s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
       this.audit("professor", `${p.label}${said}`, { playerId: p.id });
     }

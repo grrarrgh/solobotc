@@ -22,6 +22,7 @@ import {
   misinformedBy,
   who,
   steer,
+  steerWhy,
   killHelps,
   lean,
   leanText,
@@ -42,8 +43,8 @@ import {
   claimTo,
   lied,
 } from "./strategy.js";
-import { byId, pick, shuffle } from "./util.js";
-import { formatLog } from "./log.js";
+import { byId, bySeat, pick, shuffle } from "./util.js";
+import { formatLog, logNames } from "./log.js";
 import { abilities, living } from "./abilities.js";
 import { characters } from "./characters/index.js";
 
@@ -125,6 +126,8 @@ export class Engine {
       type,
       text,
       data,
+      // (How log.txt names players, as things stand now.)
+      names: logNames(this.s),
     });
   }
 
@@ -391,7 +394,7 @@ export class Engine {
 
     this.audit(
       "choice",
-      `${this.human().label} chose ${picked.map((x) => x.label).join(" and ")}.`,
+      `${this.human().label} chose ${bySeat(picked).map((x) => x.label).join(" and ")}.`,
       { targetIds: picked.map((x) => x.id) },
     );
 
@@ -506,6 +509,7 @@ export class Engine {
       this.shareInfo();
       this.npcShots();
       this.npcArtists();
+      this.moonchildDawn();
       this.npcSavants();
       this.npcJugglers();
       this.twinsAnnounce();
@@ -734,50 +738,50 @@ export class Engine {
 
     if (!works(d)) {
       outcome = "blocked";
-      detail = "the attack failed (the Demon is drunk or poisoned)";
+      detail = "failed (the Demon is drunk or poisoned)";
     } else if (t.role === "soldier" && works(t)) {
       outcome = "blocked";
-      detail = "blocked by the Soldier ability";
+      detail = "was blocked by the Soldier ability";
       foiled = true;
     } else if (s.revived.includes(t.id)) {
       outcome = "blocked";
-      detail = "blocked: they came back to life tonight";
+      detail = "was blocked: they came back to life tonight";
     } else if (t.protected) {
       outcome = "blocked";
-      detail = "blocked by Monk protection";
+      detail = "was blocked by Monk protection";
       protector = t.protectedBy;
     } else if ((guard = this.guard(t, "demon"))) {
       outcome = "blocked";
-      detail = `blocked: ${guard.text}`;
+      detail = `was blocked: ${guard.text}`;
       foiled = true;
       protector = guard.by;
     } else if (t.role === "mayor" && works(t)) {
       // (Never onto the human, the Demon or either twin.)
+      const bounce = s.players.filter(
+        (x) =>
+          x.alive &&
+          !x.human &&
+          x.id !== t.id &&
+          x.id !== d.id &&
+          !isTwin(s, x),
+      );
       const alt = pick(
-        steer(
-          s,
-          s.players.filter(
-            (x) =>
-              x.alive &&
-              !x.human &&
-              x.id !== t.id &&
-              x.id !== d.id &&
-              !isTwin(s, x),
-          ),
-          killHelps,
-          "where the Mayor's bounce lands",
-        ),
+        steer(s, bounce, killHelps, "where the Mayor's bounce lands"),
         s.r,
       );
 
       if (alt) {
         t = alt;
         outcome = "redirected";
-        detail = `redirected to ${t.label}`;
+        detail = `was redirected to ${t.label} by the Mayor (why: ${steerWhy(
+          s,
+          bounce,
+          killHelps,
+        )})`;
 
         if ((guard = this.cantDie(t, "demon"))) {
           outcome = "blocked";
-          detail = `redirected to ${t.label}, but ${guard}`;
+          detail = `was redirected to ${t.label}, but ${guard}`;
         }
       }
     }
@@ -795,11 +799,24 @@ export class Engine {
       detail = `${t.label} survived as the Fool`;
     }
 
-    const result = outcome === "killed" ? `${t.label} was killed` : detail;
+    const result =
+      outcome === "killed"
+        ? `${t.label} was killed`
+        : outcome === "fool"
+          ? detail
+          : `the attack ${detail}`;
+    // Why it chose them (see strategy demon()).
+    const why = chosen && d.killWhy?.[original.id];
+
+    if (d.killWhy) {
+      delete d.killWhy[original.id];
+    }
 
     this.audit(
       "demon",
-      `${d.label} (${name(d.role)}) ${verb} ${original.label}; attack ${result}.`,
+      `${d.label} (${name(d.role)}) ${verb} ${original.label}${
+        why ? ` (why: ${why})` : ""
+      }; ${result}.`,
       {
         actorId: d.id,
         targetId: original.id,
@@ -1268,9 +1285,11 @@ export class Engine {
         last[t.id] = s.day;
       }
 
+      // (A list for each player, in the order they talked.)
       if (picks.length) {
         lines.push(
-          `${p.label} talked to ${picks.map((x) => x.label).join(", ")}.`,
+          `${p.label} talked to:`,
+          ...picks.map((x) => `  - ${x.label}`),
         );
       }
     }
@@ -1369,8 +1388,8 @@ export class Engine {
         }
       }
 
-      if (p.cover?.kind === "bait") {
-        this.strat.baitInfo(s, p);
+      if (p.cover) {
+        this.strat.coverInfo(s, p);
       }
     }
   }
@@ -1417,7 +1436,8 @@ export class Engine {
       kind === "hide"
         ? `I was hiding as the ${name(as)}; I'm really the ${name(p.claim)}.`
         : `I said I was the ${name(as)} to bait the Demon; I'm really the ${name(p.claim)}.`;
-    const line = `Day ${s.day} — ${p.label} comes clean: "${[why, ...info].join(" ")}"`;
+    // (Each sentence on its own line.)
+    const line = `Day ${s.day} — ${p.label} comes clean: "${[why, ...info].join("\n")}"`;
 
     p.cover = null;
     p.cameClean = { day: s.day, from: as };
@@ -1462,7 +1482,7 @@ export class Engine {
     const line = `Day ${s.day} — ${p.label} comes clean: "${[
       `I was hiding as the ${name(was)}; I'm really the ${name(role)}.`,
       ...info,
-    ].join(" ")}"`;
+    ].join("\n")}"`;
 
     p.claim = role;
     p.bluff = role;

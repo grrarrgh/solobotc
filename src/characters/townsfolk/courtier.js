@@ -1,5 +1,6 @@
 import { name } from "../../data.js";
 import { ability, works, who, choiceInfo } from "../../storyteller.js";
+import { bySeat } from "../../util.js";
 
 // The Courtier, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -45,7 +46,7 @@ export const courtier = {
           !effective
             ? "it failed"
             : holders.length
-              ? `${holders
+              ? `${bySeat(holders)
                   .map((x) => x.label)
                   .join(", ")} drunk for 3 nights and 3 days`
               : "not in play"

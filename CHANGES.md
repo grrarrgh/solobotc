@@ -2,6 +2,22 @@
 
 Newest first.
 
+## Bug Fixes & New Features: Gambler, Failed Abilities Said in Public, Cover Story Information, Courtier Countdown, Log Names
+
+- Gambler: NPC Gamblers no longer throw their lives away. Before, a Gambler who had heard no claims guessed a random character from the whole script (often an evil one, for a good player), so most died on Night 2. Now they test a claim they've heard; at GAMBLER_WILD_GUESS_CHANCE they follow a hunch instead (their suspect is a Demon or Minion on the script); with nothing to go on, they guess themselves, which is safe ("I guessed myself, to be safe."). Gambler bluffers and cover stories guess the same way.
+- Gambler: one who dies because a claim was a lie says so in public ("…, and died. Player 4 claimed to be the Sailor, so they lied."), and the town weighs that player's word the other way round, as for the Professor. A dead Gambler now names that player as their suspect ("Who I suspect"); before, it could be someone else. log.txt no longer says a Gambler "died" when the Tea Lady (say) saved them, and says why they guessed. A guess about you reads "guessed you are the …".
+- Moonchild: when the Moonchild's (or a Moonchild bluffer's) pick is still alive the morning after the curse, they say so in public ("As the Moonchild I chose Player 11, and they didn't die."), and good NPCs count it against that player. The Monk's protection no longer stops the curse (it only protects from the Demon).
+- Professor: a Professor whose choice stayed dead without having claimed a Townsfolk now says so in public too ("…, and they didn't come back.").
+- Cover stories: good NPCs hiding as another character now give made-up information for it, as baiters do (a hiding Gambler's guesses, a hiding Sailor's or Exorcist's choices…). Evil bluffers, "mad" players and cover stories now share the same made-up choices for every character who chooses at night (Monk, Snake Charmer, Chambermaid, Sailor, Exorcist, Innkeeper, Butler, Gambler).
+- Courtier: a Courtier who has chosen (or says they have) counts down how long their choice is drunk: "My choice, the Pukka, is drunk for 2 more nights and 3 more days (counting today).", then "… is no longer drunk."
+- Exorcist: the Exorcist (and an Exorcist bluffer, such as the Lunatic) never chooses you.
+- Coming clean: each sentence is on its own line.
+- Several players in one sentence are in seat order where the order means nothing: "One of Player 3 and Player 7 is the …" (which also no longer gives away which is real), the Chambermaid, Seamstress, Fortune Teller, Noble, Innkeeper, Courtier and Lunatic lists.
+- log.txt: the Demon's kills say why it chose that player ("why: "high" priority (it heard they're the Chambermaid): 1 of 2 at that level, on its 75% chance"; following the Lunatic; going after a protector or the Exorcist; covering for the Spy; star-passing), and "attack the attack failed" now reads "the attack failed".
+- log.txt: the Storyteller's chosen deaths (the Pit-Hag's random death, the Gossip's, the Mayor's bounce, the Tinker) say why: the Storyteller's lean and how many players it chose from.
+- log.txt: players are named by their character, with their claim in brackets when it's different ("Assassin (Gossip)", "Chambermaid (Gambler)" while hiding), as it was at the time. You stay "You"; two players with the same character get their seat added. The Player States tables and the Setup's list of who sits where still use seats.
+- log.txt: "[talks]" lists who each player talked to, one per line.
+
 ## New Feature: Characters From Any Script
 
 - Characters no longer belong to a script, so a custom script can mix characters from Trouble Brewing, Sects & Violets, Bad Moon Rising and Onion Pies (say, the Imp with a Sailor, a Pixie and a Witch). A script is still just a list of character ids in `scripts/`.

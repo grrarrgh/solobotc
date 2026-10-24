@@ -1,5 +1,6 @@
 import { name, team } from "../../data.js";
 import { heard } from "../../strategy.js";
+import { bySeat } from "../../util.js";
 
 // The Lunatic, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -45,7 +46,7 @@ export const lunatic = {
         !x.lunaticRevealed,
     )) {
       const team = p.lunaticTeam.map((id) => this.player(id));
-      const list = team.map((x) => x.label).join(" and ");
+      const list = bySeat(team).map((x) => x.label).join(" and ");
       const said = ` says: "I was the Lunatic: I thought I was the ${name(
         p.shown,
       )}. My Minions were ${list}."`;

@@ -33,6 +33,10 @@ export const sample = (a, n, r = Math.random) => shuffle(a, r).slice(0, n);
 
 export const byId = (s, id) => s.players.find((x) => x.id === id);
 
+// Players in seat order (a copy), for naming several in a sentence where the
+// order says nothing.
+export const bySeat = (ps) => [...ps].sort((a, b) => a.seat - b.seat);
+
 // A player's label as a possessive: "Player 4's", or "your" for you (whose
 // label is "You").
 export const whose = (p) => (p.human ? "your" : `${p.label}'s`);

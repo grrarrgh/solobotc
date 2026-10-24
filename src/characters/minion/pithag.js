@@ -1,5 +1,12 @@
 import { name, team, PITHAG_NO_DEATH_CHANCE } from "../../data.js";
-import { works, isDemon, steer, killHelps, who } from "../../storyteller.js";
+import {
+  works,
+  isDemon,
+  steer,
+  steerWhy,
+  killHelps,
+  who,
+} from "../../storyteller.js";
 import { untwinned } from "../../strategy.js";
 import { pick } from "../../util.js";
 import { acts } from "../../abilities.js";
@@ -71,25 +78,33 @@ export const pithag = {
       s,
       s.players.filter((x) => x.alive && !x.human && !isDemon(x)),
     );
-    let t =
-      s.r() < PITHAG_NO_DEATH_CHANCE
-        ? null
-        : pick(steer(s, pool, killHelps, "who dies at random"), s.r);
+    const none = s.r() < PITHAG_NO_DEATH_CHANCE;
+    let t = none
+      ? null
+      : pick(steer(s, pool, killHelps, "who dies at random"), s.r);
+    let why = none
+      ? `no death, on the ${Math.round(PITHAG_NO_DEATH_CHANCE * 100)}% chance`
+      : steerWhy(s, pool, killHelps);
 
     // "If you die at night, another player might die instead": the Mayor.
     if (t?.role === "mayor" && works(t)) {
+      const mayor = t;
+
       t =
         pick(
           pool.filter((x) => x !== t),
           s.r,
         ) ?? t;
+      why += t === mayor ? "" : `; it fell on ${mayor.label} (Mayor), who bounced it`;
     }
 
     this.audit(
       "pithag",
-      t
-        ? `Random death (a Demon was made): ${t.label}.`
-        : "Random death (a Demon was made): nobody died.",
+      `${
+        t
+          ? `Random death (a Demon was made): ${t.label}.`
+          : "Random death (a Demon was made): nobody died."
+      } (why: ${why})`,
       { targetId: t?.id ?? null },
     );
 

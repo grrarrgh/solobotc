@@ -1,7 +1,7 @@
 import { name } from "../../data.js";
 import { ability, works, who, choiceInfo } from "../../storyteller.js";
 import { untwinned } from "../../strategy.js";
-import { pick } from "../../util.js";
+import { bySeat, pick } from "../../util.js";
 
 // The Innkeeper, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -44,7 +44,7 @@ export const innkeeper = {
 
       this.audit(
         "innkeeper",
-        `${p.label} (${name(p.role)}) protected ${picks
+        `${p.label} (${name(p.role)}) protected ${bySeat(picks)
           .map((x) => x.label)
           .join(" and ")}; ${
           effective

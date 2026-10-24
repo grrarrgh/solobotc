@@ -1,5 +1,5 @@
 import { TINKER_DEATH_CHANCE } from "../../data.js";
-import { works, lean, leanNote } from "../../storyteller.js";
+import { works, lean, leanNote, leanText } from "../../storyteller.js";
 import { isTwin } from "../../strategy.js";
 
 // The Tinker, mixed into Engine.prototype (see characters/index.js),
@@ -22,7 +22,13 @@ export const tinker = {
         continue;
       }
 
-      this.audit("tinker", `${p.label} (Tinker) dies.`, { playerId: p.id });
+      this.audit(
+        "tinker",
+        `${p.label} (Tinker) dies (why: the Storyteller's ${Math.round(
+          TINKER_DEATH_CHANCE * 100,
+        )}% chance tonight came up; Storyteller ${leanText(s).replace(/\.$/, "")}).`,
+        { playerId: p.id },
+      );
 
       if (this.kill(p, "tinker")) {
         this.check();

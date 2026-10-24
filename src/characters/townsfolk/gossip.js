@@ -4,6 +4,7 @@ import {
   works,
   isDemon,
   steer,
+  steerWhy,
   killHelps,
   who,
   bluffing,
@@ -33,23 +34,17 @@ export const gossip = {
         continue;
       }
 
-      const t = pick(
-        steer(
-          s,
-          untwinned(
-            s,
-            s.players.filter((x) => x.alive && !x.human && !isDemon(x)),
-          ),
-          killHelps,
-          "who dies for the Gossip",
-        ),
-        s.r,
+      // (Any living NPC but the Demon.)
+      const pool = untwinned(
+        s,
+        s.players.filter((x) => x.alive && !x.human && !isDemon(x)),
       );
+      const t = pick(steer(s, pool, killHelps, "who dies for the Gossip"), s.r);
 
       this.audit(
         "gossip",
         `${Whose(p)} Gossip statement was true: ${
-          t ? `${t.label} dies` : "nobody can die"
+          t ? `${t.label} dies (why: ${steerWhy(s, pool, killHelps)})` : "nobody can die"
         }.`,
         { actorId: p.id, targetId: t?.id ?? null },
       );

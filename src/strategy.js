@@ -168,6 +168,9 @@ function infoStance(m) {
       return "suspicious";
     case "professor":
       return /, who stayed dead\.$/.test(t) ? "suspicious" : null;
+    // A Moonchild whose pick didn't die: maybe evil.
+    case "moonchild":
+      return /, who didn't die\.$/.test(t) ? "suspicious" : null;
     case "exorcist":
       return "suspicious";
     // A Gambler who died guessing knows they were wrong.
@@ -842,6 +845,28 @@ export class SimpleStrategy {
       : null;
   }
 
+  // A Courtier who has chosen (or says they have) counts down how long
+  // their choice is drunk: the 3 nights and 3 days from the night they
+  // chose (through Day <night + 2>; see courtier.js), counting today.
+  courtierLine(s, memories) {
+    const m = memories.findLast((x) => x.role === "courtier" && x.character);
+
+    if (!m) {
+      return null;
+    }
+
+    const last = m.night + 2;
+    const days = last - s.day + 1;
+    const nights = last - s.day;
+    const plural = (n, what) => `${n} more ${what}${n === 1 ? "" : "s"}`;
+
+    return days < 1
+      ? `My choice, the ${name(m.character)}, is no longer drunk.`
+      : `My choice, the ${name(m.character)}, is drunk for ${
+          nights > 0 ? `${plural(nights, "night")} and ` : ""
+        }${plural(days, "day")} (counting today).`;
+  }
+
   // "I haven't used my X ability yet." for a living NPC whose claimed
   // character has a once-per-game ability they (say they) haven't used.
   unusedAbility(p) {
@@ -947,8 +972,9 @@ export class SimpleStrategy {
   //
   // A good NPC with a cover story (see coverFor()) tells listener `to`
   // their cover character instead, unless they tell `to` the truth (see
-  // truthTo()): hiding, with no information; baiting, with made-up
-  // information to match (and an opinion drawn from it).
+  // truthTo()), with made-up information to match (see coverInfo()):
+  // baiting, with an opinion drawn from it; hiding, with no reasons for
+  // their opinion (which could give them away).
   answer(s, p, to = null) {
     const mad = p.mad?.day === s.day ? p.mad : this.pixieMad(s, p);
     const copy = !mad && this.twinCopy(s, p);
@@ -969,7 +995,7 @@ export class SimpleStrategy {
     if (hidden) {
       return {
         claim: p.cover.as,
-        memories: [],
+        memories: p.cover.memories ?? [],
         opinion: this.hiddenOpinion(s, p),
         hidden,
       };
@@ -1048,9 +1074,10 @@ export class SimpleStrategy {
     return as ? { kind, as, night: s.night } : null;
   }
 
-  // A baiter's made-up information for their cover character, kept from
-  // day to day: tonight's is added each morning.
-  baitInfo(s, p) {
+  // A cover story's made-up information for the cover character, kept from
+  // day to day: tonight's is added each morning (none for a character with
+  // nothing to learn).
+  coverInfo(s, p) {
     const c = p.cover;
     const fresh = madInfo(s, p, c.as, this).filter(
       (m) => !c.memories || (m.night === s.night && !m.day),
@@ -1236,6 +1263,7 @@ export class SimpleStrategy {
         (p.gained ?? p.bluffGained) &&
         `I have the ${name(p.gained ?? p.bluffGained)} ability.`,
       details,
+      this.courtierLine(s, memories),
       !mad && !hidden && this.unusedAbility(copy ? copy.twin : p),
       // (A hider gives no reasons: they could give them away.)
       one,
@@ -1267,6 +1295,10 @@ export class SimpleStrategy {
     const evil = sideOf(p) === "evil";
     const goat = evil && !thinksEvil(p) ? scapegoat(s) : null;
     const twin = this.twinOf(s, p);
+    // (Someone they know lied: a Gambler who died guessing them.)
+    const certain = s.players.find(
+      (x) => x.id === p.certainSuspect && x !== twin,
+    );
     const rows = s.players
       .filter((x) => x !== p && !x.human && x.alive)
       .map((x) => {
@@ -1284,7 +1316,10 @@ export class SimpleStrategy {
             ? "my information vouches for them"
             : null;
 
-        if (x === twin || (x === goat && !twin)) {
+        if (x === certain && !(evil && teammate(p, x))) {
+          stance = "suspect";
+          note = "I know they lied";
+        } else if (x === twin || (x === goat && !twin)) {
           stance = "suspect";
           note = x === twin ? "my twin" : "the evil team's scapegoat";
         } else if (evil && teammate(p, x) && stance === "suspect") {
@@ -1294,12 +1329,18 @@ export class SimpleStrategy {
 
         return { id: x.id, x, score: ev.score, reasons: ev.reasons, stance, note };
       });
+    const known = (x) => x === twin || x === certain;
     const suspect = rows
       .filter((r) => r.stance === "suspect")
-      .sort((a, b) => (b.x === twin) - (a.x === twin) || b.score - a.score)
+      .sort((a, b) => known(b.x) - known(a.x) || b.score - a.score)
       .map((r) => ({
         x: r.x,
-        why: r.x === twin ? "my twin" : r.reasons[0] ?? null,
+        why:
+          r.x === twin
+            ? "my twin"
+            : r.x === certain
+              ? "I died guessing their character as the Gambler"
+              : r.reasons[0] ?? null,
       }));
     const trust = rows
       .filter((r) => r.stance === "trust")
@@ -1308,7 +1349,7 @@ export class SimpleStrategy {
 
     const row = (x) => rows.find((r) => r.x === x);
     const strength = {
-      suspect: (x) => (x === twin ? Infinity : row(x).score),
+      suspect: (x) => (known(x) ? Infinity : row(x).score),
       trust: (x) =>
         Math.max(-row(x).score, own.has(x.id) ? EVIDENCE_WEIGHT.myInfo : 0),
     };
@@ -1565,10 +1606,19 @@ export class SimpleStrategy {
   // them (the Monk, Innkeeper or Tea Lady), keeps the Lunatic alive as a decoy, kills who the
   // Lunatic chose at LUNATIC_FOLLOW_CHANCE (so they keep believing), and
   // goes after an Exorcist who has found it.
+  //
+  // Why it chose each target goes in p.killWhy (by id), for the log.
   demon(s, p, exclude = []) {
     const minion = s.players.some(
       (x) => x.alive && team(x.role) === "minion",
     );
+    const because = (t, why) => {
+      if (t) {
+        (p.killWhy ??= {})[t.id] = why;
+      }
+
+      return t;
+    };
 
     if (
       p.role === "imp" &&
@@ -1576,7 +1626,10 @@ export class SimpleStrategy {
       s.nominated.includes(p.id) &&
       s.r() < DEMON_STAR_PASS_CHANCE
     ) {
-      return p;
+      return because(
+        p,
+        "itself, to pass the Demon to a Minion: it was nominated today",
+      );
     }
 
     // The Vigormortis's Minions keep their ability if it kills them.
@@ -1606,15 +1659,21 @@ export class SimpleStrategy {
     );
 
     if (protector) {
-      return protector;
+      return because(
+        protector,
+        "they protected a player it attacked before (Tea Lady, Innkeeper or Monk)",
+      );
     }
 
     if (lunaticPick && s.r() < LUNATIC_FOLLOW_CHANCE) {
-      return lunaticPick;
+      return because(
+        lunaticPick,
+        "the Lunatic chose them, so the Lunatic keeps believing",
+      );
     }
 
     if (exorcist && s.r() < KILL_PRIORITY_CHANCE.high) {
-      return exorcist;
+      return because(exorcist, "the Exorcist who found it");
     }
 
     // (Hiding the Spy: someone it wouldn't have known to go after.)
@@ -1627,10 +1686,42 @@ export class SimpleStrategy {
       : [];
 
     if (cover.length && s.r() < SPY_COVER_CHANCE) {
-      return pick(cover, s.r);
+      return because(
+        pick(cover, s.r),
+        "a low-priority good player, to keep its Spy hidden",
+      );
     }
 
-    return this.byPriority(s, p, options, level);
+    let why = null;
+    const t = this.byPriority(s, p, options, level, (text) => (why = text));
+
+    return because(t, why);
+  }
+
+  // Why player x has the kill priority they have to evil player p (see
+  // priorityLevel()), for the log.
+  levelSource(s, x, p) {
+    const claim = claimHeard(x, p);
+
+    if (p.role === "vigormortis" && team(x.role) === "minion") {
+      return "a Minion it kills keeps their ability";
+    }
+
+    if (x.alignment === "evil") {
+      return `their teammate, the ${name(x.role)}${
+        claim && claim !== x.role ? `, publicly the ${name(claim)}` : ""
+      }`;
+    }
+
+    if (sure(s).includes(x.id)) {
+      return "the town is sure they're good";
+    }
+
+    return this.spyWorks(s, p)
+      ? `the Spy saw them as the ${name(x.role)}`
+      : claim
+        ? `it heard they're the ${name(claim)}`
+        : "it doesn't know their character";
   }
 
   // Whether evil player p has a working Spy on their team (themselves, or a
@@ -1716,27 +1807,63 @@ export class SimpleStrategy {
   // from high to low at its KILL_PRIORITY_CHANCE, never choosing "avoid"
   // while anyone else is available; if no level fires, a good player who
   // isn't avoided, then any good player, then anyone.
-  byPriority(s, p, pool, level = (x) => this.priorityLevel(s, x, p)) {
+  // (`report`, if given, is told why, for the log.)
+  byPriority(
+    s,
+    p,
+    pool,
+    level = (x) => this.priorityLevel(s, x, p),
+    report = () => {},
+  ) {
     const notAvoided = pool.filter((x) => level(x) !== "avoid");
+    const skipped = [];
 
     for (const tier of ["top", "high", "med", "low"]) {
       const found = notAvoided.filter((x) => level(x) === tier);
 
       if (found.length && s.r() < KILL_PRIORITY_CHANCE[tier]) {
-        return pick(found, s.r);
+        const t = pick(found, s.r);
+
+        report(
+          `"${tier}" priority (${this.levelSource(s, t, p)}): 1 of ${
+            found.length
+          } at that level, on its ${Math.round(
+            KILL_PRIORITY_CHANCE[tier] * 100,
+          )}% chance${
+            skipped.length
+              ? `; the ${skipped.join(", ")} chance didn't come up`
+              : ""
+          }`,
+        );
+
+        return t;
+      }
+
+      if (found.length) {
+        skipped.push(`"${tier}"`);
       }
     }
 
     const good = pool.filter((x) => x.alignment === "good");
+    const fallback = [
+      [good.filter((x) => level(x) !== "avoid"), "a good player it isn't avoiding"],
+      [good, "a good player (all avoided)"],
+      [pool, "anyone (no good player to attack)"],
+    ].find(([options]) => options.length);
 
-    return (
-      pick(
-        good.filter((x) => level(x) !== "avoid"),
-        s.r,
-      ) ??
-      pick(good, s.r) ??
-      pick(pool, s.r)
+    if (!fallback) {
+      return null;
+    }
+
+    const t = pick(fallback[0], s.r);
+
+    report(
+      `no priority level's chance came up${
+        skipped.length ? ` (${skipped.join(", ")})` : ""
+      }: ${fallback[1]}, at random (${this.levelSource(s, t, p)})`,
     );
+
+    return t;
   }
 
   // Night choices only ever pick living players. An evil Ravenkeeper bluffer
@@ -1788,29 +1915,35 @@ export class SimpleStrategy {
     );
   }
 
-  // A Gambler guesses another living player is the character they've
-  // claimed to them (see claimTo()), preferring players whose claim they
-  // know, or (at GAMBLER_WILD_GUESS_CHANCE, or with no claim to go on)
-  // takes a wild guess at any character on the script. Either can be
-  // wrong, and a wrong guess kills a working Gambler. (A Gambler bluffer
-  // guesses the same way.)
+  // A Gambler tests what they've heard: they guess another living player
+  // is the character that player claimed (see claimHeard()), which kills
+  // them if it's a lie. At GAMBLER_WILD_GUESS_CHANCE they follow a hunch
+  // instead: their suspect is a Demon or Minion on the script. With no claim
+  // to go on, they guess themselves (`self`), which is safe and learns
+  // nothing. A wrong guess kills a working Gambler. (A Gambler bluffer, or a
+  // cover story, guesses the same way.)
   gamble(s, p) {
-    const pool = this.fresh(p, "gamble", this.pickable(s, p));
-    const known = pool.filter((x) => claimHeard(x, p));
-    const target = this.noted(
-      p,
-      "gamble",
-      pick(known.length ? known : pool, s.r),
-    );
+    const pool = this.pickable(s, p);
+    const suspect = pool.find((x) => x.id === p.suspicion?.targetId);
+    const evil = s.script.ids.filter((id) => alignment(id) === "evil");
 
-    if (!target) {
-      return null;
+    if (suspect && evil.length && s.r() < GAMBLER_WILD_GUESS_CHANCE) {
+      this.noted(p, "gamble", suspect);
+
+      return { target: suspect, role: pick(evil, s.r), told: false };
     }
 
-    const claim = claimHeard(target, p);
-    const wild = !claim || s.r() < GAMBLER_WILD_GUESS_CHANCE;
+    const known = this.fresh(
+      p,
+      "gamble",
+      pool.filter((x) => claimHeard(x, p)),
+    );
+    const target = this.noted(p, "gamble", pick(known, s.r));
 
-    return { target, role: wild ? pick(s.script.ids, s.r) : claim };
+    // (They know their own character: the one they were shown.)
+    return target
+      ? { target, role: claimHeard(target, p), told: true }
+      : { target: p, role: p.shown, told: false, self: true };
   }
 
   // An Artist asks "Is any of these 1–3 players <evil / the Demon / a Minion
@@ -2256,18 +2389,22 @@ export class SimpleStrategy {
 
   // The Exorcist chooses someone they suspect, never last night's pick (nor
   // a twin).
+  // (Never the human, who is never the Demon; the same for an Exorcist
+  // bluffer.)
   exorcist(s, p) {
     const last = p.lastPicks?.exorcist ?? [];
     const pool = this.fresh(
       p,
       "exorcist",
-      untwinned(s, this.pickable(s, p)).filter((x) => !last.includes(x.id)),
+      untwinned(s, this.pickable(s, p)).filter(
+        (x) => !x.human && !last.includes(x.id),
+      ),
     );
 
     return this.noted(
       p,
       "exorcist",
-      this.suspect(s, p, pool.filter((x) => !x.human)) ?? pick(pool, s.r),
+      this.suspect(s, p, pool) ?? pick(pool, s.r),
     );
   }
 
