@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node serve.js",
-    "check": "node -e \"for (const f of require('fs').readdirSync('src')) require('child_process').execFileSync(process.execPath, ['--check', 'src/' + f], { stdio: 'inherit' })\"",
+    "check": "node -e \"for (const f of require('fs').readdirSync('src', { recursive: true })) if (f.endsWith('.js')) require('child_process').execFileSync(process.execPath, ['--check', 'src/' + f], { stdio: 'inherit' })\"",
     "test": "node --test tests/*.test.js"
   }
 }

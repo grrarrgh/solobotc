@@ -48,10 +48,17 @@ middle of the town square for the whole script.
 Everyone Can Play, Sects & Violets, Bad Moon Rising and Onion Pies, in the
 official script-tool JSON format.
 
+Characters don't belong to a script: a script is just a list of character
+ids, so a custom script can mix characters from any of these (say, the Imp
+with a Sailor, a Pixie and a Witch). To add one, save its JSON in `scripts/`
+and add the file name to `scripts/index.json`.
+
 ## Tuning
 
 NPC behaviour is set by constants in [`src/data.js`](src/data.js), each with a
-comment explaining it. These include:
+comment explaining it. What's particular to one character (its kill
+priority, once-per-game timing, whether you can be dealt it...) is a field
+in its record in `CHARACTERS`. These include:
 
 - when NPCs use once-per-game abilities (`ONCE_PER_GAME`);
 - who the Demon kills (`DEMON_KILL_PRIORITY`, `KILL_PRIORITY_CHANCE`), and how
@@ -64,18 +71,17 @@ comment explaining it. These include:
   they trust someone (`TRUST_EVIDENCE`);
 - the vote animation speed (`VOTE_COUNT_DELAY_MS`, `VOTE_TICK_MS`), and how
   long you have to lower your hand (`HAND_WAIT_MS`);
-- the characters the human can't be dealt (`FORBIDDEN_HUMAN`).
+- the characters the human can't be dealt (`notForHuman`).
 
 ## Code
 
 | File | What it does |
 | --- | --- |
-| `src/data.js` | Characters, ability text, role counts and the tuning constants |
+| `src/data.js` | Every character (`CHARACTERS`: name, team, ability text and its settings), role counts and the tuning constants |
 | `src/setup.js` | Deals a new game from a script, seat count and seed |
 | `src/engine.js` | Runs nights, days, NPC conversations, nominations, deaths and win checks |
-| `src/sects.js` | Sects & Violets characters (mixed into the engine) |
-| `src/bmr.js` | Bad Moon Rising characters (mixed into the engine) |
-| `src/onion.js` | Onion Pies characters (mixed into the engine) |
+| `src/characters/` | Each character's own mechanics, one file per character, by team (`townsfolk/`, `outsider/`, `minion/`, `demon/`), mixed into the engine |
+| `src/abilities.js` | Ability mechanics several characters share (waking, protection, coming back to life, madness, claims) |
 | `src/storyteller.js` | What each character learns: true, false or bluffed |
 | `src/strategy.js` | How NPCs choose, vote, nominate, claim and suspect |
 | `src/log.js` | Formats the downloadable log |

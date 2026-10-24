@@ -32,8 +32,8 @@ export const ability = (p) =>
 
 // Whether NPC p acts out `role` in public without having its ability: an
 // evil player (or the Lunatic) bluffing it, or a mad Pixie claiming it (see
-// onion.js). They use it as a real one would, to no effect, and any
-// information it gives them is made up.
+// characters/townsfolk/pixie.js). They use it as a real one would, to no
+// effect, and any information it gives them is made up.
 export const bluffing = (p, role) =>
   !p.human &&
   p.claim === role &&
@@ -381,7 +381,7 @@ const nameable = (s, p) =>
     (x) => x.id !== p.id && !(p.alignment === "evil" && x.human),
   );
 
-// ── Sects & Violets information ─────────────────────────────
+// ── More characters' information ────────────────────────────
 
 
 const evilRoles = (s) => s.script.ids.filter((id) => alignment(id) === "evil");
@@ -635,8 +635,6 @@ export const snakeInfo = (s, t) => ({
   functioning: true,
 });
 
-// ── Bad Moon Rising information ─────────────────────────────
-
 // The Chambermaid: how many of two players woke tonight due to their
 // ability.
 export function chambermaidInfo(s, a, b, mode) {
@@ -681,8 +679,6 @@ export const gossipInfo = (s, t, q) => ({
   trigger: "day",
   functioning: true,
 });
-
-// ── Onion Pies information ──────────────────────────────────
 
 const nobleText = (ts) => `Noble: one of ${listLabels(ts)} is evil.`;
 const pixieText = (role) => `Pixie: the ${name(role)} is in play.`;
@@ -1217,7 +1213,8 @@ function unreliableInfo(s, p, role, targets) {
     return { targets: ts.map((x) => x.id), text: nobleText(ts) };
   }
 
-  // (A Pixie bluffer goes mad about it, as a real one would: see onion.js.)
+  // (A Pixie bluffer goes mad about it, as a real one would: see
+  // characters/townsfolk/pixie.js.)
   if (role === "pixie") {
     const id = pick(
       s.script.ids.filter((x) => team(x) === "townsfolk" && x !== "pixie"),
@@ -1509,7 +1506,7 @@ export function bluffInfo(s, p, strat) {
     return t ? monkInfo(s, t) : null;
   }
 
-  // Bad Moon Rising choices: an invented choice (and, for the Chambermaid, a
+  // Characters who choose: an invented choice (and, for the Chambermaid, a
   // number: true for the Spy).
   if (role === "chambermaid") {
     const picks = strat.chambermaid(s, p);

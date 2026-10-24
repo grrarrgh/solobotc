@@ -18,6 +18,7 @@ import {
   GOOD_VOTE_EVIDENCE_STEP,
   ARTIST_QUESTIONS,
   COURTIER_CORRECT_CHANCE,
+  ROLES,
   name,
   team,
   alignment,
@@ -2361,6 +2362,28 @@ test("whole games play out on every script without errors", () => {
   }
 });
 
+// Characters don't belong to a script: any mix of them plays together.
+test("whole games play out on scripts mixing characters from every edition", () => {
+  const ids = Object.keys(ROLES);
+  const of = (t, n, r) => shuffle(ids.filter((id) => team(id) === t), r).slice(0, n);
+
+  for (let g = 0; g < 80; g++) {
+    const r = rng(`mixed-${g}`);
+    const raw = [
+      { id: "_meta", name: `Mixed ${g}` },
+      ...of("townsfolk", 13, r),
+      ...of("outsider", 4, r),
+      ...of("minion", 4, r),
+      ...of("demon", 4, r),
+    ];
+    const { s, e } = playOut(raw, 8 + (g % 8), `mixed-${g}`);
+
+    assert.ok([null, "good", "evil"].includes(s.winner));
+    assert.ok(s.players.every((p) => ["good", "evil"].includes(p.alignment)));
+    assert.ok(e.debugLog().length > 0);
+  }
+});
+
 test("Sects & Violets loads with its name and 25 characters", () => {
   const s = createState(sv, 10, "sv");
 
@@ -4490,7 +4513,7 @@ test("an NPC Gossip can die to their own statement; the human never does", () =>
     const n = bmrDay(`gossip-npc-${seed}`, [null, "gossip"]);
 
     n.strat.gossip = () => ({ target: n.p[4], question: "demon" });
-    n.e.bmrDawn();
+    n.e.npcGossips();
     n.e.endDay();
     victims.npc += n.p[1].death === "gossip" ? 1 : 0;
   }
@@ -5401,7 +5424,7 @@ test("an NPC Gossip always makes their statement before the day ends", () => {
     const r = s.r;
 
     s.r = () => 0.99;
-    e.bmrDawn();
+    e.npcGossips();
     s.r = r;
     assert.equal(said().length, 0);
 
@@ -5498,7 +5521,7 @@ test("a regurgitated player is alive, can't die that night, and is announced at 
   assert.ok(s.audit.some((x) => /came back to life tonight/.test(x.text)));
 
   // At dawn the Storyteller announces it (without saying how).
-  e.bmrDawn();
+  e.revivedDawn();
   assert.ok(
     s.publicLog.includes(
       `Day ${s.day} — The Storyteller announces that ${chef.label} is alive again.`,

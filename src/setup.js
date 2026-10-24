@@ -211,7 +211,6 @@ export function createState(
       assassinUsed: false,
       foolUsed: false,
       grandchild: null,
-      // Sects & Violets.
       drunkFrom: null, // drunk from now on (Sweetheart, Philosopher)
       lastingPoison: null, // poisoned from now on (Snake Charmer)
       vigor: false, // a Minion killed by the Vigormortis keeps their ability
@@ -225,7 +224,6 @@ export function createState(
       memories: [],
       talks: [],
       death: null,
-      // Bad Moon Rising.
       drunkTonight: false, // drunk until dusk (Sailor, Innkeeper, Goon...)
       drunkTill: 0, // drunk through this night and the next day (Courtier)
       safeNight: 0, // can't die on this night (Innkeeper)
@@ -391,7 +389,6 @@ export function createState(
     moonCurse: null,
     advocate: null,
     scapegoat: null,
-    // Sects & Violets.
     twins: goodTwin ? { evilId: evilTwin.id, goodId: goodTwin.id } : null,
     fangGuJumped: false,
     lastingPoison: [], // { id, by } poisoned while `by` lives (Vigormortis)
@@ -407,7 +404,6 @@ export function createState(
     voteHistory: [], // { day, nominatorId, nomineeId, voterIds }
     nightDeaths: [], // announced at dawn
     dawnLearn: [], // "when you learn that you died", at dawn
-    // Bad Moon Rising.
     woke: [], // who woke tonight due to their ability (the Chambermaid)
     sailorPending: [], // { sailorId, targetId }: who's drunk isn't decided yet
     diedToday: false, // anyone died today (the Zombuul)

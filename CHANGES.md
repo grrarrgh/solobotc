@@ -2,6 +2,14 @@
 
 Newest first.
 
+## New Feature: Characters From Any Script
+
+- Characters no longer belong to a script, so a custom script can mix characters from Trouble Brewing, Sects & Violets, Bad Moon Rising and Onion Pies (say, the Imp with a Sailor, a Pixie and a Witch). A script is still just a list of character ids in `scripts/`.
+- Each character's mechanics now have their own file in `src/characters/`, filed by team: `townsfolk/`, `outsider/`, `minion/` and `demon/` (49 characters; those that only need information or NPC choices live in storyteller.js and strategy.js as before). Mechanics several characters share (waking, protection, coming back to life, madness, claims) are in `src/abilities.js`. `src/sects.js`, `src/bmr.js` and `src/onion.js` are gone, and so are the Poisoner, Monk, Butler, Gambler, Devil's Advocate, Assassin, Moonchild, Artist, Fool, Grandmother, Virgin and Slayer code in engine.js.
+- The engine's night order calls each character in turn, rather than one step per script ("Bad Moon Rising at dusk", "Sects & Violets at dawn"...). The order is unchanged.
+- `src/data.js`: each character has one record in `CHARACTERS` with everything about it: name, team, ability text, and its settings (`kill` priority, `info`, `outsiders`, `oncePerGame`, `publicInfo`, `bait`, `neverHides`, `neverHiddenAs`, `protects`, `notForHuman`). The old tables (`ROLES`, `ABILITIES`, `DEMON_KILL_PRIORITY`, `FORBIDDEN_HUMAN`...) are built from it, with the same values as before.
+- A new test plays 80 whole games on random scripts mixing characters from every edition.
+
 ## Bug Fix & New Feature: Abilities Seen to Work or Fail
 
 - A confirmed Virgin was still suspected. When a Townsfolk nominates a working Virgin and is executed, the town now knows the Virgin is real, so good. Before, nothing recorded it: the evil team went on framing them, and good NPCs believed the accusations. Now they're confirmed good: good NPCs trust them (EVIDENCE_WEIGHT.confirmedGood, -6, in src/data.js), never suspect them, and say so ("Who I trust"); the evil team stops framing them (a new scapegoat, and no accusations from evil NPCs while there's anyone else to accuse). log.txt says "[confirmed]".

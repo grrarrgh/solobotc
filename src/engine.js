@@ -1,5 +1,4 @@
 import {
-  ARTIST_QUESTIONS,
   name,
   team,
   alignment,
@@ -17,15 +16,9 @@ import {
   ability,
   works,
   ravenInfo,
-  monkInfo,
-  butlerInfo,
-  gamblerInfo,
-  artistInfo,
   isDemon,
   isDrunk,
-  infoMode,
   philosopherInfo,
-  choiceInfo,
   misinformedBy,
   who,
   steer,
@@ -33,6 +26,7 @@ import {
   lean,
   leanText,
   madInfo,
+  choiceInfo,
   bluffing,
 } from "./storyteller.js";
 import {
@@ -50,9 +44,8 @@ import {
 } from "./strategy.js";
 import { byId, pick, shuffle } from "./util.js";
 import { formatLog } from "./log.js";
-import { sectsAndViolets } from "./sects.js";
-import { badMoonRising } from "./bmr.js";
-import { onionPies } from "./onion.js";
+import { abilities, living } from "./abilities.js";
+import { characters } from "./characters/index.js";
 
 const KEY_MOMENT_TYPES = new Set([
   "poison",
@@ -99,12 +92,6 @@ const KEY_MOMENT_TYPES = new Set([
   "marionette",
   "game_over",
 ]);
-
-// Minions keep acting after death if the Vigormortis killed them.
-const acts = (x) => x.alive || x.vigor;
-
-// Really alive: living, or a Zombuul that only registers as dead.
-const living = (x) => x.alive || x.undead;
 
 export class Engine {
   constructor(s, strat = new SimpleStrategy()) {
@@ -227,9 +214,16 @@ export class Engine {
     s.woke = [];
     s.sailorPending = [];
 
-    this.lastingEffects();
-    this.bmrLasting();
-    this.onionLasting();
+    // Effects that outlast a single night, reapplied now everyone's poison
+    // and drunkenness has been cleared (and yesterday's madness ends).
+    this.cerenovusLasting();
+    this.snakeCharmerLasting();
+    this.vigormortisLasting();
+    this.noDashiiLasting();
+    this.courtierLasting();
+    this.minstrelLasting();
+    this.pukkaLasting();
+    this.cannibalLasting();
     this.barberNight();
 
     s.pending = this.wakeHuman();
@@ -414,75 +408,26 @@ export class Engine {
   // The rest of the night, in night order, then dawn.
   resolveNight() {
     const s = this.s;
-    const poisoner = s.players.find((x) => acts(x) && x.role === "poisoner");
-
-    if (poisoner) {
-      const t = this.strat.poison(s, poisoner);
-
-      if (t) {
-        this.woke(poisoner);
-        this.chose(poisoner, t);
-      }
-
-      if (t && works(poisoner)) {
-        t.poisoned = true;
-        t.poisonedBy = who(poisoner);
-        s.poisoned = t.id;
-
-        this.audit(
-          "poison",
-          `${poisoner.label} (${name(poisoner.role)}) selected ${t.label}; poisoned.`,
-          {
-            actorId: poisoner.id,
-            targetId: t.id,
-            effective: true,
-          },
-        );
-      }
-    }
-
-    this.bmrDusk();
+    this.poisoners();
+    this.sailors();
+    this.innkeepers();
+    this.courtiers();
     this.ogres();
-    this.sectsDusk();
+    this.philosophers();
+    this.snakeCharmers();
+    this.twinInfo();
+    this.witch();
+    this.cerenovus();
+    this.pitHag();
     this.advocate();
 
     if (s.night === 1) {
-      this.bmrFirstNight();
+      this.godfatherFirstNight();
+      this.pukkaFirstNight();
     }
 
     if (s.night > 1) {
-      for (const m of s.players.filter(
-        (x) => x.alive && ability(x) === "monk",
-      )) {
-        const t = this.humanPicks(m)?.[0] ?? this.strat.monk(s, m);
-
-        if (t) {
-          this.woke(m);
-          this.chose(m, t);
-
-          const effective = works(m);
-
-          if (effective) {
-            t.protected = true;
-            t.protectedBy = m.id;
-          }
-
-          this.audit(
-            "monk",
-            `${m.label} (${name(m.role)}) chose ${t.label}; ${
-              effective ? "protected" : "protection failed"
-            }.`,
-            {
-              actorId: m.id,
-              targetId: t.id,
-              effective,
-            },
-          );
-
-          this.remember(m, monkInfo(s, t, effective));
-        }
-      }
-
+      this.monks();
       this.gamblers();
       this.resolveMoonCurse();
       this.exorcists();
@@ -496,7 +441,10 @@ export class Engine {
       }
 
       if (!s.winner) {
-        this.bmrNight();
+        this.godfather();
+        this.gossipDeaths();
+        this.professors();
+        this.tinkers();
       }
     }
 
@@ -516,7 +464,8 @@ export class Engine {
       }
     }
 
-    this.sectsInfo();
+    this.seamstresses();
+    this.jugglerNight();
     this.butlers();
     // (Last: she learns about everyone who woke tonight.)
     this.chambermaids();
@@ -557,8 +506,13 @@ export class Engine {
       this.shareInfo();
       this.npcShots();
       this.npcArtists();
-      this.sectsDawn();
-      this.bmrDawn();
+      this.npcSavants();
+      this.npcJugglers();
+      this.twinsAnnounce();
+      this.revivedDawn();
+      this.professorReveals();
+      this.lunaticReveals();
+      this.npcGossips();
       this.pixieMadness();
       this.marionetteDawn();
       this.dawnComeClean();
@@ -610,265 +564,7 @@ export class Engine {
     return strat;
   }
 
-  // Each Butler picks a master for tomorrow's vote.
-  butlers() {
-    const s = this.s;
-
-    for (const b of s.players.filter(
-      (x) => x.alive && ability(x) === "butler",
-    )) {
-      const t = this.humanPicks(b)?.[0] ?? this.strat.butler(s, b);
-
-      if (!t) {
-        continue;
-      }
-
-      this.woke(b);
-      b.master = t.id;
-
-      this.audit(
-        "butler",
-        `${b.label} (${name(b.role)}) chose ${t.label} as master.`,
-        { actorId: b.id, targetId: t.id, effective: works(b) },
-      );
-
-      this.remember(b, butlerInfo(s, t));
-    }
-  }
-
   // ── Night actions: Everyone Can Play ──────────────────────
-
-  // The Devil's Advocate picks someone (not last night's pick) who survives
-  // execution tomorrow.
-  advocate() {
-    const s = this.s;
-    const lastId = s.advocate?.targetId ?? null;
-    const da = s.players.find((x) => acts(x) && x.role === "devilsadvocate");
-
-    s.advocate = null;
-
-    if (!da) {
-      return;
-    }
-
-    const t = this.strat.advocate(s, da, lastId);
-
-    if (!t) {
-      return;
-    }
-
-    this.woke(da);
-    this.chose(da, t);
-
-    const effective = works(da);
-
-    s.advocate = { targetId: t.id, day: s.night, effective };
-
-    this.audit(
-      "advocate",
-      `${da.label} (${name(da.role)}) chose ${t.label}; ${
-        effective ? "protected from execution" : "protection failed"
-      }.`,
-      { actorId: da.id, targetId: t.id, effective },
-    );
-  }
-
-  // Whether the Devil's Advocate saves p from execution today.
-  advocated(p) {
-    const a = this.s.advocate;
-
-    return Boolean(a?.effective && a.targetId === p.id && a.day === this.s.day);
-  }
-
-  // Each Gambler guesses a player's character; a wrong guess kills them.
-  gamblers() {
-    const s = this.s;
-
-    for (const g of s.players.filter(
-      (x) => x.alive && ability(x) === "gambler",
-    )) {
-      const guess = this.strat.gamble(s, g);
-
-      if (!guess) {
-        continue;
-      }
-
-      this.woke(g);
-      this.chose(g, guess.target);
-
-      const wrong = guess.target.role !== guess.role;
-      const dies = wrong && works(g);
-
-      this.audit(
-        "gambler",
-        `${g.label} (${name(g.role)}) guessed ${guess.target.label} is ${name(
-          guess.role,
-        )}; ${wrong ? "wrong" : "right"}${dies ? ", and died" : ""}.`,
-        { actorId: g.id, targetId: guess.target.id, guess: guess.role, wrong },
-      );
-
-      // A Gambler who dies knows they guessed wrong: they suspect that
-      // player for certain, and say so in the morning (see gamblerReveal()).
-      const died = dies && this.kill(g, "gambler");
-
-      this.remember(g, gamblerInfo(s, guess.target, guess.role, died));
-
-      if (died) {
-        g.certainSuspect = guess.target.id;
-        g.suspicion = { targetId: guess.target.id, day: s.day };
-        this.check();
-      }
-    }
-  }
-
-  // A Gambler who died guessing wrong says so publicly, so the town can
-  // weigh it: "I was the Gambler. I guessed X is the Y, and died."
-  gamblerReveal(p) {
-    const s = this.s;
-    const m = p.memories.findLast(
-      (x) => x.role === "gambler" && /, and died\.$/.test(x.text),
-    );
-
-    if (p.human || !m || p.gambleRevealed) {
-      return;
-    }
-
-    p.gambleRevealed = true;
-    this.claimPublicly(p);
-    heard(s, p, [m]);
-
-    const said = ` says: "I was the Gambler. ${speak(m.text)}"`;
-
-    s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
-    this.audit("gambler", `${p.label}${said}`, { playerId: p.id });
-  }
-
-  // Last night's (or today's) Moonchild choice dies tonight if good.
-  resolveMoonCurse() {
-    const s = this.s;
-    const t = this.player(s.moonCurse);
-
-    s.moonCurse = null;
-
-    if (!t?.alive || t.alignment !== "good" || t.protected) {
-      return;
-    }
-
-    // (The town sees the pick die: maybe a Demon kill, maybe the curse.)
-    if (this.kill(t, "moonchild")) {
-      this.confirm(
-        this.player(s.moonCurseBy),
-        "maybe",
-        `the player they chose as the Moonchild, ${t.label}, died that night`,
-      );
-    }
-
-    this.check();
-  }
-
-  // Once per game, the Assassin kills a player; nothing can stop it.
-  assassin() {
-    const s = this.s;
-    const a = s.players.find(
-      (x) => acts(x) && x.role === "assassin" && !x.assassinUsed,
-    );
-
-    if (!a) {
-      return;
-    }
-
-    // The Assassin wakes each night until they use their ability.
-    this.woke(a);
-
-    const t = this.strat.assassin(s, a);
-
-    if (!t) {
-      return;
-    }
-
-    this.chose(a, t);
-
-    const effective = works(a);
-
-    a.assassinUsed = true;
-
-    this.audit(
-      "assassin",
-      `${a.label} (${name(a.role)}) chose ${t.label}; ${
-        effective ? "killed" : "the kill failed"
-      }.`,
-      { actorId: a.id, targetId: t.id, effective },
-    );
-
-    if (effective && this.kill(t, "assassin")) {
-      this.check();
-    }
-  }
-
-  // A dying Moonchild publicly picks a living player to curse. An evil NPC
-  // bluffing Moonchild makes the same show, with no effect.
-  moonchild(p) {
-    const s = this.s;
-    const t = this.strat.moonchild(s, p);
-
-    if (!t) {
-      return;
-    }
-
-    const real = p.role === "moonchild" && !p.poisoned;
-
-    this.claimPublicly(p);
-
-    if (real) {
-      s.moonCurse = t.id;
-      s.moonCurseBy = p.id;
-    }
-
-    s.publicLog.push(`${p.label} claims Moonchild and chooses ${t.label}.`);
-
-    this.audit(
-      "moonchild",
-      `${p.label} (${name(p.role)}) chose ${t.label}; ${
-        real ? "cursed" : "no effect"
-      }.`,
-      { actorId: p.id, targetId: t.id, effective: real },
-    );
-  }
-
-  // At dawn, NPC Artists (and NPCs bluffing Artist; see bluffing()) ask their question.
-  npcArtists() {
-    const s = this.s;
-
-    for (const p of s.players) {
-      const claimsArtist = ability(p) === "artist" || bluffing(p, "artist");
-
-      if (s.winner || p.human || !p.alive || p.artistUsed || !claimsArtist) {
-        continue;
-      }
-
-      const ask = this.strat.artist(s, p);
-
-      if (!ask) {
-        continue;
-      }
-
-      p.artistUsed = true;
-
-      if (ability(p) === "artist" && p.alignment === "good") {
-        this.remember(
-          p,
-          artistInfo(s, ask.targets, ask.question, infoMode(s, p)),
-        );
-      } else {
-        const spy = p.role === "spy" && works(p);
-
-        this.rememberBluff(
-          p,
-          artistInfo(s, ask.targets, ask.question, spy ? "truth" : "lie"),
-        );
-      }
-    }
-  }
 
   // Evil NPCs gather night info to report for the role they are bluffing.
   bluffs() {
@@ -1131,22 +827,6 @@ export class Engine {
     }
   }
 
-  // A working Fool survives their first death, unless it is the Assassin's.
-  foolSaves(p, cause) {
-    return (
-      p.role === "fool" && works(p) && !p.foolUsed && cause !== "assassin"
-    );
-  }
-
-  // If the Demon kills a working Grandmother's grandchild, she dies too.
-  grandmother(t) {
-    for (const g of this.s.players) {
-      if (g.role === "grandmother" && g.grandchild === t.id && works(g)) {
-        this.kill(g, "grandmother");
-      }
-    }
-  }
-
   // Returns whether p actually died.
   kill(p, cause) {
     if (!p?.alive) {
@@ -1237,7 +917,10 @@ export class Engine {
       }
     }
 
-    this.sectsDeath(p, cause);
+    this.sageDeath(p, cause);
+    this.sweetheartDeath(p);
+    this.barberDeath(p);
+    this.vigormortisDeath(p);
     this.pixieGains(p);
 
     // "When you learn that you died" (Moonchild, Klutz): at night, that's in
@@ -2245,49 +1928,6 @@ export class Engine {
     }
   }
 
-  // The Virgin's ability: the Townsfolk who nominated them (`by`, the human
-  // or an NPC) is executed immediately, and the day ends.
-  virgin(n, by, base) {
-    const s = this.s;
-    const from = s.publicLog.length;
-
-    s.lastExecution = by.id;
-    s.lastVote = null;
-    s.block = null;
-    s.executedToday = true;
-
-    this.audit(
-      "virgin",
-      `${by.label} nominated ${n.label} (${name(n.role)}) and was executed.`,
-      { actorId: by.id, targetId: n.id },
-    );
-
-    this.announce(
-      by.human
-        ? `Day ${s.day} — You nominated ${n.label} and were executed immediately.`
-        : `Day ${s.day} — ${by.label} nominated ${n.label} and was executed immediately.`,
-    );
-
-    if (!this.advocated(by)) {
-      this.kill(by, "execution");
-      this.check();
-    }
-
-    // (The day is over: any Gossip yet to speak today does so now.)
-    if (!s.winner) {
-      this.npcGossips(true);
-    }
-
-    this.phaseCard("dusk", from);
-
-    if (!s.winner) {
-      s.night++;
-      this.night();
-    }
-
-    return { ...base, virgin: true };
-  }
-
   // Ends the day: whoever is marked for execution is executed; with nobody
   // marked, nobody is (and the Vortox or a Mayor may decide the game).
   endDay() {
@@ -2335,131 +1975,6 @@ export class Engine {
     if (!s.winner) {
       s.night++;
       this.night();
-    }
-  }
-
-  slay(id) {
-    const p = this.human();
-    const t = this.player(id);
-
-    if (
-      this.s.slayerUsed ||
-      ability(p) !== "slayer" ||
-      !p.alive ||
-      !t?.alive
-    ) {
-      throw Error("Slayer unavailable.");
-    }
-
-    this.s.slayerUsed = true;
-
-    const killed = this.shoot(p, t);
-
-    this.audit(
-      "slayer",
-      `${p.label} (${name(p.role)}) shot ${t.label}; ${
-        killed ? "killed" : "no effect"
-      }.`,
-      { actorId: p.id, targetId: t.id, killed },
-    );
-
-    return killed;
-  }
-
-  // Once per game, the human Artist asks the Storyteller a yes/no question
-  // about a player.
-  artist(id, question) {
-    const s = this.s;
-    const h = this.human();
-    const t = this.player(id);
-
-    if (
-      s.phase !== "day" ||
-      s.winner ||
-      ability(h) !== "artist" ||
-      h.artistUsed ||
-      !h.alive ||
-      !t ||
-      !ARTIST_QUESTIONS[question]
-    ) {
-      throw Error("Artist unavailable.");
-    }
-
-    h.artistUsed = true;
-
-    const info = artistInfo(s, t, question, infoMode(s, h));
-
-    this.remember(h, info);
-
-    return info.text;
-  }
-
-  // Resolves a Slayer shot; only a working Slayer can kill, and only the
-  // Imp (or the Recluse, who registers as one).
-  shoot(p, t) {
-    if (
-      ability(p) === "slayer" &&
-      works(p) &&
-      (isDemon(t) || t.role === "recluse")
-    ) {
-      const before = this.alive().length;
-
-      this.kill(t, "slayer");
-      this.confirm(p, "certain", `their Slayer shot killed ${t.label}`);
-
-      if (isDemon(t)) {
-        this.successor(t, before, false);
-      } else {
-        this.check();
-      }
-
-      return true;
-    }
-
-    return false;
-  }
-
-  // At dawn, NPC Slayers (and NPCs bluffing Slayer; see bluffing()) may shoot once.
-  npcShots() {
-    const s = this.s;
-
-    for (const p of s.players) {
-      if (s.winner) {
-        return;
-      }
-
-      const claimsSlayer = ability(p) === "slayer" || bluffing(p, "slayer");
-
-      if (p.human || !p.alive || p.shotUsed || !claimsSlayer) {
-        continue;
-      }
-
-      const t = this.strat.slay(s, p);
-
-      if (!t) {
-        continue;
-      }
-
-      p.shotUsed = true;
-      this.claimPublicly(p);
-
-      s.publicLog.push(
-        `Day ${s.day} — ${p.label} claims Slayer and shoots ${t.label}.`,
-      );
-
-      const killed = this.shoot(p, t);
-
-      if (!killed) {
-        s.publicLog.push(`Day ${s.day} — Nothing happens.`);
-      }
-
-      this.audit(
-        "slayer",
-        `${p.label} (${name(p.role)}) shot ${t.label}; ${
-          killed ? "killed" : "no effect"
-        }.`,
-        { actorId: p.id, targetId: t.id, killed },
-      );
     }
   }
 
@@ -2705,6 +2220,6 @@ export class Engine {
   }
 }
 
-// Sects & Violets, Bad Moon Rising and Onion Pies characters (see sects.js,
-// bmr.js and onion.js).
-Object.assign(Engine.prototype, sectsAndViolets, badMoonRising, onionPies);
+// Shared ability mechanics and each character's own (see abilities.js and
+// characters/).
+Object.assign(Engine.prototype, abilities, ...Object.values(characters));

@@ -1905,7 +1905,7 @@ export class SimpleStrategy {
     return pick(evil.length ? evil : pool, s.r);
   }
 
-  // ── Sects & Violets ────────────────────────────────────────
+  // ── More characters' choices ───────────────────────────────
 
   // The Dreamer looks into someone they suspect (not last night's pick).
   dream(s, p) {
@@ -2235,8 +2235,6 @@ export class SimpleStrategy {
 
     return target && role ? { target, role } : null;
   }
-
-  // ── Bad Moon Rising ─────────────────────────────────────────
 
   // The Sailor drinks with another living player (never a twin).
   sailor(s, p) {
