@@ -3,6 +3,7 @@ import {
   FIRST_NIGHT_INFO,
   ONGOING_INFO,
   FINAL_THREE_MARGIN,
+  RECLUSE_SAGE_CHANCE,
   name,
   team,
   alignment,
@@ -444,10 +445,16 @@ const dreamText = (t, a, b) =>
 // Players whose ability is working abnormally because of another character:
 // anyone poisoned or made drunk, and Townsfolk with information tonight
 // under the Vortox. (An approximation of the Mathematician's count.) By
-// their jinxes, a Drunk or Marionette whose information tonight is false
-// counts too.
+// their jinxes, a Drunk or Marionette whose ability failed tonight counts
+// too (one with information tonight, or who woke to choose: a Monk,
+// Innkeeper, Sailor...), and so does a Lunatic who "attacked" a player the
+// Demon didn't choose tonight.
 function mathCount(s, p) {
   const vortox = vortoxActive(s);
+  const strayLunatic = (x) =>
+    x.role === "lunatic" &&
+    s.lunaticPickNight === s.night &&
+    !(s.demonChose?.night === s.night && s.demonChose.ids.includes(s.lunaticPick));
 
   return s.players.filter(
     (x) =>
@@ -456,7 +463,8 @@ function mathCount(s, p) {
       (x.poisoned ||
         x.drunkFrom ||
         (["drunk", "marionette"].includes(x.role) &&
-          actsTonight(ability(x), s.night)) ||
+          (actsTonight(ability(x), s.night) || (s.woke ?? []).includes(x.id))) ||
+        strayLunatic(x) ||
         (vortox &&
           team(x.role) === "townsfolk" &&
           actsTonight(ability(x), s.night))),
@@ -532,9 +540,16 @@ export function seamstressInfo(s, a, b, mode) {
 }
 
 // The Sage, killed by the Demon: the Demon is one of two players.
+// By the Recluse and Sage jinx, a living Recluse might register as the
+// Demon (at RECLUSE_SAGE_CHANCE): shown in the Demon's place.
 export function sageInfo(s, p, mode) {
-  const d = s.players.find((x) => x.alive && isDemon(x));
-  const others = nameable(s, p).filter((x) => x !== d);
+  const demon = s.players.find((x) => x.alive && isDemon(x));
+  const recluse = s.players.find((x) => x.alive && x !== p && x.role === "recluse");
+  const d =
+    mode === "truth" && demon && recluse && s.r() < RECLUSE_SAGE_CHANCE
+      ? recluse
+      : demon;
+  const others = nameable(s, p).filter((x) => x !== d && x !== demon);
   const pair =
     mode === "truth" && d
       ? [
@@ -559,8 +574,9 @@ export function sageInfo(s, p, mode) {
   };
 }
 
-// The Juggler, the night after juggling: how many guesses were right.
-export function jugglerInfo(s, guesses, mode) {
+// The Juggler, the night after juggling: how many guesses were right. (Or,
+// by their jinx, the Cannibal who ate the Juggler `juggler`.)
+export function jugglerInfo(s, guesses, mode, juggler = null) {
   const n = guesses.filter((g) => byId(s, g.id)?.role === g.role).length;
   const options = range(0, guesses.length);
   const said =
@@ -572,8 +588,10 @@ export function jugglerInfo(s, guesses, mode) {
 
   return {
     night: s.night,
-    role: "juggler",
-    text: `Juggler: ${said} of my ${guesses.length} guess${
+    role: juggler ? "cannibal" : "juggler",
+    text: `${juggler ? "Cannibal" : "Juggler"}: ${said} of ${
+      juggler ? `${juggler.label}'s` : "my"
+    } ${guesses.length} guess${
       guesses.length === 1 ? "" : "es"
     } ${said === 1 ? "was" : "were"} correct.`,
     targets: guesses.map((g) => g.id),
@@ -1643,9 +1661,11 @@ function unreliableInfo(s, p, role, targets) {
 
 export function nightInfo(s, p, strat) {
   const role = ability(p);
-  // A first-night ability gained later (by the Cannibal) is used that night.
+  // A first-night ability gained later (by the Cannibal, or a Barber swap)
+  // is used that night: the Pixie's too, so they learn an in-play Townsfolk.
   const gainedTonight =
-    p.gainedNight === s.night && FIRST_NIGHT.includes(role);
+    p.gainedNight === s.night &&
+    (FIRST_NIGHT.includes(role) || role === "pixie");
 
   if (!p.alive || !(actsTonight(role, s.night) || gainedTonight)) {
     return null;

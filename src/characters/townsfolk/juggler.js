@@ -29,6 +29,18 @@ export const juggler = {
 
       p.juggle = null;
     }
+
+    // By their jinx: the living Cannibal who ate a Juggler on the day they
+    // juggled learns how many guesses were right (see cannibals()).
+    for (const c of s.players.filter((x) => x.cannibalJuggle?.night === s.night)) {
+      const { guesses, fromId } = c.cannibalJuggle;
+
+      c.cannibalJuggle = null;
+
+      if (c.alive && c.role === "cannibal") {
+        this.remember(c, jugglerInfo(s, guesses, infoMode(s, c), this.player(fromId)));
+      }
+    }
   },
 
   // On Day 1, NPC Jugglers (and Juggler bluffers) publicly guess up to 5

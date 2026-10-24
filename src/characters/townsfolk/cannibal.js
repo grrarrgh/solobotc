@@ -9,7 +9,10 @@ export const cannibal = {
   // A player died by execution: each living Cannibal gains their ability.
   // If they were evil, the Cannibal is told a good ability (the one the
   // executee claimed, if any) and is poisoned until a good player dies by
-  // execution. They don't learn the character, only whose ability it is.
+  // execution. They don't learn the character, only whose ability it is,
+  // except the Butler (their jinx). By the Cannibal and Juggler jinx, a
+  // Juggler executed on the day they juggled leaves their count to the
+  // living Cannibal tonight (see jugglerNight()).
   //
   // An evil player bluffing the Cannibal "gains" it too: the good character
   // the executee claimed, as far as they know (else any good one), so their
@@ -60,6 +63,12 @@ export const cannibal = {
       c.cannibalPoison = evil ? `eating ${who(dead)}` : null;
       c.cannibalFrom = dead.id;
 
+      const butler = !evil && c.gained === "butler";
+
+      if (!evil && dead.juggle && ability(dead) === "juggler") {
+        c.cannibalJuggle = { ...dead.juggle, fromId: dead.id };
+      }
+
       // Poisoned now; or, with a good player executed, no longer (unless
       // something else poisoned them).
       if (evil) {
@@ -74,13 +83,15 @@ export const cannibal = {
         "cannibal",
         `${c.label} (Cannibal) has ${whose(dead)} ability: ${name(c.gained)}${
           evil ? ", poisoned until a good player dies by execution" : ""
-        }.`,
+        }${butler ? " (and learns it: the Cannibal and Butler jinx)" : ""}.`,
         { playerId: c.id, fromId: dead.id, role: c.gained, poisoned: evil },
       );
 
       if (c.human) {
         s.privateLog.push(
-          `Day ${s.day}: You now have the ability of ${dead.label}, who was executed.`,
+          `Day ${s.day}: You now have the ability of ${dead.label}, who was executed${
+            butler ? ": the Butler" : ""
+          }.`,
         );
       }
     }

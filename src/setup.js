@@ -8,7 +8,6 @@ import {
   ONGOING_INFO_SHARE,
   MINION_BLUFF_CHANCE,
   OUTSIDER_MODIFIERS,
-  HUMAN_DRUNK_CHANCE,
   TRAVELLERS,
   FABLED,
   HIDDEN_OUTSIDERS,
@@ -196,13 +195,8 @@ export function createState(
     safe = [i];
   }
 
-  // Move the human's role into seat 1. When the Drunk is dealt, it's the
-  // human's at HUMAN_DRUNK_CHANCE. (A separate generator decides this, so the
-  // random draws for the rest of the deal are the same either way.)
-  const drunk = roles.indexOf("drunk");
-  const dealt = pick(safe, r);
-  const hi =
-    drunk >= 0 && rng(`${seed}:drunk`)() < HUMAN_DRUNK_CHANCE ? drunk : dealt;
+  // Move the human's role into seat 1 (never the Drunk: see notForHuman).
+  const hi = pick(safe, r);
   [roles[0], roles[hi]] = [roles[hi], roles[0]];
 
   const used = new Set(roles),
@@ -288,7 +282,7 @@ export function createState(
       lastingPoison: null, // poisoned from now on (Snake Charmer)
       vigor: false, // a Minion killed by the Vigormortis keeps their ability
       gained: null, // the ability a Philosopher (or Cannibal, Pixie) gained
-      gainedNight: 0, // the night a gained first-night ability is used
+      gainedNight: 0, // the night a gained first-night ability is used (Cannibal, Barber swap)
       bluffGained: null, // ...or that an evil Philosopher bluffer "gained"
       seamUsed: false,
       juggled: false,

@@ -8,7 +8,7 @@ import {
   alignment,
   HIDDEN_OUTSIDERS,
 } from "./data.js";
-import { ability, works, madInfo } from "./storyteller.js";
+import { ability, works, madInfo, isDemon } from "./storyteller.js";
 import { speak, heard } from "./strategy.js";
 import { pick } from "./util.js";
 
@@ -205,6 +205,13 @@ export const abilities = {
   },
 
   // p woke tonight due to their ability (what the Chambermaid learns about).
+  // Whether p uses a "first night" ability tonight: on Night 1, or the
+  // night they gained it (eaten by the Cannibal, swapped by the Barber, or
+  // made by the Pit-Hag: p.gainedNight).
+  startsTonight(p) {
+    return this.s.night === 1 || p.gainedNight === this.s.night;
+  },
+
   woke(p) {
     const s = this.s;
 
@@ -215,11 +222,22 @@ export const abilities = {
 
   // `actor` chose `targets` with their ability. The first player each night
   // to choose a working Goon is drunk until dusk, and the Goon joins their
-  // team. Call this before checking whether the actor's ability works.
+  // team (but a Goon the Pit-Hag made from an evil player never turns good:
+  // their jinx). Call this before checking whether the actor's ability works.
+  // Who the Demon chose tonight is kept in s.demonChose (for the
+  // Mathematician and Lunatic jinx: see storyteller.js mathCount()).
   chose(actor, targets) {
     const s = this.s;
 
     this.sailorResolve({ actor });
+
+    if (s.phase === "night" && isDemon(actor)) {
+      if (s.demonChose?.night !== s.night) {
+        s.demonChose = { night: s.night, ids: [] };
+      }
+
+      s.demonChose.ids.push(...[].concat(targets ?? []).filter(Boolean).map((t) => t.id));
+    }
 
     for (const t of [].concat(targets ?? [])) {
       if (
@@ -232,10 +250,15 @@ export const abilities = {
         continue;
       }
 
-      const turned = t.alignment !== actor.alignment;
+      const locked = t.goonStaysEvil && actor.alignment === "good";
+      const turned = !locked && t.alignment !== actor.alignment;
 
       t.goonNight = s.night;
-      t.alignment = actor.alignment;
+
+      if (!locked) {
+        t.alignment = actor.alignment;
+      }
+
       actor.drunkTonight = true;
       actor.drunkBy = `choosing ${t.label}, the Goon`;
 

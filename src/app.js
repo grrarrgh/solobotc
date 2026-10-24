@@ -11,6 +11,8 @@ import {
   VOTE_COUNT_DELAY_MS,
   VOTE_TICK_MS,
   HAND_WAIT_MS,
+  BOOM_WAIT_MS,
+  ROUND_ROBIN_ALIVE,
   CLAIM_ALERT_HOLD_MS,
   CLAIM_ALERT_FADE_MS,
   PERF_LOGGING,
@@ -199,6 +201,7 @@ function start() {
     e = new Engine(s);
     e.start();
 
+    stopBoomCountdown();
     selectedPlayerId = null;
     talkingTo = null;
     marks = {};
@@ -707,6 +710,7 @@ const PHASE_TITLES = {
   dusk: "🌙 Dusk",
   nomination: "🗣️ Before the vote",
   nominations: "⚖️ Nominations",
+  roundrobin: "🔄 Round Robin",
 };
 
 // Resolves once no card is showing (after the last one is closed, and the
@@ -1367,12 +1371,20 @@ function draw() {
   $("actions").hidden = !!s.winner || !t || !!s.pending || !!s.boom;
   $("day-controls").hidden =
     !!s.winner || !!s.pending || !!s.boom || s.phase !== "day";
-  // The Boomdandy's countdown waits for you to point (see e.boomPoint()).
+  // The Boomdandy's countdown: you select who you point at until it runs
+  // out (see boomCountdown()).
   $("boom-choice").hidden = !s.boom || !!s.winner;
+
+  if (s.boom && !s.winner) {
+    boomCountdown();
+  }
+
+  $("boom-left").textContent = boomLeft;
   $("boom-pick").innerHTML = colourPlayers(
-    t?.alive ? `Pointing at: ${t.label}` : "Select a living player.",
+    boomTarget(t)
+      ? `Pointing at: ${t.label}`
+      : "Select a living player to point at.",
   );
-  $("boom-point").disabled = !t?.alive;
   $("fisherman").hidden = !(
     ability(h) === "fisherman" &&
     h.alive &&
@@ -1420,6 +1432,15 @@ function draw() {
   $("request-nomination").hidden = false;
   $("request-nomination").disabled = blocked;
   $("pass").disabled = !!voteAnim || nominating;
+  // Round Robin: under the nomination buttons once ROUND_ROBIN_ALIVE or
+  // fewer are alive; once used, it stays, disabled, for the rest of the game.
+  $("round-robin-controls").hidden =
+    !open ||
+    !!s.winner ||
+    !!s.pending ||
+    (!s.roundRobinDay && e.alive().length > ROUND_ROBIN_ALIVE);
+  $("round-robin").disabled =
+    !e.roundRobinReady() || !!voteAnim || nominating;
   // While a vote is being counted, this shows how things stood before it.
   const block = voteAnim ? voteAnim.before.block : s.block;
   const marked = block?.nomineeId ? e.player(block.nomineeId) : null;
@@ -1547,6 +1568,7 @@ document.addEventListener("click", (ev) => {
 });
 
 function resetGame() {
+  stopBoomCountdown();
   s = null;
   e = null;
   selectedPlayerId = null;
@@ -1732,6 +1754,15 @@ $("start-nominations").onclick = () => openNominations();
 
 $("npc-nominations").onclick = () => npcNominate();
 
+$("round-robin").onclick = () => {
+  try {
+    e.roundRobin();
+    render();
+  } catch (err) {
+    $("day-answer").textContent = err.message;
+  }
+};
+
 // Your Good / Evil mark on the selected player.
 document.querySelectorAll("#mark [data-guess]").forEach((b) => {
   b.onclick = () => setMark(b.dataset.guess);
@@ -1837,16 +1868,53 @@ $("puzzle").onclick = () => {
   }
 };
 
-$("boom-point").onclick = () => {
-  try {
-    e.boomPoint(selectedPlayerId);
-    selectedPlayerId = null;
-    $("boom-error").textContent = "";
-    render();
-  } catch (err) {
-    $("boom-error").textContent = err.message;
+// The Boomdandy's countdown: whether you can point at player t (living, and
+// not you).
+const boomTarget = (t) => Boolean(t?.alive && !t.human);
+
+// Starts the countdown from BOOM_WAIT_MS (unless it's running), ticking each
+// second, paused while a dawn / dusk card is up. When it runs out, you point
+// at the player you've selected (or nobody) and the countdown is settled.
+let boomTimer = null;
+let boomLeft = 0;
+
+function boomCountdown() {
+  if (boomTimer) {
+    return;
   }
-};
+
+  boomLeft = Math.ceil(BOOM_WAIT_MS / 1000);
+  boomTimer = setInterval(() => {
+    if ($("phase-dialog").open) {
+      return;
+    }
+
+    boomLeft--;
+
+    if (boomLeft > 0) {
+      $("boom-left").textContent = boomLeft;
+      return;
+    }
+
+    stopBoomCountdown();
+
+    try {
+      const t = selectedPlayerId ? e.player(selectedPlayerId) : null;
+
+      e.boomPoint(boomTarget(t) ? t.id : null);
+      selectedPlayerId = null;
+      $("boom-error").textContent = "";
+      render();
+    } catch (err) {
+      $("boom-error").textContent = err.message;
+    }
+  }, 1000);
+}
+
+function stopBoomCountdown() {
+  clearInterval(boomTimer);
+  boomTimer = null;
+}
 
 $("pass").onclick = () => {
   try {

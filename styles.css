@@ -113,15 +113,38 @@ button:disabled {
 
 /* A dead player's seat fades to grey, but your Good / Evil mark around it
    (its outline) stays in full colour: the fading is on the seat's border,
-   background and contents, not the seat itself. */
+   background and contents, not the seat itself. The death shroud hangs over
+   it for the rest of the game, from the top of the seat, behind the text,
+   so you can still read what they claimed. */
 .seat.dead {
+  overflow: visible;
   border-color: rgba(136, 136, 136, 0.4);
   background: rgba(41, 46, 56, 0.4);
 }
 
+.seat.dead::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -2px; /* (level with the top of the seat's border) */
+  width: 54px;
+  height: 76px;
+  transform: translateX(-50%);
+  background: url("images/death-shroud.png") center top / contain no-repeat;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
 .seat.dead > * {
-  opacity: 0.4;
+  opacity: 0.8;
   filter: grayscale(1);
+}
+
+/* (In front of the shroud, with a shadow to read against it.) */
+.seat.dead > .token,
+.seat.dead > small {
+  position: relative;
+  text-shadow: 0 0 3px #000, 0 0 6px #000;
 }
 
 .selected {

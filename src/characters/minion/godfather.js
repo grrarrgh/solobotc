@@ -42,8 +42,9 @@ export const godfather = {
   godfatherFirstNight() {
     const s = this.s;
 
+    // (On Night 1, or the night the Pit-Hag makes one: see startsTonight().)
     for (const g of s.players.filter(
-      (x) => x.alive && x.role === "godfather",
+      (x) => x.alive && x.role === "godfather" && this.startsTonight(x),
     )) {
       const outsiders = s.players.filter((x) => team(x.role) === "outsider");
 

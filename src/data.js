@@ -412,6 +412,7 @@ export const CHARACTERS = {
     ability:
       "You do not know you are the Drunk. You think you are a Townsfolk character, but you are not.",
     neverHiddenAs: true,
+    notForHuman: true,
   },
   recluse: {
     name: "Recluse",
@@ -725,7 +726,28 @@ const each = (key) =>
 // - Pit-Hag & Damsel: the Storyteller chooses who becomes the Damsel
 //   (characters/minion/pithag.js);
 // - Mathematician & Drunk or Marionette: their false information counts
-//   (storyteller.js mathCount()).
+//   (storyteller.js mathCount());
+// - Mathematician & Lunatic: the Lunatic counts on a night they "attack"
+//   someone the Demon didn't (mathCount(); s.demonChose in abilities.js);
+// - Mathematician & Chambermaid: the Mathematician wakes each night before
+//   the Chambermaid learns who woke (engine resolveNight()), so she can
+//   detect them;
+// - Cannibal & Butler: the Cannibal learns they have the Butler ability;
+//   Cannibal & Juggler: an executed Juggler's count goes to the living
+//   Cannibal that night (characters/townsfolk/cannibal.js, juggler.js);
+// - Recluse & Ogre: an Ogre who chooses the Recluse becomes evil and knows
+//   it; Spy & Ogre: an Ogre who chooses the Spy becomes evil
+//   (characters/outsider/ogre.js);
+// - Recluse & Sage: at RECLUSE_SAGE_CHANCE the Sage is shown the Recluse in
+//   the Demon's place (storyteller.js sageInfo());
+// - Mastermind & Vigormortis: a Mastermind the Vigormortis killed keeps
+//   their ability when it dies (characters/demon/vigormortis.js,
+//   characters/minion/mastermind.js);
+// - Pit-Hag & Goon: a Goon the Pit-Hag made from an evil player never turns
+//   good (abilities.js chose()); Pit-Hag & Ogre: an Ogre only chooses on
+//   Night 1, before the Pit-Hag acts, so a made one never turns good;
+// - Scarlet Woman & Fang Gu: a Fang Gu that jumps leaves no second Demon
+//   (characters/demon/fanggu.js).
 export const JINXES = [
   { ids: ["spy", "damsel"], text: "If the Spy is (or has been) in play, the Damsel is poisoned." },
   { ids: ["widow", "damsel"], text: "If the Widow is (or has been) in play, the Damsel is poisoned." },
@@ -749,7 +771,65 @@ export const JINXES = [
     ids: ["mathematician", "marionette"],
     text: "The Mathematician learns if the Marionette's ability yielded false info or failed to work properly.",
   },
+  {
+    ids: ["mathematician", "chambermaid"],
+    text: "The Chambermaid can detect if the Mathematician will wake tonight.",
+  },
+  {
+    ids: ["mathematician", "lunatic"],
+    text: "The Mathematician learns if the Lunatic attacks a different player than the real Demon attacked.",
+  },
+  {
+    ids: ["cannibal", "butler"],
+    text: "If the Cannibal gains the Butler ability, the Cannibal learns this.",
+  },
+  {
+    ids: ["cannibal", "juggler"],
+    text: "If the Juggler guesses on their first day and dies by execution, tonight the living Cannibal learns how many guesses the Juggler got correct.",
+  },
+  { ids: ["recluse", "ogre"], text: "If the Recluse registers as evil to the Ogre, the Ogre learns that they are evil." },
+  { ids: ["recluse", "sage"], text: "The Recluse might register as the Demon to the Sage." },
+  { ids: ["spy", "ogre"], text: "The Spy registers as evil to the Ogre." },
+  {
+    ids: ["mastermind", "vigormortis"],
+    text: "A Mastermind that has their ability keeps it if the Vigormortis dies.",
+  },
+  {
+    ids: ["pithag", "goon"],
+    text: "If the Pit-Hag turns an evil player into the Goon, they can't turn good due to their own ability.",
+  },
+  {
+    ids: ["pithag", "ogre"],
+    text: "If the Pit-Hag turns an evil player into the Ogre, they can't turn good due to their own ability.",
+  },
+  {
+    ids: ["scarletwoman", "fanggu"],
+    text: "If there would be two Demons, one of which was the Scarlet Woman, the Scarlet Woman remains the Scarlet Woman.",
+  },
 ];
+
+// The Recluse and Sage jinx: a Demon-killed Sage, with a living Recluse in
+// play, is shown the Recluse in the Demon's place at this chance.
+export const RECLUSE_SAGE_CHANCE = 0.5;
+
+// The Barber's swap: the Demon swaps the 2 good NPCs whose swap helps evil
+// most, judging by what they claim (see strategy barber()). Each claimed
+// character is worth BARBER_VALUE[its kill priority] to good (an Outsider,
+// BARBER_OUTSIDER_VALUE; a spent once-per-game ability, half), counted by
+// how far the town believes its player: BARBER_CONFIRMED_WEIGHT if
+// confirmed, less BARBER_SUSPECTED_WEIGHT for each good NPC who suspects
+// them (or once, as the scapegoat), never below BARBER_MIN_WEIGHT. So evil
+// gains by moving strong abilities off believed players onto doubted ones.
+// A swap into a character that starts knowing something (the Chef...)
+// costs BARBER_NEW_INFO_COST, weighted the same way: they learn it tonight.
+// The Demon doesn't swap unless it gains at least BARBER_MIN_GAIN.
+export const BARBER_VALUE = { top: 4, high: 3, med: 2, low: 1, avoid: 2 };
+export const BARBER_OUTSIDER_VALUE = -1;
+export const BARBER_CONFIRMED_WEIGHT = 2;
+export const BARBER_SUSPECTED_WEIGHT = 0.25;
+export const BARBER_MIN_WEIGHT = 0.25;
+export const BARBER_NEW_INFO_COST = 1.5;
+export const BARBER_MIN_GAIN = 0.5;
 
 // Fabled (`team: "fabled"`): a script's rules for the Storyteller, never
 // dealt. They're kept out of the script's characters (see parseScript());
@@ -985,13 +1065,10 @@ export const TRUST_EVIDENCE = -1;
 // enough, so the town doesn't all pile onto the first accusation.
 export const EVIDENCE_TO_SUSPECT = 1;
 
-// You, the human, can be misinformed like anyone else.
-// HUMAN_DRUNK_CHANCE: when the Drunk is dealt, the chance it's you (shown a
-//   Townsfolk, and never told). Otherwise you're dealt a good character at
-//   random, which can still be the Drunk.
+// You, the human, can be misinformed like anyone else (though you're never
+// dealt the Drunk: see notForHuman).
 // HUMAN_POISON_CHANCE: each night, the chance the Poisoner picks you (not
 //   two nights running). Otherwise they pick as usual, and can still pick you.
-export const HUMAN_DRUNK_CHANCE = 0.15;
 export const HUMAN_POISON_CHANCE = 0.10;
 
 // Witch, Pit-Hag and Cerenovus NPC behaviour.
@@ -1079,9 +1156,11 @@ export const LUNATIC_FOLLOW_CHANCE = 0.5;
 // dies, except to a player claiming the Huntsman she doesn't suspect, whom
 // she tells in private (see strategy damselTo()); good players never pass
 // that on. NPC Minions know she's in play (from Night 1) and hunt for her;
-// each guesses once, in public, at dawn (one guess a dawn for the team). A
-// guess that misses gives the Minion away (see EVIDENCE_WEIGHT.damselGuess),
-// so they guess:
+// each guesses once, in public, at dawn (one guess a dawn for the team),
+// from DAMSEL_GUESS_FROM_DAY; or, any day, when their Demon is about to be
+// executed (at End day, before the execution): a last chance, so they guess
+// their best candidate below without the chances. A guess that misses gives
+// the Minion away (see EVIDENCE_WEIGHT.damselGuess), so they guess:
 // - at once, a player they've found out: one who told a teammate bluffing
 //   the Huntsman that she's the Damsel;
 // - at DAMSEL_CLAIM_CHANCE a day, a player who says they're the Damsel
@@ -1096,6 +1175,7 @@ export const LUNATIC_FOLLOW_CHANCE = 0.5;
 //   Damsel, nor a "high" character, who hides instead) claims the Damsel as
 //   a cover story on Day 1, so a Minion wastes its guess on them and gives
 //   itself away. At most one decoy at a time. They tell a Huntsman the truth.
+export const DAMSEL_GUESS_FROM_DAY = 3;
 export const DAMSEL_CLAIM_CHANCE = 0.4;
 export const DAMSEL_DECOY_CHANCE = 0.15;
 export const DAMSEL_HIDER_CHANCE = 0.5;
@@ -1127,6 +1207,20 @@ export const VOTE_COUNT_DELAY_MS = 500;
 // before the votes are counted. Skipped when you can't vote (dead, with your
 // ghost vote spent).
 export const HAND_WAIT_MS = 3000;
+
+// The Boomdandy's countdown: how long (in ms) you have to select the living
+// player you point at. When it runs out, whoever has the most players
+// pointing at them dies (with nobody selected, you don't point). It's paused
+// while a dawn / dusk card is up.
+export const BOOM_WAIT_MS = 10000;
+
+// Round Robin: once per game, once nominations are open on a day with
+// ROUND_ROBIN_ALIVE or fewer players alive, you can press Round Robin: from
+// Seat 1, every player, living or dead, says in public their character and
+// information. You say your claim and what you've learned; good NPCs tell
+// the truth (dropping any cover story), except a living Damsel; evil NPCs
+// and a living Damsel keep to their bluffs.
+export const ROUND_ROBIN_ALIVE = 4;
 
 // Vote animation: how long (in ms) the large hand takes per seat as it
 // counts votes. (A voter's hand goes up just before the clock hand arrives.)

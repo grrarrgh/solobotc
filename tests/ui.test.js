@@ -79,6 +79,10 @@ test("a vote waits for you to lower your hand before counting", () => {
   assert.match(app, /handChoice\(c\)/);
   assert.match(app, /e\.castVotes\(hand\)/);
   assert.match(app, /HAND_WAIT_MS/);
+  assert.match(app, /BOOM_WAIT_MS/);
+  assert.match(html, /id="round-robin"/);
+  assert.match(app, /ROUND_ROBIN_ALIVE/);
+  assert.match(html, /id="boom-left"/);
   assert.match(css, /\.hand-toggle/);
 });
 
@@ -227,8 +231,13 @@ test("all you can note about a player is a Good / Evil mark", () => {
 test("a dead player's seat fades, but your Good / Evil mark around it doesn't", () => {
   // The fading is on the seat's border, background and contents, so the
   // outline (your mark) keeps its colour.
-  assert.match(css, /\.seat\.dead > \* \{\s*opacity: 0\.4;\s*filter: grayscale\(1\);/);
+  assert.match(css, /\.seat\.dead > \* \{\s*opacity: 0\.8;\s*filter: grayscale\(1\);/);
   assert.doesNotMatch(css, /(^|\n)\.dead \{[^}]*(opacity|filter)/);
+});
+
+test("a dead player's seat has the death shroud hanging over it", () => {
+  assert.match(css, /\.seat\.dead::before \{[^}]*url\("images\/death-shroud\.png"\)/);
+  assert.ok(fs.existsSync(new URL("../images/death-shroud.png", import.meta.url)));
 });
 
 test("dawn / dusk cards close on any press; a fading ⚠ marks unprompted claims", () => {

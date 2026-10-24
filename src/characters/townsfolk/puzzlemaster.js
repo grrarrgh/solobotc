@@ -14,15 +14,18 @@ import { pick } from "../../util.js";
 // The Puzzlemaster, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
 export const puzzlemaster = {
-  // Night 1, before anyone acts: the Storyteller makes 1 player drunk for
+  // Night 1, before anyone acts (or the night someone gains the ability:
+  // see startsTonight()): the Storyteller makes 1 player drunk for
   // the rest of the game, even once the Puzzlemaster dies (s.puzzle). Never
   // the Puzzlemaster, the Demon (who could never kill again) or a twin. A
   // drunk evil player helps good, a drunk good one helps evil (see steer()).
   puzzleDrunk() {
     const s = this.s;
-    const pm = s.players.find((x) => x.role === "puzzlemaster");
+    const pm = s.players.find(
+      (x) => ability(x) === "puzzlemaster" && this.startsTonight(x),
+    );
 
-    if (s.night !== 1 || s.puzzle || !pm) {
+    if (s.puzzle || !pm) {
       return;
     }
 

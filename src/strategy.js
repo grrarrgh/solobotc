@@ -7,6 +7,13 @@ import {
   FIRST_NIGHT_INFO,
   ONGOING_INFO,
   DEMON_KILL_PRIORITY,
+  BARBER_VALUE,
+  BARBER_OUTSIDER_VALUE,
+  BARBER_CONFIRMED_WEIGHT,
+  BARBER_SUSPECTED_WEIGHT,
+  BARBER_MIN_WEIGHT,
+  BARBER_NEW_INFO_COST,
+  BARBER_MIN_GAIN,
   KILL_PRIORITY_CHANCE,
   DEMON_STAR_PASS_CHANCE,
   GAMBLER_WILD_GUESS_CHANCE,
@@ -54,6 +61,7 @@ import {
   BOOMDANDY_HOT_VOTE_CHANCE,
   DAMSEL_GUESS_ALIVE,
   DAMSEL_GUESS_CHANCE,
+  DAMSEL_GUESS_FROM_DAY,
 } from "./data.js";
 import {
   ability,
@@ -77,6 +85,13 @@ import {
 export { claimTo, claimHeard, tick };
 
 const human = (s) => s.players.find((x) => x.human);
+
+// What viewer has heard x claim, for the log ("they claim the Chef").
+const claimedAs = (x, viewer) => {
+  const c = claimHeard(x, viewer);
+
+  return c ? `they claim the ${name(c)}` : "they haven't claimed a character";
+};
 
 // Records a lie told to you (or in public), for the final reveal (see
 // engine reveal()): { kind, byId, said, truth, aboutId? }. Kept once.
@@ -1749,13 +1764,19 @@ export class SimpleStrategy {
   // claims, they don't trust or suspect, not confirmed (a hider claims
   // something quiet); else anyone. Null if not tonight.
   // (A Huntsman bluffer keeps the Damsel they found for the Minions' guess.)
+  // Why it chose them goes in p.huntsmanWhy, for the log.
   huntsman(s, p) {
     const evil = sideOf(p) === "evil";
     const pool = this.pickable(s, p);
     const told = pool.find((x) => claimHeard(x, p) === "damsel");
+    const because = (t, why) => {
+      p.huntsmanWhy = why;
+
+      return t;
+    };
 
     if (told && !evil) {
-      return told;
+      return because(told, "they said they're the Damsel");
     }
 
     if (!this.onceReady(s, "huntsman", s.night)) {
@@ -1771,7 +1792,19 @@ export class SimpleStrategy {
         !sure(s).includes(x.id),
     );
 
-    return pick(quiet.length ? quiet : pool, s.r);
+    if (!quiet.length) {
+      return because(
+        pick(pool, s.r),
+        `a guess at anyone: they trust, suspect or know about all ${pool.length} they could choose`,
+      );
+    }
+
+    const t = pick(quiet, s.r);
+
+    return because(
+      t,
+      `a guess: ${claimedAs(t, p)}, and they don't trust, suspect or know about them (1 of ${quiet.length} such players)`,
+    );
   }
 
   // An NPC Minion's one Damsel guess today (see DAMSEL_* in data.js), or
@@ -1783,13 +1816,18 @@ export class SimpleStrategy {
   // Never while the Spy or Widow jinx poisons her (the team knows: see
   // characters/outsider/damsel.js), nor once she's said the Huntsman found
   // her (see damselSaved()).
-  damselGuess(s, p) {
+  // Not before DAMSEL_GUESS_FROM_DAY, unless their Demon `doomed` is about
+  // to be executed: then it's a last chance, so they guess their best
+  // candidate without the chances (and with nobody better, anyone).
+  // Why it chose them goes in p.damselWhy, for the log.
+  damselGuess(s, p, doomed = null) {
     if (
       !s.damselKnown ||
       s.damselJinx ||
       s.damselGone ||
       p.damselGuessed ||
-      sideOf(p) !== "evil"
+      sideOf(p) !== "evil" ||
+      (!doomed && s.day < DAMSEL_GUESS_FROM_DAY)
     ) {
       return null;
     }
@@ -1798,32 +1836,57 @@ export class SimpleStrategy {
     const pool = s.players.filter(
       (x) => x.alive && x !== p && !teammate(p, x) && !missed.includes(x.id),
     );
+    const last = doomed
+      ? `their Demon, ${doomed.label}, is about to be executed (a last chance): `
+      : "";
+    const because = (t, why) => {
+      p.damselWhy = last + why;
+
+      return t;
+    };
+    const chance = (c) => (doomed ? "" : `, at a ${c * 100}% chance`);
+    const of = (list) => (list.length > 1 ? ` (1 of ${list.length})` : "");
     // (What the team's Huntsman bluffer was told in private: the real thing.)
     const team_ = [p, ...s.players.filter((x) => x !== p && teammate(p, x))];
-    const found = pool.find((x) =>
-      team_.some((m) => m.claim === "huntsman" && m.toldMe?.[x.id]?.claim === "damsel"),
-    );
+    const told = (x) =>
+      team_.find((m) => m.claim === "huntsman" && m.toldMe?.[x.id]?.claim === "damsel");
+    const found = pool.find(told);
 
     if (found) {
-      return found;
+      const m = told(found);
+
+      return because(
+        found,
+        `they told ${m === p ? "them" : `their teammate ${m.label}`}, bluffing as the Huntsman, that they're the Damsel`,
+      );
     }
 
     const claimed = pool.filter((x) => claimHeard(x, p) === "damsel");
 
-    if (claimed.length && s.r() < DAMSEL_CLAIM_CHANCE) {
-      return pick(claimed, s.r);
+    if (claimed.length && (doomed || s.r() < DAMSEL_CLAIM_CHANCE)) {
+      return because(
+        pick(claimed, s.r),
+        `they said they're the Damsel${of(claimed)}${chance(DAMSEL_CLAIM_CHANCE)}`,
+      );
     }
 
     const bluffs = p.bluffs?.length ? p.bluffs : (s.demonBluffs ?? []);
     const hiders = pool.filter((x) => bluffs.includes(claimHeard(x, p)));
 
-    if (hiders.length && s.r() < DAMSEL_HIDER_CHANCE) {
-      return pick(hiders, s.r);
+    if (hiders.length && (doomed || s.r() < DAMSEL_HIDER_CHANCE)) {
+      const t = pick(hiders, s.r);
+
+      return because(
+        t,
+        `${claimedAs(t, p)}, one of the Demon's bluffs, so not in play: they may be hiding${of(hiders)}${chance(DAMSEL_HIDER_CHANCE)}`,
+      );
     }
 
+    const alive = s.players.filter((x) => x.alive).length;
+
     if (
-      s.players.filter((x) => x.alive).length > DAMSEL_GUESS_ALIVE ||
-      s.r() >= DAMSEL_GUESS_CHANCE
+      !pool.length ||
+      (!doomed && (alive > DAMSEL_GUESS_ALIVE || s.r() >= DAMSEL_GUESS_CHANCE))
     ) {
       return null;
     }
@@ -1831,8 +1894,19 @@ export class SimpleStrategy {
     const open = pool.filter((x) => !sure(s).includes(x.id));
     const options = open.length ? open : pool;
     const outsiders = options.filter((x) => team(claimHeard(x, p)) === "outsider");
+    const t = pick(outsiders.length ? outsiders : options, s.r);
+    const late = doomed
+      ? "a guess"
+      : `a late guess (${alive} alive, ${DAMSEL_GUESS_ALIVE} or fewer)${chance(DAMSEL_GUESS_CHANCE)}`;
 
-    return pick(outsiders.length ? outsiders : options, s.r);
+    return because(
+      t,
+      outsiders.length
+        ? `${late}: ${claimedAs(t, p)}, an Outsider${of(outsiders)}`
+        : open.length
+          ? `${late}: nobody claims an Outsider, so anyone not confirmed (${claimedAs(t, p)})${of(open)}`
+          : `${late}: everyone is confirmed, so anyone (${claimedAs(t, p)})${of(pool)}`,
+    );
   }
 
   // Who p points at in the Boomdandy's countdown, among the living
@@ -2212,10 +2286,20 @@ export class SimpleStrategy {
 
   // Night choices only ever pick living players. An evil Ravenkeeper bluffer
   // "learns" about the team's scapegoat.
+  // (Never you. An evil bluffer names the scapegoat, else never a teammate:
+  // their made-up character could give that teammate away.)
   raven(s, p) {
-    const goat = p.alignment === "evil" ? scapegoat(s) : null;
+    const evil = p.alignment === "evil";
+    const goat = evil ? scapegoat(s) : null;
 
-    return goat?.alive && goat !== p ? goat : pick(this.pickable(s, p), s.r);
+    if (goat?.alive && goat !== p) {
+      return goat;
+    }
+
+    const pool = this.pickable(s, p).filter((x) => !x.human);
+    const good = evil ? pool.filter((x) => !teammate(p, x)) : pool;
+
+    return pick(good.length ? good : pool, s.r);
   }
 
   // Two players, avoiding last night's pair where possible.
@@ -2575,7 +2659,11 @@ export class SimpleStrategy {
   }
 
   // After the Barber dies, the Demon swaps two good NPCs' characters.
-  barber(s) {
+  // The Barber's swap (see BARBER_* in data.js): the Demon d swaps the 2
+  // living good NPCs (never a Drunk or a twin) whose swap helps evil most,
+  // by what d has heard them claim; or nobody, if no swap gains enough.
+  // Why it chose them goes in d.barberWhy, for the log.
+  barber(s, d = null) {
     const good = s.players.filter(
       (x) =>
         x.alive &&
@@ -2585,8 +2673,72 @@ export class SimpleStrategy {
         !isDemon(x) &&
         !isTwin(s, x),
     );
+    const claim = (x) => claimHeard(x, d);
+    // What a claimed character's ability is worth to good, for player x
+    // (a spent once-per-game ability, half; an unknown claim, "med").
+    const worth = (role, x) => {
+      const v = !role
+        ? BARBER_VALUE.med
+        : team(role) === "outsider"
+          ? BARBER_OUTSIDER_VALUE
+          : (BARBER_VALUE[DEMON_KILL_PRIORITY[role]] ?? BARBER_VALUE.med);
 
-    return good.length >= 2 ? sample(good, 2, s.r) : null;
+      return role && abilityUsed(x, role) ? v / 2 : v;
+    };
+    // How far the town believes x.
+    const weight = (x) => {
+      const doubters = s.players.filter(
+        (y) => y.alive && !y.human && y.alignment === "good" && y.suspicion?.targetId === x.id,
+      ).length + (s.scapegoat === x.id ? 1 : 0);
+      const confirmed = ["certain", "likely"].includes(s.confirmed?.[x.id]?.level);
+
+      return Math.max(
+        BARBER_MIN_WEIGHT,
+        (confirmed ? BARBER_CONFIRMED_WEIGHT : 1) - doubters * BARBER_SUSPECTED_WEIGHT,
+      );
+    };
+    const starts = (role) => FIRST_NIGHT_INFO.includes(role) || role === "pixie";
+    // Evil's gain from swapping a and b: good's ability, weighted by belief,
+    // before less after, less any information the swap gives them tonight.
+    const gain = (a, b) =>
+      weight(a) * (worth(claim(a), a) - worth(claim(b), a)) +
+      weight(b) * (worth(claim(b), b) - worth(claim(a), b)) -
+      (starts(claim(b)) ? BARBER_NEW_INFO_COST * weight(a) : 0) -
+      (starts(claim(a)) ? BARBER_NEW_INFO_COST * weight(b) : 0);
+
+    let best = null;
+
+    for (const [i, a] of good.entries()) {
+      for (const b of good.slice(i + 1)) {
+        const g = gain(a, b);
+
+        if (!best || g > best.g || (g === best.g && s.r() < 0.5)) {
+          best = { a, b, g };
+        }
+      }
+    }
+
+    const note = (why) => {
+      if (d) {
+        d.barberWhy = why;
+      }
+    };
+
+    if (!best || best.g < BARBER_MIN_GAIN) {
+      note(best
+        ? `no swap helps evil enough (best ${Math.round(best.g * 10) / 10}, needs ${BARBER_MIN_GAIN})`
+        : "fewer than 2 good players to swap");
+      return null;
+    }
+
+    const said = (x) => (claim(x) ? `the ${name(claim(x))}` : "an unknown character");
+    const belief = (x) => `believed ${Math.round(weight(x) * 100) / 100}`;
+
+    note(`${best.a.label} (claims ${said(best.a)}, ${belief(best.a)}) and ${
+      best.b.label
+    } (claims ${said(best.b)}, ${belief(best.b)}): evil gains ${Math.round(best.g * 10) / 10}`);
+
+    return [best.a, best.b];
   }
 
   // The Witch curses the human (the likeliest nominator) or a good NPC.

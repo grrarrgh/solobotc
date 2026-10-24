@@ -51,27 +51,28 @@ export const boomdandy = {
     );
   },
 
-  // The countdown: you point at living player `id` (anyone but you); every
-  // NPC, living or dead, points too (good players first, then evil ones, who
-  // see how it's going; see strategy boomPoint()). The player with the most
-  // dies; on a tie, nobody does. Then night falls, unless the game is over.
-  boomPoint(id) {
+  // The countdown: you point at living player `id` (anyone but you), or,
+  // with no `id` (the countdown ran out first), at nobody; every NPC, living
+  // or dead, points too (good players first, then evil ones, who see how
+  // it's going; see strategy boomPoint()). The player with the most dies; on
+  // a tie, nobody does. Then night falls, unless the game is over.
+  boomPoint(id = null) {
     const s = this.s;
     const h = this.human();
-    const t = this.player(id);
+    const t = id ? this.player(id) : null;
     const pool = this.alive();
 
     if (!s.boom || s.winner) {
       throw Error("No countdown.");
     }
 
-    if (!t?.alive || t.human) {
+    if (id && (!t?.alive || t.human)) {
       throw Error("Point at another living player.");
     }
 
     const from = s.publicLog.length;
-    const counts = { [t.id]: 1 };
-    const points = [[h, t]];
+    const counts = t ? { [t.id]: 1 } : {};
+    const points = t ? [[h, t]] : [];
     const npcs = s.players.filter((x) => !x.human);
 
     for (const x of [
@@ -92,7 +93,7 @@ export const boomdandy = {
 
     s.boom = null;
     this.announce(
-      `Day ${s.day} — 3, 2, 1… ${points
+      `Day ${s.day} — 3, 2, 1… ${t ? "" : "You don't point; "}${points
         .sort(([a], [b]) => a.seat - b.seat)
         .map(
           ([x, at]) =>

@@ -77,6 +77,11 @@
             <!-- One NPC nomination per press; the number still wanting to. -->
             <button id="npc-nominations" type="button">NPC nominations 0</button>
           </div>
+          <!-- Once per game, with ROUND_ROBIN_ALIVE or fewer alive: every
+               player says their character and information in public. -->
+          <div id="round-robin-controls" class="nomination-controls" hidden>
+            <button id="round-robin" type="button" title="Once per game: from Seat 1, every player says their character and information in public">Round Robin</button>
+          </div>
           <button id="savant" type="button" hidden>Visit the Storyteller</button>
           <button id="fisherman" type="button" hidden>Ask the Storyteller for advice</button>
           <span id="amnesiac-controls" hidden>
@@ -86,11 +91,11 @@
           <p id="day-answer"></p>
         </div>
 
-        <!-- The Boomdandy's countdown: select a living player and point. -->
+        <!-- The Boomdandy's countdown: select a living player before it runs
+             out (BOOM_WAIT_MS); then everyone points. -->
         <section id="boom-choice" class="night-choice" hidden>
-          <h3>💥 The Boomdandy's countdown: point at a living player</h3>
+          <h3>💥 The Boomdandy's countdown: <span id="boom-left"></span></h3>
           <p id="boom-pick"></p>
-          <button id="boom-point" type="button">Point at them</button>
           <p id="boom-error"></p>
         </section>
 

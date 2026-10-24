@@ -57,17 +57,31 @@ export const pithag = {
       // claims a Townsfolk instead); an evil one keeps their bluff.
       const demon = team(role) === "demon";
 
+      // (An evil player made the Goon never turns good: their jinx.)
+      if (role === "goon" && target.alignment === "evil") {
+        target.goonStaysEvil = true;
+      }
+
       target.role = role;
       target.shown = role;
+      // (A "first night" ability is used tonight: see startsTonight().)
+      target.gainedNight = s.night;
 
       if (target.alignment === "good") {
         target.claim = this.claimFor(target);
       }
 
-      // A good player learns a Widow is in play (see characters/minion/widow.js).
+      // A new Widow looks at the Grimoire and poisons tonight, and a good
+      // player learns she's in play (see characters/minion/widow.js).
       if (role === "widow") {
-        this.widowKnown();
+        this.widows();
       }
+
+      // So does a new Godfather learn the Outsiders, a new Puzzlemaster's
+      // puzzle start, and a new Ogre choose (their "first night").
+      this.godfatherFirstNight();
+      this.puzzleDrunk();
+      this.ogres();
 
       // The Minions learn a Damsel is in play (see characters/outsider/damsel.js).
       if (role === "damsel") {

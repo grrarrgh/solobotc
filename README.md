@@ -34,8 +34,11 @@ picks a new one.
   are counted. NPCs can lie, good ones included: some hide a valuable
   character or claim one to bait the Demon.
   Some characters add buttons (Slayer, Artist, Savant, Gossip, Amnesiac,
-  Fisherman, Puzzlemaster). If a Boomdandy is executed, you point at a
-  player in the countdown before night falls. Dead players
+  Fisherman, Puzzlemaster). If a Boomdandy is executed, you have 10
+  seconds to select the player you point at before night falls. With 4 or
+  fewer players alive and nominations open, **Round Robin** (once per game)
+  has every player, from Seat 1, say their character and information in
+  public. Dead players
   can be nominated too. Press **End day** to
   execute whoever is marked for execution (💀) and go to night.
 - **Game over:** the **Final reveal** shows the Grimoire and a timeline of the

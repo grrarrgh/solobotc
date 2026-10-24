@@ -3,12 +3,13 @@ import { works } from "../../storyteller.js";
 // The Mastermind, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
 export const mastermind = {
-  // The Demon died by execution with a working Mastermind alive: play one
+  // The Demon died by execution with a working Mastermind alive (or dead,
+  // kept going by the Vigormortis, even once it dies: their jinx): play one
   // more day. Returns whether that happened.
   mastermindContinues() {
     const s = this.s;
     const m = s.players.find(
-      (x) => x.alive && x.role === "mastermind" && works(x),
+      (x) => (x.alive || x.vigor) && x.role === "mastermind" && works(x),
     );
 
     if (!m || s.mastermindDay) {

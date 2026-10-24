@@ -23,6 +23,7 @@ export const lunatic = {
 
       this.woke(p);
       s.lunaticPick = t.id;
+      s.lunaticPickNight = s.night;
 
       this.audit(
         "lunatic",

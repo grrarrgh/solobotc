@@ -8,6 +8,7 @@ import {
   COME_CLEAN_NOMINATED_CHANCE,
   COME_CLEAN_NOMINATION_CHANCE,
   FAKE_CLEAN_CHANCE,
+  ROUND_ROBIN_ALIVE,
   TRUST_EVIDENCE,
   EVIDENCE_TO_SUSPECT,
 } from "./data.js";
@@ -1526,6 +1527,108 @@ export class Engine {
     return line;
   }
 
+  // Whether you can press Round Robin now (see ROUND_ROBIN_ALIVE): once per
+  // game, by day, once nominations are open and no vote or countdown waits.
+  roundRobinReady() {
+    const s = this.s;
+
+    return (
+      s.phase === "day" &&
+      !s.winner &&
+      !s.roundRobinDay &&
+      !!s.nominationsOpen &&
+      !s.pendingVote &&
+      !s.boom &&
+      this.alive().length <= ROUND_ROBIN_ALIVE
+    );
+  }
+
+  // Round Robin (once per game; see ROUND_ROBIN_ALIVE): from Seat 1, every
+  // player, living or dead, says in public their character and information.
+  // You (always good) say your claim and what you've learned, which the
+  // NPCs weigh like anything said in public. A good NPC tells the truth,
+  // coming clean if they have a cover story (see comeClean()), except a
+  // living Damsel; she and evil NPCs say what they'd say in public (see
+  // strategy answer()): their bluff. It all goes on a card for you.
+  roundRobin() {
+    const s = this.s;
+
+    if (!this.roundRobinReady()) {
+      throw Error(
+        s.roundRobinDay
+          ? "The Round Robin has been used."
+          : `The Round Robin needs nominations open and ${ROUND_ROBIN_ALIVE} or fewer players alive.`,
+      );
+    }
+
+    s.roundRobinDay = s.day;
+
+    const intro = this.announce(
+      `Day ${s.day} — Round Robin: from Seat 1, every player says their character and information.`,
+    );
+    const lines = [s.publicLog[intro]];
+    const said = (claim, memories) =>
+      [
+        `I am the ${name(claim)}.`,
+        ...memories.map(
+          (m) => `${m.day ? `Day ${m.day}` : `Night ${m.night}`}: ${speak(m.text)}`,
+        ),
+      ].join("\n");
+
+    for (const p of [...s.players].sort((a, b) => a.seat - b.seat)) {
+      const truthful =
+        !p.human &&
+        sideOf(p) === "good" &&
+        !(p.role === "damsel" && p.alive);
+
+      if (truthful && p.cover) {
+        lines.push(this.comeClean(p));
+        continue;
+      }
+
+      let claim;
+      let memories;
+
+      if (p.human) {
+        claim = p.claim;
+        memories = p.memories;
+      } else if (truthful) {
+        claim = this.strat.revealsWhenDead?.(p) ?? p.claim;
+        memories = p.memories;
+      } else {
+        const a = this.strat.answer(s, p);
+
+        ({ claim, memories } = a);
+
+        // For the final reveal: a cover story, or an evil player's bluff.
+        if (a.hidden) {
+          lied(s, { kind: p.cover.kind, byId: p.id, said: claim, truth: p.claim });
+        } else if (!a.mad && p.alignment === "evil" && claim !== p.role) {
+          lied(s, { kind: "bluff", byId: p.id, said: claim, truth: p.role });
+        }
+      }
+
+      const line = `Day ${s.day} — ${p.human ? "You" : p.label}: "${said(claim, memories)}"`;
+
+      // (You're always good: what you share helps the NPCs' suspicions.)
+      this.claimPublicly(p);
+      heard(s, p, memories);
+      s.publicLog.push(line);
+      lines.push(line);
+    }
+
+    this.audit(
+      "round_robin",
+      `Round Robin, with ${this.alive().length} alive:\n${lines
+        .slice(1)
+        .map((x) => x.replace(/^Day \d+ — /, ""))
+        .join("\n")}`,
+    );
+    (s.phaseCards ??= []).push({ kind: "roundrobin", day: s.day, lines });
+
+    return lines;
+  }
+
   // Before the vote on nominee n: n comes clean if they have a cover story
   // (at COME_CLEAN_NOMINATED_CHANCE), or, if evil, may fake it
   // (FAKE_CLEAN_CHANCE, once); then each other player with a cover story
@@ -2004,6 +2107,17 @@ export class Engine {
     const p = this.marked();
 
     s.block = null;
+
+    // (With their Demon about to be executed, a Minion guesses the Damsel
+    // first: a last chance. Right, and evil wins before the execution.)
+    if (p && isDemon(p) && p.alignment === "evil") {
+      this.npcDamselGuesses(p);
+
+      if (s.winner) {
+        this.phaseCard("dusk", from);
+        return;
+      }
+    }
 
     if (!p) {
       this.announce(`Day ${s.day} — Nobody was executed.`);

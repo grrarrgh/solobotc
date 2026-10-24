@@ -48,7 +48,8 @@ export const vigormortis = {
   },
 
   // The Vigormortis dies: the dead Minions it kept going lose their
-  // abilities, and their neighbours' poison ends.
+  // abilities (except the Mastermind: their jinx), and their neighbours'
+  // poison ends.
   vigormortisDeath(p) {
     const s = this.s;
 
@@ -56,7 +57,9 @@ export const vigormortis = {
       return;
     }
 
-    const kept = s.players.filter((x) => !x.alive && x.vigor);
+    const kept = s.players.filter(
+      (x) => !x.alive && x.vigor && x.role !== "mastermind",
+    );
 
     for (const x of kept) {
       x.vigor = false;

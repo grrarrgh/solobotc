@@ -6,7 +6,8 @@ import { byId, pick } from "../../util.js";
 // The Widow, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
 export const widow = {
-  // Night 1, after the Poisoner: the Widow looks at the Grimoire, so the
+  // Night 1 (or the night the Pit-Hag makes her: see startsTonight()),
+  // after the Poisoner: the Widow looks at the Grimoire, so the
   // evil team knows every character as it is tonight (not any change later:
   // see strategy seenRole()), and poisons a player (never herself) for the
   // rest of the game (see widowLasting()). Then 1 good player learns that a
@@ -15,7 +16,7 @@ export const widow = {
     const s = this.s;
     const w = s.players.find((x) => acts(x) && x.role === "widow");
 
-    if (s.night !== 1 || !w) {
+    if (!w || !this.startsTonight(w)) {
       return;
     }
 

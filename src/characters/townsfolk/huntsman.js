@@ -45,10 +45,15 @@ export const huntsman = {
       }
 
       const effective = !fake && works(p) && t.role === "damsel";
+      // Why they chose t (see strategy huntsman()).
+      const why = p.huntsmanWhy;
 
+      delete p.huntsmanWhy;
       this.audit(
         "huntsman",
         `${p.label} (${name(p.role)}) chose ${t.label}${
+          why ? ` (why: ${why})` : ""
+        }${
           t.role !== "damsel" ? ", who isn't the Damsel" : effective ? ", the Damsel" : ", the Damsel, but it failed"
         }.`,
         { actorId: p.id, targetId: t.id, effective },

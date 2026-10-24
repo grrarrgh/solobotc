@@ -38,8 +38,9 @@ export const damsel = {
   },
 
   // At dawn, one NPC Minion at most guesses the Damsel, in public (see
-  // strategy damselGuess()).
-  npcDamselGuesses() {
+  // strategy damselGuess()); or at End day, when their Demon `doomed` is
+  // about to be executed (see endDay()), as a last chance.
+  npcDamselGuesses(doomed = null) {
     const s = this.s;
 
     if (!s.damselKnown || s.winner) {
@@ -50,7 +51,7 @@ export const damsel = {
       (x) =>
         !x.human && x.alive && team(x.role) === "minion" && sideOf(x) === "evil",
     )) {
-      const t = this.strat.damselGuess(s, m);
+      const t = this.strat.damselGuess(s, m, doomed);
 
       if (t) {
         this.damselGuess(m, t);
@@ -65,7 +66,10 @@ export const damsel = {
   damselGuess(m, t) {
     const s = this.s;
     const right = t.role === "damsel" && works(t);
+    // Why they chose t (see strategy damselGuess()).
+    const why = m.damselWhy;
 
+    delete m.damselWhy;
     m.damselGuessed = true;
     (s.damselGuesses ??= []).push({ byId: m.id, targetId: t.id, day: s.day });
     s.publicLog.push(
@@ -73,7 +77,9 @@ export const damsel = {
     );
     this.audit(
       "damsel",
-      `${m.label} (${name(m.role)}) guessed ${t.label} (${name(t.role)}) is the Damsel: ${
+      `${m.label} (${name(m.role)}) guessed ${t.label} (${name(t.role)}) is the Damsel${
+        why ? ` (why: ${why})` : ""
+      }: ${
         right ? "right" : t.role === "damsel" ? "right, but she has no ability" : "wrong"
       }.`,
       { actorId: m.id, targetId: t.id, right },
