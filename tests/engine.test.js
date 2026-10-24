@@ -26,13 +26,15 @@ import {
 import { createState, infoTarget } from "../src/setup.js";
 import { logNames } from "../src/log.js";
 import { Engine } from "../src/engine.js";
-import { SimpleStrategy, speak, isTwin, claimTo } from "../src/strategy.js";
+import { SimpleStrategy, speak, isTwin, claimTo, stanceOn } from "../src/strategy.js";
 import {
   ravenInfo,
   artistInfo,
   savantInfo,
   nightInfo,
   infoMode,
+  amnesiacKey,
+  bluffInfo,
   lean,
   scapegoat,
   evilTwinInfo,
@@ -2300,7 +2302,7 @@ function playOut(raw, seats, seed) {
   const s = createState(raw, seats, seed);
   const e = new Engine(s);
   const expected =
-    /No conversation slots|Already asked|Nobody is able|Already nominated|already nominated today|Savant unavailable|Nominations are open/;
+    /No conversation slots|Already asked|Nobody is able|Already nominated|already nominated today|Savant unavailable|Amnesiac unavailable|Nominations are open/;
   const attempt = (fn) => {
     try {
       fn();
@@ -2326,6 +2328,10 @@ function playOut(raw, seats, seed) {
 
     if (e.human().shown === "savant" && e.human().alive) {
       attempt(() => e.savant());
+    }
+
+    if (e.human().shown === "amnesiac" && e.human().alive) {
+      attempt(() => e.amnesiac("goodplayer"));
     }
 
     const target = s.players.find(
@@ -6799,4 +6805,228 @@ test("log.txt names players by character, with their claim in brackets", () => {
   e.audit("test", `${baron.label} (Baron) chose ${chef.label}; ${human.label} saw.`);
 
   assert.ok(e.debugLog().includes(`[test] Baron (Butler) chose Chef; You saw.`));
+});
+
+// ── Catfishing ───────────────────────────────────────────────
+
+const cf = JSON.parse(
+  fs.readFileSync(new URL("../scripts/Catfishing_11_1_1.json", import.meta.url)),
+);
+
+test("Catfishing loads without its Travellers, and plays whole games without errors", () => {
+  const s = createState(cf, 10, "cf");
+
+  assert.equal(s.script.meta.name, "Catfishing");
+  assert.equal(s.script.ids.length, 25);
+  assert.ok(!s.script.ids.includes("harlot"));
+
+  for (const seats of [8, 10, 12, 13, 15]) {
+    for (let seed = 0; seed < 16; seed++) {
+      const { s: g, e } = playOut(cf, seats, `cf-${seats}-${seed}`);
+
+      assert.ok([null, "good", "evil"].includes(g.winner));
+      assert.ok(e.debugLog().length > 0);
+    }
+  }
+});
+
+// A 5-player Catfishing game (the base roles: Mayor (you), Chef, Butler,
+// Baron, Imp), with `roles` by seat, on Night `night`.
+function cfNight(seed, roles = [], night = 1) {
+  const s = base(seed, cf);
+
+  roles.forEach((id, i) => id && role(s.players[i], id, alignment(id)));
+  s.phase = "night";
+  s.night = night;
+  s.day = night - 1;
+
+  const strat = new SimpleStrategy();
+
+  strat.demon = () => null;
+
+  return { s, p: s.players, strat, e: new Engine(s, strat) };
+}
+
+test("the Balloonist is shown a player of a different character type each night", () => {
+  for (let seed = 0; seed < 20; seed++) {
+    const { s, p, strat } = cfNight(`balloon-${seed}`, [null, "balloonist"]);
+    const types = [];
+
+    for (let night = 1; night <= 4; night++) {
+      s.night = night;
+
+      const info = nightInfo(s, p[1], strat);
+
+      assert.match(info.text, /^Balloonist: shown .+\.$/);
+      types.push(team(byId(s, info.targets[0]).role));
+    }
+
+    types.slice(1).forEach((k, i) => assert.notEqual(k, types[i], `seed ${seed}`));
+  }
+
+  assert.equal(speak("Balloonist: shown Player 4."), "I was shown Player 4.");
+});
+
+test("a working Balloonist sees every character type once, in random order, then starts again", () => {
+  const orders = new Set();
+
+  for (let seed = 0; seed < 20; seed++) {
+    // (Mayor (you), Balloonist, Butler, Baron, Imp: all 4 types to see.)
+    const { s, p, strat } = cfNight(`balloon-cycle-${seed}`, [null, "balloonist"]);
+    const types = [];
+
+    for (let night = 1; night <= 8; night++) {
+      s.night = night;
+
+      const info = nightInfo(s, p[1], strat);
+
+      assert.ok(info.functioning);
+      types.push(team(byId(s, info.targets[0]).role));
+    }
+
+    const all = ["townsfolk", "outsider", "minion", "demon"];
+
+    assert.deepEqual([...types.slice(0, 4)].sort(), [...all].sort(), `seed ${seed}`);
+    assert.deepEqual([...types.slice(4)].sort(), [...all].sort(), `seed ${seed}`);
+    assert.notEqual(types[4], types[3]);
+    orders.add(types.slice(0, 4).join());
+  }
+
+  assert.ok(orders.size > 1);
+});
+
+test("a Balloonist bluffer names players whose claimed types change each night", () => {
+  for (let seed = 0; seed < 20; seed++) {
+    const { s, p, strat } = cfNight(`balloon-bluff-${seed}`, [null, "chef", "recluse", null, "imp"]);
+    const claims = ["mayor", "chef", "recluse", "investigator", "balloonist"];
+
+    p.forEach((x, i) => {
+      x.claim = claims[i];
+      x.claimKnown = true;
+    });
+    p[4].claim = "balloonist";
+
+    const types = [];
+
+    for (let night = 1; night <= 4; night++) {
+      s.night = night;
+
+      const info = bluffInfo(s, p[4], strat);
+
+      types.push(team(byId(s, info.targets[0]).claim));
+    }
+
+    types.slice(1).forEach((k, i) => assert.notEqual(k, types[i], `seed ${seed}`));
+  }
+});
+
+test("the Widow poisons a player (never herself) for the rest of the game, and a good player learns she's in play", () => {
+  const { s, p, e } = cfNight("widow", [null, "empath", null, "widow"]);
+
+  e.night();
+
+  const t = byId(s, s.widowPick.targetId);
+
+  assert.notEqual(t, p[3]);
+  assert.equal(t.alignment, "good");
+  assert.ok(t.poisoned);
+  assert.ok(
+    s.players.some((x) =>
+      x.memories.some((m) => m.text === "Widow: a Widow is in play."),
+    ),
+  );
+
+  // Still poisoned on later nights, while she lives.
+  s.phase = "night";
+  s.night = 2;
+  e.widowLasting();
+  assert.ok(t.poisoned);
+
+  p[3].alive = false;
+  t.poisoned = false;
+  e.widowLasting();
+  assert.ok(!t.poisoned);
+
+  // A strategy that picks the Widow herself poisons nobody.
+  const self = cfNight("widow-self", [null, null, null, "widow"]);
+
+  self.strat.widow = (_, w) => w;
+  self.e.night();
+  assert.ok(!self.s.widowPick);
+});
+
+test("the evil team knows the characters the Widow saw on Night 1, not later changes", () => {
+  const { s, p, e, strat } = cfNight("widow-grim", [null, "empath", null, "widow"]);
+
+  e.night();
+  assert.equal(s.widowGrimoire[p[1].id], "empath");
+
+  // The Empath is changed later: the Demon still sees the Empath.
+  role(p[1], "sweetheart", "good");
+  p[1].claim = null;
+  assert.equal(strat.seenRole(s, p[1], p[4]), "empath");
+  assert.equal(strat.priorityLevel(s, p[1], p[4]), DEMON_KILL_PRIORITY.empath);
+  // (A good player doesn't know.)
+  assert.equal(strat.seenRole(s, p[1], p[2]), null);
+});
+
+test("a Widow made by the Pit-Hag tells a living good player she's in play", () => {
+  const { s, e } = cfNight("widow-pithag");
+
+  e.widowKnown();
+
+  const told = s.players.filter((x) =>
+    x.memories.some((m) => m.text === "Widow: a Widow is in play."),
+  );
+
+  assert.equal(told.length, 1);
+  assert.ok(told[0].alive && told[0].alignment === "good");
+});
+
+test("the Amnesiac's information doesn't say what it means, and guesses say how close they are", () => {
+  const { s, p, strat, e } = cfNight("amnesiac", [null, "amnesiac"]);
+
+  p[1].amnesiac = "goodplayer";
+
+  const info = nightInfo(s, p[1], strat);
+
+  assert.match(info.text, /^Amnesiac: (You|Player \d+)\.$/);
+  assert.equal(byId(s, info.targets[0]).alignment, "good");
+  e.remember(p[1], info);
+
+  s.phase = "day";
+  s.day = 1;
+  assert.match(e.amnesiacGuess(p[1], "neighbours").text, /: not close\.$/);
+  assert.ok(!p[1].memories[0].known);
+  assert.match(e.amnesiacGuess(p[1], "evilplayer").text, /: close\.$/);
+  assert.match(e.amnesiacGuess(p[1], "goodplayer").text, /: correct\.$/);
+  assert.ok(p[1].memories[0].known);
+
+  // Once they know, a good player they learned is trusted.
+  assert.equal(stanceOn(s, p[1].memories[0], byId(s, info.targets[0]), p[1]), "trust");
+
+  // Every secret ability works, true or not.
+  for (const key of ["neighbours", "goodplayer", "evilpair"]) {
+    for (const mode of ["truth", "lie", "random"]) {
+      const g = cfNight(`amnesiac-${key}-${mode}`, [null, "amnesiac"]);
+
+      g.p[1].amnesiac = key;
+      if (mode === "lie") g.p[1].poisoned = true;
+
+      const m = nightInfo(g.s, g.p[1], g.strat);
+
+      assert.equal(amnesiacKey(g.s, g.p[1]), key);
+      assert.match(m.text, /^Amnesiac: (YES|NO|(You|Player \d+)( and Player \d+)?)\.$/);
+    }
+  }
+});
+
+test("the human Amnesiac guesses once a day", () => {
+  const { s, p, e } = cfNight("amnesiac-human", ["amnesiac"]);
+
+  p[0].amnesiac = "neighbours";
+  s.phase = "day";
+  s.day = 1;
+  assert.match(e.amnesiac("neighbours"), /: correct\.$/);
+  assert.throws(() => e.amnesiac("goodplayer"), /Amnesiac unavailable/);
 });

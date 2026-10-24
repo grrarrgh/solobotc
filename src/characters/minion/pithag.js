@@ -50,6 +50,11 @@ export const pithag = {
         target.claim = this.claimFor(target);
       }
 
+      // A good player learns a Widow is in play (see characters/minion/widow.js).
+      if (role === "widow") {
+        this.widowKnown();
+      }
+
       // Deaths tonight are arbitrary (see arbitraryDeath()).
       if (demon) {
         s.arbitraryNight = s.night;

@@ -2,6 +2,14 @@
 
 Newest first.
 
+## New Script: Catfishing
+
+- New script: Catfishing (scripts/Catfishing_11_1_1.json), with 3 new characters. Its 5 Travellers (Apprentice, Barista, Beggar, Bone Collector, Harlot) are left out: Travellers aren't supported, so any script's Travellers are skipped when it loads (`TRAVELLERS` in src/data.js).
+- Balloonist: each night, learns a player of a different character type (Townsfolk, Outsider, Minion, Demon) from last night's ("Balloonist: shown Player 4."). A working Balloonist sees each type in play once, in random order, then starts again with another random order. A misinformed one is shown a player of the same type. An evil Balloonist bluffer goes by what players claim, so the players they name have a different claimed type each night and their story holds up. Deals 0 or 1 extra Outsider.
+- Widow: on Night 1 she looks at the Grimoire and poisons a good player (never herself; you at HUMAN_POISON_CHANCE), who stays poisoned while she's alive with her ability. Like the Spy, the Grimoire tells the evil team every character, so the Demon picks its kills by them, but only as they were on Night 1: a character changed since (the Pit-Hag, say) isn't seen. A good player learns "Widow: a Widow is in play." on Night 1, and when the Pit-Hag makes a Widow.
+- Amnesiac: the Storyteller gives them one of 3 secret abilities (AMNESIAC_ABILITIES in src/characters/townsfolk/amnesiac.js): each night they learn if either alive neighbour is evil, a good player, or 2 players of which exactly 1 is evil, said without saying which ("Amnesiac: YES.", "Amnesiac: Player 5."). Each day they may guess their ability from 6 (AMNESIAC_GUESSES), and learn if it's correct, close (information that looks the same) or not close. You guess with the "Guess my ability" button. NPC Amnesiacs guess each morning until they're right; until then, their information doesn't make them trust or suspect anyone.
+- NPCs say a Balloonist's information as "I was shown Player 4."
+
 ## Bug Fixes & New Features: Gambler, Failed Abilities Said in Public, Cover Story Information, Courtier Countdown, Log Names
 
 - Gambler: NPC Gamblers no longer throw their lives away. Before, a Gambler who had heard no claims guessed a random character from the whole script (often an evil one, for a good player), so most died on Night 2. Now they test a claim they've heard; at GAMBLER_WILD_GUESS_CHANCE they follow a hunch instead (their suspect is a Demon or Minion on the script); with nothing to go on, they guess themselves, which is safe ("I guessed myself, to be safe."). Gambler bluffers and cover stories guess the same way.

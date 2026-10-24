@@ -18,6 +18,7 @@ import {
   Whose,
 } from "./util.js";
 import { logNames } from "./log.js";
+import { AMNESIAC_ABILITIES } from "./characters/townsfolk/amnesiac.js";
 
 // Drunk: the Drunk themselves, anyone made drunk "from now on" (by a
 // Sweetheart's death or a Philosopher choosing their character), and anyone
@@ -231,7 +232,14 @@ const evil = (p) =>
       : p.alignment === "evil";
 
 const FIRST_NIGHT = FIRST_NIGHT_INFO;
-const EACH_NIGHT = ["empath", "fortuneteller", "dreamer", "mathematician"];
+const EACH_NIGHT = [
+  "empath",
+  "fortuneteller",
+  "dreamer",
+  "mathematician",
+  "balloonist",
+  "amnesiac",
+];
 const LATER_NIGHTS = ["undertaker", "flowergirl", "towncrier", "oracle"];
 
 // The team each "one of these two players is X" role learns about.
@@ -727,6 +735,43 @@ export const gossipInfo = (s, t, q) => ({
 });
 
 const nobleText = (ts) => `Noble: one of ${listLabels(ts)} is evil.`;
+
+const balloonText = (t) => `Balloonist: shown ${t.label}.`;
+
+// The Balloonist: a player of a different character type from the one shown
+// last night (any type on Night 1). A working Balloonist sees each type in
+// play once, in random order (p.balloonCycle, kept in secretInfo()), then
+// starts again with another random order.
+function balloonTrue(s, p) {
+  const named = nameable(s, p);
+  const inPlay = [...new Set(named.map((x) => team(x.role)))].filter(
+    (k) => k !== p.balloonType,
+  );
+  const left = inPlay.filter((k) => !(p.balloonCycle ?? []).includes(k));
+  const type = pick(left.length ? left : inPlay, s.r);
+
+  return pick(
+    named.filter((x) => team(x.role) === type),
+    s.r,
+  );
+}
+
+// The Amnesiac's secret ability (see AMNESIAC_ABILITIES), given the first
+// time it's needed. (Also for a Drunk shown the Amnesiac, and anyone
+// bluffing it.)
+export const amnesiacKey = (s, p) =>
+  (p.amnesiac ??= pick(Object.keys(AMNESIAC_ABILITIES), s.r));
+
+// The Amnesiac's information, said without saying what it means:
+// "Amnesiac: YES.", "Amnesiac: Player 5.", "Amnesiac: Player 3 and Player 7.".
+const amnesiacYes = (yes, ts) => ({
+  targets: ts.map((x) => x.id),
+  text: `Amnesiac: ${yes ? "YES" : "NO"}.`,
+});
+const amnesiacPlayers = (ts) =>
+  ts.length
+    ? { targets: ts.map((x) => x.id), text: `Amnesiac: ${listLabels(ts)}.` }
+    : { targets: [], text: "No information." };
 const pixieText = (role) => `Pixie: the ${name(role)} is in play.`;
 
 // The Townsfolk a Pixie can learn: those in play, or (`notInPlay`) those
@@ -884,6 +929,32 @@ function trueInfo(s, p, role, strat) {
       targets: [],
       text: `Mathematician number: ${mathCount(s, p)}.`,
     };
+  }
+
+  if (role === "balloonist") {
+    const t = balloonTrue(s, p);
+
+    return t
+      ? { targets: [t.id], text: balloonText(t) }
+      : { targets: [], text: "No information." };
+  }
+
+  if (role === "amnesiac") {
+    const key = amnesiacKey(s, p);
+    const named = nameable(s, p);
+
+    if (key === "neighbours") {
+      return amnesiacYes(neigh(s, p).some(evil), neigh(s, p));
+    }
+
+    if (key === "goodplayer") {
+      return amnesiacPlayers([pick(named.filter((x) => !evil(x)), s.r)].filter(Boolean));
+    }
+
+    const bad = pick(named.filter(evil), s.r);
+    const good = pick(named.filter((x) => !evil(x)), s.r);
+
+    return amnesiacPlayers(bad && good ? [bad, good] : []);
   }
 
   if (role === "flowergirl") {
@@ -1213,6 +1284,64 @@ function falseInfo(s, p, role, strat, helpEvil = false) {
     };
   }
 
+  // A player of the same type as last night's (any player on Night 1). An
+  // evil bluffer goes by what players claim instead, so their story holds
+  // up: a player whose claimed type differs from last night's.
+  if (role === "balloonist" && p.alignment === "evil") {
+    const named = nameable(s, p);
+    const claimed = (x) => team(claimHeard(x, p)) ?? null;
+    const differs = named.filter(
+      (x) => claimed(x) && claimed(x) !== p.balloonClaimed,
+    );
+    const unknown = named.filter((x) => !claimed(x));
+    const t = pick(differs.length ? differs : unknown.length ? unknown : named, s.r);
+
+    p.balloonClaimed = t ? claimed(t) : null;
+
+    return t
+      ? { targets: [t.id], text: balloonText(t) }
+      : { targets: [], text: "No information." };
+  }
+
+  if (role === "balloonist") {
+    const named = nameable(s, p);
+    const same = named.filter(
+      (x) => p.balloonType && team(x.role) === p.balloonType,
+    );
+    const t = pick(same.length ? same : named, s.r);
+
+    return t
+      ? { targets: [t.id], text: balloonText(t) }
+      : { targets: [], text: "No information." };
+  }
+
+  // The wrong answer: vouching for an evil player, or framing good ones (the
+  // scapegoat first).
+  if (role === "amnesiac") {
+    const key = amnesiacKey(s, p);
+    const named = nameable(s, p);
+    const good = named.filter((x) => !evil(x) && !isDemon(x));
+
+    if (key === "neighbours") {
+      return amnesiacYes(!neigh(s, p).some(evil), neigh(s, p));
+    }
+
+    if (key === "goodplayer") {
+      const t =
+        pick(named.filter((x) => x.alignment === "evil"), s.r) ??
+        pick(named, s.r);
+
+      return amnesiacPlayers(t ? [t] : []);
+    }
+
+    const goat = framed(s, p);
+    const pair = good.includes(goat)
+      ? [goat, pick(good.filter((x) => x !== goat), s.r)]
+      : sample(good, 2, s.r);
+
+    return amnesiacPlayers(pair.every(Boolean) && pair.length === 2 ? bySeat(pair) : []);
+  }
+
   if (role === "mathematician") {
     const n = mathCount(s, p);
     const said = wrongNumber(s, n, range(0, Math.max(3, n + 2)));
@@ -1359,6 +1488,23 @@ function unreliableInfo(s, p, role, targets) {
     };
   }
 
+  if (role === "balloonist") {
+    const t = pick(nameable(s, p), s.r);
+
+    return t
+      ? { targets: [t.id], text: balloonText(t) }
+      : { targets: [], text: "No information." };
+  }
+
+  if (role === "amnesiac") {
+    const key = amnesiacKey(s, p);
+    const others = s.players.filter((x) => x.id !== p.id);
+
+    return key === "neighbours"
+      ? amnesiacYes(s.r() < 0.5, neigh(s, p))
+      : amnesiacPlayers(sample(others, key === "goodplayer" ? 1 : 2, s.r));
+  }
+
   if (role === "flowergirl") {
     return { targets: [], text: flowerText(s.r() < 0.5) };
   }
@@ -1415,14 +1561,42 @@ export function nightInfo(s, p, strat) {
     ({ text, targets } = unreliableInfo(s, p, role, targets));
   }
 
-  return {
+  return secretInfo(s, p, {
     night: s.night,
     role,
     text,
     targets,
     trigger: "normal",
     functioning: mode === "truth",
-  };
+  });
+}
+
+// What a night's information leaves behind: the type of player a Balloonist
+// was shown (tomorrow's must differ), and which secret ability an
+// Amnesiac's information is from (see infoStance() in strategy.js: it means
+// something to them once they've guessed it).
+function secretInfo(s, p, info) {
+  const t = byId(s, info.targets[0]);
+
+  if (info.role === "balloonist" && t) {
+    const k = team(t.role);
+    const cycle = p.balloonCycle ?? [];
+
+    p.balloonType = k;
+
+    // (A type seen again starts a new cycle.)
+    if (info.functioning) {
+      p.balloonCycle = cycle.includes(k) ? [k] : [...cycle, k];
+    }
+  }
+
+  return info.role === "amnesiac"
+    ? {
+        ...info,
+        amnesiac: amnesiacKey(s, p),
+        known: info.known ?? Boolean(p.amnesiacKnown),
+      }
+    : info;
 }
 
 // A Minion bluffing a first-night role uses it to back up the Demon's claim:
@@ -1629,14 +1803,16 @@ export function bluffInfo(s, p, strat) {
     confirm ??
     (truthful ? trueInfo(s, p, role, strat) : falseInfo(s, p, role, strat));
 
-  return {
+  // (A bluffer "knows" what their Amnesiac information means.)
+  return secretInfo(s, p, {
     night: s.night,
     role,
     text,
     targets,
     trigger: "normal",
     functioning: truthful,
-  };
+    ...(role === "amnesiac" && { known: true }),
+  });
 }
 
 // The Ravenkeeper is already dead here, so works() can't be used. A Drunk,

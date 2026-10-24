@@ -33,7 +33,7 @@ picks a new one.
   vote unless you press **Lower hand** in the few seconds before the votes
   are counted. NPCs can lie, good ones included: some hide a valuable
   character or claim one to bait the Demon.
-  Some characters add buttons (Slayer, Artist, Savant, Gossip). Dead players
+  Some characters add buttons (Slayer, Artist, Savant, Gossip, Amnesiac). Dead players
   can be nominated too. Press **End day** to
   execute whoever is marked for execution (💀) and go to night.
 - **Game over:** the **Final reveal** shows the Grimoire and a timeline of the
@@ -45,8 +45,10 @@ middle of the town square for the whole script.
 ## Scripts
 
 `scripts/` holds the scripts listed in `scripts/index.json`: Trouble Brewing,
-Everyone Can Play, Sects & Violets, Bad Moon Rising and Onion Pies, in the
-official script-tool JSON format.
+Everyone Can Play, Sects & Violets, Bad Moon Rising, Onion Pies and
+Catfishing, in the official script-tool JSON format. Travellers aren't
+supported: a script's Travellers are left out (`TRAVELLERS` in
+`src/data.js`).
 
 Characters don't belong to a script: a script is just a list of character
 ids, so a custom script can mix characters from any of these (say, the Imp

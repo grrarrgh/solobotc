@@ -350,6 +350,22 @@ export const CHARACTERS = {
     neverHiddenAs: true,
     notForHuman: true,
   },
+  balloonist: {
+    name: "Balloonist",
+    team: "townsfolk",
+    ability:
+      "Each night, you learn a player of a different character type than last night. [+0 or +1 Outsider]",
+    info: "ongoing",
+    kill: "med",
+    outsiders: [0, 1],
+  },
+  amnesiac: {
+    name: "Amnesiac",
+    team: "townsfolk",
+    ability:
+      "You do not know what your ability is. Each day, privately guess what it is: you learn how accurate you are.",
+    kill: "med", // a secret ability (see characters/townsfolk/amnesiac.js)
+  },
   cannibal: {
     name: "Cannibal",
     team: "townsfolk",
@@ -548,6 +564,13 @@ export const CHARACTERS = {
       "If the Demon dies by execution (ending the game), play for 1 more day. If a player is then executed, their team loses.",
     kill: "avoid",
   },
+  widow: {
+    name: "Widow",
+    team: "minion",
+    ability:
+      "On your 1st night, look at the Grimoire & choose a player: they are poisoned. 1 good player knows a Widow is in play.",
+    kill: "avoid",
+  },
   marionette: {
     name: "Marionette",
     team: "minion",
@@ -612,6 +635,29 @@ export const CHARACTERS = {
       "Each night*, you may choose a player: they die. If your last choice was no-one, choose 3 players tonight.",
   },
 };
+
+// Travellers aren't supported: a script's Travellers are left out (as in a
+// game no Traveller joins).
+export const TRAVELLERS = [
+  "scapegoat",
+  "gunslinger",
+  "beggar",
+  "bureaucrat",
+  "thief",
+  "butcher",
+  "bonecollector",
+  "harlot",
+  "barista",
+  "deviant",
+  "apprentice",
+  "matron",
+  "judge",
+  "bishop",
+  "voudon",
+  "gangster",
+  "gnome",
+  "cacklejack",
+];
 
 // The ids of the characters whose record passes `test`, and each one's
 // `key` (for those that have it).

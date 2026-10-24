@@ -64,6 +64,7 @@ const KEY_MOMENT_TYPES = new Set([
   "advocate",
   "snakecharmer",
   "witch",
+  "widow",
   "pithag",
   "barber",
   "klutz",
@@ -227,6 +228,7 @@ export class Engine {
     this.minstrelLasting();
     this.pukkaLasting();
     this.cannibalLasting();
+    this.widowLasting();
     this.barberNight();
 
     s.pending = this.wakeHuman();
@@ -412,6 +414,7 @@ export class Engine {
   resolveNight() {
     const s = this.s;
     this.poisoners();
+    this.widows();
     this.sailors();
     this.innkeepers();
     this.courtiers();
@@ -511,6 +514,7 @@ export class Engine {
       this.npcArtists();
       this.moonchildDawn();
       this.npcSavants();
+      this.npcAmnesiacs();
       this.npcJugglers();
       this.twinsAnnounce();
       this.revivedDawn();

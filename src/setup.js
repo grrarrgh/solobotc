@@ -9,6 +9,7 @@ import {
   MINION_BLUFF_CHANCE,
   OUTSIDER_MODIFIERS,
   HUMAN_DRUNK_CHANCE,
+  TRAVELLERS,
   team,
   alignment,
   name,
@@ -67,9 +68,10 @@ export function parseScript(raw) {
       name: "Unnamed",
     },
     // Scripts list roles either as "id" strings or as { "id": ... } objects.
+    // (Travellers are left out: see TRAVELLERS.)
     ids = raw
       .map((x) => (typeof x === "string" ? x : x?.id))
-      .filter((id) => id && id !== "_meta"),
+      .filter((id) => id && id !== "_meta" && !TRAVELLERS.includes(id)),
     bad = ids.filter((x) => !ROLES[x]);
 
   if (bad.length) throw Error(`Unsupported: ${bad}`);

@@ -23,6 +23,7 @@ import {
 import { createState } from "./setup.js";
 import { ability } from "./storyteller.js";
 import { Engine } from "./engine.js";
+import { AMNESIAC_GUESSES } from "./characters/townsfolk/amnesiac.js";
 import { claimTo } from "./strategy.js";
 import { byId } from "./util.js";
 
@@ -1344,6 +1345,11 @@ function draw() {
     h.alive &&
     h.savantDay !== s.day
   );
+  $("amnesiac-controls").hidden = !(
+    ability(h) === "amnesiac" &&
+    h.alive &&
+    h.amnesiacDay !== s.day
+  );
   // (Gone once you've asked them today, or nominations have started.)
   $("ask").hidden = !t || talk.already || s.nominationsOpen;
   $("ask").disabled = !t || !talk.remaining || s.nominationsOpen;
@@ -1760,6 +1766,15 @@ $("savant").onclick = () => {
   }
 };
 
+$("amnesiac").onclick = () => {
+  try {
+    $("day-answer").innerHTML = linkRoles(e.amnesiac($("amnesiac-guess").value));
+    render();
+  } catch (err) {
+    $("day-answer").textContent = err.message;
+  }
+};
+
 $("pass").onclick = () => {
   try {
     e.endDay();
@@ -1779,6 +1794,10 @@ $("seats").value = DEFAULT_SEATS;
 
 $("artist-question").innerHTML = Object.entries(ARTIST_QUESTIONS)
   .map(([k, v]) => `<option value="${k}">Is this player ${esc(v)}?</option>`)
+  .join("");
+
+$("amnesiac-guess").innerHTML = Object.entries(AMNESIAC_GUESSES)
+  .map(([k, v]) => `<option value="${k}">${esc(v.text)}</option>`)
   .join("");
 
 $("gossip-question").innerHTML = Object.entries(ARTIST_QUESTIONS)

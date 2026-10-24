@@ -58,6 +58,10 @@ import {
   works,
 } from "./storyteller.js";
 import { byId, pick, sample, claimTo, claimHeard, tick } from "./util.js";
+import {
+  AMNESIAC_ABILITIES,
+  AMNESIAC_GUESSES,
+} from "./characters/townsfolk/amnesiac.js";
 
 export { claimTo, claimHeard, tick };
 
@@ -142,6 +146,7 @@ export function speak(text) {
   const said = rest
     .slice(2)
     .replace(/^(chose|protected|guessed|asked|gained|said) /, "I $1 ")
+    .replace(/^shown /, "I was shown ")
     .replace(/^your /, "my ")
     .replace(/ is your /, " is my ");
 
@@ -179,6 +184,18 @@ function infoStance(m) {
     case "washerwoman":
     case "grandmother":
       return "trust";
+    // Only once the Amnesiac knows what their information means (see
+    // AMNESIAC_ABILITIES).
+    case "amnesiac":
+      return !m.known
+        ? null
+        : m.amnesiac === "neighbours"
+          ? /: YES\.$/.test(t)
+            ? "suspicious"
+            : "trust"
+          : m.amnesiac === "goodplayer"
+            ? "trust"
+            : "suspicious";
     // Their own pick (who to protect, or their master) tells them nothing.
     case "monk":
     case "butler":
@@ -1555,6 +1572,37 @@ export class SimpleStrategy {
     return this.noted(p, "poison", pick(this.fresh(p, "poison", pool), s.r));
   }
 
+  // The Widow (who has seen the Grimoire) poisons a good NPC with ongoing
+  // information, for the rest of the game; you at HUMAN_POISON_CHANCE.
+  widow(s, p) {
+    const good = untwinned(
+      s,
+      s.players.filter((x) => x.alive && x.alignment === "good"),
+    );
+    // (Never herself: she's evil, but a Widow is never her own pick.)
+    const npcs = good.filter((x) => !x.human && x !== p);
+    const info = npcs.filter((x) => ONGOING_INFO.includes(ability(x)));
+    const human = good.find((x) => x.human);
+
+    if (human && s.r() < HUMAN_POISON_CHANCE) {
+      return human;
+    }
+
+    return pick(info.length ? info : npcs.length ? npcs : human ? [human] : [], s.r);
+  }
+
+  // What an NPC Amnesiac guesses their ability is: one they haven't guessed
+  // yet that gives information like theirs (see AMNESIAC_GUESSES).
+  amnesiacGuess(s, p) {
+    const shape = AMNESIAC_ABILITIES[p.amnesiac]?.shape;
+    const fresh = Object.keys(AMNESIAC_GUESSES).filter(
+      (k) => !(p.amnesiacGuessed ?? []).includes(k),
+    );
+    const like = fresh.filter((k) => AMNESIAC_GUESSES[k].shape === shape);
+
+    return pick(like.length ? like : fresh, s.r);
+  }
+
   monk(s, p) {
     return this.noted(
       p,
@@ -1719,7 +1767,9 @@ export class SimpleStrategy {
 
     return this.spyWorks(s, p)
       ? `the Spy saw them as the ${name(x.role)}`
-      : claim
+      : this.seenRole(s, x, p)
+        ? `the Widow saw them as the ${name(this.seenRole(s, x, p))} on Night 1`
+        : claim
         ? `it heard they're the ${name(claim)}`
         : "it doesn't know their character";
   }
@@ -1734,6 +1784,18 @@ export class SimpleStrategy {
         (x) => x.alignment === "evil" && ability(x) === "spy" && works(x),
       )
     );
+  }
+
+  // The character evil player p's team knows x is, from the Grimoire (null
+  // if it doesn't): a working Spy sees it as it is now; a Widow saw it once,
+  // on Night 1 (s.widowGrimoire), so the team knows the character x had
+  // then, not any change since.
+  seenRole(s, x, p) {
+    return this.spyWorks(s, p)
+      ? x.role
+      : p.alignment === "evil"
+        ? (s.widowGrimoire?.[x.id] ?? null)
+        : null;
   }
 
   // Everyone the Demon attacks tonight: the Shabaloth 2 players; the Po
@@ -1774,7 +1836,7 @@ export class SimpleStrategy {
   // A player's kill priority (DEMON_KILL_PRIORITY in data.js) to evil
   // player p: good players by the character they've claimed to p (null if
   // unknown; see claimTo()), or by their true character when p's team has
-  // a working Spy (see spyWorks()); a good player the town is sure of
+  // a working Spy or a Widow (see seenRole()); a good player the town is sure of
   // (see sure()) above all ("top"); evil players by their true character,
   // raised to a public "med"/"high" bluff's level unless their own level is
   // "avoid".
@@ -1788,9 +1850,9 @@ export class SimpleStrategy {
         return "top";
       }
 
-      return this.spyWorks(s, p)
-        ? (DEMON_KILL_PRIORITY[x.role] ?? "low")
-        : claimLevel;
+      const seen = this.seenRole(s, x, p);
+
+      return seen ? (DEMON_KILL_PRIORITY[seen] ?? "low") : claimLevel;
     }
 
     const rank = ["avoid", "low", "med", "high"];

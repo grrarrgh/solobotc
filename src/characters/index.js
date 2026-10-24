@@ -5,6 +5,7 @@
 // order. (Characters that only need the Storyteller's information or NPC
 // choices, in storyteller.js and strategy.js, have no module here.)
 
+import { amnesiac } from "./townsfolk/amnesiac.js";
 import { artist } from "./townsfolk/artist.js";
 import { cannibal } from "./townsfolk/cannibal.js";
 import { chambermaid } from "./townsfolk/chambermaid.js";
@@ -48,6 +49,7 @@ import { marionette } from "./minion/marionette.js";
 import { mastermind } from "./minion/mastermind.js";
 import { pithag } from "./minion/pithag.js";
 import { poisoner } from "./minion/poisoner.js";
+import { widow } from "./minion/widow.js";
 import { witch } from "./minion/witch.js";
 
 import { fanggu } from "./demon/fanggu.js";
@@ -59,6 +61,7 @@ import { vortox } from "./demon/vortox.js";
 import { zombuul } from "./demon/zombuul.js";
 
 export const characters = {
+  amnesiac,
   artist,
   cannibal,
   chambermaid,
@@ -100,6 +103,7 @@ export const characters = {
   mastermind,
   pithag,
   poisoner,
+  widow,
   witch,
   fanggu,
   nodashii,
