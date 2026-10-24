@@ -51,6 +51,7 @@ import { devilsadvocate } from "./minion/devilsadvocate.js";
 import { eviltwin } from "./minion/eviltwin.js";
 import { godfather } from "./minion/godfather.js";
 import { marionette } from "./minion/marionette.js";
+import { mezepheles } from "./minion/mezepheles.js";
 import { mastermind } from "./minion/mastermind.js";
 import { pithag } from "./minion/pithag.js";
 import { poisoner } from "./minion/poisoner.js";
@@ -58,6 +59,7 @@ import { widow } from "./minion/widow.js";
 import { witch } from "./minion/witch.js";
 
 import { fanggu } from "./demon/fanggu.js";
+import { legion } from "./demon/legion.js";
 import { nodashii } from "./demon/nodashii.js";
 import { pukka } from "./demon/pukka.js";
 import { shabaloth } from "./demon/shabaloth.js";
@@ -110,12 +112,14 @@ export const characters = {
   eviltwin,
   godfather,
   marionette,
+  mezepheles,
   mastermind,
   pithag,
   poisoner,
   widow,
   witch,
   fanggu,
+  legion,
   nodashii,
   pukka,
   shabaloth,

@@ -1,4 +1,4 @@
-import { name, team } from "../../data.js";
+import { name, team, LEGION_MINSTREL_CHANCE } from "../../data.js";
 import { ability, works, who } from "../../storyteller.js";
 import { whose } from "../../util.js";
 
@@ -13,21 +13,41 @@ export const minstrel = {
       (x) => x.alive && ability(x) === "minstrel" && works(x),
     );
 
-    if (!m || team(p.role) !== "minion") {
+    // By their jinx, an executed Legion might register as a Minion
+    // (LEGION_MINSTREL_CHANCE): Legion keep their ability, and the Minstrel
+    // learns it was Legion.
+    const legion = p.role === "legion";
+
+    if (
+      !m ||
+      (team(p.role) !== "minion" && !legion) ||
+      (legion && s.r() >= LEGION_MINSTREL_CHANCE)
+    ) {
       return;
     }
 
     s.minstrelUntil = s.night + 1;
     s.minstrelBy = `${who(m)}, after ${whose(p)} execution`;
+    s.minstrelSparesLegion = legion;
+    this.minstrelLasting();
 
-    for (const x of s.players.filter((y) => y.role !== "minstrel")) {
-      x.drunkTonight = true;
-      x.drunkBy = s.minstrelBy;
+    if (legion) {
+      this.remember(m, {
+        day: s.day,
+        night: s.night,
+        role: "minstrel",
+        text: `Minstrel: ${p.label}, executed today, was Legion.`,
+        targets: [p.id],
+        trigger: "day",
+        functioning: true,
+      });
     }
 
     this.audit(
       "minstrel",
-      `${p.label} (${name(p.role)}) died by execution: everyone but the Minstrel is drunk until dusk tomorrow.`,
+      `${p.label} (${name(p.role)}) died by execution: everyone but the Minstrel${
+        legion ? " and Legion" : ""
+      } is drunk until dusk tomorrow.`,
       { playerId: p.id },
     );
   },
@@ -41,7 +61,9 @@ export const minstrel = {
       return;
     }
 
-    for (const p of s.players.filter((x) => x.role !== "minstrel")) {
+    for (const p of s.players.filter(
+      (x) => x.role !== "minstrel" && !(s.minstrelSparesLegion && x.role === "legion"),
+    )) {
       p.drunkTonight = true;
       p.drunkBy = s.minstrelBy;
     }

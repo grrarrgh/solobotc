@@ -19,6 +19,9 @@ import {
   ARTIST_QUESTIONS,
   COURTIER_CORRECT_CHANCE,
   ROLES,
+  JINXES,
+  LEGION_STRONG,
+  LEGION_STRONG_SHARE,
   name,
   team,
   alignment,
@@ -39,7 +42,14 @@ import {
   nightOrder,
 } from "../src/characters/nightorder.js";
 import { Engine } from "../src/engine.js";
-import { SimpleStrategy, speak, isTwin, claimTo, stanceOn } from "../src/strategy.js";
+import {
+  SimpleStrategy,
+  speak,
+  isTwin,
+  claimTo,
+  stanceOn,
+  fooledBy,
+} from "../src/strategy.js";
 import {
   ravenInfo,
   artistInfo,
@@ -2400,8 +2410,12 @@ const ec = JSON.parse(
   ),
 );
 
+const tr = JSON.parse(
+  fs.readFileSync(new URL("../scripts/Trust Redux_1_0_0.json", import.meta.url)),
+);
+
 test("whole games play out on every script without errors", () => {
-  for (const raw of [script, ecp, sv, bmr, ec]) {
+  for (const raw of [script, ecp, sv, bmr, ec, tr]) {
     for (const seats of [8, 10, 12, 13, 15]) {
       for (let seed = 0; seed < 16; seed++) {
         const { s, e } = playOut(raw, seats, `play-${seats}-${seed}`);
@@ -8612,5 +8626,346 @@ test("an evil Cannibal bluffer gains the executee's character as best they know 
 
     e.cannibals(imp);
     assert.equal(m.bluffGained, "monk");
+  }
+});
+
+// ── Trust Redux ──────────────────────────────────────────────
+
+// A 5-player Night `night` on Trust Redux (see base()), with these roles.
+function trNight(seed, roles = [], night = 1) {
+  const s = base(seed, tr);
+
+  roles.forEach((id, i) => id && role(s.players[i], id, alignment(id)));
+  s.phase = "night";
+  s.night = night;
+  s.day = night - 1;
+
+  const strat = new SimpleStrategy();
+
+  strat.demon = () => null;
+
+  return { s, p: s.players, strat, e: new Engine(s, strat) };
+}
+
+test("Trust Redux loads, with its 5 new characters, and the jinxes between them", () => {
+  const s = createState(tr, 10, "tr");
+
+  assert.equal(s.script.meta.name, "Trust Redux");
+  assert.equal(s.script.ids.length, 24);
+
+  for (const id of ["highpriestess", "villageidiot", "magician", "mezepheles", "legion"]) {
+    assert.ok(s.script.ids.includes(id), id);
+  }
+
+  const on = JINXES.filter((j) => j.ids.every((id) => s.script.ids.includes(id)));
+
+  assert.deepEqual(
+    on.map((j) => j.ids.join("&")).sort(),
+    ["magician&legion", "magician&marionette"],
+  );
+});
+
+test("you're never dealt the Magician", () => {
+  assert.ok(FORBIDDEN_HUMAN.has("magician"));
+
+  for (let seed = 0; seed < 200; seed++) {
+    assert.notEqual(createState(tr, 8 + (seed % 8), `mag-${seed}`).players[0].role, "magician");
+  }
+});
+
+test("the Village Idiot brings 0 to 2 more; with more than 1, one of them is drunk", () => {
+  const counts = new Set();
+
+  for (let seed = 0; seed < 300; seed++) {
+    const s = createState(tr, 12, `vi-${seed}`);
+    const vis = s.players.filter((p) => p.role === "villageidiot");
+
+    if (!vis.length) {
+      continue;
+    }
+
+    counts.add(vis.length);
+    assert.equal(
+      vis.filter((p) => p.drunkFrom === "villageidiot").length,
+      vis.length > 1 ? 1 : 0,
+      `seed ${seed}`,
+    );
+  }
+
+  assert.deepEqual([...counts].sort(), [1, 2, 3]);
+});
+
+test("the Village Idiot learns a player's alignment; drunk, the wrong one; several don't count as a double claim", () => {
+  const { s, p, strat } = trNight("vi-info", [null, "villageidiot", "villageidiot"]);
+
+  strat.villageIdiot = () => p[4];
+
+  const info = nightInfo(s, p[1], strat);
+
+  assert.equal(info.text, `Village Idiot: ${p[4].label} is evil.`);
+  assert.equal(stanceOn(s, info, p[4], p[1]), "suspicious");
+
+  // Drunk, a lie says the Imp is good (a random answer may say either).
+  p[1].drunkFrom = "villageidiot";
+
+  if (infoMode(s, p[1]) === "lie") {
+    assert.equal(nightInfo(s, p[1], strat).text, `Village Idiot: ${p[4].label} is good.`);
+  }
+
+  // (Two players claiming the Village Idiot isn't held against either.)
+  p[1].claimKnown = true;
+  p[2].claimKnown = true;
+  assert.ok(!strat.evidence(s, p[3], p[1]).reasons.some((x) => /both claim/.test(x)));
+});
+
+test("you can be the Village Idiot: you choose a player each night", () => {
+  assert.ok(!FORBIDDEN_HUMAN.has("villageidiot"));
+
+  const { s, p, e } = trNight("vi-human", ["villageidiot"]);
+
+  e.night();
+  assert.equal(s.pending?.role, "villageidiot");
+  e.choose([p[3].id]);
+
+  const m = p[0].memories.find((x) => x.role === "villageidiot");
+
+  assert.deepEqual(m.targets, [p[3].id]);
+});
+
+test("the High Priestess learns a living NPC to talk to", () => {
+  for (let seed = 0; seed < 20; seed++) {
+    const { s, p, strat } = trNight(`hp-${seed}`, [null, "highpriestess"]);
+    const info = nightInfo(s, p[1], strat);
+    const t = byId(s, info.targets[0]);
+
+    assert.match(info.text, /^High Priestess: talk to Player \d+\.$/);
+    assert.ok(t.alive && !t.human && t !== p[1]);
+  }
+});
+
+test("Legion: most players are Legion, with no Minions, and you're good", () => {
+  const raw = tr.filter((x) => !["imp", "vigormortis"].includes(x.id));
+
+  for (const seats of [8, 10, 12, 15]) {
+    const s = createState(raw, seats, `legion-${seats}`);
+    const legion = s.players.filter((p) => p.role === "legion");
+
+    assert.equal(legion.length, Math.floor(seats / 2) + 1);
+    assert.ok(!s.players.some((p) => team(p.role) === "minion"));
+    assert.ok(legion.every((p) => p.alignment === "evil" && !p.human));
+  }
+});
+
+test("Legion share half as many bluffs as there are Legion, 1 an Outsider when the game has Outsiders", () => {
+  const raw = tr.filter((x) => !["imp", "vigormortis"].includes(x.id));
+
+  for (const seats of [8, 9, 10, 11, 12, 13, 14, 15]) {
+    for (let seed = 0; seed < 10; seed++) {
+      const s = createState(raw, seats, `legion-bluffs-${seats}-${seed}`);
+      const legion = s.players.filter((p) => p.role === "legion");
+      const outsiders = s.players.filter((p) => team(p.role) === "outsider").length;
+      const bluffOutsiders = s.demonBluffs.filter((id) => team(id) === "outsider").length;
+      const inPlay = new Set(s.players.map((p) => p.role));
+
+      assert.equal(s.demonBluffs.length, Math.ceil(legion.length / 2), `${seats} seats`);
+      assert.equal(bluffOutsiders, outsiders ? 1 : 0, `${seats} seats`);
+      assert.ok(s.demonBluffs.every((id) => !inPlay.has(id)));
+      assert.ok(legion.every((p) => p.bluffs.length === s.demonBluffs.length));
+    }
+  }
+});
+
+test("in a Legion game, good gets strong Townsfolk against Legion, you included", () => {
+  const raw = tr.filter((x) => !["imp", "vigormortis"].includes(x.id));
+  let yours = 0;
+  let games = 0;
+
+  for (const seats of [8, 10, 12, 15]) {
+    for (let seed = 0; seed < 25; seed++) {
+      const s = createState(raw, seats, `legion-strong-${seats}-${seed}`);
+      const townsfolk = s.players.filter((p) => team(p.startRole) === "townsfolk");
+      const strong = townsfolk.filter((p) => LEGION_STRONG.includes(p.startRole));
+      const t = townsfolk.length;
+
+      games++;
+      yours += LEGION_STRONG.includes(s.players[0].role) ? 1 : 0;
+      // (Extra Village Idiots can take a strong one's place.)
+      assert.ok(
+        strong.length >= Math.ceil(t * LEGION_STRONG_SHARE) ||
+          townsfolk.some((p) => p.role === "villageidiot"),
+        `${seats} seats, seed ${seed}`,
+      );
+    }
+  }
+
+  // (You can't be dealt every one of them: the Mayor.)
+  assert.ok(yours > games * 0.8, `${yours} of ${games}`);
+});
+
+test("a Lunatic in a Legion game gets 3 bluffs of their own, never one of the Legion's", () => {
+  const raw = tr.filter((x) => !["imp", "vigormortis"].includes(x.id));
+  let lunatics = 0;
+
+  for (let seed = 0; seed < 400; seed++) {
+    const s = createState(raw, 12, `legion-lunatic-${seed}`);
+    const lunatic = s.players.find((p) => p.role === "lunatic" && !p.human);
+
+    if (!lunatic) {
+      continue;
+    }
+
+    lunatics++;
+    assert.equal(lunatic.bluffs.length, 3);
+    assert.ok(!lunatic.bluffs.some((id) => s.demonBluffs.includes(id)), `seed ${seed}`);
+  }
+
+  assert.ok(lunatics > 0);
+});
+
+test("Legion: an execution fails if only evil players voted", () => {
+  const s = base("legion-veto", tr);
+  const [, chef, l1, l2, l3] = s.players;
+
+  role(l1, "legion", "evil");
+  role(l2, "legion", "evil");
+  role(l3, "legion", "evil");
+
+  const strat = new SimpleStrategy();
+
+  strat.vote = (_, v) => v.alignment === "evil";
+
+  const e = new Engine(s, strat);
+  const only = e.nominate(chef.id, false);
+
+  assert.equal(only.count, 0);
+  assert.equal(only.marked, false);
+
+  // With a good vote (yours), it counts.
+  assert.ok(e.requestNomination(l1.id, true).marked);
+});
+
+test("Legion: an executed Legion dies, and the game goes on while another lives", () => {
+  const s = base("legion-exec", tr);
+  const [, , , l1, l2] = s.players;
+
+  role(l1, "legion", "evil");
+  role(l2, "legion", "evil");
+
+  const e = new Engine(s);
+
+  e.execute(l1);
+  assert.equal(l1.alive, false);
+  assert.equal(s.winner, null);
+
+  e.execute(l2);
+  assert.equal(s.winner, "good");
+});
+
+test("Legion: each night the Storyteller chooses who might die: never you, nor the last Legion", () => {
+  for (let seed = 0; seed < 30; seed++) {
+    const { s, p, e } = trNight(`legion-night-${seed}`, [null, null, null, "legion", "legion"], 2);
+
+    s.revived = [];
+    e.legionNight();
+
+    assert.ok(p[0].alive);
+    assert.ok(p[3].alive || p[4].alive);
+  }
+});
+
+test("the Magician: evil NPCs count them as one of their own, until they hear them claim it", () => {
+  const { s, p, strat } = trNight("magician", [null, "magician"]);
+  const [, mag, chef, baron, imp] = p;
+
+  mag.magicianTrick = true;
+  mag.claimKnown = false;
+
+  assert.ok(fooledBy(imp, mag));
+  assert.ok(!fooledBy(chef, mag));
+  assert.equal(strat.priorityLevel(s, mag, imp), "avoid");
+  assert.equal(strat.suspect(s, baron, [mag, chef]), chef);
+
+  // Once they hear it, the trick is up.
+  mag.claimKnown = true;
+  mag.publicClaim = "magician";
+  assert.ok(!fooledBy(imp, mag));
+});
+
+test("the Magician's jinxes: the Spy never sees the Demon or Magician; the Demon can't find its Marionette", () => {
+  const { s, p, strat, e } = trNight("magician-jinx", [null, "magician", "marionette", "spy"], 2);
+
+  assert.equal(strat.seenRole(s, p[4], p[3]), null);
+  assert.equal(strat.seenRole(s, p[1], p[3]), null);
+
+  // (The Demon would tell its Marionette, but the Magician lives.)
+  s.r = () => 0;
+  e.marionetteReveal(p[4]);
+  assert.ok(!p[2].toldEvil);
+});
+
+test("the Mezepheles turns a random good NPC evil on its night, if alive", () => {
+  const { s, p, e } = trNight("mez", [null, null, null, "mezepheles"], 2);
+
+  s.mezepheles = { night: 2, used: false };
+  e.mezepheles();
+
+  const turned = p.filter((x) => x.turnedEvil);
+
+  assert.equal(turned.length, 1);
+  assert.equal(turned[0].alignment, "evil");
+  assert.ok(!turned[0].human);
+  assert.equal(alignment(turned[0].role), "good");
+
+  // Dead, it does nothing.
+  const dead = trNight("mez-dead", [null, null, null, "mezepheles"], 3);
+
+  dead.s.mezepheles = { night: 3, used: false };
+  dead.p[3].alive = false;
+  dead.e.mezepheles();
+  assert.ok(!dead.p.some((x) => x.turnedEvil));
+});
+
+test("an NPC Mayor wins for good with 3 alive and no execution", () => {
+  const s = base("npc-mayor", tr);
+
+  role(s.players[0], "chef", "good");
+  role(s.players[1], "mayor", "good");
+  s.players[2].alive = false;
+  s.players[3].alive = false;
+
+  const e = new Engine(s);
+
+  e.endDay();
+  assert.equal(s.winner, "good");
+  assert.match(s.reason, /Mayor/);
+});
+
+test("the Legion and Minstrel jinx: an executed Legion leaves Legion sober, and the Minstrel learns it", () => {
+  const s = base("legion-minstrel", tr);
+  const [, minstrel, butler, l1, l2] = s.players;
+
+  role(minstrel, "minstrel", "good");
+  role(l1, "legion", "evil");
+  role(l2, "legion", "evil");
+  s.r = () => 0;
+
+  const e = new Engine(s);
+
+  e.execute(l1);
+  assert.ok(butler.drunkTonight);
+  assert.ok(!l2.drunkTonight);
+  assert.match(minstrel.memories.at(-1).text, /was Legion/);
+});
+
+test("Trust Redux's night order has its new characters", () => {
+  const ids = tr.map((x) => x.id).filter((id) => id !== "_meta");
+  const { first, other } = nightOrder(ids);
+
+  for (const id of ["magician", "villageidiot", "highpriestess"]) {
+    assert.ok(first.some((x) => x.id === id), id);
+  }
+
+  for (const id of ["mezepheles", "legion", "villageidiot", "highpriestess"]) {
+    assert.ok(other.some((x) => x.id === id), id);
   }
 });

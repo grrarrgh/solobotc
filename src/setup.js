@@ -12,6 +12,11 @@ import {
   FABLED,
   HIDDEN_OUTSIDERS,
   HIDDEN_BLUFF_CHANCE,
+  VILLAGE_IDIOT_EXTRAS,
+  MEZEPHELES_NIGHTS,
+  LEGION_MAJORITY,
+  LEGION_STRONG,
+  LEGION_STRONG_SHARE,
   team,
   alignment,
   name,
@@ -143,8 +148,20 @@ export function createState(
   // the Fang Gu +1, the Vigormortis -1, the Godfather -1 or +1, the
   // Sentinel Fabled -1, 0 or +1), trading Townsfolk for Outsiders.
   let [t, o, m] = base;
-  const mins = sample(pool("minion"), m, r);
-  const demons = sample(pool("demon"), 1, r);
+  let mins = sample(pool("minion"), m, r);
+  let demons = sample(pool("demon"), 1, r);
+
+  // Legion: most players are Legion (see LEGION_MAJORITY), with no Minions.
+  // The rest are good: Townsfolk and Outsiders, in the usual proportion.
+  if (demons[0] === "legion") {
+    const legion = Math.floor(seats / 2) + LEGION_MAJORITY;
+    const good = seats - legion;
+
+    mins = [];
+    demons = Array(legion).fill("legion");
+    o = Math.round((o * good) / (t + o));
+    t = good - o;
+  }
   const shift = [...mins, ...demons, ...script.fabled].reduce((n, id) => {
     const k = OUTSIDER_MODIFIERS[id] ?? 0;
 
@@ -155,7 +172,36 @@ export function createState(
   t -= outsiders - o;
   o = outsiders;
 
-  const townsfolk = drawTownsfolk(pool("townsfolk"), t, r);
+  // In a Legion game, good gets strong Townsfolk first (see LEGION_STRONG).
+  const legionGame = demons[0] === "legion";
+  const strong = legionGame
+    ? sample(
+        pool("townsfolk").filter((x) => LEGION_STRONG.includes(x)),
+        Math.min(t, Math.ceil(t * LEGION_STRONG_SHARE)),
+        r,
+      )
+    : [];
+  const townsfolk = [
+    ...strong,
+    ...drawTownsfolk(
+      pool("townsfolk").filter((x) => !strong.includes(x)),
+      t - strong.length,
+      r,
+    ),
+  ];
+
+  // The Village Idiot brings 0, 1 or 2 more, in other Townsfolk's places
+  // (see VILLAGE_IDIOT_EXTRAS).
+  if (townsfolk.includes("villageidiot")) {
+    const extras = pick(VILLAGE_IDIOT_EXTRAS, r);
+    const others = townsfolk
+      .map((x, i) => (x === "villageidiot" ? -1 : i))
+      .filter((i) => i >= 0);
+
+    for (const i of sample(others, extras, r)) {
+      townsfolk[i] = "villageidiot";
+    }
+  }
   const outsiderRoles = sample(pool("outsider"), o, r);
 
   // The Huntsman brings the Damsel: she takes an Outsider's place, or (with
@@ -196,7 +242,9 @@ export function createState(
   }
 
   // Move the human's role into seat 1 (never the Drunk: see notForHuman).
-  const hi = pick(safe, r);
+  // In a Legion game, a strong one if there is one.
+  const strongSafe = legionGame ? safe.filter((i) => LEGION_STRONG.includes(roles[i])) : [];
+  const hi = pick(strongSafe.length ? strongSafe : safe, r);
   [roles[0], roles[hi]] = [roles[hi], roles[0]];
 
   const used = new Set(roles),
@@ -306,6 +354,16 @@ export function createState(
     };
   });
 
+  // With more than one Village Idiot, the Storyteller makes one drunk.
+  const idiots = players.filter((x) => x.role === "villageidiot");
+
+  if (idiots.length > 1) {
+    const d = pick(idiots, r);
+
+    d.drunkFrom = "villageidiot";
+    d.drunkFromBy = "the Storyteller (the drunk Village Idiot)";
+  }
+
   // The Demon learns three good characters that are not in play (nor shown
   // to a Drunk, and never the Drunk itself) and bluffs as one of them. Each
   // Minion also learns them with probability `minionBluffChance`; a Minion who
@@ -323,7 +381,23 @@ export function createState(
       !tokens.has(x) &&
       !roles.includes(x),
   );
-  const demonBluffs = sample(notInPlay, 3, r);
+  // Legion are many: half as many bluffs as Legion (rounded up), 1 of them
+  // an Outsider when the game has Outsiders (all Legion share them).
+  const legions = demons.length > 1 ? demons.length : 0;
+  const outsiderBluff =
+    legions && o > 0
+      ? sample(notInPlay.filter((x) => team(x) === "outsider"), 1, r)
+      : [];
+  const demonBluffs = legions
+    ? [
+        ...outsiderBluff,
+        ...sample(
+          notInPlay.filter((x) => !outsiderBluff.includes(x) && team(x) !== "outsider"),
+          Math.ceil(legions / 2) - outsiderBluff.length,
+          r,
+        ),
+      ]
+    : sample(notInPlay, 3, r);
   const spyOptions = notInPlay.filter((x) => !demonBluffs.includes(x));
 
   // The Demon picks first and the Spy last, so the Spy sees every claim.
@@ -424,9 +498,13 @@ export function createState(
   // (at least 2).
   const realDemon = evil.find((x) => team(x.role) === "demon");
 
+  // (In a Legion game, never one of the Legion's bluffs.)
   for (const p of players.filter((x) => x.role === "lunatic" && !x.human)) {
     const goods = script.ids.filter(
-      (x) => alignment(x) === "good" && !["drunk", "lunatic"].includes(x),
+      (x) =>
+        alignment(x) === "good" &&
+        !["drunk", "lunatic"].includes(x) &&
+        !(legions && demonBluffs.includes(x)),
     );
     const others = players.filter(
       (x) => !x.human && x !== p && x.alignment === "good",
@@ -485,6 +563,18 @@ export function createState(
     r,
   )?.id;
 
+  // The Magician dealt at setup: on Night 1 the evil team is shown them as
+  // one of its own (see strategy fooledBy()).
+  for (const p of players.filter((x) => x.role === "magician")) {
+    p.magicianTrick = true;
+  }
+
+  // The night the Mezepheles turns a good NPC evil (see
+  // characters/minion/mezepheles.js).
+  const mezepheles = players.some((x) => x.role === "mezepheles")
+    ? { night: pick(MEZEPHELES_NIGHTS, r), used: false }
+    : null;
+
   const s = {
     version: "2.4.0",
     script,
@@ -516,6 +606,7 @@ export function createState(
     advocate: null,
     scapegoat: null,
     twins: goodTwin ? { evilId: evilTwin.id, goodId: goodTwin.id } : null,
+    mezepheles,
     fangGuJumped: false,
     lastingPoison: [], // { id, by } poisoned while `by` lives (Vigormortis)
     witched: null, // { targetId, day, effective }
@@ -559,7 +650,7 @@ export function createState(
 
   setupLog(
     "bluffs",
-    `Demon bluffs (told to ${demon?.label ?? "the Demon"}): ${
+    `Demon bluffs (told to ${legions ? "every Legion" : (demon?.label ?? "the Demon")}): ${
       demonBluffs.map(name).join(", ") || "none"
     }. ${demon ? `${demon.label} bluffs as ${name(demon.claim)}.` : ""}`.trim(),
   );
@@ -570,6 +661,29 @@ export function createState(
       `${evilTwin.label} (Evil Twin) is paired with ${goodTwin.label} (${name(
         goodTwin.role,
       )}) and claims ${name(evilTwin.claim)}.`,
+    );
+  }
+
+  for (const p of idiots.filter((x) => x.drunkFrom)) {
+    setupLog(
+      "villageidiot",
+      `${idiots.length} Village Idiots: ${idiots
+        .map((x) => x.label)
+        .join(", ")}. ${p.label} is the drunk one.`,
+    );
+  }
+
+  if (demons[0] === "legion") {
+    setupLog(
+      "legion",
+      `${demons.length} of ${seats} players are Legion, and there are no Minions.`,
+    );
+  }
+
+  if (mezepheles) {
+    setupLog(
+      "mezepheles",
+      `The Mezepheles turns a good player evil on Night ${mezepheles.night}, if alive.`,
     );
   }
 

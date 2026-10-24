@@ -951,6 +951,7 @@ const DRUNK_FROM = {
   sweetheart: "Sweetheart",
   philosopher: "Philosopher",
   puzzlemaster: "Puzzlemaster",
+  villageidiot: "the drunk Village Idiot",
 };
 
 // "Key moments only" survives re-renders of the reveal.
@@ -998,6 +999,8 @@ function playerNotes(p, r) {
       notes.push(`became the Demon (${when})`);
     } else if (ev.type === "succession" && d.previousDemonId === p.id && p.alive) {
       notes.push(`stopped being the Demon (${when})`);
+    } else if (ev.type === "mezepheles" && d.targetId === p.id && d.effective) {
+      notes.push(`turned evil by the Mezepheles (${when})`);
     }
   }
 
@@ -1007,6 +1010,10 @@ function playerNotes(p, r) {
 
   if (p.lastingPoison) {
     notes.push("poisoned from then on (Snake Charmer)");
+  }
+
+  if (p.magicianTrick) {
+    notes.push("the evil team was shown them as one of its own (Magician)");
   }
 
   if (p.vigor) {

@@ -62,6 +62,10 @@ import {
   DAMSEL_GUESS_ALIVE,
   DAMSEL_GUESS_CHANCE,
   DAMSEL_GUESS_FROM_DAY,
+  MAGICIAN_HIDE_CHANCE,
+  LEGION_GOOD_VOTE_CHANCE,
+  LEGION_SACRIFICE_VOTE_CHANCE,
+  LEGION_HEARSAY_FACTOR,
 } from "./data.js";
 import {
   ability,
@@ -113,6 +117,21 @@ const thinksEvil = (p) => p.role === "lunatic" && !p.human;
 const thinksGood = (p) =>
   ["marionette", "ogre"].includes(p.role) && !p.human && !p.toldEvil;
 
+// Whether evil player p is fooled by the Magician x: the evil team was
+// shown them as one of its own on Night 1 (the Demon thinks they're a
+// Minion; Minions, that they might be the Demon), until p hears them claim
+// the Magician. (Not you: you're never fooled, and never evil.)
+export const fooledBy = (p, x) =>
+  Boolean(x?.magicianTrick) &&
+  x.role === "magician" &&
+  p?.alignment !== "good" &&
+  claimHeard(x, p) !== "magician";
+
+// Whether x is a good player to evil player p (null: the team as a whole),
+// who picks good players to kill, poison or curse: not the Magician they
+// think is one of their own.
+const goodTo = (p, x) => x.alignment === "good" && !fooledBy(p, x);
+
 // The team p plays for.
 export const sideOf = (p) =>
   thinksEvil(p) ? "evil" : thinksGood(p) ? "good" : p.alignment;
@@ -122,7 +141,7 @@ export const sideOf = (p) =>
 const teammate = (p, x) =>
   thinksEvil(p)
     ? x.id === p.id || (p.lunaticTeam ?? []).includes(x.id)
-    : x.alignment === "evil";
+    : x.alignment === "evil" || fooledBy(p, x);
 
 // Whether p has used the once-per-game ability of `role` (null if it has
 // none).
@@ -238,6 +257,8 @@ function infoStance(m) {
     case "washerwoman":
     case "grandmother":
       return "trust";
+    case "villageidiot":
+      return / is evil\.$/.test(t) ? "suspicious" : "trust";
     // Only once the Amnesiac knows what their information means (see
     // AMNESIAC_ABILITIES).
     case "amnesiac":
@@ -639,8 +660,10 @@ export class SimpleStrategy {
         ? PIXIE_DOUBLE_CLAIM_FACTOR
         : 1;
     const maybe = pixie < 1 ? " (a Pixie could explain it)" : "";
+    // (There can be up to 3 Village Idiots: claiming it twice is no clash.)
+    const many = claim === "villageidiot";
 
-    if (claim && !twins(p, t)) {
+    if (claim && !many && !twins(p, t)) {
       if (claim === p.claim && !(p.pixieMad && !p.gained)) {
         add(
           W.claimsMyCharacter * pixie,
@@ -847,8 +870,12 @@ export class SimpleStrategy {
       }
     }
 
+    // (With Legion on the script, most voices may be lying: see
+    // LEGION_HEARSAY_FACTOR.)
+    const hearsay = s.script.ids.includes("legion") ? LEGION_HEARSAY_FACTOR : 1;
+
     for (const x of strongest.values()) {
-      add(x.weight, x.text);
+      add(x.weight * hearsay, x.text);
     }
 
     // You nominated them (see humanTrusted).
@@ -1177,8 +1204,11 @@ export class SimpleStrategy {
       return { kind: "decoy", as: "damsel", night: s.night };
     }
 
+    // (The Magician keeps the evil team fooled by keeping quiet.)
     const kind =
-      DEMON_KILL_PRIORITY[p.claim] === "high" && !HIDE_NEVER.includes(p.claim)
+      p.claim === "magician"
+        ? s.r() < MAGICIAN_HIDE_CHANCE && "hide"
+        : DEMON_KILL_PRIORITY[p.claim] === "high" && !HIDE_NEVER.includes(p.claim)
         ? s.r() < HIDE_CHANCE && "hide"
         : BAIT_ROLES.includes(p.claim)
           ? s.r() < BAIT_CHANCE && "bait"
@@ -1599,6 +1629,16 @@ export class SimpleStrategy {
         return s.r() < EVIL_VOTE_CHANCE;
       }
 
+      // (Legion are many: one sacrificed looks good, and can't lose the
+      // game. See LEGION_SACRIFICE_VOTE_CHANCE.)
+      if (
+        v.role === "legion" &&
+        n.role === "legion" &&
+        s.players.filter((x) => x.alive && x.role === "legion").length > 2
+      ) {
+        return s.r() < LEGION_SACRIFICE_VOTE_CHANCE;
+      }
+
       // (Tying the player already marked changes it too: nobody is marked.)
       const tie =
         s.block?.nomineeId && tally && tally.yes + 1 === s.block.count;
@@ -1624,6 +1664,14 @@ export class SimpleStrategy {
     // Your nomination counts as evidence too (humanTrusted), on top of
     // HUMAN_NOMINATION_BONUS.
     const yours = tally?.nominator?.human;
+
+    // With Legion on the script, a vote for anyone but their suspect (or
+    // your pick) could be the one good vote an evil nomination needs: they
+    // hold back (see LEGION_GOOD_VOTE_CHANCE).
+    if (s.script.ids.includes("legion") && !yours) {
+      return s.r() < LEGION_GOOD_VOTE_CHANCE;
+    }
+
     const chance =
       GOOD_VOTE_CHANCE +
       GOOD_VOTE_EVIDENCE_STEP *
@@ -1710,7 +1758,7 @@ export class SimpleStrategy {
   poison(s, p = null) {
     const good = untwinned(
       s,
-      s.players.filter((x) => x.alive && x.alignment === "good"),
+      s.players.filter((x) => x.alive && goodTo(p, x)),
     );
     const roles =
       s.night === 1 ? [...FIRST_NIGHT_INFO, ...ONGOING_INFO] : ONGOING_INFO;
@@ -1971,7 +2019,7 @@ export class SimpleStrategy {
   widow(s, p) {
     const good = untwinned(
       s,
-      s.players.filter((x) => x.alive && x.alignment === "good"),
+      s.players.filter((x) => x.alive && goodTo(p, x)),
     );
     // (Never herself: she's evil, but a Widow is never her own pick.)
     const npcs = good.filter((x) => !x.human && x !== p);
@@ -2123,7 +2171,7 @@ export class SimpleStrategy {
     const cover = this.spyWorks(s, p)
       ? options.filter(
           (x) =>
-            x.alignment === "good" &&
+            goodTo(p, x) &&
             (DEMON_KILL_PRIORITY[x.role] ?? "low") === "low",
         )
       : [];
@@ -2148,6 +2196,10 @@ export class SimpleStrategy {
 
     if (p.role === "vigormortis" && team(x.role) === "minion") {
       return "a Minion it kills keeps their ability";
+    }
+
+    if (fooledBy(p, x)) {
+      return "it thinks they're on its team (the Magician)";
     }
 
     if (x.alignment === "evil") {
@@ -2186,6 +2238,15 @@ export class SimpleStrategy {
   // on Night 1 (s.widowGrimoire), so the team knows the character x had
   // then, not any change since.
   seenRole(s, x, p) {
+    // By their jinxes, the Spy and Widow never see the Demon's or the
+    // Magician's token while a Magician is in play.
+    if (
+      (isDemon(x) || x.role === "magician") &&
+      s.players.some((y) => y.role === "magician")
+    ) {
+      return null;
+    }
+
     return this.spyWorks(s, p)
       ? x.role
       : p.alignment === "evil"
@@ -2239,7 +2300,19 @@ export class SimpleStrategy {
     const claim = claimHeard(x, p);
     const claimLevel = claim ? (DEMON_KILL_PRIORITY[claim] ?? "low") : null;
 
-    if (x.alignment !== "evil") {
+    // (The Magician it thinks is one of its own.)
+    if (fooledBy(p, x)) {
+      return "avoid";
+    }
+
+    // By their jinx, while the Magician lives the Demon doesn't know which
+    // neighbour is its Marionette: it goes by their claim, as for anyone.
+    const hidden =
+      x.role === "marionette" &&
+      isDemon(p) &&
+      s.players.some((y) => y.alive && y.role === "magician");
+
+    if (x.alignment !== "evil" || hidden) {
       // (A good player the town is sure of can't be framed: kill them first.)
       if (sure(s).includes(x.id)) {
         return "top";
@@ -2301,7 +2374,7 @@ export class SimpleStrategy {
       }
     }
 
-    const good = pool.filter((x) => x.alignment === "good");
+    const good = pool.filter((x) => goodTo(p, x));
     const fallback = [
       [good.filter((x) => level(x) !== "avoid"), "a good player it isn't avoiding"],
       [good, "a good player (all avoided)"],
@@ -2489,7 +2562,7 @@ export class SimpleStrategy {
         s,
         s.players.filter(
           (x) =>
-            x.alive && !x.human && x.alignment === "good" && x.role !== "lunatic",
+            x.alive && !x.human && goodTo(null, x) && x.role !== "lunatic",
         ),
       ),
       s.r,
@@ -2508,6 +2581,21 @@ export class SimpleStrategy {
   // ── More characters' choices ───────────────────────────────
 
   // The Dreamer looks into someone they suspect (not last night's pick).
+  // The Village Idiot learns a player's alignment: a good NPC, their
+  // suspect if they haven't checked them yet, else someone they haven't;
+  // an evil bluffer "checks" the scapegoat first. Never you.
+  villageIdiot(s, p) {
+    const fresh = this.fresh(p, "villageidiot", this.others(s, p));
+    const want =
+      sideOf(p) === "evil" ? scapegoat(s) : byId(s, p.suspicion?.targetId);
+
+    return this.noted(
+      p,
+      "villageidiot",
+      fresh.includes(want) ? want : pick(fresh, s.r),
+    );
+  }
+
   dream(s, p) {
     const pool = this.fresh(p, "dream", this.others(s, p));
 
@@ -2799,7 +2887,7 @@ export class SimpleStrategy {
 
     const good = untwinned(
       s,
-      this.others(s, p).filter((x) => x.alignment === "good"),
+      this.others(s, p).filter((x) => goodTo(p, x)),
     );
 
     return this.noted(p, "witch", pick(this.fresh(p, "witch", good), s.r));
@@ -2829,7 +2917,7 @@ export class SimpleStrategy {
             this.fresh(
               p,
               "cerenovus",
-              others.filter((x) => x.alignment === "good"),
+              others.filter((x) => goodTo(p, x)),
             ),
           ),
     );
@@ -2888,7 +2976,7 @@ export class SimpleStrategy {
       s.r,
     );
     const good = untwinned(s, this.others(s, p)).filter(
-      (x) => x.alignment === "good" && !isDrunk(x),
+      (x) => goodTo(p, x) && !isDrunk(x),
     );
     const voices = good.filter(
       (x) =>
@@ -3061,7 +3149,7 @@ export class SimpleStrategy {
   // The Godfather kills a good NPC, the way the Demon picks.
   godfather(s, p) {
     const good = untwinned(s, this.others(s, p)).filter(
-      (x) => x.alignment === "good" && !s.revived?.includes(x.id),
+      (x) => goodTo(p, x) && !s.revived?.includes(x.id),
     );
     const decoys = good.filter((x) => x.role !== "lunatic");
 

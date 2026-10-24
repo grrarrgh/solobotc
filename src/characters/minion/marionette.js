@@ -24,7 +24,9 @@ export const marionette = {
       (x) => x.alive && x.role === "marionette" && !x.toldEvil,
     );
 
-    if (!m || s.night < 2) {
+    // (By their jinx, while the Magician lives the Demon doesn't know which
+    // neighbour is the Marionette.)
+    if (!m || s.night < 2 || s.players.some((x) => x.alive && x.role === "magician")) {
       return;
     }
 

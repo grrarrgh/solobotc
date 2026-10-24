@@ -98,6 +98,8 @@ const KEY_MOMENT_TYPES = new Set([
   "pixie",
   "cannibal",
   "marionette",
+  "mezepheles",
+  "legion",
   "game_over",
 ]);
 
@@ -293,6 +295,10 @@ export class Engine {
         prompt:
           "Choose a player: you learn 1 good and 1 evil character, 1 of which is correct.",
       },
+      villageidiot: {
+        count: 1,
+        prompt: "Choose a player: you learn their alignment.",
+      },
       seamstress: !h.seamUsed && {
         count: 2,
         optional: true,
@@ -474,6 +480,7 @@ export class Engine {
     this.witch();
     this.cerenovus();
     this.pitHag();
+    this.mezepheles();
     this.advocate();
 
     if (s.night === 1) {
@@ -513,6 +520,13 @@ export class Engine {
 
     for (const p of s.players) {
       const info = nightInfo(s, p, this.strategyFor(p));
+
+      // (A good character the Mezepheles turned evil gets their information,
+      // but says what helps the evil team: see bluffs().)
+      if (info && p.turnedEvil && !p.human) {
+        this.woke(p);
+        continue;
+      }
 
       if (info) {
         this.woke(p);
@@ -623,6 +637,7 @@ export class Engine {
     const strat = Object.create(this.strat);
     strat.ft = () => picks;
     strat.dream = () => picks[0];
+    strat.villageIdiot = () => picks[0];
 
     return strat;
   }
@@ -711,6 +726,12 @@ export class Engine {
     }
 
     this.lunatics();
+
+    // (Legion: the Storyteller chooses who might die.)
+    if (d.role === "legion") {
+      this.legionNight();
+      return;
+    }
 
     if (this.demonSleeps(d)) {
       return;
@@ -1325,11 +1346,19 @@ export class Engine {
 
     for (const p of npcs) {
       const last = (p.talkedTo ??= {});
+      // (A High Priestess talks first to the player she was shown last night.)
+      const priestess = p.memories.findLast(
+        (m) => m.role === "highpriestess" && m.night === s.night && !m.day,
+      )?.targets?.[0];
       const picks = shuffle(
         npcs.filter((x) => x !== p),
         s.r,
       )
-        .sort((a, b) => (last[a.id] ?? 0) - (last[b.id] ?? 0))
+        .sort(
+          (a, b) =>
+            (b.id === priestess) - (a.id === priestess) ||
+            (last[a.id] ?? 0) - (last[b.id] ?? 0),
+        )
         .slice(0, limit);
 
       for (const t of picks) {
@@ -2020,6 +2049,12 @@ export class Engine {
       hand && this.canVote(),
       pending.intents ?? null,
     );
+    const threshold = Math.ceil(this.alive().length / 2);
+
+    // (Executions fail if only evil voted: Legion. Only a vote that would
+    // mark the nominee is counted as 0.)
+    this.legionVeto(records, needed);
+
     const count = records.filter((x) => x.counted).length;
 
     // Who nominated and voted for whom is public: good NPCs weigh it.
@@ -2029,7 +2064,6 @@ export class Engine {
       nomineeId: id,
       voterIds: records.filter((x) => x.attempted).map((x) => x.playerId),
     });
-    const threshold = Math.ceil(this.alive().length / 2);
     const previous = s.block;
     const enough = count >= threshold;
     const marked = enough && count > (previous?.count ?? 0);
@@ -2208,8 +2242,7 @@ export class Engine {
       return;
     } else if (
       this.alive().length === 3 &&
-      this.human().role === "mayor" &&
-      works(this.human())
+      s.players.some((x) => x.alive && ability(x) === "mayor" && works(x))
     ) {
       this.finish("good", "Mayor final-three victory.");
     }
@@ -2230,8 +2263,9 @@ export class Engine {
   // same character as the old one. With no successor, good wins, unless the
   // Demon was `executed` while the Mastermind lives.
   successor(dead, before, self, executed = false) {
-    // A Zombuul that only registers as dead isn't dead.
-    if (dead.undead) {
+    // A Zombuul that only registers as dead isn't dead, and another Demon
+    // (Legion) carries on.
+    if (dead.undead || this.s.players.some((x) => x !== dead && living(x) && isDemon(x))) {
       this.check();
       return;
     }

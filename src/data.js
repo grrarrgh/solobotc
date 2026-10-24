@@ -143,6 +143,36 @@ export const JINXES = [
     ids: ["scarletwoman", "fanggu"],
     text: "If there would be two Demons, one of which was the Scarlet Woman, the Scarlet Woman remains the Scarlet Woman.",
   },
+  // the evil team counts the Magician as a teammate (strategy teammate())
+  {
+    ids: ["magician", "legion"],
+    text: "If the Magician is in play, during the Demon info step, Legion wake in separate groups. Each group learns which players are good, but does not learn the Magician.",
+  },
+  // no reveal while the Magician lives (characters/minion/marionette.js)
+  {
+    ids: ["magician", "marionette"],
+    text: "If the Magician is alive, the Demon doesn't know which neighbor is the Marionette.",
+  },
+  // the team doesn't see either character (strategy seenRole())
+  {
+    ids: ["magician", "spy"],
+    text: "When the Spy sees the Grimoire, the Demon and Magician's character tokens are removed.",
+  },
+  // the team doesn't see either character (strategy seenRole())
+  {
+    ids: ["magician", "widow"],
+    text: "When the Widow sees the Grimoire, the Demon and Magician's character tokens are removed.",
+  },
+  // never arises: the Pit-Hag only makes good players Outsiders (strategy pithag())
+  {
+    ids: ["pithag", "villageidiot"],
+    text: "If there is a spare token, the Pit-Hag can create an extra Village Idiot. If so, the drunk Village Idiot might change.",
+  },
+  // at LEGION_MINSTREL_CHANCE (characters/townsfolk/minstrel.js)
+  {
+    ids: ["legion", "minstrel"],
+    text: "If Legion died by execution today, Legion keeps their ability, but the Minstrel might learn they are Legion.",
+  },
 ];
 
 // The Recluse and Sage jinx: the chance a Demon-killed Sage is shown a
@@ -434,6 +464,53 @@ export const BARBER_SUSPECTED_WEIGHT = 0.25; // ...less this for each good NPC w
 export const BARBER_MIN_WEIGHT = 0.25; // ...never below this
 export const BARBER_NEW_INFO_COST = 1.5; // a swap into a "start knowing" character: they learn it tonight
 export const BARBER_MIN_GAIN = 0.5;
+
+
+// The Village Idiot: setup adds 0, 1 or 2 more (in other Townsfolk's
+// places), and the Storyteller makes one of the extras drunk.
+export const VILLAGE_IDIOT_EXTRAS = [0, 1, 2];
+
+// The chance an NPC Magician hides behind a cover story on Day 1 (see
+// strategy coverFor()): once the evil team hears them claim the Magician,
+// the trick is up for whoever heard it.
+export const MAGICIAN_HIDE_CHANCE = 0.75;
+
+// The Mezepheles (simplified: no secret word): on one of these nights, at
+// random, if they're alive (and their ability works), a random living good
+// NPC turns evil and plays for the evil team from then on (see
+// characters/minion/mezepheles.js).
+export const MEZEPHELES_NIGHTS = [2, 3];
+
+// Legion: most players are Legion (half the seats, rounded down, plus
+// LEGION_MAJORITY), with no Minions. Each night* the Storyteller chooses who
+// dies (see characters/demon/legion.js): helping the side lean() names, else
+// nobody at LEGION_NO_DEATH_CHANCE, else a Legion at LEGION_SELF_CHANCE, else
+// a good NPC.
+export const LEGION_MAJORITY = 1;
+export const LEGION_NO_DEATH_CHANCE = 0.2;
+export const LEGION_SELF_CHANCE = 0.5;
+// In a Legion game, at least this share of the Townsfolk dealt (rounded up)
+// are strong ones against Legion (`vsLegion` in CHARACTERS: they learn who's
+// good or evil, or can win outright), when the script has them, and you're
+// dealt one if one you can be dealt is in play.
+export const LEGION_STRONG = where((c) => c.vsLegion);
+export const LEGION_STRONG_SHARE = 0.6;
+// With Legion on the script, a good NPC votes for a nominee who isn't their
+// suspect (nor your pick) only at this chance, whatever the evidence:
+// executions fail if only evil voted, so a good vote on a hunch could be the
+// one an evil nomination needs.
+export const LEGION_GOOD_VOTE_CHANCE = 0.1;
+// The chance a Legion votes to execute another Legion, while more than 2
+// Legion live: they're many, and one sacrificed makes the voters look good.
+export const LEGION_SACRIFICE_VOTE_CHANCE = 0.4;
+// With Legion on the script, what other players say (their information and
+// opinions, in public or in private) counts this much of its usual weight
+// as evidence: most of them may be Legion.
+export const LEGION_HEARSAY_FACTOR = 0.3;
+// The Legion and Minstrel jinx: the chance an executed Legion registers as a
+// Minion to the Minstrel (everyone else but Legion is drunk, and the
+// Minstrel learns it was Legion).
+export const LEGION_MINSTREL_CHANCE = 0.5;
 
 
 // ── Timings and display ──────────────────────────────────────

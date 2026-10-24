@@ -2,6 +2,33 @@
 
 Newest first.
 
+## New Script: Trust Redux
+
+- New script: Trust Redux (scripts/Trust Redux_1_0_0.json), with 5 new characters. The others were already in the game.
+- High Priestess: each night, learns which player the Storyteller believes she should talk to most ("High Priestess: talk to Player 5."). It's a living NPC worth talking to: an evil player, or a good player whose information is wrong or points at an evil one. When the Storyteller is helping evil (lean()), it's one who isn't worth it. Drunk or poisoned, she's sent to a good player who isn't worth it, and an evil bluffer names a teammate. An NPC High Priestess talks to that player first at dawn. You can be dealt her.
+- Village Idiot: each night, chooses a player and learns their alignment ("Village Idiot: Player 4 is good."). Setup adds 0, 1 or 2 more (VILLAGE_IDIOT_EXTRAS) in other Townsfolk's places, and with more than 1, the Storyteller makes one of them drunk for the game (shown in the Grimoire). Good NPCs check their suspect first, then players they haven't checked. An evil bluffer "checks" the scapegoat and always lies. Several players claiming the Village Idiot isn't held against them as a double claim. You can be dealt it: you're woken to choose a player.
+- Magician: on Night 1 the evil team is shown the Magician as one of its own, so evil NPCs treat them as a teammate (`fooledBy()` in src/strategy.js). The Demon never kills them (they're a "Minion"), and Minions don't poison, curse or frame them. A Minion backing up the Demon's claim backs up whichever of the 2 they think it is. Each evil NPC sees through it once they hear the Magician claim the Magician. NPC Magicians usually keep quiet behind a cover story (MAGICIAN_HIDE_CHANCE, 0.75) and come clean later, as other hiders do. You're never dealt the Magician (`notForHuman`).
+- Mezepheles (simplified: no secret word): on Night 2 or 3 (MEZEPHELES_NIGHTS, set at random during setup), if the Mezepheles is alive, a random living good NPC becomes evil (never you, nor a twin). They learn it, and from then on play for the evil team: they know their teammates, and their information is made up to help evil. A drunk or poisoned Mezepheles fails, and has used its ability. The script sheet still shows the official ability text.
+- Legion: most players are Legion (half the seats, rounded down, plus LEGION_MAJORITY), with no Minions. The rest are good, Townsfolk and Outsiders in the usual proportion.
+  - Bluffs: every Legion is told the same bluffs, half as many as there are Legion, rounded up (7 Legion: 4 bluffs). When the game has an Outsider, 1 of them is an Outsider, and the rest are Townsfolk. Legion claim the bluffs first. Once they're taken, the rest claim a Townsfolk no teammate claims, which may be in play. A Lunatic in a Legion game still gets 3 bluffs of their own, never one of the Legion's.
+  - Strong Townsfolk: at least LEGION_STRONG_SHARE (0.6, rounded up) of the Townsfolk dealt are strong ones against Legion, when the script has them, and you're dealt one where possible. They're marked `vsLegion` in src/characters/catalog.js: those who learn who's good or evil (Village Idiot, Seamstress, Oracle, Noble, Empath, Chef, Fortune Teller, Dreamer, Artist, Savant, Fisherman), those who can win outright (Slayer, Mayor), and the Philosopher, who can gain any of them.
+  - Each night*, the Storyteller chooses who dies (src/characters/demon/legion.js). It helps the side lean() names; with no lean, nobody dies at LEGION_NO_DEATH_CHANCE, else a Legion at LEGION_SELF_CHANCE, else a good NPC. It's never you, and never the last Legion. The Monk, Soldier, Mayor and the Exorcist work against it as against any Demon.
+  - Executions fail if only evil voted: a vote with enough hands to mark the nominee, all of them evil, is counted as 0.
+  - An executed Legion dies and the game goes on while another lives (a dead Demon only ends the game when no other Demon lives).
+  - Legion registers as a Minion too: to the Investigator, the Town Crier and the Clockmaker.
+  - Legion NPCs vote to execute another Legion at LEGION_SACRIFICE_VOTE_CHANCE while more than 2 live: they're many, and good can't reach the votes alone.
+- With Legion on the script, good NPCs are more cautious. On other scripts, they vote as before.
+  - They vote for a nominee who isn't their suspect (nor your pick) only at LEGION_GOOD_VOTE_CHANCE (0.1): a good vote on a hunch could be the one an evil nomination needs.
+  - What other players say counts LEGION_HEARSAY_FACTOR (0.3) of its usual weight, since most of them may be Legion.
+- Jinxes (`JINXES` in src/data.js), checked against the official list. Only the first 2 are between characters on Trust Redux; the others pair a new character with one from another script, since any characters can share a game:
+  - Magician & Legion: Legion don't learn the Magician, so they count them as Legion.
+  - Magician & Marionette: while the Magician lives, the Demon never tells its Marionette who they are, and goes by the Marionette's claim like anyone else's.
+  - Magician & Spy, Magician & Widow: the team never sees the Demon's or the Magician's character from the Grimoire.
+  - Legion & Minstrel: an executed Legion registers as a Minion to the Minstrel at LEGION_MINSTREL_CHANCE. Everyone but the Minstrel and Legion is drunk, and the Minstrel learns it was Legion.
+  - Pit-Hag & Village Idiot: listed, but it never arises, since the Pit-Hag only turns good players into Outsiders.
+  - The Mezepheles and High Priestess have no jinxes.
+- Mayor (bug fix, all scripts): an NPC Mayor now wins for good with 3 alive and no execution. Before, only a human Mayor could, and you're never dealt the Mayor, so it never happened.
+
 ## Improvements: Evil Cannibal Bluffs
 
 - An evil player bluffing the Cannibal now "gains" the executee's character as best they know it, so their made-up information matches what a real Cannibal would get (`eatenAs()` in src/characters/townsfolk/cannibal.js): a good executee's real character if they've seen it in the Grimoire (a working Spy, or the Widow, who saw it on Night 1); a teammate's bluff, as a real Cannibal eating an evil player is told; else the character they heard the executee claim. Only with none of these do they pick any good character, as before. (Before, a Spy or Widow went by the claim too, and a teammate's bluff was only used if they'd heard it.)

@@ -67,8 +67,8 @@ The **Final reveal** shows the Grimoire and a timeline of the whole game;
 ## Scripts
 
 `scripts/` holds the scripts listed in `scripts/index.json`: Trouble Brewing,
-Everyone Can Play, Sects & Violets, Bad Moon Rising, Onion Pies, Catfishing
-and Extension Cord, in the official script-tool JSON format. Travellers
+Everyone Can Play, Sects & Violets, Bad Moon Rising, Onion Pies, Catfishing,
+Extension Cord and Trust Redux, in the official script-tool JSON format. Travellers
 aren't supported: a script's Travellers are left out (`TRAVELLERS` in
 `src/characters/catalog.js`). Fabled (such as the Sentinel) are Storyteller rules, never
 dealt (`FABLED`). Jinxes between a script's characters are listed on its

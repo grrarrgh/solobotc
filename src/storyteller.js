@@ -16,6 +16,7 @@ import {
   sample,
   shuffle,
   claimHeard,
+  claimTo,
   whose,
   Whose,
 } from "./util.js";
@@ -35,6 +36,26 @@ export const isDrunk = (p) =>
   Boolean(p.drunkTonight);
 
 export const isDemon = (p) => team(p.role) === "demon";
+
+// Whether p registers as a Minion: a Minion, or Legion ("You register as a
+// Minion too").
+export const isMinion = (p) => team(p.role) === "minion" || p.role === "legion";
+
+// The player evil player p believes is the Demon: the Demon, except that a
+// Minion shown the Magician too (see strategy fooledBy()) doesn't know
+// which of the two it is, so goes by one of them, decided once.
+export function demonTo(s, p) {
+  const d = s.players.find((x) => (x.alive || x.undead) && isDemon(x));
+  const magician = s.players.find((x) => x.magicianTrick && x.alive);
+
+  if (!d || !magician || team(p.role) !== "minion" || claimHeard(magician, p) === "magician") {
+    return d;
+  }
+
+  p.thinksDemon ??= pick([d, magician], s.r).id;
+
+  return byId(s, p.thinksDemon) ?? d;
+}
 
 // The ability a player acts with: the Drunk acts as the character they were
 // shown, and a Philosopher as the character they gained.
@@ -236,6 +257,8 @@ const evil = (p) =>
 const FIRST_NIGHT = FIRST_NIGHT_INFO;
 const EACH_NIGHT = [
   "empath",
+  "villageidiot",
+  "highpriestess",
   "fortuneteller",
   "dreamer",
   "mathematician",
@@ -405,7 +428,7 @@ function clockmakerCount(s) {
   const d = s.players.findIndex(isDemon);
   const steps = s.players
     .map((x, i) => [x, Math.abs(i - d)])
-    .filter(([x]) => team(x.role) === "minion")
+    .filter(([x], i) => isMinion(x) && i !== d)
     .map(([, k]) => Math.min(k, n - k));
 
   return d < 0 || !steps.length ? 0 : Math.min(...steps);
@@ -475,7 +498,7 @@ function mathCount(s, p) {
 // What the Flowergirl and Town Crier learn about the day just gone.
 const demonVoted = (s) => s.dayVoters.some((id) => isDemon(byId(s, id)));
 const minionNominated = (s) =>
-  s.dayNominators.some((id) => team(byId(s, id)?.role) === "minion");
+  s.dayNominators.some((id) => byId(s, id) && isMinion(byId(s, id)));
 
 const deadCount = (s) => s.players.filter((x) => !x.alive).length;
 const deadEvil = (s) => s.players.filter((x) => !x.alive && evil(x)).length;
@@ -971,6 +994,57 @@ export const gossipInfo = (s, t, q) => ({
 
 const nobleText = (ts) => `Noble: one of ${listLabels(ts)} is evil.`;
 
+const idiotText = (t, isEvil) =>
+  `Village Idiot: ${t.label} is ${isEvil ? "evil" : "good"}.`;
+
+const priestessText = (t) => `High Priestess: talk to ${t.label}.`;
+
+// Whether the High Priestess would do well to talk to x: an evil player
+// (whose bluff may not hold up), or a good player whose information is
+// wrong (drunk or poisoned) or points at an evil player.
+function worthTalking(s, x) {
+  if (x.alignment === "evil") {
+    return true;
+  }
+
+  return x.memories.some(
+    (m) =>
+      m.functioning === false ||
+      (m.targets ?? []).some((id) => byId(s, id)?.alignment === "evil"),
+  );
+}
+
+// Who the Storyteller believes the High Priestess should talk to most: a
+// living NPC worth talking to (see worthTalking()), unless the Storyteller
+// is helping evil (see lean()), when it's one who isn't. Misinformed
+// (`truth` false), a good player who isn't worth it; an evil bluffer names
+// a teammate, who backs them up.
+function priestessPick(s, p, truth = true) {
+  const pool = s.players.filter((x) => x.alive && !x.human && x !== p);
+  const helps = (x) => (worthTalking(s, x) ? "good" : "evil");
+
+  if (!truth) {
+    const mates = pool.filter((x) => x.alignment === "evil");
+    const dull = pool.filter((x) => helps(x) === "evil");
+
+    return pick(p.alignment === "evil" && mates.length ? mates : dull.length ? dull : pool, s.r);
+  }
+
+  const side = lean(s) ?? "good";
+  const better = pool.filter((x) => helps(x) === side);
+
+  if (lean(s) && better.length && better.length < pool.length) {
+    leanNote(
+      s,
+      `who ${whose(p)} High Priestess should talk to: one of ${bySeat(better)
+        .map((x) => x.label)
+        .join(", ")}.`,
+    );
+  }
+
+  return pick(better.length ? better : pool, s.r);
+}
+
 const balloonText = (t) => `Balloonist: shown ${t.label}.`;
 
 // The Balloonist: a player of a different character type from the one shown
@@ -1063,7 +1137,9 @@ function trueInfo(s, p, role, strat) {
 
   if (wanted) {
     const real = pick(
-      nameable(s, p).filter((x) => team(x.role) === wanted),
+      nameable(s, p).filter(
+        (x) => team(x.role) === wanted || (wanted === "minion" && isMinion(x)),
+      ),
       s.r,
     );
 
@@ -1210,6 +1286,22 @@ function trueInfo(s, p, role, strat) {
     return amnesiacPlayers(bad && good ? [bad, good] : []);
   }
 
+  if (role === "villageidiot") {
+    const t = strat.villageIdiot(s, p);
+
+    return t
+      ? { targets: [t.id], text: idiotText(t, evil(t)) }
+      : { targets: [], text: "No information." };
+  }
+
+  if (role === "highpriestess") {
+    const t = priestessPick(s, p);
+
+    return t
+      ? { targets: [t.id], text: priestessText(t) }
+      : { targets: [], text: "No information." };
+  }
+
   if (role === "flowergirl") {
     return { targets: [], text: flowerText(demonVoted(s)) };
   }
@@ -1237,12 +1329,14 @@ export function scapegoat(s) {
   const current = byId(s, s.scapegoat);
   // (Never either twin, who must look alike to the town.)
   const twins = s.twins ? [s.twins.evilId, s.twins.goodId] : [];
-  // (Not anyone confirmed good: it wouldn't stick.)
+  // (Not anyone confirmed good: it wouldn't stick. Nor the Magician, whom
+  // the team thinks is one of its own, until they claim it in public.)
   const good = s.players.filter(
     (x) =>
       x.alive &&
       !x.human &&
       x.alignment === "good" &&
+      !(x.magicianTrick && claimTo(x) !== "magician") &&
       !twins.includes(x.id) &&
       !["certain", "likely"].includes(s.confirmed?.[x.id]?.level),
   );
@@ -1636,6 +1730,24 @@ function falseInfo(s, p, role, strat, helpEvil = false) {
     };
   }
 
+  // The wrong alignment: an evil bluffer "learns" the scapegoat is evil, or
+  // a teammate good.
+  if (role === "villageidiot") {
+    const t = strat.villageIdiot(s, p);
+
+    return t
+      ? { targets: [t.id], text: idiotText(t, !evil(t)) }
+      : { targets: [], text: "No information." };
+  }
+
+  if (role === "highpriestess") {
+    const t = priestessPick(s, p, false);
+
+    return t
+      ? { targets: [t.id], text: priestessText(t) }
+      : { targets: [], text: "No information." };
+  }
+
   // Never more evil dead than there are dead.
   if (role === "oracle") {
     const n = deadEvil(s);
@@ -1780,6 +1892,25 @@ function unreliableInfo(s, p, role, targets) {
         : amnesiacPlayers(sample(others, shape === "player" ? 1 : 2, s.r));
   }
 
+  if (role === "villageidiot") {
+    const t = byId(s, targets[0]);
+
+    return t
+      ? { targets, text: idiotText(t, s.r() < 0.5) }
+      : { targets: [], text: "No information." };
+  }
+
+  if (role === "highpriestess") {
+    const t = pick(
+      s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
+      s.r,
+    );
+
+    return t
+      ? { targets: [t.id], text: priestessText(t) }
+      : { targets: [], text: "No information." };
+  }
+
   if (role === "flowergirl") {
     return { targets: [], text: flowerText(s.r() < 0.5) };
   }
@@ -1910,7 +2041,8 @@ function dreamerBluff(s, p, strat) {
 // Demon claims a character of the team they learn about); as Grandmother they
 // name the Demon as their grandchild. Returns null when the role can't help.
 function confirmDemon(s, p, role) {
-  const d = s.players.find((x) => x.alive && team(x.role) === "demon");
+  // (Shown the Magician too, they back up whichever they think it is.)
+  const d = demonTo(s, p);
   const claim = d?.claim;
 
   if (team(p.role) !== "minion" || !d) {

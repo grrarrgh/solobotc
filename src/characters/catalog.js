@@ -21,7 +21,9 @@
 //     PUBLIC_INFO_CHANCE);
 //   bait, neverHides, neverHiddenAs: cover stories (see BAIT_ROLES);
 //   protects: a protection character (see PROTECTION_ROLES);
-//   notForHuman: never dealt to you (see FORBIDDEN_HUMAN).
+//   notForHuman: never dealt to you (see FORBIDDEN_HUMAN);
+//   vsLegion: a strong Townsfolk against Legion, favoured in Legion games
+//     (see LEGION_STRONG).
 export const CHARACTERS = {
   washerwoman: {
     name: "Washerwoman",
@@ -55,6 +57,7 @@ export const CHARACTERS = {
     info: "first",
     kill: "med",
     publicInfo: 0.6,
+    vsLegion: true,
   },
   empath: {
     name: "Empath",
@@ -63,6 +66,7 @@ export const CHARACTERS = {
       "Each night, you learn how many of your 2 alive neighbours are evil.",
     info: "ongoing",
     kill: "high",
+    vsLegion: true,
   },
   fortuneteller: {
     name: "Fortune Teller",
@@ -71,6 +75,7 @@ export const CHARACTERS = {
       "Each night, choose 2 players: you learn if either is a Demon. There is a good player that registers as a Demon to you.",
     info: "ongoing",
     kill: "high",
+    vsLegion: true,
   },
   undertaker: {
     name: "Undertaker",
@@ -113,6 +118,7 @@ export const CHARACTERS = {
       "Once per game, during the day, publicly choose a player: if they are the Demon, they die.",
     kill: "med",
     oncePerGame: { AFTER_DAY: 2, START_CHANCE: 0.2, STEP_CHANCE: 0.2 }, // day
+    vsLegion: true,
   },
   soldier: {
     name: "Soldier",
@@ -131,6 +137,7 @@ export const CHARACTERS = {
     kill: "avoid",
     bait: true,
     notForHuman: true,
+    vsLegion: true,
   },
   clockmaker: {
     name: "Clockmaker",
@@ -165,6 +172,7 @@ export const CHARACTERS = {
       "Once per game, during the day, privately ask the Storyteller any yes/no question.",
     kill: "med",
     oncePerGame: { AFTER_DAY: 1, START_CHANCE: 0.5, STEP_CHANCE: 0.25 }, // day
+    vsLegion: true,
   },
   fool: {
     name: "Fool",
@@ -182,6 +190,7 @@ export const CHARACTERS = {
       "Each night, choose a player (not yourself or Travellers): you learn 1 good & 1 evil character, 1 of which is correct.",
     info: "ongoing",
     kill: "high",
+    vsLegion: true,
   },
   snakecharmer: {
     name: "Snake Charmer",
@@ -219,6 +228,7 @@ export const CHARACTERS = {
     ability: "Each night*, you learn how many dead players are evil.",
     info: "ongoing",
     kill: "high",
+    vsLegion: true,
   },
   savant: {
     name: "Savant",
@@ -227,6 +237,7 @@ export const CHARACTERS = {
       "Each day, you may visit the Storyteller to learn 2 things in private: 1 is true & 1 is false.",
     kill: "high",
     neverHides: true,
+    vsLegion: true,
   },
   seamstress: {
     name: "Seamstress",
@@ -236,6 +247,7 @@ export const CHARACTERS = {
     kill: "med",
     oncePerGame: { AFTER_DAY: 1, START_CHANCE: 0.5, STEP_CHANCE: 0.25 }, // night
     publicInfo: 0.5,
+    vsLegion: true,
   },
   philosopher: {
     name: "Philosopher",
@@ -244,6 +256,7 @@ export const CHARACTERS = {
       "Once per game, at night, choose a good character: gain that ability. If this character is in play, they are drunk.",
     kill: "med",
     oncePerGame: { AFTER_DAY: 1, START_CHANCE: 1, STEP_CHANCE: 0 }, // night
+    vsLegion: true,
   },
   juggler: {
     name: "Juggler",
@@ -345,6 +358,7 @@ export const CHARACTERS = {
     info: "first",
     kill: "med",
     publicInfo: 0.5,
+    vsLegion: true,
   },
   pixie: {
     name: "Pixie",
@@ -354,6 +368,31 @@ export const CHARACTERS = {
     kill: "med",
     neverHiddenAs: true,
     notForHuman: true,
+  },
+  highpriestess: {
+    name: "High Priestess",
+    team: "townsfolk",
+    ability:
+      "Each night, learn which player the Storyteller believes you should talk to most.",
+    info: "ongoing",
+    kill: "med",
+  },
+  villageidiot: {
+    name: "Village Idiot",
+    team: "townsfolk",
+    ability:
+      "Each night, choose a player: you learn their alignment. [+0 to +2 Village Idiots. 1 of the extras is drunk]",
+    info: "ongoing",
+    kill: "high",
+    vsLegion: true,
+  },
+  magician: {
+    name: "Magician",
+    team: "townsfolk",
+    ability:
+      "The Demon thinks you are a Minion. Minions think you are a Demon.",
+    kill: "low", // the evil team thinks they're a teammate
+    notForHuman: true, // the evil team's confusion is the NPCs'
   },
   balloonist: {
     name: "Balloonist",
@@ -378,6 +417,7 @@ export const CHARACTERS = {
       "Once per game, during the day, visit the Storyteller for some advice to help your team win.",
     kill: "med",
     oncePerGame: { AFTER_DAY: 1, START_CHANCE: 0.4, STEP_CHANCE: 0.3 }, // day
+    vsLegion: true,
   },
   huntsman: {
     name: "Huntsman",
@@ -626,6 +666,13 @@ export const CHARACTERS = {
       "You think you are a good character, but you are not. The Demon knows who you are. [You neighbour the Demon]",
     kill: "avoid", // thinks they're good: a hidden teammate
   },
+  mezepheles: {
+    name: "Mezepheles",
+    team: "minion",
+    ability:
+      "You start knowing a secret word. The 1st good player to say this word becomes evil that night.",
+    kill: "avoid",
+  },
   imp: {
     name: "Imp",
     team: "demon",
@@ -681,6 +728,12 @@ export const CHARACTERS = {
     team: "demon",
     ability:
       "Each night*, you may choose a player: they die. If your last choice was no-one, choose 3 players tonight.",
+  },
+  legion: {
+    name: "Legion",
+    team: "demon",
+    ability:
+      "Each night*, a player might die. Executions fail if only evil voted. You register as a Minion too. [Most players are Legion]",
   },
   sentinel: {
     name: "Sentinel",
