@@ -1003,6 +1003,19 @@ const idiotText = (t, isEvil) =>
 
 const priestessText = (t) => `High Priestess: talk to ${t.label}.`;
 
+// The players p's `role` information named on earlier nights, as far as
+// they've learned or said it: their own information, or what they made up
+// (a cover story, madness, a mad Pixie, a hiding Mutant or Damsel). So a
+// Village Idiot or High Priestess doesn't get the same player again.
+export function shownBefore(s, p, role) {
+  return new Set(
+    [p.memories, p.cover?.memories, p.hideInfo?.memories, p.pixieMemories, p.mad?.memories]
+      .flat()
+      .filter((m) => m && m.role === role && !m.day && m.night < s.night)
+      .flatMap((m) => m.targets ?? []),
+  );
+}
+
 // Whether the High Priestess would do well to talk to x: an evil player
 // (whose bluff may not hold up), or a good player whose information is
 // wrong (drunk or poisoned) or points at an evil player.
@@ -1024,7 +1037,11 @@ function worthTalking(s, x) {
 // (`truth` false), a good player who isn't worth it; an evil bluffer names
 // a teammate, who backs them up.
 function priestessPick(s, p, truth = true) {
-  const pool = s.players.filter((x) => x.alive && !x.human && x !== p);
+  // (Never one they were shown before, while there's anyone else.)
+  const living = s.players.filter((x) => x.alive && !x.human && x !== p);
+  const seen = shownBefore(s, p, "highpriestess");
+  const unseen = living.filter((x) => !seen.has(x.id));
+  const pool = unseen.length ? unseen : living;
   const helps = (x) => (worthTalking(s, x) ? "good" : "evil");
 
   if (!truth) {
@@ -1037,7 +1054,15 @@ function priestessPick(s, p, truth = true) {
   const side = lean(s) ?? "good";
   const better = pool.filter((x) => helps(x) === side);
 
-  if (lean(s) && better.length && better.length < pool.length) {
+  // (Only noted when it's what they'll learn: a misinformed High Priestess
+  // learns something else; see nightInfo().)
+  if (
+    lean(s) &&
+    works(p) &&
+    !(team(p.role) === "townsfolk" && vortoxActive(s)) &&
+    better.length &&
+    better.length < pool.length
+  ) {
     leanNote(
       s,
       `who ${whose(p)} High Priestess should talk to: one of ${bySeat(better)
@@ -1787,10 +1812,15 @@ function falseInfo(s, p, role, strat, helpEvil = false) {
       : { targets: [], text: "No information." };
   }
 
-  // Never more evil dead than there are dead.
+  // Never more evil dead than there are dead, and never fewer than they
+  // said before (the dead don't come back), so the lie can't be caught out.
   if (role === "oracle") {
     const n = deadEvil(s);
-    const said = wrongNumber(s, n, range(0, deadCount(s))) ?? n;
+    const least = Math.min(p.oracleSaid ?? 0, deadCount(s));
+    const said =
+      wrongNumber(s, n, range(least, deadCount(s))) ?? Math.max(n, least);
+
+    p.oracleSaid = said;
 
     return { targets: [], text: oracleText(said) };
   }
@@ -1940,10 +1970,10 @@ function unreliableInfo(s, p, role, targets) {
   }
 
   if (role === "highpriestess") {
-    const t = pick(
-      s.players.filter((x) => x.alive && !x.human && x.id !== p.id),
-      s.r,
-    );
+    const living = s.players.filter((x) => x.alive && !x.human && x.id !== p.id);
+    const seen = shownBefore(s, p, "highpriestess");
+    const unseen = living.filter((x) => !seen.has(x.id));
+    const t = pick(unseen.length ? unseen : living, s.r);
 
     return t
       ? { targets: [t.id], text: priestessText(t) }

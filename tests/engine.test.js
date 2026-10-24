@@ -9243,3 +9243,63 @@ test("a Drunk shown the Pixie acts as a Pixie: mad about their Townsfolk, never 
   e.execute(drunk);
   assert.ok(s.publicLog.some((x) => x.includes("reveals they were the Pixie")));
 });
+
+test("an Oracle bluff never says fewer dead players are evil than it said before", () => {
+  for (let seed = 0; seed < 40; seed++) {
+    const { s, p, strat } = trNight(`oracle-bluff-${seed}`, [null, null, "chef", "noble"], 2);
+    const imp = p[4];
+    let last = 0;
+
+    imp.claim = "oracle";
+
+    for (let night = 2; night <= 5; night++) {
+      s.night = night;
+
+      if (night === 3) {
+        p[2].alive = false;
+      }
+
+      if (night === 4) {
+        p[3].alive = false;
+      }
+
+      const n = Number(/(\d+) dead/.exec(bluffInfo(s, imp, strat).text)[1]);
+
+      assert.ok(n >= last, `seed ${seed}, night ${night}: ${n} after ${last}`);
+      assert.ok(n <= s.players.filter((x) => !x.alive).length);
+      last = n;
+    }
+  }
+});
+
+test("a Marionette who doesn't know isn't recorded as lying to you", () => {
+  const { s, p, e } = trNight("marionette-lie", [null, "marionette"], 1);
+  const m = p[1];
+
+  m.shown = "chef";
+  m.claim = "chef";
+  s.phase = "day";
+  s.day = 1;
+  e.ask(m.id);
+
+  assert.ok(!(s.liesToYou ?? []).some((x) => x.byId === m.id));
+});
+
+test("a Village Idiot and a High Priestess never get the same player twice while there's anyone else", () => {
+  for (const role of ["villageidiot", "highpriestess"]) {
+    const { s, p, strat } = trNight(`no-repeat-${role}`, [null, role], 1);
+    const seen = [];
+
+    for (let night = 1; night <= 3; night++) {
+      s.night = night;
+
+      const info = nightInfo(s, p[1], strat);
+
+      p[1].memories.push(info);
+      seen.push(info.targets[0]);
+    }
+
+    // (4 others to choose from, never you: 3 nights, 3 different players.)
+    assert.equal(new Set(seen).size, 3, `${role}: ${seen}`);
+  }
+});

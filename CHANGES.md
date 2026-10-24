@@ -2,6 +2,18 @@
 
 Newest first.
 
+## Bug Fixes: Oracle Bluffs, Marionette, Cover Stories & Logging
+
+- An evil Oracle bluffer never says fewer dead players are evil than they said before: the dead don't come back, so a count that went down (2, then 0) gave the lie away. It's still never more than the number of dead players. The same holds for a drunk or poisoned Oracle's wrong answer.
+- High Priestess: never shown a player she was shown before, while there's anyone else (about 30% of nights repeated one before). The same goes for her made-up information, and an evil bluffer's.
+- Village Idiot: never checks a player they checked before, while there's anyone else. Repeats were rare for a working one, but a drunk one's and an evil bluffer's ran out of fresh players early: every pick counted, even ones that never reached their information. It now goes by what they've learned or said (`shownBefore()` in src/storyteller.js), and they pick one player a night.
+- Vigormortis (checked, no change): a Minion it kills poisons exactly one Townsfolk, the nearest one on either side, alive or dead (825 test kills, every one right).
+- A Marionette who doesn't know they're the Marionette is no longer listed as having lied to you (in the log's clues and the final reveal) when they claim the Townsfolk they believe they are. Once the Demon has told them, their claim counts as a bluff, as before.
+- Cover stories: two good players could hide behind (or bait as) the same character, in one test game three of them as the Ravenkeeper, so each looked like a liar to the town. A cover story now never uses a character someone else's cover story already uses. Checked over 640 games on every script: none shared.
+- log.txt:
+  - When you first talk to someone with a cover story, it says whether they drop it for you ("Player 5 tells you the truth: they're the Village Idiot, not the Ravenkeeper") or keep it, decided once at COVER_TELL_HUMAN_CHANCE. Before, a player listed as baiting as the Monk who told you they're the Ravenkeeper looked like a mistake.
+  - The Storyteller's choice of who a High Priestess should talk to is only noted when that's what they learn. Before, it was noted for a drunk High Priestess (or a Marionette who thinks they're one), whose information was something else.
+
 ## UI Fix: Death Shroud Size
 
 - Death shroud: 25% bigger, 50% of the seat's width (was 40%), still in proportion to the seat at any size.

@@ -79,6 +79,7 @@ import {
   atFinal,
   works,
   bluffing,
+  shownBefore,
 } from "./storyteller.js";
 import { byId, pick, sample, claimTo, claimHeard, tick } from "./util.js";
 import {
@@ -1240,8 +1241,10 @@ export class SimpleStrategy {
       return null;
     }
 
+    // (Nor anyone else's cover story: two good players claiming it would
+    // each look like a liar.)
     const used = new Set([
-      ...s.players.flatMap((x) => [x.role, x.shown, x.claim]),
+      ...s.players.flatMap((x) => [x.role, x.shown, x.claim, x.cover?.as]),
       ...(s.demonBluffs ?? []),
     ]);
     const fits = (id) => {
@@ -1433,7 +1436,8 @@ export class SimpleStrategy {
     // For the final reveal: a cover story, or an evil player's bluff.
     if (hidden) {
       lied(s, { kind: p.cover.kind, byId: p.id, said: a.claim, truth: p.claim });
-    } else if (!mad && p.alignment === "evil" && a.claim !== p.role) {
+    } else if (!mad && sideOf(p) === "evil" && p.alignment === "evil" && a.claim !== p.role) {
+      // (Not a Marionette who doesn't know: they believe their claim.)
       lied(s, { kind: "bluff", byId: p.id, said: a.claim, truth: p.role });
     }
 
@@ -2614,17 +2618,26 @@ export class SimpleStrategy {
   // The Dreamer looks into someone they suspect (not last night's pick).
   // The Village Idiot learns a player's alignment: a good NPC, their
   // suspect if they haven't checked them yet, else someone they haven't;
-  // an evil bluffer "checks" the scapegoat first. Never you.
+  // an evil bluffer "checks" the scapegoat first. Never you, and never a
+  // player they checked before while there's anyone else (going by what
+  // they've learned or said: see shownBefore()). The same player all night,
+  // however often it's asked (a misinformed one's true and false answers).
   villageIdiot(s, p) {
-    const fresh = this.fresh(p, "villageidiot", this.others(s, p));
+    if (p.idiotPick?.night === s.night && byId(s, p.idiotPick.id)?.alive) {
+      return byId(s, p.idiotPick.id);
+    }
+
+    const all = this.others(s, p);
+    const checked = shownBefore(s, p, "villageidiot");
+    const unchecked = all.filter((x) => !checked.has(x.id));
+    const pool = unchecked.length ? unchecked : all;
     const want =
       sideOf(p) === "evil" ? scapegoat(s) : byId(s, p.suspicion?.targetId);
+    const t = pool.includes(want) ? want : pick(pool, s.r);
 
-    return this.noted(
-      p,
-      "villageidiot",
-      fresh.includes(want) ? want : pick(fresh, s.r),
-    );
+    p.idiotPick = t ? { night: s.night, id: t.id } : null;
+
+    return t;
   }
 
   dream(s, p) {

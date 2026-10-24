@@ -1150,7 +1150,22 @@ export class Engine {
     }
 
     // (In private: only you learn their claim; see claimTo().)
+    const firstWithCover = p.cover && p.cover.human === undefined;
     const response = this.strat.ask(s, p);
+
+    // Whether someone with a cover story drops it for you is decided the
+    // first time you talk (see strategy truthTo()): the log says which.
+    if (firstWithCover && p.cover?.human !== undefined) {
+      this.audit(
+        "cover",
+        p.cover.human
+          ? `${p.label} tells you the truth: they're the ${name(p.claim)}, not the ${name(
+              p.cover.as,
+            )} (decided once, at COVER_TELL_HUMAN_CHANCE).`
+          : `${p.label} keeps their cover story with you: the ${name(p.cover.as)} (decided once, at COVER_TELL_HUMAN_CHANCE).`,
+        { playerId: p.id },
+      );
+    }
 
     p.talks.push({
       day: s.day,
@@ -1698,7 +1713,7 @@ export class Engine {
         // For the final reveal: a cover story, or an evil player's bluff.
         if (a.hidden) {
           lied(s, { kind: p.cover.kind, byId: p.id, said: claim, truth: p.claim });
-        } else if (!a.mad && p.alignment === "evil" && claim !== p.role) {
+        } else if (!a.mad && sideOf(p) === "evil" && p.alignment === "evil" && claim !== p.role) {
           lied(s, { kind: "bluff", byId: p.id, said: claim, truth: p.role });
         }
       }
