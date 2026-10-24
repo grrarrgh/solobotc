@@ -34,6 +34,13 @@ input {
   border-radius: 7px;
 }
 
+/* A button you can't press yet (Nominate with no player selected, say)
+   looks it. */
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* ── Town square ─────────────────────────────────────────── */
 
 .town-square-wrap {
@@ -1051,13 +1058,17 @@ input {
   display: none;
 }
 
-/* Nominate and Request nomination: their own row, at the bottom (once
-   nominations have started). */
+/* Nominate, Request nomination and NPC nominations: their own row, below
+   End day (once nominations have started), shown whether or not a player
+   is selected. */
 .nomination-controls[hidden] {
   display: none;
 }
 
 .nomination-controls {
+  max-width: 650px;
+  margin-left: auto;
+  margin-right: auto;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;

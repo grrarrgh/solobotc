@@ -1098,10 +1098,11 @@ function reveal() {
     return;
   }
 
-  // When the game ends, collapse the Public log and show the Final reveal
-  // collapsed too.
+  // When the game ends, collapse the Storyteller and Public log sections,
+  // and show the Final reveal collapsed too.
   if (!shownGameOver) {
     shownGameOver = true;
+    $("private-panel").open = false;
     $("public-panel").open = false;
     $("reveal-panel").open = false;
   }
@@ -1372,7 +1373,7 @@ function draw() {
 
   $("start-nominations").hidden = open || s.phase !== "day";
   $("start-nominations").disabled = !!voteAnim || nominating;
-  $("nomination-controls").hidden = !open;
+  $("nomination-controls").hidden = !open || !!s.winner || !!s.pending;
   $("npc-nominations").textContent = `NPC nominations ${s.npcWanting ?? 0}`;
   $("npc-nominations").disabled =
     !s.npcWanting || !!voteAnim || nominating || !!s.winner;
@@ -1518,6 +1519,7 @@ function resetGame() {
     $("phase-dialog").close();
   }
 
+  $("private-panel").open = true;
   $("public-panel").open = true;
 
   $("night-choice").hidden = true;

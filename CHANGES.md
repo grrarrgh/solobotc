@@ -2,6 +2,12 @@
 
 Newest first.
 
+## UI Fix: Nomination Buttons
+
+- Once nominations have started, the nomination buttons (Nominate, Request nomination, NPC nominations) are always shown, whether or not a player is selected. They're now just below End day. Before, they were in the selected-player panel, so they vanished when nobody was selected. Nominate and Request nomination are disabled until you select a player; NPC nominations is disabled while no NPC wants to nominate. (Nominate is still hidden once you're dead: you can only request nominations.)
+- When the game is over, the Storyteller section collapses, as the Public log does (click its title to open it). It's now a collapsible panel like the Public log.
+- Disabled buttons now look it (faded, with no pointer), everywhere: before, a button you couldn't press looked just like one you could.
+
 ## New Script: Catfishing
 
 - New script: Catfishing (scripts/Catfishing_11_1_1.json), with 3 new characters. Its 5 Travellers (Apprentice, Barista, Beggar, Bone Collector, Harlot) are left out: Travellers aren't supported, so any script's Travellers are skipped when it loads (`TRAVELLERS` in src/data.js).

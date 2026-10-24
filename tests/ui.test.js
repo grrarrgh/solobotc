@@ -99,10 +99,10 @@ test("a conversation ends with Share My Info and Leave conversation", () => {
   assert.match(html, /id="share-info"[^>]*>Share My Info</);
   assert.match(html, /id="leave-conversation"[^>]*>Leave conversation</);
   assert.match(app, /e\.tell\(talkingTo, e\.human\(\)\.claim, true\)/);
-  // Nominations get their own row, below your Good / Evil mark.
+  // Nominations get their own row, below End day.
   assert.match(
     html,
-    /id="mark"[\s\S]*id="nomination-controls"[\s\S]*id="nominate"[\s\S]*id="request-nomination"/,
+    /id="pass"[\s\S]*id="nomination-controls"[\s\S]*id="nominate"[\s\S]*id="request-nomination"[\s\S]*id="savant"/,
   );
 });
 
@@ -144,6 +144,12 @@ test("nominations animate clock hands, mark with a skull, and End day executes",
   assert.doesNotMatch(html, /id="request-nomination" hidden/);
   // Nominate and Request nomination only once nominations have started.
   assert.match(html, /id="nomination-controls" class="nomination-controls" hidden/);
+  // ...then always shown, below End day (outside the selected-player panel):
+  // Nominate and Request nomination wait for a selection.
+  const actions = html.match(/<section id="actions"[\s\S]*?<\/section>/)[0];
+
+  assert.doesNotMatch(actions, /id="nomination-controls"/);
+  assert.match(app, /const blocked = !t \|\|/);
   assert.match(css, /\.nomination-controls\[hidden\]/);
 });
 
@@ -152,6 +158,8 @@ test("game over: the status says Game Over!, and the logs collapse", () => {
   assert.match(html, /id="public-panel"[^>]*open/);
   assert.match(html, /id="reveal-panel"/);
   assert.match(app, /\$\("public-panel"\)\.open = false/);
+  assert.match(html, /id="private-panel"[^>]*open/);
+  assert.match(app, /\$\("private-panel"\)\.open = false/);
   assert.match(app, /\$\("reveal-panel"\)\.open = false/);
 });
 
