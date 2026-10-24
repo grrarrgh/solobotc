@@ -3,6 +3,7 @@ import {
   works,
   infoMode,
   savantInfo,
+  savantBluff,
   bluffing,
 } from "../../storyteller.js";
 
@@ -27,7 +28,7 @@ export const savant = {
       } else {
         const spy = p.role === "spy" && works(p);
 
-        this.rememberBluff(p, savantInfo(s, p, spy ? "truth" : "lie"));
+        this.rememberBluff(p, spy ? savantInfo(s, p, "truth") : savantBluff(s, p));
       }
     }
   },

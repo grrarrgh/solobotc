@@ -440,17 +440,17 @@ export const BARBER_MIN_GAIN = 0.5;
 
 // Vote animation: how long (in ms) the clock hands point at the nominator
 // and nominee before the large hand starts counting votes.
-export const VOTE_COUNT_DELAY_MS = 500;
+export const VOTE_COUNT_DELAY_MS = 750;
 
 // Vote animation: how long (in ms) the large hand takes per seat as it
 // counts votes. (A voter's hand goes up just before the clock hand arrives.)
-export const VOTE_TICK_MS = 350;
+export const VOTE_TICK_MS = 450;
 
 // Vote: how long (in ms) you have to raise your hand (it starts lowered)
 // before the votes are counted; you can still raise or lower it as they're
 // counted, until the clock hand reaches you. Skipped when you can't vote
 // (dead, with your ghost vote spent).
-export const HAND_WAIT_MS = 3000;
+export const HAND_WAIT_MS = 4000;
 
 // The Boomdandy's countdown: how long (in ms) you have to select the living
 // player you point at. When it runs out, whoever has the most players

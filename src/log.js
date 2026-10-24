@@ -104,7 +104,7 @@ function stateLines(players, rename) {
             { hide: "hiding as", bait: "baiting as", decoy: "a decoy as" }[p.cover.kind]
           } ${name(p.cover.as)})`
         : ""
-    }`,
+    }${p.mad ? ` (mad as ${name(p.mad)})` : ""}`,
     p.alignment,
     [
       p.alive ? "alive" : "DEAD",

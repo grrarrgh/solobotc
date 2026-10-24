@@ -10,7 +10,7 @@ import {
 } from "./data.js";
 import { ability, works, madInfo, isDemon } from "./storyteller.js";
 import { speak, heard } from "./strategy.js";
-import { pick } from "./util.js";
+import { pick, tick } from "./util.js";
 
 // Minions keep acting after death if the Vigormortis killed them.
 export const acts = (x) => x.alive || x.vigor;
@@ -109,7 +109,19 @@ export const abilities = {
         continue;
       }
 
-      if (p.human || !p.alive || !before || before === (p.cover?.as ?? p.claim)) {
+      if (!p.human && wasMad) {
+        this.explainMadness(p, wasMad, before === wasMad);
+      }
+
+      // (Dead or alive, a player whose madness was public explains it.)
+      const publicMadness = wasMad && before === wasMad;
+
+      if (
+        p.human ||
+        (!p.alive && !publicMadness) ||
+        !before ||
+        before === (p.cover?.as ?? p.claim)
+      ) {
         continue;
       }
 
@@ -132,6 +144,40 @@ export const abilities = {
     }
   },
 
+  // When p's madness about `role` ends, they explain it to everyone they
+  // told it in private (you included): "Yesterday the Cerenovus made me mad
+  // as the X, I am actually the Y". Anyone who heard it, there or in public
+  // (`inPublic`; see announceClaims()), no longer holds the changed story
+  // against them (see strategy evidence()).
+  explainMadness(p, role, inPublic) {
+    const s = this.s;
+    const claim = p.cover?.as ?? p.claim;
+    const said = `"Yesterday the Cerenovus made me mad as the ${name(
+      role,
+    )}, I am actually the ${name(claim)}."`;
+    const listeners = s.players.filter(
+      (x) => x !== p && x.toldMe?.[p.id]?.claim === role,
+    );
+
+    (p.madAbout ??= []).push(role);
+
+    for (const x of listeners) {
+      x.toldMe[p.id] = { claim, day: s.day, at: tick(s), was: role };
+    }
+
+    if (inPublic || !listeners.length) {
+      return;
+    }
+
+    if (listeners.some((x) => x.human)) {
+      s.publicLog.push(`Day ${s.day} — ${p.label} tells you: ${said}`);
+    }
+
+    this.audit("claim", `${p.label} tells ${listeners
+      .map((x) => (x.human ? "you" : x.label))
+      .join(", ")}: ${said}`, { playerId: p.id, from: role, to: claim });
+  },
+
   // In bigger games (PUBLIC_INFO_MIN_SEATS+), an NPC with first-night (or
   // spent) information may share it in public the morning they get it, at
   // PUBLIC_INFO_CHANCE for their character. Evil bluffers share their bluffed
@@ -146,7 +192,10 @@ export const abilities = {
     for (const p of s.players) {
       const news = p.memories.filter(
         (m) =>
-          m.night === s.night && !m.day && PUBLIC_INFO_CHANCE[m.role] !== undefined,
+          m.night === s.night &&
+          !m.day &&
+          !m.shared &&
+          PUBLIC_INFO_CHANCE[m.role] !== undefined,
       );
 
       // (A cover story stays a secret.)
@@ -171,12 +220,51 @@ export const abilities = {
     }
   },
 
+  // At dawn, an NPC who died in the night claiming the Ravenkeeper (the real
+  // one, or an evil bluffer) says so in public, with the
+  // character they learned, whatever the number of seats: it's the point of
+  // the claim. (A cover story stays a secret.)
+  ravenkeeperReveal() {
+    const s = this.s;
+
+    for (const p of s.players) {
+      const m = p.memories.findLast(
+        (x) => x.role === "ravenkeeper" && x.night === s.night,
+      );
+
+      if (
+        p.human ||
+        p.alive ||
+        p.diedAtNight !== s.night ||
+        p.cover ||
+        p.claim !== "ravenkeeper" ||
+        !m
+      ) {
+        continue;
+      }
+
+      const said = ` says: "I am the Ravenkeeper. Night ${m.night}: ${speak(m.text)}"`;
+
+      // (So shareInfo() doesn't share it again.)
+      m.shared = true;
+      this.claimPublicly(p);
+      heard(s, p, [m]);
+      s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
+      this.audit("share", `${p.label}${said}`, { playerId: p.id });
+    }
+  },
+
   // At dawn, a "mad" NPC switches their claim for the day, and makes up
-  // plausible information to go with it.
+  // plausible information to go with it. (Not one killed the night they were
+  // made mad as the Ravenkeeper: they come clean; see madRavenkeeper().)
   applyMadness() {
     const s = this.s;
 
     for (const p of s.players) {
+      if (this.madRavenkeeper(p)) {
+        continue;
+      }
+
       if (p.mad?.day === s.day && p.mad.previous === null) {
         p.mad.previous = p.claim;
         p.mad.memories = madInfo(s, p, p.mad.role, this.strat);

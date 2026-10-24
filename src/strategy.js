@@ -118,9 +118,10 @@ export const sideOf = (p) =>
   thinksEvil(p) ? "evil" : thinksGood(p) ? "good" : p.alignment;
 
 // Whether p (playing for evil) counts x as a teammate.
+// (The Lunatic counts themself: the Demon of their imagined team.)
 const teammate = (p, x) =>
   thinksEvil(p)
-    ? (p.lunaticTeam ?? []).includes(x.id)
+    ? x.id === p.id || (p.lunaticTeam ?? []).includes(x.id)
     : x.alignment === "evil";
 
 // Whether p has used the once-per-game ability of `role` (null if it has
@@ -167,6 +168,21 @@ export function speak(text) {
   }
 
   const rest = text.slice(prefix.length);
+
+  // An Amnesiac's guess or question, and (on its own line) what the
+  // Storyteller said.
+  const guessed = /^: guessed (".*"): (BINGO|HOT|WARM|COLD)\.$/.exec(rest);
+  const asked = /^: asked (".*"): (YES|NO)\.$/.exec(rest);
+
+  if (guessed) {
+    return `I guessed my ability is ${guessed[1]}\nAnd I got: ${guessed[2]}${
+      guessed[2] === "BINGO" ? "!" : "."
+    }`;
+  }
+
+  if (asked) {
+    return `I asked the Storyteller ${asked[1]}\nAnd I got: ${asked[2]}.`;
+  }
 
   if (rest.startsWith(" number: ")) {
     return `My number is ${rest.slice(" number: ".length)}`;
@@ -447,6 +463,11 @@ export const sure = (s) =>
     .filter(([, c]) => ["certain", "likely"].includes(c.level))
     .map(([id]) => id);
 
+// Whether x has said why they claimed `role`: they came clean about a cover
+// story, or explained the Cerenovus made them mad about it.
+const explained = (x, role) =>
+  x.cameClean?.from === role || (x.madAbout ?? []).includes(role);
+
 // How a player is named in a reason: "you" for the human.
 const who = (x) => (x.human ? "you" : x.label);
 const whose = (x) => (x.human ? "your" : `${x.label}'s`);
@@ -645,13 +666,15 @@ export class SimpleStrategy {
 
     if (other && other !== told.claim && !twins(p, t)) {
       add(
-        t.cameClean ? W.changedStoryCleared : W.changedStory,
+        t.cameClean || explained(t, other) || explained(t, told.claim)
+          ? W.changedStoryCleared
+          : W.changedStory,
         `they told me they're the ${name(told.claim)}, but they've also said the ${name(other)}`,
       );
     }
 
     // Passed on to p (see told()): someone says t told them otherwise
-    // (unless that was a cover story t has since come clean about)...
+    // (unless t has since explained it: see explained())...
     const passed = p.secondHand?.[t.id];
     const by = passed && byId(s, passed.fromId);
 
@@ -659,7 +682,7 @@ export class SimpleStrategy {
       by &&
       claim &&
       passed.claim !== claim &&
-      passed.claim !== t.cameClean?.from &&
+      !explained(t, passed.claim) &&
       !twins(p, t)
     ) {
       add(
@@ -677,7 +700,7 @@ export class SimpleStrategy {
         x.fromId === t.id &&
         known &&
         x.claim !== known &&
-        x.claim !== about.cameClean?.from
+        !explained(about, x.claim)
       ) {
         add(
           W.passedOnOtherwise,
@@ -1576,8 +1599,13 @@ export class SimpleStrategy {
         return s.r() < EVIL_VOTE_CHANCE;
       }
 
+      // (Tying the player already marked changes it too: nobody is marked.)
+      const tie =
+        s.block?.nomineeId && tally && tally.yes + 1 === s.block.count;
       const harmless =
-        tally && (tally.yes >= tally.needed || tally.yes + 1 < tally.needed);
+        tally &&
+        !tie &&
+        (tally.yes >= tally.needed || tally.yes + 1 < tally.needed);
 
       return Boolean(harmless) && s.r() < EVIL_TEAMMATE_VOTE_CHANCE;
     }

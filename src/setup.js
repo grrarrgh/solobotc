@@ -433,7 +433,17 @@ export function createState(
     );
 
     p.bluffs = sample(goods, 3, r);
-    p.claim = pick(p.bluffs, r) ?? p.claim;
+    // (Preferably one nobody is, or claims: a double claim would count
+    // against them, and against whoever else claims it.)
+    p.claim =
+      pick(
+        p.bluffs.filter((x) => !taken.has(x) && !tokens.has(x)),
+        r,
+      ) ??
+      pick(p.bluffs.filter((x) => !taken.has(x)), r) ??
+      pick(p.bluffs, r) ??
+      p.claim;
+    taken.add(p.claim);
     p.bluff = p.claim;
     p.lunaticTeam = shuffle(
       [

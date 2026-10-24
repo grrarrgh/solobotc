@@ -524,6 +524,8 @@ export class Engine {
 
     if (!s.winner) {
       this.coverStories();
+      this.madRavenkeeperClean();
+      this.ravenkeeperReveal();
       this.shareInfo();
       this.npcShots();
       this.npcArtists();
@@ -2285,8 +2287,10 @@ export class Engine {
       role: p.role,
       shown: p.shown,
       gained: p.gained,
-      claim: p.claim,
+      // (While mad: the claim they had, and go back to.)
+      claim: p.mad?.previous ?? p.claim,
       cover: p.cover ? { kind: p.cover.kind, as: p.cover.as } : null,
+      mad: p.mad?.role ?? null,
       alignment: p.alignment,
       alive: p.alive,
       drunk: isDrunk(p),

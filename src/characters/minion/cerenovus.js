@@ -34,6 +34,48 @@ export const cerenovus = {
     );
   },
 
+  // Whether NPC p was killed the night the Cerenovus made them mad as the
+  // Ravenkeeper (and hasn't yet said so).
+  madRavenkeeper(p) {
+    const s = this.s;
+
+    return (
+      !p.human &&
+      !p.alive &&
+      p.diedAtNight === s.night &&
+      p.mad?.day === s.day &&
+      p.mad.previous === null &&
+      p.mad.role === "ravenkeeper"
+    );
+  },
+
+  // At dawn, an NPC killed the night they were made mad as the Ravenkeeper
+  // doesn't pretend to have woken: they say in public they were made mad, and
+  // what they really are (a good player's character, ending any cover story;
+  // an evil player's bluff). The madness ends there.
+  madRavenkeeperClean() {
+    const s = this.s;
+
+    for (const p of s.players.filter((x) => this.madRavenkeeper(x))) {
+      if (p.alignment === "good") {
+        p.cover = null;
+      }
+
+      const claim = p.cover?.as ?? p.claim;
+      const said = ` says: "The Cerenovus made me mad as the Ravenkeeper last night, but I was killed. I am actually the ${name(claim)}."`;
+
+      p.mad = null;
+      (p.madAbout ??= []).push("ravenkeeper");
+      this.claimPublicly(p);
+      s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
+      this.audit("claim", `${p.label}${said}`, {
+        playerId: p.id,
+        from: "ravenkeeper",
+        to: claim,
+      });
+    }
+  },
+
   // At dusk, yesterday's madness ends: the player goes back to their claim.
   cerenovusLasting() {
     const s = this.s;

@@ -127,8 +127,9 @@ button:disabled {
   position: absolute;
   left: 50%;
   top: -2px; /* (level with the top of the seat's border) */
-  width: 54px;
-  height: 76px;
+  /* (In proportion to the seat, whatever its size.) */
+  width: 40%;
+  aspect-ratio: 54 / 76;
   transform: translateX(-50%);
   background: url("images/death-shroud.png") center top / contain no-repeat;
   opacity: 0.85;

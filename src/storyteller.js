@@ -4,6 +4,7 @@ import {
   ONGOING_INFO,
   FINAL_THREE_MARGIN,
   RECLUSE_SAGE_CHANCE,
+  COUNTS,
   name,
   team,
   alignment,
@@ -678,6 +679,106 @@ export function savantInfo(s, p, mode) {
     targets: [],
     trigger: "day",
     functioning: mode === "truth",
+  };
+}
+
+// An evil Savant bluffer's daily visit: two made-up statements, each one
+// true or false at random, but never one that hurts their team. A teammate
+// is only ever "good", or the character they claim; only a good player is
+// ever "evil" (never the evil team's scapegoat "good"); a character named is
+// never an evil one in play (that would give it away); the Demon is only
+// ever misplaced, never next to a teammate; and the Outsider count is only
+// true when no Minion changed it. Never the same statement twice, nor the
+// same kind of statement about a player twice (see p.savantSaid), and the
+// two are about different things. (The Lunatic's team is the one they
+// imagine, with themself as the Demon.)
+export function savantBluff(s, p) {
+  const lunatic = p.role === "lunatic";
+  const mine = (x) =>
+    lunatic
+      ? x === p || (p.lunaticTeam ?? []).includes(x.id)
+      : x.alignment === "evil";
+  const demon = lunatic ? p : s.players.find((x) => x.alive && isDemon(x));
+  const goat = lunatic ? null : scapegoat(s);
+  const inPlay = new Set(s.players.map((x) => x.role));
+  const said = new Set(p.savantSaid ?? []);
+  const options = [];
+  // `group`: what it's about (only one statement each a day); `keys`: what
+  // can't be said again.
+  const add = (group, kind, text, ids = []) => {
+    const keys = [text, ...ids.map((id) => `${kind}:${id}`)];
+
+    if (!keys.some((k) => said.has(k))) {
+      options.push({ group, keys, text, ids });
+    }
+  };
+
+  for (const x of s.players.filter((y) => y.alive && !y.human && y !== p)) {
+    if (x !== goat) {
+      add(x.id, "alignment", `${x.label} is good.`, [x.id]);
+    }
+
+    if (!mine(x)) {
+      add(x.id, "alignment", `${x.label} is evil.`, [x.id]);
+    }
+
+    const role = mine(x)
+      ? alignment(x.claim) === "good" && x.claim !== x.role
+        ? x.claim
+        : null
+      : pick(
+          s.script.ids.filter(
+            (id) =>
+              !(alignment(id) === "evil" && inPlay.has(id)) &&
+              !(x === goat && id === x.role),
+          ),
+          s.r,
+        );
+
+    if (role) {
+      add(x.id, "character", `${x.label} is the ${name(role)}.`, [x.id]);
+    }
+
+    const near = neigh(s, x);
+
+    if (demon && near.includes(demon)) {
+      add(x.id, "demon", `The Demon is not a neighbour of ${x.label}.`, [x.id]);
+    } else if (demon && !near.some(mine)) {
+      add(x.id, "demon", `The Demon is a neighbour of ${x.label}.`, [x.id]);
+    }
+  }
+
+  const outsiders = s.players.filter((y) => team(y.role) === "outsider").length;
+  const base = COUNTS[s.players.length]?.[1] ?? outsiders;
+
+  for (let n = Math.max(0, base - 1); n <= base + 1; n++) {
+    if (n !== outsiders || outsiders === base) {
+      add(
+        "outsiders",
+        "outsiders",
+        `There ${n === 1 ? "is 1 Outsider" : `are ${n} Outsiders`} in play.`,
+      );
+    }
+  }
+
+  const a = pick(options, s.r);
+  const b = a && pick(options.filter((o) => o.group !== a.group), s.r);
+
+  // (With nothing left to say, which takes many days, a plain lie.)
+  if (!b) {
+    return savantInfo(s, p, "lie");
+  }
+
+  p.savantSaid = [...said, ...a.keys, ...b.keys];
+
+  return {
+    day: s.day,
+    night: s.night,
+    role: "savant",
+    text: `Savant: one of these is true:\n"${a.text}"\n"${b.text}"`,
+    targets: [],
+    trigger: "day",
+    functioning: false,
   };
 }
 
@@ -1399,16 +1500,20 @@ function falseInfo(s, p, role, strat, helpEvil = false) {
 
   if (role === "grandmother") {
     // Vouch for an evil player (or anyone else) with a good character they
-    // don't have.
+    // don't have: the one they claim, so it backs them up instead of
+    // contradicting them.
     const g =
       pick(
         nameable(s, p).filter((x) => x.alignment === "evil"),
         s.r,
       ) ?? pick(nameable(s, p), s.r);
-    const shown = pick(
-      goodRoles(s).filter((id) => id !== g.role),
-      s.r,
-    );
+    const shown =
+      alignment(g.claim) === "good" && g.claim !== g.role
+        ? g.claim
+        : pick(
+            goodRoles(s).filter((id) => id !== g.role),
+            s.r,
+          );
 
     return { targets: [g.id], text: grandchildText(g, shown) };
   }

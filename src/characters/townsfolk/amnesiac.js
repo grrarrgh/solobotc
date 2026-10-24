@@ -1,13 +1,14 @@
-import { ability, amnesiacKey } from "../../storyteller.js";
+import { ability, amnesiacKey, bluffing } from "../../storyteller.js";
 
 // The Amnesiac's secret abilities: at setup, the Storyteller gives each
 // Amnesiac one of these. Each night they learn something, said without
 // saying what it means ("Amnesiac: YES.", "Amnesiac: Player 5.",
 // "Amnesiac number: 1."), and each day they may guess their ability from
 // AMNESIAC_GUESSES, or ask a question about it (AMNESIAC_QUESTIONS).
-// `shape` is what the information looks like (AMNESIAC_SHAPES): a guess
-// that's wrong but looks the same (the same shape) is "close"; any other
-// wrong guess is "not close". `about` is what it's about, for questions.
+// `shape` is what the information looks like (AMNESIAC_SHAPES), and `about`
+// is what it's about, for questions and for how close a guess is: BINGO
+// (right), HOT (wrong, but its information looks the same), WARM (it looks
+// different, but it's about the same thing) or COLD.
 export const AMNESIAC_ABILITIES = {
   neighbours: {
     text: "Each night, you learn if either of your alive neighbours is evil.",
@@ -111,10 +112,11 @@ export const amnesiacShape = (text) =>
 // AMNESIAC_ABILITIES above (its information is in storyteller.js).
 export const amnesiac = {
   // p guesses their ability is AMNESIAC_GUESSES[guess]: the Storyteller says
-  // if it's correct, close (wrong, but its information looks the same) or
-  // not close. (Always truly, even if drunk or poisoned.) Once they're
-  // right, they know what their information means.
-  amnesiacGuess(p, guess) {
+  // BINGO, HOT, WARM or COLD (see above). (Always truly, even if drunk or
+  // poisoned.) Once they're
+  // right, they know what their information means. An evil player bluffing
+  // the Amnesiac (`bluff`) guesses at the ability they pretend to have.
+  amnesiacGuess(p, guess, bluff = false) {
     const s = this.s;
     const g = AMNESIAC_GUESSES[guess];
 
@@ -123,12 +125,15 @@ export const amnesiac = {
     }
 
     const key = amnesiacKey(s, p);
+    const real = AMNESIAC_ABILITIES[key];
     const said =
       guess === key
-        ? "correct"
-        : g.shape === AMNESIAC_ABILITIES[key].shape
-          ? "close"
-          : "not close";
+        ? "BINGO"
+        : g.shape === real.shape
+          ? "HOT"
+          : g.about.some((x) => real.about.includes(x))
+            ? "WARM"
+            : "COLD";
 
     p.amnesiacDay = s.day;
     (p.amnesiacGuessed ??= []).push(guess);
@@ -152,7 +157,11 @@ export const amnesiac = {
       functioning: true,
     };
 
-    this.remember(p, info);
+    if (bluff) {
+      this.rememberBluff(p, info);
+    } else {
+      this.remember(p, info);
+    }
 
     return info;
   },
@@ -186,7 +195,8 @@ export const amnesiac = {
     return info;
   },
 
-  // Good NPC Amnesiacs guess at dawn each day, until they're right.
+  // Good NPC Amnesiacs guess at dawn each day, until they're right, and so
+  // do NPCs bluffing the Amnesiac, so they have guesses to tell too.
   npcAmnesiacs() {
     const s = this.s;
 
@@ -194,8 +204,8 @@ export const amnesiac = {
       (x) =>
         !x.human &&
         x.alive &&
-        x.alignment === "good" &&
-        ability(x) === "amnesiac" &&
+        ((x.alignment === "good" && ability(x) === "amnesiac") ||
+          bluffing(x, "amnesiac")) &&
         !x.amnesiacKnown &&
         x.amnesiacDay !== s.day,
     )) {
@@ -204,7 +214,7 @@ export const amnesiac = {
       const guess = this.strat.amnesiacGuess(s, p);
 
       if (guess) {
-        this.amnesiacGuess(p, guess);
+        this.amnesiacGuess(p, guess, ability(p) !== "amnesiac");
       }
     }
   },

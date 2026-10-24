@@ -2,6 +2,21 @@
 
 Newest first.
 
+## Bug Fixes: Madness, Ravenkeeper, Evil Votes & Bluffs, Amnesiac, Death Shroud
+
+- Cerenovus madness in the debug log: the Player states Claims column shows it ("Fortune Teller (mad as Ravenkeeper)"). Before, a mad claim never showed (madness starts at dawn and ends at dusk, between tables), except at Game Over, where it looked like a real claim.
+- When a player's madness ends, they explain it ("Yesterday the Cerenovus made me mad as the Savant, I am actually the Balloonist."), dead or alive: in public if they had claimed in public, else to everyone they told in private, you included (in your Public log). Their changed story then counts as much as a cover story they came clean about (changedStoryCleared), and so does anyone passing on the mad claim. Before, only a living player who'd claimed in public explained, so a good player made mad was suspected for the rest of the game.
+- A player killed the night they're made mad as the Ravenkeeper comes clean at dawn, in public, with their character (or an evil player's bluff): "The Cerenovus made me mad as the Ravenkeeper last night, but I was killed. I am actually the Fortune Teller." The madness ends there. Before, they claimed the Ravenkeeper all day with "I have no stored information."
+- A player who dies at night claiming the Ravenkeeper (the real one, or an evil bluffer) says so in public at dawn, with the character they learned, in any size of game ("Player 5 says: "I am the Ravenkeeper. Night 2: Player 3 is Gambler.""). Before, it only came out at 12+ seats, at PUBLIC_INFO_CHANCE.
+- Evil votes: an evil NPC no longer votes for a teammate when their vote would tie the player already marked (so nobody is marked). Before, the Imp could vote for themself to a tie and save the player the evil team was framing.
+- The Lunatic counts themself on their imagined team, so they never vote to execute themself.
+- An evil Grandmother bluffer names their grandchild as the character that player claims. Before, it was a random good character, which contradicted their own teammate's claim.
+- An evil Savant bluffer's statements are made up at random, each true or false, but never one that hurts their team (`savantBluff()`). A teammate is only ever "good", or the character they claim; only a good player is ever "evil", and the evil team's scapegoat is never "good"; a character named is never an evil one in play; the Demon is only ever misplaced, and never put next to a teammate; the Outsider count is only true when no Minion changed it. No statement is ever repeated, nor the same kind of statement about the same player, and a day's two are about different things. Before, both were always false, which you could catch.
+- The Lunatic claims one of their bluffs that nobody is and nobody claims, when there is one. Before, they often double-claimed with the Demon (or a real good player).
+- Amnesiac guesses: the Storyteller now answers BINGO (right), HOT (wrong, but the information looks the same; was "close"), WARM (it looks different, but it's about the same thing: neighbours, the Demon, or who is good or evil) or COLD (was "not close"), for you and the NPCs.
+- Amnesiac conversations: an NPC says what they guessed or asked, with the Storyteller's answer on its own line ("Day 1: I guessed my ability is "…"" / "And I got: HOT."; "I asked the Storyteller "Is my ability about the Demon?"" / "And I got: NO."). An evil NPC (or the Lunatic) bluffing the Amnesiac now makes daily guesses too, so they have the same to tell.
+- Death shroud: smaller (40% of the seat's width, was 54px on a 92px seat), in proportion to the seat at any size.
+
 ## Fixes: Round Robin Log, Dreamer Bluffs, Evil Twin & Widow
 
 - Round Robin: the Public Log shows it as one entry, in seat order, from the "Round Robin:" line to the last seat. (Before, each player was a separate line, so the newest-first log showed it backwards, with the "Round Robin:" line last.)

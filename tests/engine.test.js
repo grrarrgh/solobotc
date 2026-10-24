@@ -46,6 +46,7 @@ import {
   scapegoat,
   evilTwinInfo,
   sageInfo,
+  savantBluff,
 } from "../src/storyteller.js";
 import { shuffle, sample, rng, byId } from "../src/util.js";
 
@@ -7150,10 +7151,11 @@ test("the Amnesiac's information doesn't say what it means, and guesses say how 
 
   s.phase = "day";
   s.day = 1;
-  assert.match(e.amnesiacGuess(p[1], "neighbours").text, /: not close\.$/);
+  assert.match(e.amnesiacGuess(p[1], "neighbours").text, /: WARM\.$/);
+  assert.match(e.amnesiacGuess(p[1], "demonsteps").text, /: COLD\.$/);
   assert.ok(!p[1].memories[0].known);
-  assert.match(e.amnesiacGuess(p[1], "evilplayer").text, /: close\.$/);
-  assert.match(e.amnesiacGuess(p[1], "goodplayer").text, /: correct\.$/);
+  assert.match(e.amnesiacGuess(p[1], "evilplayer").text, /: HOT\.$/);
+  assert.match(e.amnesiacGuess(p[1], "goodplayer").text, /: BINGO\.$/);
   assert.ok(p[1].memories[0].known);
 
   // Once they know, a good player they learned is trusted.
@@ -7185,7 +7187,7 @@ test("the human Amnesiac guesses once a day", () => {
   p[0].amnesiac = "neighbours";
   s.phase = "day";
   s.day = 1;
-  assert.match(e.amnesiac("neighbours"), /: correct\.$/);
+  assert.match(e.amnesiac("neighbours"), /: BINGO\.$/);
   assert.throws(() => e.amnesiac("goodplayer"), /Amnesiac unavailable/);
 
   // Once they know, there's nothing more to guess.
@@ -7204,9 +7206,9 @@ test("the Amnesiac can ask a yes/no question about their ability instead of gues
   s.day = 2;
   assert.match(e.amnesiacQuestion("alignment"), /: NO\.$/);
   s.day = 3;
-  assert.match(e.amnesiac("demonvoted"), /: close\.$/);
+  assert.match(e.amnesiac("demonvoted"), /: HOT\.$/);
   assert.deepEqual(p[0].amnesiacAsked, { demon: true, alignment: false });
-  assert.deepEqual(p[0].amnesiacSaid, { demonvoted: "close" });
+  assert.deepEqual(p[0].amnesiacSaid, { demonvoted: "HOT" });
 
   // Every ability and decoy is about something a question can ask, and
   // there are 3 guesses of each shape.
@@ -8210,4 +8212,225 @@ test("a Damsel the Huntsman found says so in public at dawn, and the Minions sto
 
   // When asked, she says what she was.
   assert.match(strat.ask(s, p[2]), /before that I was the Damsel\./);
+});
+
+test("an evil Grandmother bluffer names their teammate as the character they claim", () => {
+  for (let seed = 0; seed < 10; seed++) {
+    const s = bluffNight(`gran-bluff-${seed}`);
+    const [, , , minion, imp] = s.players;
+
+    role(minion, "baron", "evil");
+    minion.claim = "monk";
+    imp.claim = "grandmother";
+
+    const info = bluffInfo(s, imp, new SimpleStrategy());
+
+    assert.equal(info.text, `Grandmother: your grandchild is ${minion.label}, the Monk.`);
+  }
+});
+
+test("the Lunatic never votes to execute themself", () => {
+  const s = base("lunatic-self-vote");
+  const lunatic = s.players[1];
+  const strat = new SimpleStrategy();
+
+  role(lunatic, "lunatic", "good");
+  lunatic.lunaticTeam = [s.players[4].id];
+  s.r = () => 0;
+
+  assert.equal(strat.vote(s, lunatic, lunatic, { yes: 2, needed: 3 }), false);
+});
+
+test("an evil NPC doesn't vote for a teammate when it would tie the player marked", () => {
+  const s = base("teammate-tie");
+  const [, chef, , baron, imp] = s.players;
+  const strat = new SimpleStrategy();
+
+  s.r = () => 0;
+
+  // Their vote can't mark the Imp (4 needed), but it ties the Chef's 3.
+  s.block = { nomineeId: chef.id, count: 3 };
+  assert.equal(strat.vote(s, baron, imp, { yes: 2, needed: 4 }), false);
+
+  // With nobody marked (already a tie), it changes nothing.
+  s.block = { nomineeId: null, count: 3 };
+  assert.equal(strat.vote(s, baron, imp, { yes: 2, needed: 4 }), true);
+});
+
+test("the debug log's Claims column shows a madness", () => {
+  const s = bluffNight("mad-log");
+  const chef = s.players[1];
+
+  role(s.players[3], "cerenovus", "evil");
+
+  const strat = new SimpleStrategy();
+
+  strat.cerenovus = () => ({ target: chef, role: "mayor" });
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  e.start();
+  e.snapshot("test");
+
+  const row = s.audit.findLast((a) => a.type === "state").data.players[1];
+
+  assert.equal(row.claim, "chef");
+  assert.equal(row.mad, "mayor");
+});
+
+test("a player killed the night they're made mad as the Ravenkeeper comes clean at dawn", () => {
+  const s = bluffNight("mad-raven");
+  const [, chef, , , imp] = s.players;
+
+  role(s.players[3], "cerenovus", "evil");
+
+  const strat = new SimpleStrategy();
+  // Night 2, the Chef; Night 3, the Imp (who passes the Demon on).
+  const target = () => ({ 2: chef, 3: imp })[s.night] ?? null;
+
+  strat.cerenovus = () => target() && { target: target(), role: "ravenkeeper" };
+  strat.demon = target;
+
+  const e = new Engine(s, strat);
+
+  e.start();
+  e.endDay();
+  settle(e);
+
+  assert.ok(!chef.alive);
+  assert.ok(
+    s.publicLog.includes(
+      `Day 2 — ${chef.label} says: "The Cerenovus made me mad as the Ravenkeeper last night, but I was killed. I am actually the Chef."`,
+    ),
+  );
+  assert.equal(chef.claim, "chef");
+  assert.equal(chef.mad, null);
+  assert.ok(!chef.memories.some((m) => m.role === "ravenkeeper"));
+  assert.ok(!s.publicLog.some((x) => x.includes("I am the Ravenkeeper")));
+
+  // An evil player comes clean with their bluff.
+  imp.claim = "monk";
+  e.endDay();
+  settle(e);
+
+  assert.ok(
+    s.publicLog.includes(
+      `Day 3 — ${imp.label} says: "The Cerenovus made me mad as the Ravenkeeper last night, but I was killed. I am actually the Monk."`,
+    ),
+  );
+});
+
+test("when a madness ends, the player explains it to whoever they told", () => {
+  const s = bluffNight("mad-explain");
+  const [, chef, butler] = s.players;
+
+  role(s.players[3], "cerenovus", "evil");
+
+  const strat = new SimpleStrategy();
+
+  strat.cerenovus = () => (s.night === 1 ? { target: chef, role: "mayor" } : null);
+  strat.demon = () => null;
+
+  const e = new Engine(s, strat);
+
+  e.start();
+  e.ask(chef.id);
+  strat.told(s, chef, butler);
+  assert.equal(butler.toldMe[chef.id].claim, "mayor");
+
+  e.endDay();
+  settle(e);
+
+  assert.ok(
+    s.publicLog.includes(
+      `Day 2 — ${chef.label} tells you: "Yesterday the Cerenovus made me mad as the Mayor, I am actually the Chef."`,
+    ),
+  );
+  assert.equal(butler.toldMe[chef.id].claim, "chef");
+  assert.deepEqual(chef.madAbout, ["mayor"]);
+
+  // The changed story counts for less, as if they'd come clean.
+  const before = strat.evidence(s, butler, chef).score;
+
+  chef.madAbout = [];
+  assert.equal(
+    Math.round((strat.evidence(s, butler, chef).score - before) * 100) / 100,
+    Math.round((EVIDENCE_WEIGHT.changedStory - EVIDENCE_WEIGHT.changedStoryCleared) * 100) / 100,
+  );
+});
+
+test("an Amnesiac says what they guessed and what the Storyteller said; bluffers guess too", () => {
+  assert.equal(
+    speak('Amnesiac: guessed "Each night, you learn a good player.": HOT.'),
+    'I guessed my ability is "Each night, you learn a good player."\nAnd I got: HOT.',
+  );
+  assert.equal(
+    speak('Amnesiac: guessed "Each night, you learn a good player.": BINGO.'),
+    'I guessed my ability is "Each night, you learn a good player."\nAnd I got: BINGO!',
+  );
+  assert.equal(
+    speak('Amnesiac: asked "Is my ability about the Demon?": NO.'),
+    'I asked the Storyteller "Is my ability about the Demon?"\nAnd I got: NO.',
+  );
+
+  const { s, p, e } = cfNight("amnesiac-bluffer", [null, null, null, null, "imp"]);
+
+  p[4].claim = "amnesiac";
+  s.phase = "day";
+  s.day = 1;
+  e.npcAmnesiacs();
+
+  assert.match(p[4].memories.at(-1).text, /^Amnesiac: guessed ".+": (BINGO|HOT|WARM|COLD)\.$/);
+});
+
+test("an evil Savant bluffer's statements never hurt their team and are never repeated", () => {
+  let truths = 0;
+
+  for (let seed = 0; seed < 40; seed++) {
+    const s = base(`savant-bluff-${seed}`);
+    const [, chef, butler, baron, imp] = s.players;
+
+    baron.claim = "monk";
+    imp.claim = "savant";
+
+    const all = [];
+
+    for (let day = 1; day <= 4; day++) {
+      s.day = day;
+
+      const info = savantBluff(s, imp);
+      const said = [...info.text.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+
+      assert.equal(said.length, 2);
+      assert.equal(info.functioning, false);
+      all.push(...said);
+    }
+
+    assert.equal(new Set(all).size, all.length, all.join(" | "));
+
+    for (const x of all) {
+      // Never a teammate evil, or anyone the Baron or Imp; the Baron only
+      // ever the Monk he claims.
+      assert.ok(!x.startsWith(`${baron.label} is evil`) && !x.startsWith(`${imp.label} is`), x);
+      assert.ok(!/is the (Baron|Imp)\.$/.test(x), x);
+      assert.ok(!x.startsWith(`${baron.label} is the `) || x.endsWith("the Monk."), x);
+
+      // The Demon is only ever misplaced, and never put next to the Baron.
+      const near = /^The Demon is (not )?a neighbour of (.+)\.$/.exec(x);
+
+      if (near) {
+        const who = s.players.find((p) => p.label === near[2]);
+        const n = [s.players.at(s.players.indexOf(who) - 1), s.players[(s.players.indexOf(who) + 1) % 5]];
+
+        assert.equal(n.includes(imp), Boolean(near[1]), x);
+        assert.ok(near[1] || !n.includes(baron), x);
+      }
+
+      truths += [`${chef.label} is good.`, `${butler.label} is good.`, "There is 1 Outsider in play."].includes(x);
+    }
+  }
+
+  // Some are true.
+  assert.ok(truths > 0);
 });
