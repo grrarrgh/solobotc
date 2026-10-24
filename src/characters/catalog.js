@@ -244,7 +244,6 @@ export const CHARACTERS = {
       "Once per game, at night, choose a good character: gain that ability. If this character is in play, they are drunk.",
     kill: "med",
     oncePerGame: { AFTER_DAY: 1, START_CHANCE: 1, STEP_CHANCE: 0 }, // night
-    notForHuman: true,
   },
   juggler: {
     name: "Juggler",
@@ -474,6 +473,7 @@ export const CHARACTERS = {
       "If you died today or tonight, the Demon may choose 2 players (not another Demon) to swap characters.",
     kill: "med", // dying lets the Demon swap two characters
     neverHiddenAs: true,
+    notForHuman: true, // its ability is the Demon's choice, not yours
   },
   klutz: {
     name: "Klutz",

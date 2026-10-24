@@ -256,3 +256,13 @@ test("the script popup has a Night order button that stays in its top corner", (
   // (Pressing it switches views; it doesn't close the popup.)
   assert.match(app, /\$\("night-order"\)\.onclick = \(ev\) => \{\s*\/\/[^\n]*\n\s*ev\.stopPropagation\(\);/);
 });
+
+test("every popup closes when you press anywhere", () => {
+  // The dialogs (the script, a role, dawn / dusk cards).
+  assert.match(app, /for \(const id of \["script-dialog", "role-dialog", "phase-dialog"\]\) \{\s*\$\(id\)\.onclick = \(\) => \$\(id\)\.close\(\);/);
+  // The confirm popup: anywhere but its buttons is Keep talking.
+  assert.match(app, /d\.onclick = \(ev\) => \{\s*if \(!ev\.target\.closest\("button"\)\) \{\s*d\.close\(\);\s*done\(false\);/);
+  // The menu (but its − and +) and the role counts.
+  assert.match(app, /!ev\.target\.closest\("#size-popup button, #size-settings"\)/);
+  assert.match(app, /if \(!\$\("count-popup"\)\.hidden && !ev\.target\.closest\("#count-info"\)\) \{\s*closeCountInfo\(\);/);
+});

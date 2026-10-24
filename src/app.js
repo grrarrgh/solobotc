@@ -633,13 +633,14 @@ function renderNightChoice() {
     p.role,
   )}). ${esc(p.prompt)}`;
 
-  // The Courtier chooses a character instead of players.
+  // The Courtier and Philosopher choose a character instead of players.
   const characters = $("night-character");
+  const key = `${p.night}:${p.role}`;
 
   characters.hidden = !p.characters;
 
-  if (p.characters && characters.dataset.night !== `${p.night}`) {
-    characters.dataset.night = `${p.night}`;
+  if (p.characters && characters.dataset.key !== key) {
+    characters.dataset.key = key;
     characters.innerHTML = [
       '<option value="">Choose a character</option>',
       ...p.characters.map(
@@ -1693,14 +1694,31 @@ function toggleSizeSettings(open = $("size-popup").hidden) {
   $("size-settings").setAttribute("aria-expanded", String(open));
 }
 
-// Pressing anywhere outside the popup closes it. (The menu button toggles it
-// itself.)
+function closeCountInfo() {
+  $("count-popup").hidden = true;
+  $("count-info").setAttribute("aria-expanded", "false");
+}
+
+// Pressing anywhere closes the menu and role-count popups, except their own
+// buttons: the menu's − and + (and the buttons that open them, which toggle
+// them themselves). Escape closes them too.
 document.addEventListener("click", (ev) => {
   if (
     !$("size-popup").hidden &&
-    !ev.target.closest("#size-popup, #size-settings")
+    !ev.target.closest("#size-popup button, #size-settings")
   ) {
     toggleSizeSettings(false);
+  }
+
+  if (!$("count-popup").hidden && !ev.target.closest("#count-info")) {
+    closeCountInfo();
+  }
+});
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") {
+    toggleSizeSettings(false);
+    closeCountInfo();
   }
 });
 
@@ -1735,9 +1753,7 @@ function resetGame() {
   $("answer").textContent = "";
   $("error").textContent = "";
 
-  $("count-popup").hidden = true;
-  $("count-info").setAttribute("aria-expanded", "false");
-
+  closeCountInfo();
   toggleSizeSettings(false);
 }
 
@@ -1751,12 +1767,7 @@ $("size-down").onclick = () => setSquareSize(squareSize - TOWN_SQUARE_SIZE_STEP)
 $("size-up").onclick = () => setSquareSize(squareSize + TOWN_SQUARE_SIZE_STEP);
 setSquareSize(squareSize);
 
-$("seats").onchange = () => {
-  if (!$("count-popup").hidden) {
-    $("count-popup").hidden = true;
-    $("count-info").setAttribute("aria-expanded", "false");
-  }
-};
+$("seats").onchange = closeCountInfo;
 
 // Pressing a popup (or the dimmed backdrop around it) closes it.
 for (const id of ["script-dialog", "role-dialog", "phase-dialog"]) {
@@ -1834,6 +1845,13 @@ function confirmOpen() {
     $("confirm-no").onclick = () => {
       d.close();
       done(false);
+    };
+    // (Pressing anywhere else on it, or around it, is Keep talking.)
+    d.onclick = (ev) => {
+      if (!ev.target.closest("button")) {
+        d.close();
+        done(false);
+      }
     };
     d.oncancel = () => done(false);
     d.showModal();
@@ -1957,8 +1975,8 @@ $("night-select").onclick = () => {
   }
 };
 
-// Skipping an optional night ability (the Seamstress, Courtier or
-// Professor).
+// Skipping an optional night ability (the Seamstress, Courtier, Philosopher
+// or Professor).
 $("night-skip").onclick = () => {
   try {
     e.choose([]);

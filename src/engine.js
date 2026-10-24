@@ -2,6 +2,7 @@ import {
   name,
   team,
   alignment,
+  FORBIDDEN_HUMAN,
   DEMON_KILL_PRIORITY,
   COME_CLEAN_ALIVE,
   COME_CLEAN_URGENT_CHANCE,
@@ -238,6 +239,18 @@ export class Engine {
     this.puzzleDrunk();
     this.barberNight();
 
+    if (this.wakeChoice()) {
+      return;
+    }
+
+    this.resolveNight();
+  }
+
+  // Wakes the human if they have a choice to make tonight (see wakeHuman()):
+  // true if they do, and the night waits for it.
+  wakeChoice() {
+    const s = this.s;
+
     s.pending = this.wakeHuman();
 
     if (s.pending) {
@@ -247,10 +260,9 @@ export class Engine {
           s.pending.role,
         )}): ${s.pending.prompt}`,
       );
-      return;
     }
 
-    this.resolveNight();
+    return Boolean(s.pending);
   }
 
   // What the human must choose tonight, or null if they don't wake.
@@ -307,6 +319,20 @@ export class Engine {
         count: 2,
         prompt:
           "Choose 2 players: they can't die tonight, but 1 of them is drunk until dusk.",
+      },
+      // (Not a character whose ability needs what you never face: see
+      // FORBIDDEN_HUMAN.)
+      philosopher: !h.gained && {
+        count: 0,
+        characters: s.script.ids.filter(
+          (id) =>
+            alignment(id) === "good" &&
+            id !== "philosopher" &&
+            !FORBIDDEN_HUMAN.has(id),
+        ),
+        optional: true,
+        prompt:
+          "Once per game: choose a good character to gain its ability (if a player has it, they are drunk), or skip tonight.",
       },
       courtier: !h.courtierUsed && {
         count: 0,
@@ -367,6 +393,15 @@ export class Engine {
         `${this.human().label} chose the ${name(character)}.`,
         { role: character },
       );
+
+      // The Philosopher gains it now: if it wakes them, they use it tonight.
+      if (p.role === "philosopher") {
+        this.philosopherGain(this.human(), character);
+
+        if (this.wakeChoice()) {
+          return;
+        }
+      }
 
       this.resolveNight();
       return;

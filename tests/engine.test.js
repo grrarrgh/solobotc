@@ -8522,3 +8522,95 @@ test("a script's night order lists its characters in the official order, with th
     assert.ok(id in ROLES || id in NIGHT_STEPS, id);
   }
 });
+
+test("you can be the Philosopher: you choose a good character, and use a night ability you gain that night", () => {
+  assert.ok(!FORBIDDEN_HUMAN.has("philosopher"));
+
+  const { s, p, e } = cfNight("human-philosopher", ["philosopher", "fortuneteller"]);
+
+  e.night();
+
+  assert.equal(s.pending.role, "philosopher");
+  assert.ok(s.pending.characters.includes("fortuneteller"));
+  assert.ok(!s.pending.characters.includes("philosopher"));
+  assert.ok(s.pending.characters.every((id) => alignment(id) === "good" && !FORBIDDEN_HUMAN.has(id)));
+
+  e.choose([], "fortuneteller");
+
+  // The Fortune Teller in play is drunk, and you wake again as one.
+  assert.equal(p[0].gained, "fortuneteller");
+  assert.equal(p[1].drunkFrom, "philosopher");
+  assert.equal(s.pending.role, "fortuneteller");
+
+  e.choose([p[2].id, p[4].id]);
+
+  assert.equal(s.pending, null);
+  assert.ok(p[0].memories.some((m) => m.text === "Philosopher: gained the Fortune Teller ability."));
+  assert.ok(p[0].memories.some((m) => /^Fortune Teller: (YES|NO) for /.test(m.text)));
+});
+
+test("you can skip the Philosopher's choice, and are asked again the next night", () => {
+  const { s, e } = cfNight("human-philosopher-skip", ["philosopher"]);
+
+  e.night();
+  assert.equal(s.pending.role, "philosopher");
+  e.choose([]);
+  assert.equal(s.pending, null);
+
+  e.endDay();
+  assert.equal(s.pending?.role, "philosopher");
+});
+
+test("you're never dealt the Barber", () => {
+  assert.ok(FORBIDDEN_HUMAN.has("barber"));
+});
+
+test("an evil Cannibal bluffer gains the executee's character as best they know it", () => {
+  const setup = (minion) => {
+    const s = base(`cannibal-bluff-${minion}`);
+    const [, chef, , m, imp] = s.players;
+
+    role(m, minion, "evil");
+    m.claim = "cannibal";
+    imp.claim = "monk";
+
+    // The Chef said in public they're the Empath.
+    chef.claim = "empath";
+    chef.claimKnown = true;
+    chef.publicClaim = "empath";
+
+    return { s, chef, m, imp, e: new Engine(s) };
+  };
+
+  // A working Spy sees the Grimoire: the Chef's real character.
+  {
+    const { chef, m, e } = setup("spy");
+
+    e.cannibals(chef);
+    assert.equal(m.bluffGained, "chef");
+  }
+
+  // The Widow saw it on Night 1.
+  {
+    const { chef, m, e } = setup("widow");
+
+    e.cannibals(chef);
+    assert.equal(m.bluffGained, "chef");
+  }
+
+  // Anyone else: what they heard the executee claim.
+  {
+    const { chef, m, e } = setup("baron");
+
+    e.cannibals(chef);
+    assert.equal(m.bluffGained, "empath");
+  }
+
+  // A teammate: their bluff, as a real Cannibal would be told.
+  {
+    const { imp, m, e } = setup("spy");
+
+    e.cannibals(imp);
+    assert.equal(m.bluffGained, "monk");
+  }
+});

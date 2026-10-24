@@ -2,6 +2,16 @@
 
 Newest first.
 
+## Improvements: Evil Cannibal Bluffs
+
+- An evil player bluffing the Cannibal now "gains" the executee's character as best they know it, so their made-up information matches what a real Cannibal would get (`eatenAs()` in src/characters/townsfolk/cannibal.js): a good executee's real character if they've seen it in the Grimoire (a working Spy, or the Widow, who saw it on Night 1); a teammate's bluff, as a real Cannibal eating an evil player is told; else the character they heard the executee claim. Only with none of these do they pick any good character, as before. (Before, a Spy or Widow went by the claim too, and a teammate's bluff was only used if they'd heard it.)
+
+## Bug Fixes: Barber, Popups & Philosopher
+
+- You're never dealt the Barber (`notForHuman`): its ability is the Demon's choice, not yours. (The Pit-Hag and the Barber's swap already never picked you.)
+- Popups: every one now closes when you press anywhere. The role counts popup (the "i" by the town square) closes on any press, not only its own button. The menu closes on any press but its − and + buttons. The "Start nominations?" popup counts a press anywhere but its buttons as Keep talking. Escape closes the menu and role counts too. (The script, role and dawn / dusk popups already did.)
+- You can be dealt the Philosopher. Once per game, the Storyteller wakes you to choose a good character on the script (not one you can't be dealt), or skip until another night. You gain its ability at once (a player who has it is drunk from now on), so a night ability you gain wakes you again that night: choose the Fortune Teller and you then choose your 2 players. A first-night ability you gain (the Chef, the Investigator...) gives its information that night, and so does one an NPC Philosopher gains after Night 1 (`philosopherGain()`, `gainedNight`).
+
 ## Bug Fix: No Dashii & Vigormortis Poison
 
 - No Dashii: its 2 Townsfolk neighbours are the nearest Townsfolk on each side, alive or dead, as the official rules have it. A dead Townsfolk keeps the poison; it no longer passes on to the next living Townsfolk beyond them. (Outsiders, Minions and the Demon are still skipped.)

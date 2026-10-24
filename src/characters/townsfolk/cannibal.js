@@ -1,5 +1,5 @@
 import { name, alignment } from "../../data.js";
-import { ability, who, bluffing } from "../../storyteller.js";
+import { ability, who, bluffing, works } from "../../storyteller.js";
 import { claimHeard } from "../../strategy.js";
 import { pick, whose } from "../../util.js";
 
@@ -14,9 +14,9 @@ export const cannibal = {
   // Juggler executed on the day they juggled leaves their count to the
   // living Cannibal tonight (see jugglerNight()).
   //
-  // An evil player bluffing the Cannibal "gains" it too: the good character
-  // the executee claimed, as far as they know (else any good one), so their
-  // made-up information follows it from tonight (see bluffInfo()).
+  // An evil player bluffing the Cannibal "gains" it too, so their made-up
+  // information follows it from tonight (see bluffInfo()): the executee's
+  // character as best they know it (see eatenAs()).
   cannibals(dead) {
     const s = this.s;
     const goods = s.script.ids.filter(
@@ -32,7 +32,7 @@ export const cannibal = {
         x.role !== "cannibal" &&
         x.claim === "cannibal",
     )) {
-      const said = claimHeard(dead, b);
+      const said = this.eatenAs(b, dead);
 
       b.bluffGained = goods.includes(said) ? said : pick(goods, s.r);
       b.bluffGainedNight = s.night + 1;
@@ -95,6 +95,27 @@ export const cannibal = {
         );
       }
     }
+  },
+
+  // The character evil Cannibal bluffer b says executee `dead` was, as best
+  // they know it, as a real Cannibal would gain it: a good player's real
+  // character if b has seen it in the Grimoire (a working Spy now, or the
+  // Widow on Night 1); a teammate's bluff (what a real Cannibal is told);
+  // else what they heard them claim. Null if they know nothing.
+  eatenAs(b, dead) {
+    if (dead.alignment === "good") {
+      if (b.role === "spy" && works(b)) {
+        return dead.role;
+      }
+
+      if (b.role === "widow") {
+        return dead.startRole;
+      }
+    } else {
+      return dead.claim;
+    }
+
+    return claimHeard(dead, b);
   },
 
   // At dusk: a Cannibal who ate an evil player is poisoned until a good
