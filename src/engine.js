@@ -295,6 +295,17 @@ export class Engine {
         count: 2,
         prompt: "Choose 2 players: you learn if either is the Demon.",
       },
+      // (The Alchemist's Minion ability: see alchemist.js.)
+      alchemist:
+        h.alchemist === "poisoner"
+          ? { count: 1, prompt: "Poisoner ability: choose a player to poison tonight and tomorrow." }
+          : h.alchemist === "fearmonger"
+            ? {
+                count: 1,
+                prompt:
+                  "Fearmonger ability: choose a player. If you nominate and execute them, their team loses.",
+              }
+            : false,
       butler: {
         count: 1,
         prompt:
@@ -482,6 +493,7 @@ export class Engine {
     // (The Poppy Grower died today: the evil team learns each other now.)
     this.poppyWakes();
     this.poisoners();
+    this.alchemists();
     this.lleechHosts();
     this.widows();
     this.sailors();
@@ -517,6 +529,10 @@ export class Engine {
 
       if (!s.winner) {
         this.assassin();
+      }
+
+      if (!s.winner) {
+        this.wizardNight();
       }
 
       if (!s.winner) {
@@ -614,7 +630,9 @@ export class Engine {
       this.npcDamselGuesses();
       this.dawnComeClean();
       this.fearmongerDawn();
+      this.wizardDawn();
       this.psychopathKills();
+      this.npcWishes();
       this.npcTalks();
     }
 
@@ -1809,16 +1827,18 @@ export class Engine {
   nominationReveals(n, intro = null) {
     const s = this.s;
     const lines = intro ? [intro] : [];
-    // (A Goblin, or a player mad that they're one, may say so: see goblin.js.)
+    // (A Goblin, or a player mad that they're one, may say so: see goblin.js.
+    // It gets a card of its own, after this one.)
     const goblin = this.goblinClaim(n);
 
-    if (goblin) {
-      lines.push(goblin);
-    } else if (n.cover) {
+    // (Said instead of coming clean.)
+    if (!goblin && n.cover) {
       if (s.r() < COME_CLEAN_NOMINATED_CHANCE) {
         lines.push(this.comeClean(n));
       }
     } else if (
+      !goblin &&
+      !n.cover &&
       !n.human &&
       n.alive &&
       n.alignment === "evil" &&
@@ -1848,7 +1868,11 @@ export class Engine {
       (s.phaseCards ??= []).push({ kind: "nomination", day: s.day, lines });
     }
 
-    return lines;
+    if (goblin) {
+      (s.phaseCards ??= []).push({ kind: "goblin", day: s.day, lines: [goblin] });
+    }
+
+    return goblin ? [...lines, goblin] : lines;
   }
 
   // Your Good / Evil mark on a player ("good", "evil", or "" to clear it).

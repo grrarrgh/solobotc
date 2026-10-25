@@ -763,6 +763,16 @@ button:disabled {
   border-color: #f0cf83;
 }
 
+/* Someone claimed the Goblin when nominated: executed today, their team
+   wins. */
+.phase-goblin {
+  border-color: #ef6b72;
+}
+
+.phase-goblin h2 {
+  color: #ef6b72;
+}
+
 .phase-dusk h2 {
   color: #a9bcf2;
 }

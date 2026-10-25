@@ -24,7 +24,8 @@ import {
   JINXES,
 } from "./data.js";
 import { createState } from "./setup.js";
-import { ability } from "./storyteller.js";
+import { ability, minionAbility } from "./storyteller.js";
+import { WIZARD_WISHES } from "./characters/minion/wizard.js";
 import { Engine } from "./engine.js";
 import {
   AMNESIAC_GUESSES,
@@ -805,6 +806,7 @@ const PHASE_TITLES = {
   dawn: "☀️ Dawn",
   dusk: "🌙 Dusk",
   nomination: "🗣️ Before the vote",
+  goblin: "👺 Goblin claim",
   nominations: "⚖️ Nominations",
   roundrobin: "🔄 Round Robin",
 };
@@ -1613,6 +1615,22 @@ function draw() {
     !s.slayerUsed &&
     h.alive
   );
+  // An Alchemist's Minion ability (see alchemist.js).
+  $("psychopath-kill").hidden = !(
+    minionAbility(h) === "psychopath" &&
+    h.alive &&
+    !s.nominationsOpen &&
+    h.psychopathKilled !== s.day &&
+    t?.alive &&
+    !t.human
+  );
+  $("wish-controls").hidden = !(minionAbility(h) === "wizard" && h.alive && !h.wished);
+  $("goblin-self").hidden = !(
+    minionAbility(h) === "goblin" &&
+    h.alive &&
+    !s.dayNominators.includes(h.id) &&
+    !s.nominated.includes(h.id)
+  );
   $("artist-controls").hidden = !(
     ability(h) === "artist" &&
     !h.artistUsed &&
@@ -1952,6 +1970,32 @@ $("nominate").onclick = () => yourNomination((id) => e.nominate(id, null));
 
 $("request-nomination").onclick = () =>
   yourNomination((id) => e.requestNomination(id, null));
+
+// An Alchemist's Minion ability: the Psychopath's kill, the Wizard's wish,
+// the Goblin's self-nomination (see alchemist.js).
+$("psychopath-kill").onclick = () => {
+  try {
+    e.psychopathKill(selectedPlayerId);
+    render();
+  } catch (err) {
+    $("answer").textContent = err.message;
+  }
+};
+
+$("wish-kind").innerHTML = Object.entries(WIZARD_WISHES)
+  .map(([kind, w]) => `<option value="${kind}">${esc(w.text)}</option>`)
+  .join("");
+
+$("wish-make").onclick = () => {
+  try {
+    $("answer").textContent = e.wish($("wish-kind").value, selectedPlayerId);
+    render();
+  } catch (err) {
+    $("answer").textContent = err.message;
+  }
+};
+
+$("goblin-self").onclick = () => yourNomination(() => e.goblinSelfNomination(null));
 
 $("slay").onclick = () => {
   try {

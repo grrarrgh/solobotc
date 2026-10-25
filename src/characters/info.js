@@ -14,6 +14,7 @@
 // (Kept apart from characters/index.js, and built on first use: the
 // character modules and storyteller.js import each other, so nothing here
 // may be read while they load.)
+import { info as alchemist } from "./townsfolk/alchemist.js";
 import { info as amnesiac } from "./townsfolk/amnesiac.js";
 import { info as artist } from "./townsfolk/artist.js";
 import { info as balloonist } from "./townsfolk/balloonist.js";
@@ -63,6 +64,7 @@ let INFO;
 // `role`'s info, or null if it has none.
 export const infoOf = (role) =>
   (INFO ??= {
+    alchemist,
     amnesiac,
     artist,
     balloonist,

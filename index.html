@@ -74,6 +74,9 @@
           <div id="nomination-controls" class="nomination-controls" hidden>
             <button id="nominate">Nominate</button>
             <button id="request-nomination">Request nomination</button>
+            <!-- An Alchemist with the Goblin's ability: nominate yourself and
+                 claim it (executed today, good wins). -->
+            <button id="goblin-self" type="button" hidden>Nominate yourself (claim the Goblin)</button>
             <!-- One NPC nomination per press; the number still wanting to. -->
             <button id="npc-nominations" type="button">NPC nominations 0</button>
           </div>
@@ -130,6 +133,15 @@
           <p id="talk"></p>
           <button id="ask">Ask</button>
           <button id="slay" hidden>Slay</button>
+          <!-- An Alchemist with the Psychopath's ability: once a day, before
+               nominations, the selected player dies. -->
+          <button id="psychopath-kill" type="button" hidden>Choose them to die (Psychopath)</button>
+          <!-- An Alchemist with the Wizard's ability: once per game, a wish
+               (a death wish names the selected player). -->
+          <span id="wish-controls" hidden>
+            <select id="wish-kind" aria-label="Wish"></select>
+            <button id="wish-make" type="button">Make your wish</button>
+          </span>
           <button id="puzzle" hidden>Guess they're the puzzle's drunk</button>
           <span id="artist-controls" hidden>
             <select id="artist-question"></select>

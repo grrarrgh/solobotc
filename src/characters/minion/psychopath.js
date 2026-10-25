@@ -1,5 +1,5 @@
 import { name, PSYCHOPATH_KILL_CHANCE, ROSHAMBO } from "../../data.js";
-import { isDemon, works } from "../../storyteller.js";
+import { isDemon, works, minionAbility, minionLabel } from "../../storyteller.js";
 import { pick } from "../../util.js";
 
 const THROWS = Object.keys(ROSHAMBO);
@@ -14,45 +14,91 @@ export const psychopath = {
   psychopathKills() {
     const s = this.s;
 
-    for (const p of s.players.filter((x) => !x.human && x.alive && x.role === "psychopath")) {
+    for (const p of s.players.filter(
+      (x) => !x.human && x.alive && minionAbility(x) === "psychopath",
+    )) {
       if (s.winner) {
         return;
       }
 
-      if (!p.psychopathKilled && s.r() >= PSYCHOPATH_KILL_CHANCE) {
+      // (A good Alchemist with the ability only kills someone they're sure of.)
+      if (p.role === "psychopath" && !p.psychopathKilled && s.r() >= PSYCHOPATH_KILL_CHANCE) {
         continue;
       }
 
       const t = this.strat.psychopath(s, p);
 
-      if (!t) {
-        continue;
+      if (t) {
+        this.psychopathChooses(p, t);
       }
+    }
+  },
 
-      const effective = works(p);
-      const line = this.announce(`Day ${s.day} — ${p.label} publicly chooses ${t.label}: they die.`);
+  // You, an Alchemist with the Psychopath's ability, choose living player
+  // `id` in public: they die. Once a day, before nominations.
+  psychopathKill(id) {
+    const s = this.s;
+    const h = this.human();
+    const t = this.player(id);
 
-      p.psychopathKilled = s.day;
-      p.claim = "psychopath";
+    if (
+      minionAbility(h) !== "psychopath" ||
+      !h.alive ||
+      s.phase !== "day" ||
+      s.winner ||
+      s.nominationsOpen ||
+      h.psychopathKilled === s.day
+    ) {
+      throw Error("Psychopath unavailable.");
+    }
+
+    if (!t?.alive || t.human) {
+      throw Error("Choose a living player.");
+    }
+
+    this.psychopathChooses(h, t);
+  },
+
+  // Psychopath p chooses t in public: they die. It shows a Psychopath is
+  // evil (see engine outed()), even if it fails; an Alchemist with the
+  // ability says so instead.
+  psychopathChooses(p, t) {
+    const s = this.s;
+    const effective = works(p);
+    const alchemist = p.role !== "psychopath";
+    const line = this.announce(
+      `Day ${s.day} — ${p.human ? "You" : p.label} publicly ${p.human ? "choose" : "chooses"} ${t.label}${
+        alchemist ? " (with the Alchemist's Psychopath ability)" : ""
+      }: they die.`,
+    );
+
+    p.psychopathKilled = s.day;
+
+    if (!p.human) {
+      p.claim = alchemist ? "alchemist" : "psychopath";
       p.cover = null;
       this.claimPublicly(p);
+    }
+
+    if (!alchemist) {
       this.outed(p, `they chose ${t.label} to die in public, as the Psychopath`);
-      this.audit(
-        "psychopath",
-        `${p.label} (Psychopath) publicly chose ${t.label}${effective ? "" : ", but it fails (drunk or poisoned)"}.`,
-        { actorId: p.id, targetId: t.id, effective },
-      );
+    }
 
-      const before = this.alive().length;
-      const died = effective && this.kill(t, "psychopath");
+    this.audit(
+      "psychopath",
+      `${p.label} (${minionLabel(p)}) publicly chose ${t.label}${effective ? "" : ", but it fails (drunk or poisoned)"}.`,
+      { actorId: p.id, targetId: t.id, effective },
+    );
 
-      if (!died) {
-        s.publicLog[line] += " But nothing happens.";
-      } else if (isDemon(t)) {
-        this.successor(t, before, false);
-      } else {
-        this.check();
-      }
+    const before = this.alive().length;
+    const died = effective && this.kill(t, "psychopath");
+
+    if (!died) {
+      s.publicLog[line] += " But nothing happens.";
+    } else if (isDemon(t)) {
+      this.successor(t, before, false);
+    } else {
+      this.check();
     }
   },
 
@@ -64,7 +110,7 @@ export const psychopath = {
   psychopathExecuted(p) {
     const s = this.s;
 
-    if (p.role !== "psychopath" || !works(p)) {
+    if (minionAbility(p) !== "psychopath" || !works(p)) {
       return null;
     }
 

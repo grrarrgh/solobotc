@@ -82,6 +82,7 @@ import {
   isDemon,
   atFinal,
   jinxBarred,
+  minionAbility,
   poppyBlocks,
   works,
   bluffing,
@@ -1585,16 +1586,18 @@ export class SimpleStrategy {
   // nominated), whatever they think of them.
   vote(s, v, n, tally = null) {
     // A player who claimed the Goblin today: executing them could win it for
-    // evil, so good players hardly ever vote, even for your pick; the evil
-    // team always does.
+    // evil, so good players hardly ever vote, even for your pick. The evil
+    // team always votes for their own (and, kept apart by the Poppy Grower,
+    // for anyone: it might be theirs), never for one they know isn't (an
+    // Alchemist with the ability: good would win).
     const goblin = (s.goblinClaims ?? []).some((x) => x.id === n.id && x.day === s.day);
 
     if (goblin && sideOf(v) !== "evil") {
       return s.r() < GOBLIN_GOOD_VOTE_CHANCE;
     }
 
-    if (goblin && sideOf(v) === "evil" && teammate(v, n)) {
-      return true;
+    if (goblin && sideOf(v) === "evil") {
+      return teammate(v, n) || Boolean(v.poppyBlind);
     }
 
     // (Never to execute their Lleech's host: see spares().)
@@ -1840,10 +1843,15 @@ export class SimpleStrategy {
   // (see fearmonger()), when a good NPC suspects them, or else at
   // FEARMONGER_PUSH_CHANCE (decided once a day).
   fearPush(s, p) {
-    const t = p.role === "fearmonger" && byId(s, p.fearTarget);
+    const t = minionAbility(p) === "fearmonger" && byId(s, p.fearTarget);
 
     if (!t?.alive || t.human || s.nominated.includes(t.id)) {
       return null;
+    }
+
+    // (A good Alchemist with the ability only when they suspect them.)
+    if (sideOf(p) === "good") {
+      return this.alchemistSuspect(s, p) === t ? t : null;
     }
 
     const suspected = s.players.some(
@@ -1889,6 +1897,12 @@ export class SimpleStrategy {
   // good NPC; else the good NPC the most good NPCs suspect (the town's next
   // execution), or any good NPC. (Never you: NPCs never nominate you.)
   fearmonger(s, p) {
+    // (A good Alchemist with the ability chooses the player they suspect, as
+    // they'd have the town execute them anyway: see alchemistSuspect().)
+    if (sideOf(p) === "good") {
+      return this.alchemistSuspect(s, p) ?? byId(s, p.fearTarget) ?? null;
+    }
+
     const last = byId(s, p.fearTarget);
 
     if (last?.alive && !last.human && last.alignment === "good" && !spares(s, p, last)) {
@@ -1906,6 +1920,57 @@ export class SimpleStrategy {
     const most = Math.max(0, ...pool.map(heat));
 
     return pick(most ? pool.filter((t) => heat(t) === most) : pool, s.r);
+  }
+
+  // The living NPC a good Alchemist p suspects enough to use their Minion
+  // ability on: one they'd nominate (NPC_NOMINATE_EVIDENCE), or with `sure`,
+  // one they strongly suspect (see strongSuspect()). Null if nobody.
+  alchemistSuspect(s, p, sure = false) {
+    const pool = untwinned(s, this.others(s, p));
+
+    if (sure) {
+      return this.strongSuspect(s, p, pool) ?? null;
+    }
+
+    const sus = this.suspicion(s, p);
+    const t = sus && byId(s, sus.targetId);
+
+    return t?.alive && !t.human && sus.score >= NPC_NOMINATE_EVIDENCE ? t : null;
+  }
+
+  // Who a good Alchemist with the Poisoner's ability poisons tonight: the
+  // player they suspect most, else any living NPC they don't trust.
+  alchemistPoison(s, p) {
+    const sus = this.suspicion(s, p);
+    const t = sus && byId(s, sus.targetId);
+
+    if (t?.alive && !t.human) {
+      return t;
+    }
+
+    const trusted = this.trusted(s, p);
+    const pool = untwinned(s, this.others(s, p));
+
+    return pick(pool.filter((x) => !trusted.has(x.id)), s.r) ?? pick(pool, s.r);
+  }
+
+  // An NPC Wizard's wish (see characters/minion/wizard.js): a good one (an
+  // Alchemist) wishes to know who the Demon is; an evil one, to see the
+  // Grimoire (half the time, if their team hasn't: no working Spy, nor a
+  // Widow's or a wish's look), else that a player dies: whoever the Demon
+  // would kill (never you, nor their Lleech's host).
+  wish(s, p) {
+    if (sideOf(p) === "good") {
+      return { kind: "demon" };
+    }
+
+    if (!this.spyWorks(s, p) && !s.widowGrimoire && !s.wizardGrimoire && s.r() < 0.5) {
+      return { kind: "grimoire" };
+    }
+
+    const t = this.demon(s, p);
+
+    return t?.alive && !t.human && t !== p && goodTo(p, t) && !isDemon(t) ? { kind: "death", target: t } : null;
   }
 
   // The Lleech's host: a living good NPC (never you: NPCs never nominate
@@ -1928,6 +1993,11 @@ export class SimpleStrategy {
   // Who Psychopath p kills in public today: whoever the Demon would kill
   // (see demon()), but never a teammate or themself.
   psychopath(s, p) {
+    // (A good Alchemist with the ability: only a player they're sure of.)
+    if (sideOf(p) === "good") {
+      return this.alchemistSuspect(s, p, true);
+    }
+
     const t = this.demon(s, p);
 
     return t?.alive && t !== p && goodTo(p, t) && !spares(s, p, t)
@@ -2289,6 +2359,13 @@ export class SimpleStrategy {
       return because(exorcist, "the Exorcist who found it");
     }
 
+    // (A Wizard's price: the Demon learns who wished to know it.)
+    const wisher = options.find((x) => x.id === p.wisherId);
+
+    if (wisher && s.r() < KILL_PRIORITY_CHANCE.high) {
+      return because(wisher, "they wished to know who the Demon is");
+    }
+
     // (Hiding the Spy: someone it wouldn't have known to go after.)
     const cover = this.spyWorks(s, p)
       ? options.filter(
@@ -2374,7 +2451,7 @@ export class SimpleStrategy {
     return this.spyWorks(s, p)
       ? x.role
       : p.alignment === "evil"
-        ? (s.widowGrimoire?.[x.id] ?? null)
+        ? (s.widowGrimoire?.[x.id] ?? s.wizardGrimoire?.[x.id] ?? null)
         : null;
   }
 

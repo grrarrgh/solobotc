@@ -1,17 +1,18 @@
-import { works } from "../../storyteller.js";
+import { works, minionAbility, minionLabel } from "../../storyteller.js";
 import { acts } from "../../abilities.js";
 
 // The Fearmonger, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
 export const fearmonger = {
-  // Each night, the Fearmonger chooses a player (see strategy fearmonger()):
+  // Each night, the Fearmonger (or an Alchemist with their ability: you
+  // choose, if it's you) chooses a player (see strategy fearmonger()):
   // if they nominate and execute them, that player's team loses. A new
   // choice is announced at dawn (see fearmongerDawn()), if it worked.
   fearmonger() {
     const s = this.s;
 
-    for (const f of s.players.filter((x) => acts(x) && x.role === "fearmonger")) {
-      const t = this.strat.fearmonger(s, f);
+    for (const f of s.players.filter((x) => acts(x) && minionAbility(x) === "fearmonger")) {
+      const t = f.human ? this.humanPicks(f)?.[0] : this.strat.fearmonger(s, f);
 
       if (!t) {
         continue;
@@ -31,7 +32,7 @@ export const fearmonger = {
 
       this.audit(
         "fearmonger",
-        `${f.label} (Fearmonger) chose ${t.label}${fresh ? "" : " again"}; ${
+        `${f.label} (${minionLabel(f)}) chose ${t.label}${fresh ? "" : " again"}; ${
           effective
             ? `if they nominate and execute them, ${t.alignment} loses`
             : "it fails (drunk or poisoned)"
@@ -58,7 +59,8 @@ export const fearmonger = {
   // Returns whether they did.
   fearmongerWins(p, nominatorId) {
     const f = this.s.players.find(
-      (x) => x.role === "fearmonger" && x.id === nominatorId && works(x) && x.fearTarget === p.id,
+      (x) =>
+        minionAbility(x) === "fearmonger" && x.id === nominatorId && works(x) && x.fearTarget === p.id,
     );
 
     if (!f) {
@@ -69,7 +71,7 @@ export const fearmonger = {
 
     this.audit(
       "fearmonger",
-      `${f.label} (Fearmonger) nominated and executed ${p.label}, their chosen player: ${p.alignment} loses.`,
+      `${f.label} (${minionLabel(f)}) nominated and executed ${p.label}, their chosen player: ${p.alignment} loses.`,
       { actorId: f.id, targetId: p.id },
     );
     this.finish(winner, `The Fearmonger nominated and executed ${p.label}, their chosen player.`);

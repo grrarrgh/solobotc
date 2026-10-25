@@ -380,6 +380,14 @@ export const CHARACTERS = {
     info: "ongoing",
     kill: "med",
   },
+  alchemist: {
+    name: "Alchemist",
+    team: "townsfolk",
+    ability:
+      "You have a Minion ability. When using this, the Storyteller may prompt you to choose differently.",
+    info: "first",
+    kill: "med",
+  },
   poppygrower: {
     name: "Poppy Grower",
     team: "townsfolk",
@@ -707,6 +715,13 @@ export const CHARACTERS = {
     team: "minion",
     ability:
       "Each day, before nominations, you may publicly choose a player: they die. If executed, you only die if you lose roshambo.",
+    kill: "avoid",
+  },
+  wizard: {
+    name: "Wizard",
+    team: "minion",
+    ability:
+      "Once per game, choose to make a wish. If granted, it might have a price & leave a clue as to its nature.",
     kill: "avoid",
   },
   boomdandy: {

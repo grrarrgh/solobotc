@@ -7,6 +7,7 @@
 //
 // A module may also export `info`: what that character learns, and what's
 // said in its name (see characters/info.js).
+import { alchemist } from "./townsfolk/alchemist.js";
 import { amnesiac } from "./townsfolk/amnesiac.js";
 import { artist } from "./townsfolk/artist.js";
 import { cannibal } from "./townsfolk/cannibal.js";
@@ -66,6 +67,7 @@ import { poisoner } from "./minion/poisoner.js";
 import { psychopath } from "./minion/psychopath.js";
 import { widow } from "./minion/widow.js";
 import { witch } from "./minion/witch.js";
+import { wizard } from "./minion/wizard.js";
 
 import { fanggu } from "./demon/fanggu.js";
 import { legion } from "./demon/legion.js";
@@ -78,6 +80,7 @@ import { vortox } from "./demon/vortox.js";
 import { zombuul } from "./demon/zombuul.js";
 
 export const characters = {
+  alchemist,
   amnesiac,
   artist,
   cannibal,
@@ -135,6 +138,7 @@ export const characters = {
   psychopath,
   widow,
   witch,
+  wizard,
   fanggu,
   legion,
   lleech,

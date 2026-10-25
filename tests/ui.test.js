@@ -278,3 +278,22 @@ test("roshambo against the Psychopath you nominated: rock, paper or scissors, in
   assert.match(app, /e\.roshambo\(b\.dataset\.throw\)/);
   assert.match(app, /!!s\.roshambo \|\| s\.phase !== "day"/);
 });
+
+test("an Alchemist's Minion ability: a Psychopath kill, a wish, a Goblin self-nomination", () => {
+  assert.match(html, /id="psychopath-kill" type="button" hidden/);
+  assert.match(html, /id="wish-controls" hidden/);
+  assert.match(html, /id="wish-kind"/);
+  assert.match(html, /id="wish-make"/);
+  assert.match(html, /id="goblin-self" type="button" hidden/);
+  assert.match(app, /e\.psychopathKill\(selectedPlayerId\)/);
+  assert.match(app, /e\.wish\(\$\("wish-kind"\)\.value, selectedPlayerId\)/);
+  assert.match(app, /e\.goblinSelfNomination\(null\)/);
+  assert.match(app, /minionAbility\(h\) === "psychopath"/);
+  assert.match(app, /minionAbility\(h\) === "wizard"/);
+  assert.match(app, /minionAbility\(h\) === "goblin"/);
+});
+
+test("a Goblin claim gets a popup card of its own, in red", () => {
+  assert.match(app, /goblin: "👺 Goblin claim"/);
+  assert.match(css, /\.phase-goblin \{\s*border-color: #ef6b72;/);
+});

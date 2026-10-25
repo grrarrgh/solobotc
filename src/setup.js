@@ -19,6 +19,7 @@ import {
   LEGION_STRONG,
   LEGION_STRONG_SHARE,
   exclusiveWith,
+  ALCHEMIST_ABILITIES,
   team,
   alignment,
   name,
@@ -694,6 +695,25 @@ export function createState(
       `${p.label}: ${name(p.role)}; shown ${name(p.shown)}; claim ${name(p.claim)}.`,
     ),
   );
+
+  // Each Alchemist (or a Drunk shown the Alchemist, to no effect) has the
+  // ability of a Minion on the script that isn't in play (see
+  // ALCHEMIST_ABILITIES), learned on Night 1 (see alchemist.js).
+  for (const p of players.filter((x) => x.role === "alchemist" || x.shown === "alchemist")) {
+    const inPlay = new Set(players.map((x) => x.role));
+
+    p.alchemist =
+      pick(
+        script.ids.filter((id) => ALCHEMIST_ABILITIES.includes(id) && !inPlay.has(id)),
+        r,
+      ) ?? null;
+    setupLog(
+      "alchemist",
+      p.alchemist
+        ? `${p.label} (${p.role === "alchemist" ? "Alchemist" : `${name(p.role)}, shown the Alchemist`}) has the ${name(p.alchemist)} ability.`
+        : `${p.label} (Alchemist) has no Minion ability: every one they could have is in play.`,
+    );
+  }
 
   const demon = evil.find((x) => team(x.role) === "demon");
 

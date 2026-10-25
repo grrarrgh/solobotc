@@ -186,6 +186,25 @@ export const JINXES = [
     ids: ["pithag", "politician"],
     text: "If the Pit-Hag turns an evil player into the Politician, they can't turn good due to their own ability.",
   },
+  // never arise: the Alchemist is never given these abilities (see
+  // ALCHEMIST_ABILITIES): by these jinxes, they'd have no ability (and an
+  // Alchemist only has one that's not in play)
+  {
+    ids: ["alchemist", "marionette"],
+    text: "An Alchemist-Marionette has no Marionette ability & the Marionette is in play.",
+  },
+  {
+    ids: ["alchemist", "mastermind"],
+    text: "An Alchemist-Mastermind has no Mastermind ability & the Mastermind is not-in-play.",
+  },
+  {
+    ids: ["alchemist", "spy"],
+    text: "An Alchemist-Spy has no Spy ability & a Spy is in play. After each execution, a living Alchemist-Spy may publicly guess a living player as the Spy. If correct, the Demon must choose the Spy tonight.",
+  },
+  {
+    ids: ["alchemist", "widow"],
+    text: "An Alchemist-Widow has no Widow ability & a Widow is in play. After each execution, a living Alchemist-Widow may publicly guess a living player as the Widow. If correct, the Demon must choose the Widow tonight.",
+  },
   // characters/demon/lleech.js lleechHostDied()
   {
     ids: ["lleech", "mastermind"],
@@ -342,6 +361,17 @@ export const FEARMONGER_CAUTION = 0.5;
 // Psychopath kills in public, each day, until they've done it once (then
 // they're known, and kill every day).
 export const PSYCHOPATH_KILL_CHANCE = 0.35;
+// The Alchemist (characters/townsfolk/alchemist.js): the Minion abilities
+// they can have, one on the script and not in play (the ones that work for
+// a good player; not the Spy, Widow, Marionette or Mastermind: by their
+// jinxes, the Alchemist would have no ability).
+export const ALCHEMIST_ABILITIES = ["poisoner", "fearmonger", "psychopath", "goblin", "wizard"];
+
+// The Wizard (characters/minion/wizard.js): the wishes (see WIZARD_WISHES
+// there); the chance, each day from Day 1 (evil) or Day 2 (an
+// Alchemist-Wizard), that an NPC makes theirs.
+export const WIZARD_WISH_CHANCE = 0.35;
+
 // Roshambo: what beats what.
 export const ROSHAMBO = { rock: "scissors", paper: "rock", scissors: "paper" };
 

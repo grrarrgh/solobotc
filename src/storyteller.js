@@ -67,6 +67,16 @@ export const ability = (p) =>
     ? p.shown
     : (p.gained ?? p.role);
 
+// The Minion ability p acts with: an Alchemist's (see
+// characters/townsfolk/alchemist.js; also a Drunk shown the Alchemist, to
+// no effect), or their own character's.
+export const minionAbility = (p) =>
+  ability(p) === "alchemist" ? (p.alchemist ?? null) : ability(p);
+
+// p's Minion ability, for the log: "Fearmonger", or "Alchemist-Fearmonger".
+export const minionLabel = (p) =>
+  ability(p) === "alchemist" ? `Alchemist-${name(p.alchemist)}` : name(ability(p));
+
 // Whether NPC p acts out `role` in public without having its ability: an
 // evil player (or the Lunatic) bluffing it; a mad Pixie claiming it (a real
 // one, or a Drunk or Marionette shown the Pixie; see

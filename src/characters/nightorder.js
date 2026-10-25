@@ -15,6 +15,7 @@ export const NIGHT_STEPS = {
 export const FIRST_NIGHT = [
   ["dusk", "Everyone closes their eyes."],
   ["philosopher", "Chooses a good character: gains its ability."],
+  ["alchemist", "Learns which Minion ability they have (one not in play)."],
   [
     "magician",
     "The Minions are shown the Magician as well as the Demon; the Demon, the Magician among its Minions.",
@@ -32,6 +33,7 @@ export const FIRST_NIGHT = [
   ["sailor", "Chooses a living player: either the Sailor or they are drunk until dusk."],
   ["marionette", "The Demon learns which neighbour is the Marionette."],
   ["poisoner", "Chooses a player: poisoned tonight and tomorrow."],
+  ["alchemist", "With the Poisoner's or Fearmonger's ability, uses it."],
   ["lleech", "Chooses an alive player (never you): they're poisoned, and the Lleech dies if and only if they're dead."],
   [
     "widow",
@@ -91,6 +93,7 @@ export const OTHER_NIGHTS = [
   ],
   ["sailor", "Chooses a living player: either the Sailor or they are drunk until dusk."],
   ["poisoner", "Chooses a player: poisoned tonight and tomorrow."],
+  ["alchemist", "With the Poisoner's or Fearmonger's ability, uses it."],
   ["courtier", "Once per game, may choose a character: drunk for 3 nights and 3 days."],
   ["innkeeper", "Chooses 2 players: they can't die tonight, but 1 is drunk until dusk."],
   ["gambler", "Chooses a player and guesses their character: if wrong, the Gambler dies."],
@@ -128,6 +131,7 @@ export const OTHER_NIGHTS = [
     "vigormortis",
     "Chooses a player: they die. A Minion killed keeps their ability, and poisons a Townsfolk neighbour.",
   ],
+  ["wizard", "If a wish to kill was granted today, its player dies."],
   ["assassin", "Once per game, may choose a player: they die, even if they'd be safe."],
   ["godfather", "If an Outsider died today, chooses a player: they die."],
   ["gossip", "If what they said today was true, a player dies."],

@@ -22,6 +22,7 @@ import {
   JINXES,
   LEGION_STRONG,
   LEGION_STRONG_SHARE,
+  ALCHEMIST_ABILITIES,
   name,
   team,
   alignment,
@@ -10272,6 +10273,9 @@ test("the Goblin claims it when nominated; executed that day, evil wins", () => 
   assert.ok(s.outed.some((x) => x.id === goblin.id));
   assert.match(s.audit.find((x) => x.type === "goblin").text, /\(the real Goblin\)$/);
 
+  // It gets a popup card of its own.
+  assert.deepEqual(s.phaseCards.at(-1), { kind: "goblin", day: 1, lines: [lines[0]] });
+
   // Good NPCs hardly ever vote for them, even for your pick in the final 3;
   // the evil team does.
   s.r = () => 0.5;
@@ -10922,6 +10926,245 @@ test("whole games play out with the Lleech and Poppy Grower, and each does its t
     seen.survived += /takes them for the Lleech/.test(text) ? 1 : 0;
     seen.poppy += s.audit.some((x) => x.type === "poppygrower") ? 1 : 0;
     seen.poppyDied += /The Poppy Grower is dead/.test(text) ? 1 : 0;
+  }
+
+  for (const [k, n] of Object.entries(seen)) {
+    assert.ok(n > 0, `${k}: ${JSON.stringify(seen)}`);
+  }
+});
+
+// ── Outed Evil, phase 4: the Alchemist and Wizard, and the whole script ──
+
+const outed = JSON.parse(
+  fs.readFileSync(new URL("../scripts/Outed Evil_5_0_0.json", import.meta.url)),
+);
+
+// A 5-player Day 1 (see base()) where p[2] is an Alchemist with `minion`'s
+// ability (you, with `you`).
+function alchemistDay(seed, minion, you = false) {
+  const s = base(seed);
+  const e = new Engine(s);
+  const a = you ? s.players[0] : s.players[2];
+
+  role(a, "alchemist", "good");
+  a.alchemist = minion;
+
+  return { s, e, p: s.players, a };
+}
+
+test("Outed Evil loads from the script list: 32 entries, its Travellers left out, the Sentinel kept apart", () => {
+  const files = JSON.parse(fs.readFileSync(new URL("../scripts/index.json", import.meta.url)));
+
+  assert.ok(files.includes("Outed Evil_5_0_0.json"));
+
+  const s = createState(outed, 12, "outed");
+
+  assert.equal(s.script.meta.name, "Outed Evil");
+  assert.equal(s.script.ids.length, 25);
+  assert.deepEqual(s.script.fabled, ["sentinel"]);
+
+  for (const id of ["thief", "bureaucrat", "butcher", "apprentice", "deviant"]) {
+    assert.ok(!s.script.ids.includes(id), id);
+  }
+});
+
+test("the Alchemist has a Minion ability from the script that isn't in play, learned on Night 1", () => {
+  const seen = new Set();
+
+  for (let seed = 0; seed < 600; seed++) {
+    const s = createState(outed, 10, `alchemist-${seed}`);
+
+    for (const p of s.players.filter((x) => x.role === "alchemist" || x.shown === "alchemist")) {
+      const roles = s.players.map((x) => x.role);
+
+      assert.ok(ALCHEMIST_ABILITIES.includes(p.alchemist), `${p.alchemist}, seed ${seed}`);
+      assert.ok(s.script.ids.includes(p.alchemist));
+      assert.ok(!roles.includes(p.alchemist), `${p.alchemist} is in play, seed ${seed}`);
+      assert.ok(s.audit.some((x) => x.type === "alchemist" && x.text.includes(`has the ${name(p.alchemist)} ability`)));
+      seen.add(p.alchemist);
+    }
+  }
+
+  assert.deepEqual([...seen].sort(), ["fearmonger", "goblin", "poisoner", "psychopath", "wizard"]);
+
+  // Never the Spy, Widow, Marionette or Mastermind: by their jinxes, they'd
+  // have no ability.
+  for (const id of ["spy", "widow", "marionette", "mastermind"]) {
+    assert.ok(!ALCHEMIST_ABILITIES.includes(id));
+    assert.ok(JINXES.some((j) => j.ids.includes("alchemist") && j.ids.includes(id)), id);
+  }
+
+  // On Night 1 they learn it.
+  const { s, p } = alchemistDay("alchemist-info", "goblin");
+
+  assert.equal(infoOf("alchemist").truth(s, p[2]).text, "Alchemist: you have the Goblin ability.");
+});
+
+test("an Alchemist-Poisoner poisons the player they suspect; you choose", () => {
+  const { s, e, p, a } = alchemistDay("alchemist-poisoner", "poisoner");
+
+  s.phase = "night";
+  s.night = 2;
+  e.strat.suspicion = (_, x) => (x.suspicion = { targetId: p[4].id, score: 5, reasons: [] });
+  e.alchemists();
+  assert.ok(p[4].poisoned);
+  assert.match(s.audit.at(-1).text, /\(Alchemist-Poisoner\) chose .*; poisoned\.$/);
+
+  // You: woken, and your pick is poisoned.
+  const y = alchemistDay("alchemist-poisoner-you", "poisoner", true);
+
+  y.s.phase = "night";
+  y.s.night = 2;
+  assert.equal(y.e.wakeHuman()?.count, 1);
+  assert.match(y.e.wakeHuman().prompt, /^Poisoner ability:/);
+  y.s.humanChoice = { night: 2, players: [y.p[3]] };
+  y.e.alchemists();
+  assert.ok(y.p[3].poisoned);
+  void a;
+});
+
+test("an Alchemist-Fearmonger chooses their suspect: nominating and executing them, evil loses", () => {
+  const { s, e, p, a } = alchemistDay("alchemist-fearmonger", "fearmonger");
+
+  e.strat.suspicion = (_, x) => (x.suspicion = { targetId: p[4].id, score: 5, reasons: [] });
+  s.phase = "night";
+  s.night = 2;
+  e.fearmonger();
+  assert.equal(a.fearTarget, p[4].id);
+  assert.match(s.audit.at(-1).text, /\(Alchemist-Fearmonger\) chose .*; if they nominate and execute them, evil loses\.$/);
+
+  // They nominate them, and executing them wins it for good.
+  s.phase = "day";
+  s.day = 2;
+  assert.equal(e.strat.nomination(s, a)?.target, p[4]);
+  voted(s, a, p[4]);
+  e.execute(p[4]);
+  assert.equal(s.winner, "good");
+
+  // You're woken to choose.
+  const y = alchemistDay("alchemist-fearmonger-you", "fearmonger", true);
+
+  y.s.phase = "night";
+  y.s.night = 2;
+  assert.match(y.e.wakeHuman().prompt, /^Fearmonger ability:/);
+});
+
+test("an Alchemist-Psychopath only kills a player they're sure of, saying so, and isn't taken for evil; you can too, before nominations", () => {
+  const { s, e, p, a } = alchemistDay("alchemist-psychopath", "psychopath");
+
+  e.strat.strongSuspect = () => null;
+  e.psychopathKills();
+  assert.ok(p.every((x) => x.alive));
+
+  e.strat.strongSuspect = () => p[4];
+  e.psychopathKills();
+  assert.equal(p[4].alive, false);
+  assert.match(s.publicLog.join("\n"), /publicly chooses .* \(with the Alchemist's Psychopath ability\): they die\./);
+  assert.equal(a.claim, "alchemist");
+  assert.ok(!(s.outed ?? []).some((x) => x.id === a.id));
+
+  // You.
+  const y = alchemistDay("alchemist-psychopath-you", "psychopath", true);
+
+  y.e.psychopathKill(y.p[3].id);
+  assert.equal(y.p[3].alive, false);
+  assert.match(y.s.publicLog.join("\n"), /You publicly choose .*: they die\./);
+  assert.throws(() => y.e.psychopathKill(y.p[1].id), /unavailable/);
+
+  const z = alchemistDay("alchemist-psychopath-late", "psychopath", true);
+
+  z.s.nominationsOpen = true;
+  assert.throws(() => z.e.psychopathKill(z.p[3].id), /unavailable/);
+});
+
+test("an Alchemist-Goblin claims it when nominated; executed, good wins; the evil team never votes for them", () => {
+  const { s, e, p, a } = alchemistDay("alchemist-goblin", "goblin");
+
+  s.r = () => 0;
+  assert.match(e.nominationReveals(a)[0], /says: "I'm the Goblin! Execute me today, and my team wins\."/);
+  s.r = () => 0.5;
+  assert.equal(e.strat.vote(s, p[4], a), false);
+  voted(s, p[1], a);
+  e.execute(a);
+  assert.equal(s.winner, "good");
+
+  // You nominate yourself, and claim it.
+  const y = alchemistDay("alchemist-goblin-you", "goblin", true);
+
+  y.e.openNominations();
+  y.e.goblinSelfNomination(true);
+  assert.ok(y.s.publicLog.some((x) => x === "Day 1 — You nominate yourself."));
+  assert.ok(y.s.publicLog.some((x) => /You say: "I'm the Goblin! Execute me today, and my team wins\."/.test(x)));
+  assert.throws(() => y.e.goblinSelfNomination(true), /already nominated/);
+});
+
+test("the Wizard's wishes: a death (never the Demon), the Grimoire (evil only), or who the Demon is (good only, at a price)", () => {
+  // An evil Wizard: a death, at night, with a clue at dawn.
+  let { s, e, p } = minionDay("wizard-death", "wizard");
+  const w = p[3];
+
+  assert.match(e.wishFor(w, "death", p[4]), /isn't granted/);
+  assert.ok(!w.wished);
+  assert.match(e.wishFor(w, "demon"), /isn't granted/);
+  assert.equal(e.wishFor(w, "death", p[1]), `Your wish is granted: ${p[1].label} dies tonight.`);
+  assert.equal(w.wished, 1);
+  s.phase = "night";
+  s.night = 2;
+  e.wizardNight();
+  assert.equal(p[1].alive, false);
+  assert.equal(p[1].death, "wizard");
+  s.day = 2;
+  e.wizardDawn();
+  assert.equal(s.publicLog.at(-1), `Day 2 — The Storyteller: a wish was granted, and ${p[1].label} died of it.`);
+
+  // The Grimoire: the evil team knows every character.
+  ({ s, e, p } = minionDay("wizard-grimoire", "wizard"));
+  e.wishFor(p[3], "grimoire");
+  assert.equal(new SimpleStrategy().seenRole(s, p[1], p[4]), p[1].role);
+
+  // A good one (you, an Alchemist): the Demon, and the Demon learns who wished.
+  const y = alchemistDay("wizard-you", "wizard", true);
+
+  assert.match(y.e.wish("grimoire"), /isn't granted/);
+  assert.throws(() => y.e.wish("death"), /Select a living player/);
+  y.e.wish("demon");
+  assert.equal(y.p[4].wisherId, y.p[0].id);
+  assert.ok(y.p[0].memories.some((m) => m.text === `Wizard: the Demon is ${y.p[4].label}.`));
+  assert.throws(() => y.e.wish("demon"), /unavailable/);
+});
+
+test("an NPC Wizard wishes in time; a good one learns the Demon, whom the Demon then goes after", () => {
+  const { s, e, p, a } = alchemistDay("wizard-npc", "wizard");
+
+  s.day = 2;
+  s.r = () => 0;
+  e.npcWishes();
+  assert.equal(a.wished, 2);
+  assert.equal(a.certainSuspect, p[4].id);
+  assert.equal(p[4].wisherId, a.id);
+
+  s.phase = "night";
+  s.night = 3;
+  assert.equal(new SimpleStrategy().demon(s, p[4]), a);
+});
+
+test("whole games play out on Outed Evil, with every character doing its thing", () => {
+  const seen = {};
+  const note = (k, yes) => (seen[k] = (seen[k] ?? 0) + (yes ? 1 : 0));
+
+  for (let g = 0; g < 160; g++) {
+    const { s } = playOut(outed, 8 + (g % 8), `outed-${g}`);
+    const text = s.audit.map((x) => x.text).join("\n");
+
+    assert.ok([null, "good", "evil"].includes(s.winner));
+    note("alchemist", s.audit.some((x) => x.type === "alchemist"));
+    note("wish", /wished: /.test(text));
+    note("host", /as their host/.test(text));
+    note("goblin", /I'm the Goblin!/.test(text));
+    note("fearmonger", s.audit.some((x) => x.type === "fearmonger"));
+    note("psychopath", /publicly chooses/.test(s.publicLog.join("\n")));
+    note("general", /General: .* winning/.test(text));
+    note("poppy", s.audit.some((x) => x.type === "poppygrower"));
   }
 
   for (const [k, n] of Object.entries(seen)) {

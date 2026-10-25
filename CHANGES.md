@@ -2,6 +2,24 @@
 
 Newest first.
 
+### Phase 4: the Alchemist and Wizard, and Outed Evil in the Script menu
+
+- Alchemist (src/characters/townsfolk/alchemist.js): has the ability of a Minion on the script that isn't in play, picked at setup (ALCHEMIST_ABILITIES: the Poisoner, Fearmonger, Psychopath, Goblin or Wizard), and learns it on Night 1 ("Alchemist: you have the Goblin ability."). A Drunk shown the Alchemist has one too, to no effect. It works for the good team, through `minionAbility()` in src/storyteller.js, which the Fearmonger, Psychopath, Goblin and Wizard now go by. The log names it ("Player 3 (Alchemist-Fearmonger) chose…"). You can be dealt it, with any of them.
+  - Poisoner: each night, poisons a player tonight and tomorrow. An NPC poisons their suspect; you're woken to choose.
+  - Fearmonger: each night, chooses a player. An NPC chooses their suspect, and nominates them when they'd nominate them anyway; you're woken to choose. If they nominate and execute an evil player, evil loses (and good, if it's a good one: careful). The town hears a new choice as usual.
+  - Psychopath: once a day, before nominations, a player dies in public ("…publicly chooses Player 6 (with the Alchemist's Psychopath ability): they die."). An NPC only kills a player they strongly suspect. They say they're the Alchemist, and aren't taken for evil. You get a "Choose them to die (Psychopath)" button for the selected player. Executed, they play roshambo like the Psychopath.
+  - Goblin: claimed when nominated, as the Goblin's ("Execute me today, and my team wins."). Executed that day, good wins. The evil team never votes for a Goblin they know isn't theirs (unless the Poppy Grower keeps them from knowing), and good players hardly ever vote for any. You get a "Nominate yourself (claim the Goblin)" button once nominations open.
+  - Wizard: see below. You get a wish menu (`#wish-controls`).
+  - Jinxes: Alchemist & Marionette, Mastermind, Spy and Widow are in `JINXES`. They never come up: the Alchemist is never given those abilities, since by these jinxes they'd have no ability, and an Alchemist-Spy or -Widow needs one in play.
+- Wizard (src/characters/minion/wizard.js): once per game, a wish, kept simple (WIZARD_WISHES). The Storyteller grants it, or declines it, and they may wish again:
+  - "I wish that a player I choose dies tonight.": they die that night, and at dawn the town hears "a wish was granted, and Player 4 died of it." Never the Demon (declined).
+  - "I wish to see the Grimoire.": the evil team knows every character, as after a Widow's look. Evil only (declined for a good one: it would win the game).
+  - "I wish to know who the Demon is.": they learn it. Good only (an Alchemist with the ability). Price: the Demon learns who wished, and goes after them.
+  - An NPC Wizard wishes at dawn, at WIZARD_WISH_CHANCE (0.35) a day: an evil one from Day 1 (the Grimoire half the time if the team hasn't seen it, else a death), a good one from Day 2 (the Demon, which they then go after). You make yours by day: what the Storyteller says goes in your log. The Wizard has no jinxes.
+- Goblin claims get a popup card of their own, in red ("👺 Goblin claim"), after the nomination's card.
+- Outed Evil is in the Script menu (scripts/index.json) and the README's script list. Every good character on it can be bluffed (the test that covers every listed script now covers it too). 160 whole games on it, 8 to 15 seats, see every character act.
+- The 8 other scripts are unchanged: 640 seeded games, 8 to 15 seats, gave byte-identical logs before and after.
+
 ### Phase 3: the Lleech and Poppy Grower
 
 - Lleech (src/characters/demon/lleech.js):
@@ -61,9 +79,9 @@ Newest first.
   - Legion & Politician: a good Politician's vote counts as evil to Legion at LEGION_POLITICIAN_CHANCE (0.5), so an execution where every other voter is Legion can fail. The log says when it does.
 - `exclusiveWith()` in src/data.js lists the characters jinxed never to be in play with a given one.
 
-## New Script: Outed Evil (in progress)
+## New Script: Outed Evil
 
-Outed Evil (scripts/Outed Evil_5_0_0.json, by Manny) has 10 characters the game didn't have yet. They're being added in 4 phases. The script goes in the script list (scripts/index.json) once all of them are in. Its Travellers (Thief, Bureaucrat, Butcher, Apprentice, Deviant) are left out, as on every script. The Sentinel was already in the game.
+Outed Evil (scripts/Outed Evil_5_0_0.json, by Manny) has 10 characters the game didn't have yet, added in 4 phases (above). With Phase 4 it's in the script list (scripts/index.json) and the Script menu. Its Travellers (Thief, Bureaucrat, Butcher, Apprentice, Deviant) are left out, as on every script. The Sentinel was already in the game.
 
 - scripts/Outed Evil_5_0_0.json reformatted to match the other scripts: one character per line.
 
