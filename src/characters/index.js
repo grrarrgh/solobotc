@@ -26,6 +26,7 @@ import { monk } from "./townsfolk/monk.js";
 import { pacifist } from "./townsfolk/pacifist.js";
 import { philosopher } from "./townsfolk/philosopher.js";
 import { pixie } from "./townsfolk/pixie.js";
+import { poppygrower } from "./townsfolk/poppygrower.js";
 import { professor } from "./townsfolk/professor.js";
 import { puzzlemaster } from "./townsfolk/puzzlemaster.js";
 import { ravenkeeper } from "./townsfolk/ravenkeeper.js";
@@ -68,6 +69,7 @@ import { witch } from "./minion/witch.js";
 
 import { fanggu } from "./demon/fanggu.js";
 import { legion } from "./demon/legion.js";
+import { lleech } from "./demon/lleech.js";
 import { nodashii } from "./demon/nodashii.js";
 import { pukka } from "./demon/pukka.js";
 import { shabaloth } from "./demon/shabaloth.js";
@@ -95,6 +97,7 @@ export const characters = {
   pacifist,
   philosopher,
   pixie,
+  poppygrower,
   professor,
   puzzlemaster,
   ravenkeeper,
@@ -134,6 +137,7 @@ export const characters = {
   witch,
   fanggu,
   legion,
+  lleech,
   nodashii,
   pukka,
   shabaloth,

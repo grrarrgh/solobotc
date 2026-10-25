@@ -43,6 +43,11 @@ export const isMinion = (p) => team(p.role) === "minion" || p.role === "legion";
 // Minion shown the Magician too (see strategy fooledBy()) doesn't know
 // which of the two it is, so goes by one of them, decided once.
 export function demonTo(s, p) {
+  // (Kept apart by the Poppy Grower, a Minion doesn't know.)
+  if (p.poppyBlind && team(p.role) === "minion") {
+    return null;
+  }
+
   const d = s.players.find((x) => x.alive && isDemon(x));
   const magician = s.players.find((x) => x.magicianTrick && x.alive);
 
@@ -131,6 +136,12 @@ export const works = (p) =>
 // in play, or whose ability is (`exclusive`: the Heretic with a Baron, Spy...).
 export const jinxBarred = (s) =>
   new Set(s.players.flatMap((x) => [x.role, x.gained].filter(Boolean)).flatMap(exclusiveWith));
+
+// Whether a Poppy Grower has their ability (alive, sober and healthy): the
+// Minions and Demon don't know each other, and (their jinxes) the Spy and
+// Widow don't see the Grimoire. See characters/townsfolk/poppygrower.js.
+export const poppyBlocks = (s) =>
+  s.players.some((x) => x.role === "poppygrower" && x.alive && !isDrunk(x) && !x.poisoned);
 
 // The Vortox makes every Townsfolk's information false.
 export const vortoxActive = (s) =>

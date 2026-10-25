@@ -411,6 +411,11 @@ export const abilities = {
       return null;
     }
 
+    // (A Lleech dies if and only if their host is dead: see lleech.js.)
+    if (this.lleechSafe(p)) {
+      return { text: "the Lleech can't die while their host lives", by: null };
+    }
+
     if (ability(p) === "sailor" && works(p)) {
       return { text: "the Sailor can't die", by: null };
     }

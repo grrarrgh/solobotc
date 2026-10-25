@@ -1,5 +1,5 @@
 import { name } from "../../data.js";
-import { works, who, isDrunk } from "../../storyteller.js";
+import { works, who, isDrunk, poppyBlocks } from "../../storyteller.js";
 import { acts } from "../../abilities.js";
 import { byId, pick } from "../../util.js";
 
@@ -30,11 +30,17 @@ export const widow = {
       this.chose(w, t);
     }
 
-    if (works(w)) {
+    // (Not while the Poppy Grower has their ability: their jinx. She still
+    // poisons.)
+    const sees = works(w) && !poppyBlocks(s);
+
+    if (sees) {
       s.widowGrimoire = Object.fromEntries(
         s.players.map((x) => [x.id, x.role]),
       );
+    }
 
+    if (works(w)) {
       if (t) {
         s.widowPick = { widowId: w.id, targetId: t.id };
         t.poisoned = true;

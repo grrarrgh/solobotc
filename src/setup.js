@@ -425,12 +425,23 @@ export function createState(
   const taken = new Set();
   // (A Spy or Widow on the team has seen the Grimoire: see
   // HIDDEN_BLUFF_CHANCE.)
-  const grimoire = evil.some((x) => ["spy", "widow"].includes(x.role));
+  // With a Poppy Grower dealt (one who has their ability: never the Drunk's
+  // token), the Minions and Demon don't learn who each other are, nor the
+  // Demon its bluffs; and (their jinxes) the Spy and Widow don't see the
+  // Grimoire. Each picks a bluff on their own: they don't know each other's.
+  // (They learn when the Poppy Grower dies: see poppygrower.js.)
+  const poppy = players.some((x) => x.role === "poppygrower");
+  const grimoire = !poppy && evil.some((x) => ["spy", "widow"].includes(x.role));
 
   for (const p of evil) {
-    const spy = p.role === "spy";
+    const spy = p.role === "spy" && !poppy;
     const knows =
-      team(p.role) === "demon" || spy || r() < minionBluffChance;
+      !poppy && (team(p.role) === "demon" || spy || r() < minionBluffChance);
+
+    if (poppy) {
+      p.poppyBlind = true;
+      taken.clear();
+    }
     const options = (
       spy
         ? spyOptions.length
@@ -532,14 +543,17 @@ export function createState(
 
     p.bluffs = sample(goods, 3, r);
     // (Preferably one nobody is, or claims: a double claim would count
-    // against them, and against whoever else claims it.)
+    // against them, and against whoever else claims it. With the Poppy
+    // Grower, they get no bluffs, as a real Demon wouldn't: any Townsfolk.)
+    const claims = poppy ? goods.filter((x) => team(x) === "townsfolk") : p.bluffs;
+
     p.claim =
       pick(
-        p.bluffs.filter((x) => !taken.has(x) && !tokens.has(x)),
+        claims.filter((x) => !taken.has(x) && !tokens.has(x)),
         r,
       ) ??
-      pick(p.bluffs.filter((x) => !taken.has(x)), r) ??
-      pick(p.bluffs, r) ??
+      pick(claims.filter((x) => !taken.has(x)), r) ??
+      pick(claims, r) ??
       p.claim;
     taken.add(p.claim);
     p.bluff = p.claim;
@@ -550,6 +564,16 @@ export function createState(
       ].filter(Boolean),
       r,
     ).map((x) => x.id);
+
+    // (With the Poppy Grower, a Demon learns neither its Minions nor its
+    // bluffs, so nor does the Lunatic, who thinks they're one. They learn
+    // them when the Poppy Grower dies: see poppygrower.js. The Demon still
+    // knows who they are: that's the Lunatic's own ability.)
+    if (poppy) {
+      p.lunaticLater = { team: p.lunaticTeam, bluffs: p.bluffs };
+      p.lunaticTeam = [];
+      p.bluffs = [];
+    }
   }
 
   // The Mutant is "mad" that they're not an Outsider, and the Damsel hides
@@ -683,9 +707,16 @@ export function createState(
     );
   }
 
+  if (poppy) {
+    setupLog(
+      "poppygrower",
+      "The Poppy Grower is in play: the Minions and Demon don't learn who each other are, the Demon isn't told its bluffs, and the Spy and Widow don't see the Grimoire, until the Poppy Grower dies.",
+    );
+  }
+
   setupLog(
     "bluffs",
-    `Demon bluffs (told to ${legions ? "every Legion" : (demon?.label ?? "the Demon")}): ${
+    `Demon bluffs (${poppy ? "not told: the Poppy Grower" : `told to ${legions ? "every Legion" : (demon?.label ?? "the Demon")}`}): ${
       demonBluffs.map(name).join(", ") || "none"
     }. ${demon ? `${demon.label} bluffs as ${name(demon.claim)}.` : ""}`.trim(),
   );
@@ -736,9 +767,10 @@ export function createState(
       "lunatic",
       `${p.label} (Lunatic) thinks they are the ${name(p.shown)}; bluffs ${p.bluffs
         .map(name)
-        .join(", ")}; claims ${name(p.claim)}; "Minions": ${p.lunaticTeam
-        .map((id) => players.find((x) => x.id === id).label)
-        .join(", ")}. The Demon knows who they are.`,
+        .join(", ") || "none (the Poppy Grower)"}; claims ${name(p.claim)}; "Minions": ${
+        p.lunaticTeam.map((id) => players.find((x) => x.id === id).label).join(", ") ||
+        "not shown (the Poppy Grower)"
+      }. The Demon knows who they are.`,
     );
   }
 

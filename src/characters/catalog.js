@@ -380,6 +380,13 @@ export const CHARACTERS = {
     info: "ongoing",
     kill: "med",
   },
+  poppygrower: {
+    name: "Poppy Grower",
+    team: "townsfolk",
+    ability:
+      "Minions & Demons do not know each other. If you die, they learn who each other are that night.",
+    kill: "high", // once they die, the evil team knows each other
+  },
   general: {
     name: "General",
     team: "townsfolk",
@@ -748,6 +755,12 @@ export const CHARACTERS = {
     team: "demon",
     ability:
       "Each night*, choose a player: they die. Your 2 Townsfolk neighbours are poisoned.",
+  },
+  lleech: {
+    name: "Lleech",
+    team: "demon",
+    ability:
+      "Each night*, choose a player: they die. You start by choosing an alive player: they are poisoned - you die if & only if they are dead.",
   },
   vortox: {
     name: "Vortox",

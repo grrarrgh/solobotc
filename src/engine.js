@@ -241,6 +241,7 @@ export class Engine {
     this.snakeCharmerLasting();
     this.vigormortisLasting();
     this.noDashiiLasting();
+    this.lleechLasting();
     this.courtierLasting();
     this.minstrelLasting();
     this.pukkaLasting();
@@ -478,7 +479,10 @@ export class Engine {
   // The rest of the night, in night order, then dawn.
   resolveNight() {
     const s = this.s;
+    // (The Poppy Grower died today: the evil team learns each other now.)
+    this.poppyWakes();
     this.poisoners();
+    this.lleechHosts();
     this.widows();
     this.sailors();
     this.innkeepers();
@@ -526,6 +530,9 @@ export class Engine {
     if (s.winner) {
       return;
     }
+
+    // (Or tonight.)
+    this.poppyWakes();
 
     // Any Sailor choice still open is decided now.
     this.sailorResolve();
@@ -774,6 +781,11 @@ export class Engine {
       }
     }
 
+    // (Left with only their host and you, the Lleech kills you.)
+    if (d.role === "lleech" && this.lleechCornered(d, targets)) {
+      return;
+    }
+
     for (const t of targets) {
       if (!s.winner) {
         this.attack(d, t);
@@ -1009,6 +1021,8 @@ export class Engine {
     this.barberDeath(p);
     this.vigormortisDeath(p);
     this.pixieGains(p);
+    this.lleechHostDied(p, cause);
+    this.poppyDeath(p);
 
     // "When you learn that you died" (Moonchild, Klutz): at night, that's in
     // the morning.
@@ -1456,6 +1470,31 @@ export class Engine {
       this.confirm(p, "maybe", `they claim the ${name(claim)}, and survived execution`);
     }
 
+    // With the Lleech on the script (and no Devil's Advocate), surviving
+    // with no claim to explain it says they're the Lleech: good NPCs know
+    // it, and stop nominating them (only the host's death kills it).
+    const explained =
+      ["fool", "sailor"].includes(claim) ||
+      s.players.some(
+        (x) =>
+          x.alive &&
+          x !== p &&
+          (claimTo(x) === "pacifist" ||
+            (claimTo(x) === "tealady" && this.aliveNeighbours(x).includes(p))),
+      );
+
+    if (
+      s.script.ids.includes("lleech") &&
+      !s.script.ids.includes("devilsadvocate") &&
+      !explained
+    ) {
+      this.outed(p, "they survived execution with nothing to explain it: they must be the Lleech");
+      (s.lleechSuspects ??= []).push(p.id);
+      this.audit("lleech", `${p.label} survived execution with nothing to explain it: the town takes them for the Lleech.`, {
+        playerId: p.id,
+      });
+    }
+
     for (const x of s.players.filter((y) => y.alive && y !== p)) {
       if (claimTo(x) === "pacifist") {
         this.confirm(x, "maybe", `they claim the Pacifist, and ${p.label} survived execution`);
@@ -1536,7 +1575,11 @@ export class Engine {
             }),
         );
 
-      if (!p.alive || late || (urgent && s.r() < COME_CLEAN_URGENT_CHANCE)) {
+      // (A hiding Poppy Grower only comes clean once dead: alive, saying so
+      // would get them killed.)
+      const poppy = p.claim === "poppygrower" && p.cover.kind === "hide";
+
+      if (!p.alive || (!poppy && (late || (urgent && s.r() < COME_CLEAN_URGENT_CHANCE)))) {
         this.comeClean(p);
       }
     }
@@ -1579,7 +1622,10 @@ export class Engine {
     const s = this.s;
     const claimed = new Set(
       s.players
-        .flatMap((x) => [claimHeard(x, p), x !== p && x.alignment === "evil" ? x.claim : null])
+        .flatMap((x) => [
+          claimHeard(x, p),
+          x !== p && x.alignment === "evil" && !p.poppyBlind ? x.claim : null,
+        ])
         .filter(Boolean),
     );
     const inPlay = new Set(s.players.flatMap((x) => [x.role, x.shown]));
@@ -1588,8 +1634,9 @@ export class Engine {
       alignment(id) === "good" &&
       !claimed.has(id) &&
       id !== p.claim;
+    // (Kept apart by the Poppy Grower, they were never told the bluffs.)
     const role =
-      pick((s.demonBluffs ?? []).filter(fits), s.r) ??
+      pick((p.poppyBlind ? [] : (s.demonBluffs ?? [])).filter(fits), s.r) ??
       pick(
         s.script.ids.filter((id) => fits(id) && !inPlay.has(id)),
         s.r,

@@ -82,6 +82,7 @@ import {
   isDemon,
   atFinal,
   jinxBarred,
+  poppyBlocks,
   works,
   bluffing,
   shownBefore,
@@ -140,8 +141,21 @@ export const fooledBy = (p, x) =>
 
 // Whether x is a good player to evil player p (null: the team as a whole),
 // who picks good players to kill, poison or curse: not the Magician they
-// think is one of their own.
-const goodTo = (p, x) => x.alignment === "good" && !fooledBy(p, x);
+// think is one of their own; any teammate they don't know (see blind()).
+// Whether evil player p doesn't know evil player x is a teammate: the
+// Poppy Grower kept the team apart (see setup.js, poppygrower.js).
+const blind = (p, x) => Boolean(p?.poppyBlind) && x.alignment === "evil" && x.id !== p.id;
+
+const goodTo = (p, x) => (x.alignment === "good" || blind(p, x)) && !fooledBy(p, x);
+
+// Whether evil player p keeps x alive: x is the host of a living Lleech
+// that p is, or knows is their Demon (not while the Poppy Grower keeps the
+// team apart: see teammate()). Killing the host kills the Lleech.
+export const spares = (s, p, x) => {
+  const d = s.players.find((y) => y.alive && y.role === "lleech" && y.lleechHost === x.id);
+
+  return Boolean(d) && Boolean(p) && (d === p || (sideOf(p) === "evil" && teammate(p, d)));
+};
 
 // The team p plays for.
 export const sideOf = (p) =>
@@ -152,7 +166,7 @@ export const sideOf = (p) =>
 export const teammate = (p, x) =>
   thinksEvil(p)
     ? x.id === p.id || (p.lunaticTeam ?? []).includes(x.id)
-    : x.alignment === "evil" || fooledBy(p, x);
+    : (x.alignment === "evil" && !blind(p, x)) || fooledBy(p, x);
 
 // Whether p has used the once-per-game ability of `role` (null if it has
 // none).
@@ -1158,9 +1172,12 @@ export class SimpleStrategy {
       return { kind: "decoy", as: "damsel", night: s.night };
     }
 
-    // (The Magician keeps the evil team fooled by keeping quiet.)
+    // (The Magician keeps the evil team fooled by keeping quiet. The Poppy
+    // Grower always hides: once the evil team kills them, it knows itself.)
     const kind =
-      p.claim === "magician"
+      p.claim === "poppygrower"
+        ? "hide"
+        : p.claim === "magician"
         ? s.r() < MAGICIAN_HIDE_CHANCE && "hide"
         : DEMON_KILL_PRIORITY[p.claim] === "high" && !HIDE_NEVER.includes(p.claim)
         ? s.r() < HIDE_CHANCE && "hide"
@@ -1541,6 +1558,8 @@ export class SimpleStrategy {
       !t.human &&
       p.role !== "heretic" &&
       !(sideOf(p) === "good" && (s.goblinClaims ?? []).some((x) => x.id === t.id)) &&
+      !(sideOf(p) === "good" && (s.lleechSuspects ?? []).includes(t.id)) &&
+      !spares(s, p, t) &&
       sus.score >= NPC_NOMINATE_EVIDENCE
       ? { target: t, score: sus.score, reasons: p.suspicion.reasons }
       : null;
@@ -1576,6 +1595,11 @@ export class SimpleStrategy {
 
     if (goblin && sideOf(v) === "evil" && teammate(v, n)) {
       return true;
+    }
+
+    // (Never to execute their Lleech's host: see spares().)
+    if (spares(s, v, n)) {
+      return false;
     }
 
     if (tally?.humanChoice && atFinal(s) && sideOf(v) !== "evil") {
@@ -1867,13 +1891,13 @@ export class SimpleStrategy {
   fearmonger(s, p) {
     const last = byId(s, p.fearTarget);
 
-    if (last?.alive && !last.human && last.alignment === "good") {
+    if (last?.alive && !last.human && last.alignment === "good" && !spares(s, p, last)) {
       return last;
     }
 
     const pool = untwinned(
       s,
-      s.players.filter((x) => x.alive && !x.human && x !== p && goodTo(p, x)),
+      s.players.filter((x) => x.alive && !x.human && x !== p && goodTo(p, x) && !spares(s, p, x)),
     );
     const heat = (t) =>
       s.players.filter(
@@ -1884,15 +1908,32 @@ export class SimpleStrategy {
     return pick(most ? pool.filter((t) => heat(t) === most) : pool, s.r);
   }
 
+  // The Lleech's host: a living good NPC (never you: NPCs never nominate
+  // you, so you could never be executed), preferring one who claims an
+  // information character, whose information the poison spoils.
+  lleechHost(s, p) {
+    const good = untwinned(
+      s,
+      s.players.filter((x) => x.alive && !x.human && x !== p && goodTo(p, x)),
+    );
+    const voices = good.filter(
+      (x) =>
+        FIRST_NIGHT_INFO.includes(claimHeard(x, p)) ||
+        ONGOING_INFO.includes(claimHeard(x, p)),
+    );
+
+    return pick(voices.length ? voices : good, s.r);
+  }
+
   // Who Psychopath p kills in public today: whoever the Demon would kill
   // (see demon()), but never a teammate or themself.
   psychopath(s, p) {
     const t = this.demon(s, p);
 
-    return t?.alive && t !== p && goodTo(p, t)
+    return t?.alive && t !== p && goodTo(p, t) && !spares(s, p, t)
       ? t
       : pick(
-          untwinned(s, s.players.filter((x) => x.alive && x !== p && goodTo(p, x))),
+          untwinned(s, s.players.filter((x) => x.alive && x !== p && goodTo(p, x) && !spares(s, p, x))),
           s.r,
         );
   }
@@ -2032,7 +2073,8 @@ export class SimpleStrategy {
       );
     }
 
-    const bluffs = p.bluffs?.length ? p.bluffs : (s.demonBluffs ?? []);
+    // (Kept apart by the Poppy Grower, they were never told the bluffs.)
+    const bluffs = p.bluffs?.length ? p.bluffs : p.poppyBlind ? [] : (s.demonBluffs ?? []);
     const hiders = pool.filter((x) => bluffs.includes(claimHeard(x, p)));
 
     if (hiders.length && (doomed || s.r() < DAMSEL_HIDER_CHANCE)) {
@@ -2083,7 +2125,7 @@ export class SimpleStrategy {
       return this.suspect(s, p, options) ?? pick(options, s.r);
     }
 
-    const good = options.filter((x) => !teammate(p, x));
+    const good = options.filter((x) => !teammate(p, x) && !spares(s, p, x));
     const most = Math.max(0, ...good.map((x) => counts[x.id] ?? 0));
     const top = good.filter((x) => (counts[x.id] ?? 0) === most);
 
@@ -2209,10 +2251,14 @@ export class SimpleStrategy {
         : undefined;
 
     // Neither twin is ever the Demon's kill, nor anyone who came back to
-    // life tonight (they can't die again).
+    // life tonight (they can't die again), nor their Lleech's host (it
+    // would die too: see spares()).
     const pool = this.others(s, p).filter(
       (x) =>
-        !isTwin(s, x) && !exclude.includes(x) && !s.revived?.includes(x.id),
+        !isTwin(s, x) &&
+        !exclude.includes(x) &&
+        !s.revived?.includes(x.id) &&
+        !spares(s, p, x),
     );
     const decoys = pool.filter(
       (x) => x.role !== "lunatic" && !p.foiled?.includes(x.id),
@@ -2301,8 +2347,10 @@ export class SimpleStrategy {
   // teammate): someone who sees the Grimoire, so the team knows every
   // character in play. (Not the Lunatic, whose team is imagined.)
   spyWorks(s, p) {
+    // (Not while the Poppy Grower has their ability: their jinx.)
     return (
       p.alignment === "evil" &&
+      !poppyBlocks(s) &&
       s.players.some(
         (x) => x.alignment === "evil" && ability(x) === "spy" && works(x),
       )
@@ -2388,7 +2436,9 @@ export class SimpleStrategy {
       isDemon(p) &&
       s.players.some((y) => y.alive && y.role === "magician");
 
-    if (x.alignment !== "evil" || hidden) {
+    // (With the team kept apart by the Poppy Grower, a teammate is just
+    // another player.)
+    if (x.alignment !== "evil" || hidden || blind(p, x)) {
       // (A good player the town is sure of can't be framed: kill them first.)
       if (sure(s).includes(x.id)) {
         return "top";
@@ -2631,13 +2681,19 @@ export class SimpleStrategy {
       return null;
     }
 
-    // (Never the Lunatic, the evil team's decoy.)
+    // (Never the Lunatic, the evil team's decoy; nor their Lleech's host.)
+    const a = s.players.find((x) => x.role === "assassin");
+
     return pick(
       untwinned(
         s,
         s.players.filter(
           (x) =>
-            x.alive && !x.human && goodTo(null, x) && x.role !== "lunatic",
+            x.alive &&
+            !x.human &&
+            goodTo(null, x) &&
+            x.role !== "lunatic" &&
+            !spares(s, a, x),
         ),
       ),
       s.r,
@@ -2779,7 +2835,8 @@ export class SimpleStrategy {
     const plausible = [
       ...new Set([
         ...s.players.map((y) => claimHeard(y, p)).filter(Boolean),
-        ...(s.demonBluffs ?? []),
+        // (Not ones they were never told: see poppygrower.js.)
+        ...(p.poppyBlind ? [] : (s.demonBluffs ?? [])),
       ]),
     ];
     const others = this.others(s, p);
@@ -2985,7 +3042,7 @@ export class SimpleStrategy {
 
     const good = untwinned(
       s,
-      this.others(s, p).filter((x) => goodTo(p, x)),
+      this.others(s, p).filter((x) => goodTo(p, x) && !spares(s, p, x)),
     );
 
     return this.noted(p, "witch", pick(this.fresh(p, "witch", good), s.r));
@@ -3003,7 +3060,7 @@ export class SimpleStrategy {
   // they go back to their old one.
   cerenovus(s, p) {
     const others = untwinned(s, this.others(s, p));
-    const teammates = others.filter((x) => x.alignment === "evil");
+    const teammates = others.filter((x) => x.alignment === "evil" && !blind(p, x));
     const evil = teammates.length && s.r() < CERENOVUS_EVIL_CHANCE;
     const target = this.noted(
       p,
@@ -3065,7 +3122,8 @@ export class SimpleStrategy {
     if (s.r() < PITHAG_EVIL_CHANCE) {
       const choices = s.players
         .filter(
-          (x) => x.alive && !x.human && x.alignment === "evil" && !isTwin(s, x),
+          (x) =>
+            x.alive && !x.human && x.alignment === "evil" && !blind(p, x) && !isTwin(s, x),
         )
         .map((t) => ({
           target: t,
@@ -3277,7 +3335,7 @@ export class SimpleStrategy {
   // The Godfather kills a good NPC, the way the Demon picks.
   godfather(s, p) {
     const good = untwinned(s, this.others(s, p)).filter(
-      (x) => goodTo(p, x) && !s.revived?.includes(x.id),
+      (x) => goodTo(p, x) && !s.revived?.includes(x.id) && !spares(s, p, x),
     );
     const decoys = good.filter((x) => x.role !== "lunatic");
 

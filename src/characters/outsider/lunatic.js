@@ -120,13 +120,15 @@ export const lunatic = {
       labels.length < 2
         ? labels.join("")
         : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+    // (With the Poppy Grower alive, they were never shown any.)
+    const minions = list ? `My Minions were ${list}.` : "I was never shown my Minions.";
     const said = ` says: "${
       was ? `I'm not ${was}: there was no Mayor win. I'm` : "I was"
-    } the Lunatic: I thought I was the ${name(shown)}. My Minions were ${list}."`;
+    } the Lunatic: I thought I was the ${name(shown)}. ${minions}"`;
     const info = {
       night: s.night,
       role: "lunatic",
-      text: `Lunatic: my Minions were ${list}.`,
+      text: list ? `Lunatic: my Minions were ${list}.` : "Lunatic: I was never shown my Minions.",
       targets: teamIds,
       trigger: was ? "normal" : "death",
       functioning: !fake,

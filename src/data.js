@@ -175,7 +175,7 @@ export const JINXES = [
   },
   // `exclusive`: never both in play (setup.js; the Pit-Hag never makes the
   // Heretic, as she's one of them: strategy pithag())
-  ...["baron", "godfather", "pithag", "spy", "widow"].map((id) => ({
+  ...["baron", "godfather", "lleech", "pithag", "spy", "widow"].map((id) => ({
     ids: ["heretic", id],
     text: "Only 1 jinxed character can be in play.",
     exclusive: true,
@@ -185,6 +185,23 @@ export const JINXES = [
   {
     ids: ["pithag", "politician"],
     text: "If the Pit-Hag turns an evil player into the Politician, they can't turn good due to their own ability.",
+  },
+  // characters/demon/lleech.js lleechHostDied()
+  {
+    ids: ["lleech", "mastermind"],
+    text: "If the Mastermind is alive and the Lleech host dies by execution, the Lleech lives but loses their ability.",
+  },
+  // characters/townsfolk/slayer.js shoot()
+  { ids: ["lleech", "slayer"], text: "If the Slayer slays the Lleech host, the host dies." },
+  // poppyBlocks() in storyteller.js (strategy spyWorks(), bluff.js
+  // bluffMode(), characters/minion/widow.js)
+  {
+    ids: ["spy", "poppygrower"],
+    text: "If the Poppy Grower has their ability, the Spy does not see the Grimoire.",
+  },
+  {
+    ids: ["widow", "poppygrower"],
+    text: "If the Poppy Grower has their ability, the Widow does not see the Grimoire.",
   },
   // at CERENOVUS_GOBLIN_CHANCE (strategy cerenovus()); they claim it when
   // nominated (characters/minion/goblin.js)

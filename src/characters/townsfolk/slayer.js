@@ -33,13 +33,21 @@ export const slayer = {
   },
 
   // Resolves a Slayer shot; only a working Slayer can kill, and only the
-  // Imp (or the Recluse, who registers as one).
+  // Imp (or the Recluse, who registers as one). By their jinx, a Lleech's
+  // host dies too (and so does the Lleech: see lleech.js).
   shoot(p, t) {
     if (
       ability(p) === "slayer" &&
       works(p) &&
-      (isDemon(t) || t.role === "recluse")
+      (isDemon(t) || t.role === "recluse" || this.lleechOf(t))
     ) {
+      if (!isDemon(t) && this.lleechOf(t)) {
+        this.audit("lleech", `${p.label} (Slayer) shot ${t.label}, the Lleech's host: the host dies (their jinx).`, {
+          actorId: p.id,
+          targetId: t.id,
+        });
+      }
+
       const before = this.alive().length;
 
       this.kill(t, "slayer");

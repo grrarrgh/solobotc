@@ -30,6 +30,7 @@ import {
   works,
   isDrunk,
   vortoxActive,
+  poppyBlocks,
   nameable,
   oneOf,
   goodRoles,
@@ -114,6 +115,8 @@ export function madeUpMemories(p, role) {
 // Sage's or the Ravenkeeper's.)
 export const bluffMode = (s, p, role, deadOk = false) =>
   p.role === "spy" &&
+  // (Not while the Poppy Grower has their ability: their jinx.)
+  !poppyBlocks(s) &&
   !isDrunk(p) &&
   !p.poisoned &&
   (deadOk || works(p)) &&

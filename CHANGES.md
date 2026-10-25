@@ -2,6 +2,32 @@
 
 Newest first.
 
+### Phase 3: the Lleech and Poppy Grower
+
+- Lleech (src/characters/demon/lleech.js):
+  - On Night 1, the Lleech chooses a host: a living good NPC, preferring one who claims an information character. Never you: NPCs never nominate you, so you could never be executed. The host is poisoned every night while the Lleech lives (`lleechLasting()`). A Lleech that fails to choose (drunk or poisoned), or that became the Lleech later, chooses on a later night.
+  - Each night after that, it kills like any Demon, never its own host.
+  - It can't die while its host lives, unless it's drunk or poisoned (`lleechSafe()` in `guard()`). Nothing but the Assassin gets past that.
+  - When the host dies, by any cause, the Lleech dies too (`lleechHostDied()`), and good wins unless someone takes over as Demon.
+  - Executed and surviving with no claim to explain it (no Fool, Sailor, Pacifist or Tea Lady neighbour), with the Lleech on the script and no Devil's Advocate, the town takes them for the Lleech. They're outed as evil, and good NPCs stop nominating them (`s.lleechSuspects`).
+  - The evil team spares its Lleech's host (`spares()` in src/strategy.js). The Demon, Assassin, Godfather, Witch, Psychopath and Fearmonger never choose them, the Boomdandy's countdown never points at them, and evil NPCs never nominate or vote for them. That's while they know who their Demon is: not while the Poppy Grower keeps the team apart.
+  - Left with only their host and you to kill, the Lleech kills you, and evil wins (`lleechCornered()`). This is the one time the Demon kills you: otherwise the game could never end.
+- Poppy Grower (src/characters/townsfolk/poppygrower.js):
+  - While a Poppy Grower dealt at setup has their ability (alive, sober and healthy; `poppyBlocks()`), the Minions and Demon don't know who each other are (`p.poppyBlind`).
+  - Each of them picks a bluff on their own. Nobody gets the Demon's bluffs, not even a Spy or Widow, and nothing falls back on them (a Minion guessing the Damsel, faking coming clean, juggling).
+  - To each other they're just players (`teammate()`, `goodTo()`, kill priority, the Cerenovus's and Pit-Hag's picks), so the Demon may kill its own Minion, and a Fearmonger may choose a teammate.
+  - The setup log says so, and the Demon's bluffs line reads "not told: the Poppy Grower".
+  - The Lunatic, who thinks they're the Demon, isn't shown their "Minions" or bluffs either, just as a real Demon wouldn't be, and claims a Townsfolk on their own. The setup log says so. The Demon still knows who the Lunatic is and whom they attack: that's the Lunatic's own ability. A Lunatic who dies before learning them says "I was never shown my Minions."
+  - When the Poppy Grower dies with their ability, the evil team learns who each other are that night (`poppyWakes()`), the Demon learns its bluffs, and the Lunatic is shown their "Minions" and bluffs. All of it is logged.
+  - An NPC Poppy Grower always hides behind a cover story (a "low" character), and comes clean only once dead, never "late in the game" or because of their information. Their kill priority is "high": the evil team goes after them, if it can find them.
+- Jinxes, checked against the Djinn:
+  - Heretic & Lleech: "Only 1 jinxed character can be in play." This joins the Heretic's other `exclusive` jinxes, and the whole-game test now covers it.
+  - Lleech & Mastermind: if the host is executed while the Mastermind lives, the Lleech lives but loses their ability.
+  - Lleech & Slayer: a Slayer's shot at the host kills the host (and so the Lleech).
+  - Spy & Poppy Grower, and Widow & Poppy Grower: while the Poppy Grower has their ability, the Spy and Widow don't see the Grimoire. The Spy's made-up information is a lie, not the truth, and the Widow still poisons.
+- Every jinx between the 10 Outed Evil characters and characters in the game is now in, except the Alchemist's 4 (Phase 4). The others are with characters the game doesn't have.
+- The 8 existing scripts are unchanged: 640 seeded games, 8 to 15 seats, gave byte-identical logs before and after.
+
 ### Phase 2: the Goblin, Fearmonger and Psychopath
 
 - Goblin (src/characters/minion/goblin.js): when nominated, an NPC Goblin claims it in public at GOBLIN_CLAIM_CHANCE (0.75) ("Player 6 says: "I'm the Goblin! Execute me today, and evil wins.""). If they're executed that day, dead or not and not drunk or poisoned, their team wins.

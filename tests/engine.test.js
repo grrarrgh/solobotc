@@ -51,6 +51,8 @@ import {
   heard,
   fooledBy,
   sideOf,
+  teammate,
+  spares,
 } from "../src/strategy.js";
 import {
   nightInfo,
@@ -9974,17 +9976,17 @@ test("the Heretic is never in play with the Baron, Godfather, Pit-Hag, Spy or Wi
   assert.ok(heretics > 0 && left > 0, `${heretics} Heretics, ${left} left out`);
 });
 
-test("the Heretic and a Baron, Godfather, Pit-Hag, Spy or Widow are never in play together, all game", () => {
-  const jinxed = ["baron", "godfather", "pithag", "spy", "widow"];
+test("the Heretic and a Baron, Godfather, Lleech, Pit-Hag, Spy or Widow are never in play together, all game", () => {
+  const jinxed = ["baron", "godfather", "lleech", "pithag", "spy", "widow"];
   // (With every character that changes who's what: the Philosopher, Barber,
   // Snake Charmer, Fang Gu, Huntsman, Scarlet Woman...)
   const raw = [
     { id: "_meta", name: "Heretic jinxes, all game" },
     ...["philosopher", "snakecharmer", "huntsman", "cannibal", "washerwoman", "librarian", "chef", "empath", "fortuneteller", "undertaker", "monk", "slayer", "mayor"],
     ...["heretic", "barber", "damsel", "politician", "saint", "recluse", "butler"],
-    ...jinxed,
+    ...jinxed.filter((x) => x !== "lleech"),
     ...["scarletwoman", "poisoner"],
-    ...["imp", "fanggu"],
+    ...["imp", "fanggu", "lleech"],
   ];
   const inPlay = (s) => s.players.flatMap((x) => [x.role, x.gained].filter(Boolean));
   let heretics = 0;
@@ -10519,6 +10521,407 @@ test("whole games play out with the Goblin, Fearmonger and Psychopath, and each 
     seen.announce += s.publicLog.some((x) => /the Fearmonger has chosen a new player/.test(x)) ? 1 : 0;
     seen.psychopath += /publicly chooses/.test(s.publicLog.join("\n")) ? 1 : 0;
     seen.roshambo += /Roshambo: /.test(text) ? 1 : 0;
+  }
+
+  for (const [k, n] of Object.entries(seen)) {
+    assert.ok(n > 0, `${k}: ${JSON.stringify(seen)}`);
+  }
+});
+
+// ── Outed Evil, phase 3: the Lleech and Poppy Grower ─────────────
+
+const outedSoFar3 = [
+  { id: "_meta", name: "Outed Evil (so far)" },
+  ...["sailor", "general", "snakecharmer", "fortuneteller", "savant", "philosopher", "huntsman", "fisherman", "juggler", "cannibal", "tealady", "poppygrower"],
+  ...["lunatic", "barber", "politician", "damsel", "heretic"],
+  ...["poisoner", "goblin", "fearmonger", "psychopath"],
+  ...["imp", "lleech"],
+  "sentinel",
+];
+
+// A 5-player Night 2 (see base()): p[4] is the Lleech, with p[1] (the Chef)
+// as their host.
+function lleechGame(seed) {
+  const s = base(seed);
+  const e = new Engine(s);
+
+  role(s.players[4], "lleech", "evil");
+  s.players[4].lleechHost = s.players[1].id;
+
+  return { s, e, p: s.players, d: s.players[4], host: s.players[1] };
+}
+
+test("the Lleech chooses a host on Night 1 (a good NPC, never you): poisoned for as long as the Lleech lives", () => {
+  for (let seed = 0; seed < 40; seed++) {
+    const s = base(`lleech-host-${seed}`);
+    const e = new Engine(s);
+    const d = s.players[4];
+
+    role(d, "lleech", "evil");
+    s.phase = "night";
+    s.night = 1;
+    e.lleechHosts();
+
+    const host = e.player(d.lleechHost);
+
+    assert.ok(host && !host.human && host.alignment === "good", `seed ${seed}`);
+    assert.ok(host.poisoned);
+    assert.match(s.audit.at(-1).text, /chose .* as their host; poisoned, and the Lleech dies if and only if they're dead\.$/);
+
+    // Every dusk, poisoned again.
+    host.poisoned = false;
+    e.lleechLasting();
+    assert.ok(host.poisoned);
+
+    // Chosen once.
+    e.lleechHosts();
+    assert.equal(d.lleechHost, host.id);
+  }
+});
+
+test("the Lleech can't die while their host lives; executed, the town takes them for the Lleech", () => {
+  const { s, e, p, d, host } = lleechGame("lleech-safe");
+
+  s.script = { ...s.script, ids: [...s.script.ids, "lleech"] };
+  voted(s, p[2], d);
+  e.execute(d);
+
+  assert.ok(d.alive);
+  assert.equal(s.winner, null);
+  assert.match(s.publicLog.at(-1), /is executed\. But does not die\.$/);
+  assert.ok(s.lleechSuspects.includes(d.id));
+  assert.ok(s.outed.some((x) => x.id === d.id));
+
+  // Good NPCs stop nominating them.
+  e.strat.suspicion = (_, x) => (x.suspicion = { targetId: d.id, score: 99, reasons: [] });
+  assert.equal(e.strat.nomination(s, p[2]), null);
+
+  // Poisoned, they can die.
+  d.poisoned = true;
+  assert.ok(e.kill(d, "slayer"));
+  assert.ok(host.alive);
+});
+
+test("the Lleech's host dies: so does the Lleech, and good wins", () => {
+  const { s, e, p, d, host } = lleechGame("lleech-host-dies");
+
+  voted(s, p[2], host);
+  e.execute(host);
+
+  assert.equal(host.alive, false);
+  assert.equal(d.alive, false);
+  assert.equal(d.death, "lleech");
+  assert.equal(s.winner, "good");
+  assert.ok(s.audit.some((x) => /the Lleech's host, died: .* \(Lleech\) dies too\./.test(x.text)));
+});
+
+test("the Lleech and Mastermind jinx: the host executed while the Mastermind lives, the Lleech lives without their ability", () => {
+  const { s, e, p, d, host } = lleechGame("lleech-mastermind");
+
+  role(p[3], "mastermind", "evil");
+  voted(s, p[2], host);
+  e.execute(host);
+
+  assert.ok(d.alive);
+  assert.equal(s.winner, null);
+  assert.equal(d.drunkFrom, "lleech");
+  assert.match(s.audit.find((x) => /Mastermind\) lives/.test(x.text)).text, /lives, but loses their ability\.$/);
+  assert.ok(JINXES.some((j) => j.ids.includes("lleech") && j.ids.includes("mastermind")));
+});
+
+test("the Lleech and Slayer jinx: the Slayer's shot kills the Lleech's host (and so the Lleech)", () => {
+  const { s, e, p, d, host } = lleechGame("lleech-slayer");
+
+  role(p[2], "slayer", "good");
+  assert.ok(e.shoot(p[2], host));
+  assert.equal(host.alive, false);
+  assert.equal(d.alive, false);
+  assert.equal(s.winner, "good");
+  assert.ok(JINXES.some((j) => j.ids.includes("lleech") && j.ids.includes("slayer")));
+});
+
+test("left with only their host and you, the Lleech kills you (else the game could never end)", () => {
+  const { s, e, p, d, host } = lleechGame("lleech-cornered");
+
+  p[2].alive = false;
+  p[3].alive = false;
+  s.phase = "night";
+  s.night = 3;
+  e.demon();
+
+  assert.equal(p[0].alive, false);
+  assert.ok(host.alive);
+  assert.equal(s.winner, "evil");
+  assert.ok(s.audit.some((x) => /has only their host and you left to kill: they kill you\./.test(x.text)));
+
+  // With anyone else to kill, never you.
+  const t = lleechGame("lleech-not-cornered");
+
+  t.p[2].alive = false;
+  t.s.phase = "night";
+  t.s.night = 3;
+  t.e.demon();
+  assert.ok(t.p[0].alive);
+});
+
+test("the evil team never kills, curses, chooses, nominates or votes for their Lleech's host", () => {
+  const { s, e, p, d, host } = lleechGame("lleech-spared");
+  const strat = new SimpleStrategy();
+  const minion = p[3];
+
+  s.phase = "night";
+  s.night = 3;
+
+  for (let i = 0; i < 100; i++) {
+    s.r = rng(`spared-${i}`);
+    assert.notEqual(strat.demon(s, d), host);
+
+    for (const r of ["assassin", "godfather", "witch", "psychopath", "fearmonger"]) {
+      role(minion, r, "evil");
+      minion.fearTarget = null;
+
+      const pick = r === "assassin" ? (strat.onceReady = () => true, strat.assassin(s)) : strat[r](s, minion);
+
+      assert.notEqual(pick, host, r);
+    }
+  }
+
+  s.phase = "day";
+  strat.suspicion = (_, x) => (x.suspicion = { targetId: host.id, score: 99, reasons: [] });
+  assert.equal(strat.nomination(s, minion), null);
+  assert.equal(strat.vote(s, minion, host), false);
+  assert.equal(strat.vote(s, d, host), false);
+});
+
+test("kept apart by the Poppy Grower, Minions don't know the Lleech's host; the Lleech still spares them", () => {
+  const { s, p, d, host } = lleechGame("lleech-poppy");
+  const strat = new SimpleStrategy();
+  const minion = p[3];
+
+  role(minion, "godfather", "evil");
+  minion.poppyBlind = true;
+  d.poppyBlind = true;
+
+  assert.ok(!spares(s, minion, host));
+  assert.ok(spares(s, d, host));
+  assert.ok(strat.godfather(s, minion) !== undefined);
+});
+
+test("the Heretic and the Lleech are never in play together", () => {
+  let lleechs = 0;
+
+  for (let seed = 0; seed < 200; seed++) {
+    const s = createState(outedSoFar3, 12, `heretic-lleech-${seed}`);
+    const roles = s.players.map((x) => x.role);
+
+    lleechs += roles.includes("lleech") ? 1 : 0;
+    assert.ok(!(roles.includes("lleech") && roles.includes("heretic")), roles.join(","));
+  }
+
+  assert.ok(lleechs > 0);
+  assert.ok(JINXES.some((j) => j.exclusive && j.ids.includes("heretic") && j.ids.includes("lleech")));
+});
+
+// A setup with the Poppy Grower dealt (as a good NPC).
+function poppyGame(seed, extra = []) {
+  const raw = [...outedSoFar3.filter((x) => x !== "lleech"), ...extra];
+
+  for (let k = 0; k < 400; k++) {
+    const s = createState(raw, 10, `${seed}-${k}`);
+
+    if (s.players.some((x) => x.role === "poppygrower" && !x.human)) {
+      return s;
+    }
+  }
+
+  throw Error("no Poppy Grower dealt");
+}
+
+test("with the Poppy Grower in play, the Minions and Demon don't know each other, nor the Demon its bluffs", () => {
+  const s = poppyGame("poppy-setup");
+  const evil = s.players.filter((x) => x.alignment === "evil");
+  const demon = evil.find((x) => team(x.role) === "demon");
+  const minion = evil.find((x) => team(x.role) === "minion");
+
+  assert.ok(evil.every((x) => x.poppyBlind));
+  assert.deepEqual(demon.bluffs, []);
+  assert.ok(!teammate(demon, minion) && !teammate(minion, demon));
+  assert.ok(teammate(demon, demon));
+  assert.ok(s.audit.some((x) => x.type === "poppygrower" && /don't learn who each other are/.test(x.text)));
+  assert.match(s.audit.find((x) => x.type === "bluffs").text, /not told: the Poppy Grower/);
+});
+
+test("with the Poppy Grower in play, no Minion gets any bluffs either, not even a Spy or Widow", () => {
+  let spies = 0;
+
+  for (let seed = 0; seed < 300; seed++) {
+    const s = createState([...outedSoFar3, "spy", "widow"], 12, `poppy-bluffs-${seed}`);
+
+    if (!s.players.some((x) => x.role === "poppygrower")) {
+      continue;
+    }
+
+    for (const p of s.players.filter((x) => x.alignment === "evil" && x.role !== "lunatic")) {
+      spies += ["spy", "widow"].includes(p.role) ? 1 : 0;
+      assert.deepEqual(p.bluffs, [], `${p.role}, seed ${seed}`);
+      assert.ok(p.poppyBlind);
+    }
+  }
+
+  assert.ok(spies > 0);
+});
+
+test("with the Poppy Grower in play, the Lunatic isn't shown their Minions or bluffs, until the Poppy Grower dies", () => {
+  let s = null;
+
+  for (let k = 0; k < 2000 && !s; k++) {
+    const t = createState(outedSoFar3, 12, `poppy-lunatic-${k}`);
+
+    if (
+      t.players.some((x) => x.role === "poppygrower") &&
+      t.players.some((x) => x.role === "lunatic" && !x.human)
+    ) {
+      s = t;
+    }
+  }
+
+  assert.ok(s, "no game with both");
+
+  const lunatic = s.players.find((x) => x.role === "lunatic");
+  const pg = s.players.find((x) => x.role === "poppygrower");
+  const e = new Engine(s);
+
+  assert.deepEqual(lunatic.lunaticTeam, []);
+  assert.deepEqual(lunatic.bluffs, []);
+  assert.equal(team(lunatic.claim), "townsfolk");
+  assert.match(
+    s.audit.find((x) => x.type === "lunatic").text,
+    /bluffs none \(the Poppy Grower\); .* "Minions": not shown \(the Poppy Grower\)\. The Demon knows who they are\./,
+  );
+
+  // Dead, they say they never saw them.
+  s.phase = "day";
+  s.day = 1;
+  e.lunaticSays(lunatic, lunatic.shown, lunatic.lunaticTeam);
+  assert.match(s.publicLog.at(-1), /I was never shown my Minions\."$/);
+
+  // Once the Poppy Grower dies: shown that night.
+  const later = lunatic.lunaticLater;
+
+  e.kill(pg, "execution");
+  s.phase = "night";
+  e.poppyWakes();
+  assert.deepEqual(lunatic.lunaticTeam, later.team);
+  assert.deepEqual(lunatic.bluffs, later.bluffs);
+  assert.ok(lunatic.lunaticTeam.length >= 2);
+  assert.ok(s.audit.some((x) => /\(Lunatic\) is shown their "Minions"/.test(x.text)));
+});
+
+test("the Spy and Widow don't see the Grimoire while the Poppy Grower has their ability (their jinxes)", () => {
+  const { s, e, p } = minionDay("poppy-spy", "spy");
+  const strat = new SimpleStrategy();
+
+  role(p[2], "poppygrower", "good");
+  assert.ok(!strat.spyWorks(s, p[3]));
+  assert.equal(bluffMode(s, p[3], "chef"), "lie");
+
+  p[2].alive = false;
+  assert.ok(strat.spyWorks(s, p[3]));
+  assert.equal(bluffMode(s, p[3], "chef"), "truth");
+
+  // The Widow still poisons, but sees nothing.
+  const w = minionDay("poppy-widow", "widow");
+
+  role(w.p[2], "poppygrower", "good");
+  w.s.phase = "night";
+  w.e.strat.widow = () => w.p[1];
+  w.e.widows();
+  assert.equal(w.s.widowGrimoire, undefined);
+  assert.ok(w.p[1].poisoned);
+
+  for (const id of ["spy", "widow"]) {
+    assert.ok(JINXES.some((j) => j.ids.includes(id) && j.ids.includes("poppygrower")), id);
+  }
+});
+
+test("a good Poppy Grower always hides, is a high-priority kill, and only comes clean once dead", () => {
+  assert.equal(DEMON_KILL_PRIORITY.poppygrower, "high");
+
+  const s = poppyGame("poppy-hides");
+  const pg = s.players.find((x) => x.role === "poppygrower");
+  const e = new Engine(s);
+
+  s.day = 1;
+  s.phase = "day";
+
+  for (let i = 0; i < 20; i++) {
+    s.r = rng(`hide-${i}`);
+    assert.equal(e.strat.coverFor(s, pg)?.kind, "hide");
+  }
+
+  pg.cover = e.strat.coverFor(s, pg);
+  assert.notEqual(pg.cover.as, "poppygrower");
+
+  // Late in the game, alive: still hiding.
+  for (const x of s.players.filter((y) => y !== pg && !y.human).slice(0, 6)) {
+    x.alive = false;
+  }
+
+  e.dawnComeClean();
+  assert.ok(pg.cover);
+
+  // Dead: they come clean.
+  pg.alive = false;
+  e.dawnComeClean();
+  assert.equal(pg.cover, null);
+  assert.ok(s.publicLog.some((x) => /comes clean: "I was hiding as the .*; I'm really the Poppy Grower\./.test(x)));
+});
+
+test("when the Poppy Grower dies, the evil team learns who each other are that night (and the Demon its bluffs)", () => {
+  const s = poppyGame("poppy-dies");
+  const e = new Engine(s);
+  const pg = s.players.find((x) => x.role === "poppygrower");
+  const demon = s.players.find((x) => team(x.role) === "demon");
+  const minion = s.players.find((x) => team(x.role) === "minion");
+
+  s.phase = "day";
+  s.day = 2;
+  e.kill(pg, "execution");
+  assert.ok(s.poppyWake);
+  assert.ok(demon.poppyBlind);
+
+  s.phase = "night";
+  e.poppyWakes();
+  assert.ok(!demon.poppyBlind && !minion.poppyBlind);
+  assert.deepEqual(demon.bluffs, s.demonBluffs);
+  assert.ok(teammate(demon, minion));
+  assert.ok(s.audit.some((x) => /The Poppy Grower is dead: .* learn who each other are; .* learns its bluffs/.test(x.text)));
+
+  // A drunk or poisoned one, dying, does nothing.
+  const t = poppyGame("poppy-dies-poisoned");
+  const tpg = t.players.find((x) => x.role === "poppygrower");
+
+  tpg.poisoned = true;
+  t.phase = "day";
+  new Engine(t).kill(tpg, "execution");
+  assert.ok(!t.poppyWake);
+});
+
+test("whole games play out with the Lleech and Poppy Grower, and each does its thing", () => {
+  const seen = { host: 0, hostDied: 0, survived: 0, poppy: 0, poppyDied: 0 };
+
+  for (let g = 0; g < 120; g++) {
+    const { s } = playOut(outedSoFar3, 8 + (g % 8), `outed-3-${g}`);
+    const text = s.audit.map((x) => x.text).join("\n");
+    const hosts = s.players.filter((x) => x.role === "lleech").map((d) => d.lleechHost);
+
+    assert.ok([null, "good", "evil"].includes(s.winner));
+    assert.ok(!hosts.some((id) => byId(s, id)?.human), "never you");
+    seen.host += /as their host/.test(text) ? 1 : 0;
+    seen.hostDied += /the Lleech's host, died/.test(text) ? 1 : 0;
+    seen.survived += /takes them for the Lleech/.test(text) ? 1 : 0;
+    seen.poppy += s.audit.some((x) => x.type === "poppygrower") ? 1 : 0;
+    seen.poppyDied += /The Poppy Grower is dead/.test(text) ? 1 : 0;
   }
 
   for (const [k, n] of Object.entries(seen)) {

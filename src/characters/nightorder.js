@@ -19,6 +19,10 @@ export const FIRST_NIGHT = [
     "magician",
     "The Minions are shown the Magician as well as the Demon; the Demon, the Magician among its Minions.",
   ],
+  [
+    "poppygrower",
+    "If the Poppy Grower has their ability, skip Minion info and Demon info: the evil team doesn't learn who each other are, nor the Demon its bluffs.",
+  ],
   ["minioninfo", "The Minions learn who each other are, and who the Demon is."],
   [
     "lunatic",
@@ -28,6 +32,7 @@ export const FIRST_NIGHT = [
   ["sailor", "Chooses a living player: either the Sailor or they are drunk until dusk."],
   ["marionette", "The Demon learns which neighbour is the Marionette."],
   ["poisoner", "Chooses a player: poisoned tonight and tomorrow."],
+  ["lleech", "Chooses an alive player (never you): they're poisoned, and the Lleech dies if and only if they're dead."],
   [
     "widow",
     "Sees the Grimoire and chooses a player to poison. A good player learns a Widow is in play.",
@@ -80,6 +85,10 @@ export const FIRST_NIGHT = [
 export const OTHER_NIGHTS = [
   ["dusk", "Everyone closes their eyes."],
   ["philosopher", "If they haven't yet, chooses a good character: gains its ability."],
+  [
+    "poppygrower",
+    "If the Poppy Grower died today or tonight, the Minions and Demon learn who each other are (and the Demon its bluffs).",
+  ],
   ["sailor", "Chooses a living player: either the Sailor or they are drunk until dusk."],
   ["poisoner", "Chooses a player: poisoned tonight and tomorrow."],
   ["courtier", "Once per game, may choose a character: drunk for 3 nights and 3 days."],
@@ -104,6 +113,7 @@ export const OTHER_NIGHTS = [
   ["exorcist", "Chooses a player (not last night's): if it's the Demon, the Demon doesn't wake tonight."],
   ["legion", "A player might die (the Storyteller chooses)."],
   ["imp", "Chooses a player: they die. If the Imp chooses themself, a Minion becomes the Imp."],
+  ["lleech", "Chooses a player: they die. (Never their host.)"],
   ["zombuul", "If nobody died today, chooses a player: they die."],
   ["pukka", "Chooses a player: they're poisoned. Last night's choice dies, and is healthy."],
   ["shabaloth", "Chooses 2 players: they die. A player chosen last night might come back to life."],
