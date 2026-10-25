@@ -11172,6 +11172,97 @@ test("whole games play out on Outed Evil, with every character doing its thing",
   }
 });
 
+test("on Outed Evil, every claim and bluff fits its character, all game", () => {
+  const seen = { alchemistBluff: 0, feared: 0 };
+
+  for (let g = 0; g < 120; g++) {
+    const s = createState(outed, 8 + (g % 8), `outed-bluffs-${g}`);
+    const e = new Engine(s);
+    const first = new Map();
+    const check = (when) => {
+      const host = s.players.find((d) => d.alive && d.role === "lleech")?.lleechHost;
+      const fear = s.players.find((f) => f.alive && f.role === "fearmonger" && f.fearTarget)?.fearTarget;
+      const goat = s.scapegoat && byId(s, s.scapegoat);
+
+      // The evil team never frames their Lleech's host, and frames the
+      // Fearmonger's player when it can.
+      assert.ok(!host || s.scapegoat !== host, `game ${g}, ${when}: framing the host`);
+      seen.feared += fear && s.scapegoat === fear ? 1 : 0;
+
+      for (const p of s.players.filter((x) => !x.human && x.alive)) {
+        const claim = p.cover?.as ?? p.claim;
+
+        // Evil players claim good characters: only the Psychopath, Goblin,
+        // Heretic and Lunatic are claimed as themselves, or in a fake.
+        if (p.alignment === "evil" && !["psychopath", "goblin", "heretic", "lunatic", "alchemist"].includes(claim)) {
+          assert.equal(alignment(claim), "good", `game ${g}, ${when}: ${p.label} (${p.role}) claims ${claim}`);
+        }
+
+        // Nobody claims the Heretic openly before saying so in the final 3.
+        if (claim === "heretic") {
+          assert.equal(s.hereticClaim, p.id, `game ${g}, ${when}: ${p.label} claims the Heretic`);
+        }
+
+        // An Alchemist pretender has a quiet ability, never a teammate's.
+        const said = p.bluffState?.said?.alchemist;
+
+        if (said && claim === "alchemist" && p.role !== "alchemist") {
+          seen.alchemistBluff++;
+          assert.notEqual(said, "fearmonger", `game ${g}`);
+
+          // (Judged by what they knew when they first said it.)
+          if (p.alignment === "evil" && !first.has(p.id)) {
+            const known = p.poppyBlind ? [p] : s.players.filter((x) => x.alignment === "evil");
+
+            first.set(p.id, said);
+            assert.ok(!known.some((x) => x.role === said), `game ${g}: ${p.label} says the ${said}, one of theirs`);
+          }
+        }
+      }
+
+      void goat;
+    };
+
+    // Nobody evil bluffs the Poppy Grower openly at setup.
+    for (const p of s.players.filter((x) => x.alignment === "evil")) {
+      assert.notEqual(p.claim, "poppygrower", `game ${g}`);
+    }
+
+    const audit = e.audit.bind(e);
+
+    e.audit = (...args) => {
+      const r = audit(...args);
+
+      check(args[1]);
+      return r;
+    };
+
+    e.start();
+
+    for (let turn = 0; turn < 40 && !s.winner; turn++) {
+      settle(e);
+
+      if (s.winner) {
+        break;
+      }
+
+      for (const p of s.players.filter((x) => !x.human && x.alive).slice(0, 2)) {
+        try {
+          e.ask(p.id);
+        } catch {
+          // (No conversations left.)
+        }
+      }
+
+      if (s.phase === "day" && !s.pendingVote && !s.roshambo && !s.boom) {
+        e.endDay();
+      }
+    }
+  }
+
+  assert.ok(seen.feared > 0, JSON.stringify(seen));
+});
+
 test("whole games play out with the General, Heretic and Politician", () => {
   for (let g = 0; g < 40; g++) {
     const { s } = playOut(outedSoFar, 8 + (g % 8), `outed-1-${g}`);

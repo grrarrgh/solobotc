@@ -2,6 +2,19 @@
 
 Newest first.
 
+## Bug Fixes: Outed Evil Bluffs
+
+Every claim and bluff by or of the 10 Outed Evil characters was checked against what that character would really do, and what the bluffer knows. A new test plays 120 whole games on Outed Evil (8 to 15 seats) and checks every claim after every logged event.
+
+- Alchemist bluffs: a pretender said they had a random Minion's ability. That could be a teammate's character, or a "loud" one whose use would visibly never happen. Now they say a quiet one (the Poisoner's or Wizard's), else one whose use is up to them (the Psychopath's or Goblin's), never the Fearmonger's (its every choice is announced). An evil one never names their own character, nor (unless the Poppy Grower keeps them apart) a teammate's. It's kept, in `bluffState(p).said`.
+- Minions no longer favour bluffing the Alchemist as a "first-night information" character: what it learns names nobody, so it can't back up the Demon's claim. (Kept apart by the Poppy Grower, 3 of 4 evil players could end up claiming it.)
+- The Poppy Grower is never an evil player's open claim, since a real one always hides. Setup's last-resort Townsfolk claims were missing that check. A faked coming clean as the Poppy Grower is still possible, as a real one comes clean too.
+- The Demon's bluffs are never the Poppy Grower or the Heretic, whom nobody claims openly. With 3 or 4 evil players sharing 3 bluffs, an unusable one pushed a teammate onto a Townsfolk that might be in play. On Outed Evil, evil players (not kept apart) who double-claim a character went from 24% to 17%. The rest is 4 evil players sharing 3 bluffs on a script with 11 Townsfolk.
+- The Lunatic never claims the Heretic: a real one only says so in the final 3.
+- The evil team's scapegoat (whom its false information frames) is never their Lleech's host, whose execution would kill the Lleech. It's the evil Fearmonger's chosen player when they have one: if the Fearmonger nominates and executes them, good loses. The log's "Evil team is framing" line gives that reason.
+- Kept apart by the Poppy Grower, an evil bluffer's false information no longer covers for teammates they don't know (`covered()` in src/storyteller.js, used for an Empath's "0" next to one), only for themselves.
+- The 8 other scripts are unchanged: 640 seeded games, 8 to 15 seats, gave byte-identical logs before and after.
+
 ### Phase 4: the Alchemist and Wizard, and Outed Evil in the Script menu
 
 - Alchemist (src/characters/townsfolk/alchemist.js): has the ability of a Minion on the script that isn't in play, picked at setup (ALCHEMIST_ABILITIES: the Poisoner, Fearmonger, Psychopath, Goblin or Wizard), and learns it on Night 1 ("Alchemist: you have the Goblin ability."). A Drunk shown the Alchemist has one too, to no effect. It works for the good team, through `minionAbility()` in src/storyteller.js, which the Fearmonger, Psychopath, Goblin and Wizard now go by. The log names it ("Player 3 (Alchemist-Fearmonger) chose…"). You can be dealt it, with any of them.

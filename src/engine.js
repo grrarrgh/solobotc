@@ -2595,6 +2595,7 @@ export class Engine {
       {
         players,
         scapegoat: s.scapegoat ?? null,
+        scapegoatWhy: s.scapegoatWhy ?? null,
         lean: leanText(s),
         clues: this.clues(listed),
       },

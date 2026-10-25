@@ -386,16 +386,21 @@ export function createState(
   // never doubles up with anyone.
   // (Neither shown nor dealt, and never the Drunk.) The Lunatic can be a
   // bluff, but nobody claims it while alive: an evil player who dies may
-  // say they were the Lunatic (see characters/outsider/lunatic.js).
+  // say they were the Lunatic (see characters/outsider/lunatic.js). Never
+  // the Poppy Grower or Heretic, whom nobody claims openly (a real Poppy
+  // Grower always hides; a Heretic only says so in the final 3): bluffs the
+  // team couldn't use.
   const tokens = new Set(players.map((p) => p.shown));
   const notInPlay = script.ids.filter(
     (x) =>
       alignment(x) === "good" &&
       x !== "drunk" &&
+      !["poppygrower", "heretic"].includes(x) &&
       !tokens.has(x) &&
       !roles.includes(x),
   );
-  const claimable = (x) => x !== "lunatic";
+  // (Nor the Poppy Grower: a real one always hides. See poppygrower.js.)
+  const claimable = (x) => x !== "lunatic" && x !== "poppygrower";
   // Legion are many: half as many bluffs as Legion (rounded up), 1 of them
   // an Outsider when the game has Outsiders (all Legion share them). (Never
   // the Lunatic: Legion would have no use for it.)
@@ -456,7 +461,8 @@ export function createState(
     // The Demon avoids first-night information roles; Minions favour them,
     // so their Night 1 "information" can back up the Demon's claim.
     // Teammates avoid claiming the same character when they can.
-    const firstNight = (x) => FIRST_NIGHT_INFO.includes(x);
+    // (Not the Alchemist: what they learn names nobody, so backs up nobody.)
+    const firstNight = (x) => FIRST_NIGHT_INFO.includes(x) && x !== "alchemist";
     const free = options.filter((x) => !taken.has(x));
     const preferred = free.filter((x) =>
       team(p.role) === "demon" ? !firstNight(x) : firstNight(x),
@@ -479,7 +485,7 @@ export function createState(
       : (pick(preferred, r) ??
         pick(free, r) ??
         pick(
-          pool("townsfolk").filter((x) => !taken.has(x)),
+          pool("townsfolk").filter((x) => claimable(x) && !taken.has(x)),
           r,
         ) ??
         pick(options, r) ??
@@ -499,7 +505,7 @@ export function createState(
           r,
         ) ??
         pick(
-          pool("townsfolk").filter((x) => !taken.has(x)),
+          pool("townsfolk").filter((x) => claimable(x) && !taken.has(x)),
           r,
         ) ??
         p.bluff;
@@ -514,6 +520,7 @@ export function createState(
       ? (pick(
           pool("townsfolk").filter(
             (x) =>
+              claimable(x) &&
               !taken.has(x) &&
               !(grimoire && tokens.has(x)) &&
               !HIDE_NEVER_AS.includes(x),
@@ -546,7 +553,10 @@ export function createState(
     // (Preferably one nobody is, or claims: a double claim would count
     // against them, and against whoever else claims it. With the Poppy
     // Grower, they get no bluffs, as a real Demon wouldn't: any Townsfolk.)
-    const claims = poppy ? goods.filter((x) => team(x) === "townsfolk") : p.bluffs;
+    // (Never the Heretic, who only says so in the final 3: see heretic.js.)
+    const claims = (poppy ? goods.filter((x) => team(x) === "townsfolk") : p.bluffs).filter(
+      (x) => x !== "heretic",
+    );
 
     p.claim =
       pick(

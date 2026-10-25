@@ -202,7 +202,9 @@ export function formatLog(s) {
       const goat = byId(s, e.data.scapegoat);
 
       if (goat) {
-        lines.push(`  Evil team is framing: ${rename(goat.label)}`);
+        lines.push(
+          `  Evil team is framing: ${rename(goat.label)}${e.data.scapegoatWhy ? ` (${e.data.scapegoatWhy})` : ""}`,
+        );
       }
 
       if (e.data.lean) {

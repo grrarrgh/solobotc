@@ -486,18 +486,34 @@ export function scapegoat(s) {
       x.alignment === "good" &&
       !(x.magicianTrick && claimTo(x) !== "magician") &&
       !twins.includes(x.id) &&
-      !["certain", "likely"].includes(s.confirmed?.[x.id]?.level),
+      !["certain", "likely"].includes(s.confirmed?.[x.id]?.level) &&
+      // (Nor a Lleech's host: their execution would kill the Lleech.)
+      !s.players.some((d) => d.alive && d.role === "lleech" && d.lleechHost === x.id),
   );
   const lunatic = good.find((x) => x.role === "lunatic");
+  // (The evil Fearmonger's chosen player: if they nominate and execute them,
+  // good loses, so the team frames them.)
+  const feared = good.find((x) =>
+    s.players.some((f) => f.alive && f.role === "fearmonger" && f.alignment === "evil" && f.fearTarget === x.id),
+  );
 
   if (lunatic) {
     s.scapegoat = lunatic.id;
     return lunatic;
   }
 
+  if (feared) {
+    s.scapegoat = feared.id;
+    s.scapegoatWhy = "the Fearmonger's chosen player";
+    return feared;
+  }
+
+  s.scapegoatWhy = null;
+
   if (
     current?.alive &&
     current.alignment === "good" &&
+    !s.players.some((d) => d.alive && d.role === "lleech" && d.lleechHost === current.id) &&
     !twins.includes(current.id) &&
     !["certain", "likely"].includes(s.confirmed?.[current.id]?.level)
   ) {
@@ -526,7 +542,9 @@ export function framed(s, p) {
 // Whether x is someone p's false information covers for: an evil
 // bluffer's teammates (by alignment: they know the Spy is one of them), or
 // for a misinformed good player, anyone registering as evil.
-export const covered = (p, x) => (p.alignment === "evil" ? x.alignment === "evil" : evil(x));
+// (Kept apart by the Poppy Grower, only themself: see poppygrower.js.)
+export const covered = (p, x) =>
+  p.alignment === "evil" ? x.alignment === "evil" && (!p.poppyBlind || x === p) : evil(x);
 
 // p's living evil neighbours, whom false information covers for.
 export const evilNear = (s, p) => neigh(s, p).filter((x) => covered(p, x));
