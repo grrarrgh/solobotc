@@ -376,21 +376,25 @@ export function createState(
   // The Spy sees the Grimoire, so always knows the bluffs, and claims a
   // character that is neither in play nor one of the Demon's bluffs, so it
   // never doubles up with anyone.
-  // (Neither shown nor dealt, and never the Lunatic.)
+  // (Neither shown nor dealt, and never the Drunk.) The Lunatic can be a
+  // bluff, but nobody claims it while alive: an evil player who dies may
+  // say they were the Lunatic (see characters/outsider/lunatic.js).
   const tokens = new Set(players.map((p) => p.shown));
   const notInPlay = script.ids.filter(
     (x) =>
       alignment(x) === "good" &&
-      !["drunk", "lunatic"].includes(x) &&
+      x !== "drunk" &&
       !tokens.has(x) &&
       !roles.includes(x),
   );
+  const claimable = (x) => x !== "lunatic";
   // Legion are many: half as many bluffs as Legion (rounded up), 1 of them
-  // an Outsider when the game has Outsiders (all Legion share them).
+  // an Outsider when the game has Outsiders (all Legion share them). (Never
+  // the Lunatic: Legion would have no use for it.)
   const legions = demons.length > 1 ? demons.length : 0;
   const outsiderBluff =
     legions && o > 0
-      ? sample(notInPlay.filter((x) => team(x) === "outsider"), 1, r)
+      ? sample(notInPlay.filter((x) => team(x) === "outsider" && claimable(x)), 1, r)
       : [];
   const demonBluffs = legions
     ? [
@@ -402,7 +406,7 @@ export function createState(
         ),
       ]
     : sample(notInPlay, 3, r);
-  const spyOptions = notInPlay.filter((x) => !demonBluffs.includes(x));
+  const spyOptions = notInPlay.filter((x) => !demonBluffs.includes(x) && claimable(x));
 
   // The Demon picks first and the Spy last, so the Spy sees every claim.
   const order = (p) =>
@@ -420,13 +424,15 @@ export function createState(
     const spy = p.role === "spy";
     const knows =
       team(p.role) === "demon" || spy || r() < minionBluffChance;
-    const options = spy
-      ? spyOptions.length
-        ? spyOptions
-        : demonBluffs
-      : knows && demonBluffs.length
-        ? demonBluffs
-        : pool("townsfolk");
+    const options = (
+      spy
+        ? spyOptions.length
+          ? spyOptions
+          : demonBluffs
+        : knows && demonBluffs.length
+          ? demonBluffs
+          : pool("townsfolk")
+    ).filter(claimable);
 
     // The Demon avoids first-night information roles; Minions favour them,
     // so their Night 1 "information" can back up the Demon's claim.
@@ -681,7 +687,7 @@ export function createState(
       "villageidiot",
       `${idiots.length} Village Idiots: ${idiots
         .map((x) => x.label)
-        .join(", ")}. ${p.label} is the drunk one.`,
+        .join(", ")}. ${p.human ? "You are" : `${p.label} is`} the drunk one.`,
     );
   }
 

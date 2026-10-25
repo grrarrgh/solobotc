@@ -105,7 +105,11 @@ export const boomdandy = {
       "boomdandy",
       `The countdown: ${pool
         .map((x) => `${x.label} (${name(x.role)}) ${counts[x.id] ?? 0}`)
-        .join(", ")}; ${dies ? `${dies.label} dies` : "a tie: nobody dies"}.`,
+        .join(", ")}; ${dies ? `${dies.label} dies` : "a tie: nobody dies"}. Who pointed at whom: ${
+        points.length
+          ? points.map(([x, at]) => `${x.label}${x.alive ? "" : " (dead)"} → ${at.label}`).join("; ")
+          : "nobody"
+      }.`,
       { targetId: dies?.id ?? null },
     );
 

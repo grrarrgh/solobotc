@@ -1,4 +1,4 @@
-import { ability, bluffing, infoMode, sageInfo } from "../../storyteller.js";
+import { ability, bluffing, infoMode, isDrunk, sageInfo } from "../../storyteller.js";
 
 // The Sage, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -17,7 +17,7 @@ export const sage = {
     } else if (bluffing(p, "sage")) {
       this.rememberBluff(
         p,
-        sageInfo(s, p, p.role === "spy" && !p.poisoned ? "truth" : "lie"),
+        sageInfo(s, p, p.role === "spy" && !isDrunk(p) && !p.poisoned ? "truth" : "lie"),
       );
     }
   },

@@ -51,15 +51,17 @@ export const marionette = {
 
   // Each morning after they're told, the Marionette spreads misleading
   // information in public: their latest (false) information, or else an
-  // accusation of a good player. They keep claiming their Townsfolk. (They
-  // also play for evil from now on: see strategy sideOf().)
+  // accusation of a good player. They keep claiming their Townsfolk, and
+  // only spread information from it: a Marionette shown the Pixie who went
+  // mad as the Monk doesn't repeat the Pixie's. (They also play for evil
+  // from now on: see strategy sideOf().)
   marionetteDawn() {
     const s = this.s;
 
     for (const m of s.players.filter(
       (x) => x.alive && !x.human && x.role === "marionette" && x.toldEvil,
     )) {
-      const latest = m.memories.at(-1);
+      const latest = m.memories.filter((x) => x.role === m.claim).at(-1);
       const fresh = latest && latest !== m.lastSpread ? latest : null;
       const opinion = fresh ? null : this.strat.opinion(s, m);
       const said = fresh

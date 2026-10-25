@@ -110,8 +110,9 @@ export function lied(s, lie) {
 }
 
 // The Lunatic thinks they're the Demon: they play for the evil team they
-// believe in (the "Minions" they were shown), though they're good.
-const thinksEvil = (p) => p.role === "lunatic" && !p.human;
+// believe in (the "Minions" they were shown), though they're good. (Until
+// they find out: see lunaticReveals().)
+const thinksEvil = (p) => p.role === "lunatic" && !p.human && !p.lunaticRevealed;
 
 // The Marionette and an Ogre don't know they're evil: they play as good.
 // (Unless the Demon has told the Marionette.)
@@ -1788,12 +1789,16 @@ export class SimpleStrategy {
   // The Poisoner picks a good player with information: on Night 1 anyone
   // who learns something tonight, later those who learn something every
   // night. The human is picked at HUMAN_POISON_CHANCE (not two nights
-  // running), and can also be picked like anyone else.
+  // running), and can also be picked like anyone else. Never a player
+  // already poisoned (a No Dashii's neighbour, a Widow's choice...) while
+  // there's anyone else: their information is already false.
   poison(s, p = null) {
-    const good = untwinned(
+    const alive = untwinned(
       s,
       s.players.filter((x) => x.alive && goodTo(p, x)),
     );
+    const healthy = alive.filter((x) => !x.poisoned);
+    const good = healthy.length ? healthy : alive;
     const roles =
       s.night === 1 ? [...FIRST_NIGHT_INFO, ...ONGOING_INFO] : ONGOING_INFO;
     const info = good.filter((x) => roles.includes(ability(x)));
@@ -2696,8 +2701,9 @@ export class SimpleStrategy {
     }
 
     const inPlay = new Set(s.players.map((x) => x.role));
+    // (Never the Lunatic: its "ability" is believing they're the Demon.)
     const good = s.script.ids.filter(
-      (id) => alignment(id) === "good" && id !== "philosopher",
+      (id) => alignment(id) === "good" && !["philosopher", "lunatic"].includes(id),
     );
     const fresh = good.filter(
       (id) => ONGOING_INFO.includes(id) && !inPlay.has(id),
@@ -2840,11 +2846,14 @@ export class SimpleStrategy {
   // by what d has heard them claim; or nobody, if no swap gains enough.
   // Why it chose them goes in d.barberWhy, for the log.
   barber(s, d = null) {
+    // (Never the Lunatic: their new character couldn't believe in their
+    // imagined team.)
     const good = s.players.filter(
       (x) =>
         x.alive &&
         !x.human &&
         x.alignment === "good" &&
+        x.role !== "lunatic" &&
         !isDrunk(x) &&
         !isDemon(x) &&
         !isTwin(s, x),
@@ -2979,7 +2988,8 @@ export class SimpleStrategy {
         s.script.ids.filter(
           (id) =>
             alignment(id) === "good" &&
-            !["drunk", "pixie", ...HIDDEN_OUTSIDERS].includes(id) &&
+            // (Nor the Lunatic, who never knows they are one.)
+            !["drunk", "lunatic", "pixie", ...HIDDEN_OUTSIDERS].includes(id) &&
             !own.includes(id) &&
             (!evil || !tokens.has(id)),
         ),
@@ -3021,8 +3031,12 @@ export class SimpleStrategy {
       }
     }
 
+    // (Never the Lunatic: a Lunatic made mid-game has no Demon or "Minions"
+    // to believe in.)
     const role = pick(
-      s.script.ids.filter((id) => team(id) === "outsider" && !tokens.has(id)),
+      s.script.ids.filter(
+        (id) => team(id) === "outsider" && id !== "lunatic" && !tokens.has(id),
+      ),
       s.r,
     );
     const good = untwinned(s, this.others(s, p)).filter(

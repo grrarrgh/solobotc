@@ -23,6 +23,7 @@ import {
 import { logNames } from "./log.js";
 import { stanceOn } from "./strategy.js";
 import { AMNESIAC_ABILITIES } from "./characters/townsfolk/amnesiac.js";
+import { FIRST_NIGHT as NIGHT_ONE_ORDER, OTHER_NIGHTS } from "./characters/nightorder.js";
 
 // Drunk: the Drunk themselves, anyone made drunk "from now on" (by a
 // Sweetheart's death or a Philosopher choosing their character), and anyone
@@ -250,11 +251,12 @@ export function steerWhy(s, pool, helps) {
 // Which team a player's death helps.
 export const killHelps = (x) => (x.alignment === "evil" ? "good" : "evil");
 
-// How a player registers to information abilities.
+// How a player registers to information abilities. (A drunk or poisoned
+// Spy has no ability, so registers as what they are.)
 const evil = (p) =>
   p.role === "recluse"
     ? true
-    : p.role === "spy"
+    : p.role === "spy" && !isDrunk(p) && !p.poisoned
       ? false
       : p.alignment === "evil";
 
@@ -470,33 +472,56 @@ const evilRoles = (s) => s.script.ids.filter((id) => alignment(id) === "evil");
 const dreamText = (t, a, b) =>
   `Dreamer: ${t.label} is the ${name(a)} or the ${name(b)}.`;
 
-// Players whose ability is working abnormally because of another character:
-// anyone poisoned or made drunk, and Townsfolk with information tonight
-// under the Vortox. (An approximation of the Mathematician's count.) By
-// their jinxes, a Drunk or Marionette whose ability failed tonight counts
-// too (one with information tonight, or who woke to choose: a Monk,
-// Innkeeper, Sailor...), and so does a Lunatic who "attacked" a player the
-// Demon didn't choose tonight.
-function mathCount(s, p) {
+// Players whose ability worked abnormally tonight because of another
+// character: anyone poisoned or made drunk whose ability did something
+// tonight (information tonight, waking in the night order: a Monk, Butler,
+// Spy, Poisoner, the Demon..., or a Soldier the Demon chose), and Townsfolk with
+// information tonight under the Vortox. (An approximation of the
+// Mathematician's count.) By their jinxes, a Drunk or Marionette whose
+// ability failed tonight counts too, and so does a Lunatic who "attacked" a
+// player the Demon didn't choose tonight. Each comes with why, for the log.
+function mathCounted(s, p) {
   const vortox = vortoxActive(s);
   const strayLunatic = (x) =>
     x.role === "lunatic" &&
     s.lunaticPickNight === s.night &&
     !(s.demonChose?.night === s.night && s.demonChose.ids.includes(s.lunaticPick));
 
-  return s.players.filter(
-    (x) =>
-      x !== p &&
-      (x.alive || x.vigor) &&
-      (x.poisoned ||
-        x.drunkFrom ||
-        (["drunk", "marionette"].includes(x.role) &&
-          (actsTonight(ability(x), s.night) || (s.woke ?? []).includes(x.id))) ||
-        strayLunatic(x) ||
-        (vortox &&
-          team(x.role) === "townsfolk" &&
-          actsTonight(ability(x), s.night))),
-  ).length;
+  const failed = (x) => x.poisoned || isDrunk(x);
+  const order = s.night === 1 ? NIGHT_ONE_ORDER : OTHER_NIGHTS;
+  const usedTonight = (x) =>
+    actsTonight(ability(x), s.night) ||
+    order.some(([id]) => id === ability(x)) ||
+    (s.woke ?? []).includes(x.id) ||
+    (ability(x) === "soldier" &&
+      s.demonChose?.night === s.night &&
+      s.demonChose.ids.includes(x.id));
+
+  return s.players
+    .filter((x) => x !== p && (x.alive || x.vigor))
+    .map((x) =>
+      failed(x) && usedTonight(x)
+        ? { x, why: misinformedBy(s, x) }
+        : strayLunatic(x)
+          ? { x, why: "the Lunatic attacked a player the Demon didn't choose" }
+          : vortox && team(x.role) === "townsfolk" && actsTonight(ability(x), s.night)
+            ? { x, why: "the Vortox" }
+            : null,
+    )
+    .filter(Boolean);
+}
+
+const mathCount = (s, p) => mathCounted(s, p).length;
+
+// The true count, and who it counts, for the log (see engine remember()).
+function mathNote(s, p) {
+  const counted = mathCounted(s, p);
+
+  return `true count ${counted.length}${
+    counted.length
+      ? `: ${counted.map(({ x, why }) => `${x.label} (${name(x.role)}), ${why}`).join("; ")}`
+      : ""
+  }`;
 }
 
 // What the Flowergirl and Town Crier learn about the day just gone.
@@ -1120,15 +1145,25 @@ const demonish = (x) => isDemon(x) || x.role === "recluse";
 const pixieText = (role) => `Pixie: the ${name(role)} is in play.`;
 
 // The Townsfolk a Pixie can learn: those in play, or (`notInPlay`) those
-// that aren't. Never the Pixie.
+// that aren't. Never the Pixie, nor, for an evil Pixie bluffer, one a
+// teammate claims: they'd claim it too once "mad" about it, and two evil
+// players claiming one character gives them away.
 const pixieOptions = (s, p, notInPlay = false) => {
   const inPlay = new Set(
     s.players.filter((x) => x !== p).map((x) => x.role),
   );
+  const teamClaims = new Set(
+    p.alignment === "evil"
+      ? s.players.filter((x) => x !== p && x.alignment === "evil").map((x) => x.claim)
+      : [],
+  );
 
   return s.script.ids.filter(
     (id) =>
-      team(id) === "townsfolk" && id !== "pixie" && inPlay.has(id) !== notInPlay,
+      team(id) === "townsfolk" &&
+      id !== "pixie" &&
+      !teamClaims.has(id) &&
+      inPlay.has(id) !== notInPlay,
   );
 };
 
@@ -2060,6 +2095,8 @@ export function nightInfo(s, p, strat) {
     targets,
     trigger: "normal",
     functioning: mode === "truth",
+    // (For the log: see engine remember().)
+    ...(role === "mathematician" ? { logNote: mathNote(s, p) } : {}),
   });
 }
 

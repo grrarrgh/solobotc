@@ -2,9 +2,9 @@ import { name } from "../../data.js";
 import {
   ability,
   isDemon,
+  isMinion,
   infoMode,
   bluffing,
-  steer,
   who,
   puzzleInfo,
 } from "../../storyteller.js";
@@ -16,9 +16,9 @@ import { pick } from "../../util.js";
 export const puzzlemaster = {
   // Night 1, before anyone acts (or the night someone gains the ability:
   // see startsTonight()): the Storyteller makes 1 player drunk for
-  // the rest of the game, even once the Puzzlemaster dies (s.puzzle). Never
-  // the Puzzlemaster, the Demon (who could never kill again) or a twin. A
-  // drunk evil player helps good, a drunk good one helps evil (see steer()).
+  // the rest of the game, even once the Puzzlemaster dies (s.puzzle). Always
+  // a good player: never the Puzzlemaster, a Minion or Demon (whose lost
+  // ability would give the game away), or a twin.
   puzzleDrunk() {
     const s = this.s;
     const pm = s.players.find(
@@ -31,17 +31,12 @@ export const puzzlemaster = {
 
     const pool = untwinned(
       s,
-      s.players.filter((x) => x !== pm && !isDemon(x)),
-    );
-    const t = pick(
-      steer(
-        s,
-        pool,
-        (x) => (x.alignment === "evil" ? "good" : "evil"),
-        "who the Puzzlemaster's puzzle makes drunk",
+      s.players.filter(
+        (x) =>
+          x !== pm && x.alignment === "good" && !isMinion(x) && !isDemon(x),
       ),
-      s.r,
     );
+    const t = pick(pool, s.r);
 
     if (!t) {
       return;

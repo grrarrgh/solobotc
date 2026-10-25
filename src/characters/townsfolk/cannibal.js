@@ -1,7 +1,7 @@
-import { name, alignment } from "../../data.js";
-import { ability, who, bluffing, works } from "../../storyteller.js";
+import { name, alignment, team } from "../../data.js";
+import { ability, who, bluffing, works, isDemon } from "../../storyteller.js";
 import { claimHeard } from "../../strategy.js";
-import { pick, whose } from "../../util.js";
+import { bySeat, pick, sample, shuffle, whose } from "../../util.js";
 
 // The Cannibal, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -104,6 +104,10 @@ export const cannibal = {
         { playerId: c.id, fromId: dead.id, role: c.gained, poisoned: evil },
       );
 
+      if (c.gained === "lunatic") {
+        this.cannibalLunatic(c);
+      }
+
       if (c.human) {
         s.privateLog.push(
           `Day ${s.day}: You now have the ability of ${dead.label}, who was executed${
@@ -111,6 +115,58 @@ export const cannibal = {
           }.`,
         );
       }
+    }
+  },
+
+  // A Cannibal who gains the Lunatic's ability is told what a Lunatic is:
+  // that they're a Demon (one not in play), with "Minions" (the real Demon
+  // and good players, as many as there are Minions, at least 2) and 3 good
+  // characters to bluff. They stay good, and play as the Cannibal.
+  cannibalLunatic(c) {
+    const s = this.s;
+    const demon = s.players.find((x) => x.alive && isDemon(x));
+    const shown =
+      pick(
+        s.script.ids.filter(
+          (id) => team(id) === "demon" && !s.players.some((x) => x.role === id),
+        ),
+        s.r,
+      ) ?? demon?.role;
+    const minions = s.players.filter((x) => team(x.role) === "minion").length;
+    const others = s.players.filter(
+      (x) => x.alive && x !== c && x !== demon && x.alignment === "good",
+    );
+    const mates = shuffle(
+      [demon, ...sample(others, Math.max(2, minions) - 1, s.r)].filter(Boolean),
+      s.r,
+    );
+    const bluffs = sample(
+      s.script.ids.filter(
+        (id) => alignment(id) === "good" && !["drunk", "lunatic", "cannibal"].includes(id),
+      ),
+      3,
+      s.r,
+    );
+    const labels = bySeat(mates).map((x) => x.label);
+    const list =
+      labels.length < 2
+        ? labels.join("")
+        : `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+    const text = `Lunatic: you are the ${name(shown)}. Your Minions are ${list}. Your bluffs are ${bluffs
+      .map(name)
+      .join(", ")}.`;
+
+    this.remember(c, {
+      night: s.night + 1,
+      role: "lunatic",
+      text,
+      targets: mates.map((x) => x.id),
+      trigger: "normal",
+      functioning: true,
+    });
+
+    if (c.human) {
+      s.privateLog.push(`Day ${s.day}: ${text} (You are still good.)`);
     }
   },
 

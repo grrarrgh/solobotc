@@ -49,6 +49,7 @@ import {
   claimTo,
   stanceOn,
   fooledBy,
+  sideOf,
 } from "../src/strategy.js";
 import {
   ravenInfo,
@@ -754,11 +755,14 @@ test("a poisoned Spy's bluff is not guaranteed to be true", () => {
   const strat = new SimpleStrategy();
   const e = new Engine(s, strat);
 
-  // Run bluffs() directly: night() would clear the poison first.
+  // Run bluffs() directly: night() would clear the poison first. (A
+  // poisoned Spy registers as evil, so the true number changes too.)
   spy.poisoned = true;
   e.bluffs();
 
-  assert.notEqual(spy.memories[0].text, "Chef number: 0.");
+  const truth = nightInfo(s, s.players[1], strat).text;
+
+  assert.notEqual(spy.memories[0].text, truth);
   assert.equal(spy.memories[0].functioning, false);
 });
 
@@ -1907,6 +1911,25 @@ test("the Poisoner goes after information roles: first-night ones only on Night 
   assert.deepEqual([...picks].sort(), [s.players[1].id, empath.id].sort());
 });
 
+test("the Poisoner doesn't pick a player who is already poisoned, while there's anyone else", () => {
+  const s = base("poison-already");
+  const strat = new SimpleStrategy();
+  const [, chef, empath] = s.players;
+
+  role(empath, "empath", "good");
+  s.night = 1;
+  empath.poisoned = true;
+
+  for (let i = 0; i < 30; i++) {
+    assert.notEqual(strat.poison(s), empath);
+  }
+
+  // With nobody else, they're still a pick.
+  chef.poisoned = true;
+  s.players.filter((x) => x.alignment === "good").forEach((x) => (x.poisoned = true));
+  assert.ok(strat.poison(s));
+});
+
 test("the Poisoner sometimes picks the human, who then hears false information", () => {
   let poisoned = 0;
   let falseInfo = 0;
@@ -2717,6 +2740,23 @@ test("a player the Witch cursed dies when they nominate", () => {
   assert.equal(human.death, "witch");
   assert.equal(result.marked, false);
   assert.ok(result.records.length > 0);
+});
+
+test("a drunk or poisoned Scarlet Woman doesn't become the Demon", () => {
+  for (const sober of [true, false]) {
+    const s = base(`scarlet-${sober}`);
+    const [, , , sw, imp] = s.players;
+
+    role(sw, "scarletwoman", "evil");
+    sw.poisoned = !sober;
+
+    const e = new Engine(s, new SimpleStrategy());
+
+    e.execute(imp);
+
+    assert.equal(sw.role, sober ? "imp" : "scarletwoman");
+    assert.equal(s.winner, sober ? null : "good");
+  }
 });
 
 test("the Evil Twin: good can't win while both live, and executing the good twin loses", () => {
@@ -3784,6 +3824,53 @@ test("a Mayor's bounce never lands on the Demon or the human", () => {
 
     assert.ok(t.players[0].alive && t.players[4].alive);
   }
+});
+
+test("Legion's kill on the Mayor bounces onto a good player, as the Storyteller steered it", () => {
+  for (let i = 0; i < 30; i++) {
+    const s = base(`mayor-bounce-legion-${i}`);
+    const [, mayor, chef, a, b] = s.players;
+
+    role(mayor, "mayor", "good");
+    role(chef, "chef", "good");
+    [a, b].forEach((x) => role(x, "legion", "evil"));
+    s.phase = "night";
+    s.night = 2;
+
+    new Engine(s, new SimpleStrategy()).attack(a, mayor);
+
+    assert.ok(a.alive && b.alive && !chef.alive, `seed ${i}`);
+  }
+});
+
+test("an evil Pixie bluffer is never mad about a character a teammate claims", () => {
+  for (let i = 0; i < 40; i++) {
+    const { s, p, strat } = cfNight(`pixie-team-${i}`);
+    const evil = p.filter((x) => x.alignment === "evil");
+    const [bluffer, ...team_] = evil;
+    const townsfolk = s.script.ids.filter((id) => team(id) === "townsfolk" && id !== "pixie");
+
+    bluffer.claim = "pixie";
+    bluffer.bluff = "pixie";
+    team_.forEach((x, k) => (x.claim = townsfolk[k]));
+    bluffInfo(s, bluffer, strat);
+
+    assert.ok(!team_.some((x) => x.claim === bluffer.pixieRole), `seed ${i}: ${bluffer.pixieRole}`);
+  }
+});
+
+test("the log says you hold a character an evil player claims", () => {
+  const s = base("clue-you");
+  const [human, , , , imp] = s.players;
+
+  imp.claim = human.shown;
+
+  const e = new Engine(s);
+
+  assert.ok(
+    e.clues().some((x) => x.includes(`claims the ${name(human.shown)}, which you really are.`)),
+    e.clues().join("\n"),
+  );
 });
 
 test("made mad again about something else, they say what they were mad as yesterday", () => {
@@ -5385,7 +5472,8 @@ test("the Lunatic is shown another Demon, its own bluffs and false Minions", () 
     const minions = s.players.filter((p) => team(p.role) === "minion");
 
     assert.ok(!["tinker", "goon", "lunatic"].includes(s.players[0].role));
-    assert.ok(!s.demonBluffs.includes("lunatic"));
+    // (The Lunatic can be a Demon bluff, but nobody claims it while alive.)
+    assert.ok(!s.players.some((x) => x.claim === "lunatic"));
 
     for (const p of s.players.filter((x) => x.role === "lunatic")) {
       lunatics++;
@@ -5472,6 +5560,155 @@ test("a dead Lunatic says the next day who their Minions were", () => {
       (x) => x.byId === l.id && x.targetId === demon.id && x.type === "suspicious",
     ),
   );
+});
+
+test("a dead Lunatic bluffing a mad Pixie doesn't also reveal they were the Pixie", () => {
+  const { s, l } = lunaticGame();
+  const e = new Engine(s);
+
+  l.bluff = "pixie";
+  l.pixieRole = "chef";
+  l.pixieMad = true;
+  l.claim = "chef";
+  l.alive = false;
+  s.phase = "day";
+  s.day = 1;
+  e.learnsDeath(l);
+
+  assert.notEqual(l.claim, "pixie");
+  assert.ok(!s.publicLog.some((x) => x.includes("reveals they were the Pixie")));
+});
+
+test("an evil NPC never fakes coming clean as a character a teammate claims", () => {
+  let checked = 0;
+
+  for (let i = 0; i < 30; i++) {
+    const s = coverGame(`cover-fake-team-${i}`);
+    const evil = s.players.filter((x) => x.alignment === "evil" && !x.human);
+    const [p, mate] = evil;
+    const e = new Engine(s);
+    const inPlay = s.players.map((x) => x.role);
+    const options = s.script.ids.filter(
+      (id) =>
+        DEMON_KILL_PRIORITY[id] === "high" &&
+        alignment(id) === "good" &&
+        !inPlay.includes(id),
+    );
+
+    if (!mate || !options.length) {
+      continue;
+    }
+
+    // (The teammate's claim is the only Demon bluff that fits.)
+    s.demonBluffs = [options[0]];
+
+    checked++;
+
+    // (The teammate claims one, and p never heard it.)
+    mate.claim = options[0];
+    mate.toldMe = {};
+    p.toldMe = {};
+    p.claim = "chef";
+    e.fakeClean(p);
+    assert.notEqual(p.claim, mate.claim, `seed ${i}`);
+  }
+
+  assert.ok(checked > 10, `only ${checked} games checked`);
+});
+
+test("a Lunatic claiming the Mayor comes clean after a final-3 day with no execution and no Mayor win", () => {
+  const { s, l } = lunaticGame();
+  const e = new Engine(s);
+
+  l.claim = "mayor";
+  s.phase = "day";
+  s.day = 4;
+  e.lunaticReveals();
+  assert.equal(l.claim, "mayor");
+
+  s.mayorFailed = 4;
+  s.day = 5;
+  e.lunaticReveals();
+
+  const said = s.publicLog.find((x) => x.includes("I'm not the Mayor"));
+
+  assert.ok(said, s.publicLog.join("\n"));
+  assert.ok(said.includes("I'm the Lunatic"));
+  assert.equal(l.claim, "lunatic");
+  // (They know now: they play for good.)
+  assert.equal(sideOf(l), "good");
+});
+
+test("a dead evil player with the Lunatic bluff fakes being the Lunatic, naming good players", () => {
+  let faked = 0;
+
+  for (let seed = 0; seed < 40; seed++) {
+    const s = createState(bmr, 12, `fake-lunatic-${seed}`);
+    const m = s.players.find((x) => team(x.role) === "minion" && !x.human);
+
+    if (!m || s.players.some((x) => x.role === "lunatic")) {
+      continue;
+    }
+
+    m.bluffs = ["lunatic", ...(m.bluffs ?? [])];
+    m.alive = false;
+    s.phase = "day";
+    s.day = 2;
+
+    const e = new Engine(s);
+
+    e.lunaticReveals();
+
+    const said = s.publicLog.find((x) => x.startsWith(`Day 2 — ${m.label} says: "I was the Lunatic`));
+
+    assert.ok(said, `seed ${seed}: ${s.publicLog.join("\n")}`);
+    assert.equal(m.claim, "lunatic");
+    assert.ok(m.memories.at(-1).targets.every((id) => byId(s, id).alignment === "good" && !byId(s, id).human));
+    assert.ok(s.liesToYou.some((x) => x.byId === m.id && x.said === "lunatic"));
+
+    // Once a game.
+    const other = s.players.find((x) => x.alignment === "evil" && x !== m && team(x.role) !== "demon");
+
+    if (other) {
+      other.bluffs = ["lunatic"];
+      other.alive = false;
+      e.lunaticReveals();
+      assert.notEqual(other.claim, "lunatic");
+    }
+
+    faked++;
+  }
+
+  assert.ok(faked > 10);
+});
+
+test("a Cannibal who eats the Lunatic is told they're a Demon, with Minions and bluffs, and stays good", () => {
+  const { s, p, e } = cfNight("cannibal-lunatic", [null, "cannibal", "lunatic"]);
+
+  s.phase = "day";
+  s.day = 2;
+  p[2].alive = false;
+  e.cannibals(p[2]);
+
+  const info = p[1].memories.at(-1);
+
+  assert.equal(p[1].gained, "lunatic");
+  assert.equal(p[1].alignment, "good");
+  assert.equal(sideOf(p[1]), "good");
+  assert.match(info.text, /^Lunatic: you are the .+\. Your Minions are .+\. Your bluffs are .+\.$/);
+  assert.ok(info.targets.includes(p.find((x) => team(x.role) === "demon").id));
+});
+
+test("the Pit-Hag, Philosopher, Cerenovus and Barber never pick the Lunatic", () => {
+  for (let i = 0; i < 60; i++) {
+    const { s, p, strat } = cfNight(`no-lunatic-${i}`, [null, "lunatic"], 2);
+    const hag = p.find((x) => x.alignment === "evil");
+
+    assert.notEqual(strat.pithag(s, hag)?.role, "lunatic");
+    assert.notEqual(strat.philosopher(s, p[2]), "lunatic");
+    assert.notEqual(strat.cerenovus(s, hag)?.role, "lunatic");
+    assert.ok(!(strat.barber(s, p.find((x) => team(x.role) === "demon")) ?? []).includes(p[1]));
+  }
 });
 
 test("a failed Professor exposes a liar, whose word then counts the other way", () => {
@@ -6167,6 +6404,22 @@ test("a Marionette who knows keeps their claim, spreads misleading information a
   assert.match(accusation, /I'm suspicious of/);
   assert.ok(!accusation.includes(imp.label));
 
+  // A Marionette shown the Pixie, mad as the Monk, doesn't spread the
+  // Pixie's information as the Monk's.
+  m.shown = "pixie";
+  m.claim = "monk";
+  m.lastSpread = null;
+  m.memories = [
+    { night: 1, role: "pixie", text: "Pixie: the Monk is in play.", targets: [], functioning: false },
+  ];
+  s.day = 4;
+  e.marionetteDawn();
+
+  assert.ok(
+    !s.publicLog.some((x) => x.startsWith(`Day 4 — ${m.label} says: "I am the Monk.`)),
+    s.publicLog.join("\n"),
+  );
+
   // They play for evil: never suspecting the Demon, voting for good nominees.
   const strat = new SimpleStrategy();
 
@@ -6593,6 +6846,26 @@ test("a nominated evil NPC may fake coming clean, once", () => {
   assert.equal(claimTo(baron), baron.claim);
   assert.ok(baron.cameClean.fake);
   assert.ok(s.publicLog.some((x) => x.includes(`${baron.label} comes clean: "I was hiding as the Chef;`)));
+});
+
+test("an evil Pixie bluffer who fakes coming clean answers as the new claim, not the Pixie's character", () => {
+  const s = coverGame("cover-fake-pixie");
+  const baron = s.players[5];
+  const e = new Engine(s);
+
+  baron.bluff = "pixie";
+  baron.pixieRole = "artist";
+  baron.pixieMad = true;
+  baron.claim = "artist";
+  s.r = () => 0;
+
+  assert.ok(e.fakeClean(baron));
+  assert.notEqual(baron.claim, "artist");
+
+  const answer = e.ask(baron.id);
+
+  assert.ok(answer.includes(`I claim ${name(baron.claim)}.`), answer);
+  assert.ok(!answer.includes("I claim Artist."), answer);
 });
 
 test("a dead player with a cover story comes clean at dawn", () => {
@@ -7502,12 +7775,14 @@ test("a Minion who guesses the Damsel in public wins for evil; a wrong guess giv
   miss.p[1].claimKnown = true;
   assert.notEqual(miss.strat.damselGuess(miss.s, miss.p[4]), miss.p[1]);
 
-  const hit = cfNight("damsel-hit", [null, null, "damsel"]);
+  // (Seat 2 is good: only the Baron guesses.)
+  const hit = cfNight("damsel-hit", [null, "chef", "damsel"]);
 
   hit.e.damselKnown();
   hit.s.phase = "day";
   hit.s.day = 3;
-  // A Damsel who said who she is is guessed at once.
+  // A Damsel who said who she is is guessed at once (at DAMSEL_CLAIM_CHANCE).
+  hit.s.r = () => 0;
   hit.p[2].claim = "damsel";
   hit.p[2].claimKnown = true;
   assert.equal(hit.strat.damselGuess(hit.s, hit.p[3]), hit.p[2]);
@@ -7589,6 +7864,18 @@ test("the Puzzlemaster's puzzle makes 1 player drunk; a right guess learns the D
 
   assert.ok(drunk && drunk !== p[1] && team(drunk.role) !== "demon");
   assert.equal(drunk.drunkFrom, "puzzlemaster");
+
+  // Never a Minion or the Demon.
+  for (let seed = 0; seed < 30; seed++) {
+    const t = cfNight(`puzzle-good-${seed}`, [null, "puzzlemaster"]);
+
+    t.e.puzzleDrunk();
+
+    const x = byId(t.s, t.s.puzzle.drunkId);
+
+    assert.equal(x.alignment, "good", `seed ${seed}`);
+    assert.ok(!["minion", "demon"].includes(team(x.role)), `seed ${seed}`);
+  }
 
   s.phase = "day";
   s.day = 1;
@@ -7820,13 +8107,25 @@ test("the Mathematician counts a Marionette who woke to use their ability, not o
   const { s, p, strat } = cfNight("math-marionette-monk", [null, "mathematician", "marionette"], 2);
   const count = () => Number(nightInfo(s, p[1], strat).text.match(/(\d+)/)[1]);
 
-  p[2].shown = "monk";
+  p[2].shown = "soldier";
   s.woke = [];
 
   const n = count();
 
-  // (They "protected" someone tonight: it didn't work.)
-  s.woke.push(p[2].id);
+  // (A Monk wakes every night to protect someone: it didn't work.)
+  p[2].shown = "monk";
+  assert.equal(count(), n + 1);
+});
+
+test("the Mathematician doesn't count a poisoned or drunk player whose ability did nothing tonight", () => {
+  const { s, p, strat } = cfNight("math-idle-poisoned", [null, "mathematician", "ravenkeeper", "empath"], 1);
+  const count = () => Number(nightInfo(s, p[1], strat).text.match(/(\d+)/)[1]);
+  const n = count();
+
+  // A poisoned Ravenkeeper didn't wake; a poisoned Empath got information.
+  p[2].poisoned = true;
+  assert.equal(count(), n);
+  p[3].poisoned = true;
   assert.equal(count(), n + 1);
 });
 
@@ -8087,6 +8386,8 @@ test("the Damsel tells a Huntsman she doesn't suspect, and good players keep her
   const said = (to) => strat.answer(s, p[2], to).claim;
 
   p[2].claim = "chef";
+  // (Her hunch is someone else.)
+  p[2].suspicion = { targetId: p[4].id };
 
   // To anyone else, her cover.
   assert.equal(said(p[3]), "chef");

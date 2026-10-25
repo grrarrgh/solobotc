@@ -163,7 +163,8 @@ export class Engine {
   }
 
   // Information that isn't working says why in the log (never to the human):
-  // "(misinformation: poisoned by Player 4, the Poisoner)".
+  // "(misinformation: poisoned by Player 4, the Poisoner)". Some add a note
+  // for the log too, such as the Mathematician's true count.
   remember(p, info) {
     if (info.functioning === false) {
       info.misinfo = misinformedBy(this.s, p) || null;
@@ -175,7 +176,7 @@ export class Engine {
       "information",
       `${name(p.role)} received: ${info.text}${
         info.misinfo ? ` (misinformation: ${info.misinfo})` : ""
-      }`,
+      }${info.logNote ? ` [${info.logNote}]` : ""}`,
       {
         playerId: p.id,
         ...info,
@@ -846,8 +847,10 @@ export class Engine {
       foiled = true;
       protector = guard.by;
     } else if (t.role === "mayor" && works(t)) {
-      // (Never onto the human, the Demon or either twin.)
-      const bounce = s.players.filter(
+      // (Never onto the human, the Demon or either twin. Legion's kill was
+      // steered to a good player or a Legion, for a close finish: see
+      // legionWant(). The bounce lands on the same kind, when it can.)
+      const anyone = s.players.filter(
         (x) =>
           x.alive &&
           !x.human &&
@@ -855,6 +858,8 @@ export class Engine {
           x.id !== d.id &&
           !isTwin(s, x),
       );
+      const same = anyone.filter((x) => (x.role === "legion") === (t.role === "legion"));
+      const bounce = d.role === "legion" && same.length ? same : anyone;
       const alt = pick(
         steer(s, bounce, killHelps, "where the Mayor's bounce lands"),
         s.r,
@@ -1018,7 +1023,7 @@ export class Engine {
       const t = this.strat.raven(this.s, p);
 
       if (t) {
-        const lie = p.role !== "spy";
+        const lie = p.role !== "spy" || isDrunk(p) || p.poisoned;
 
         this.rememberBluff(p, ravenInfo(this.s, p, t, lie, lie));
       }
@@ -1045,7 +1050,11 @@ export class Engine {
   learnsDeath(p) {
     // A dead Mutant (or Mutant bluffer) is no longer at risk of execution,
     // and a dead mad Pixie's madness no longer matters, so they reveal it.
-    const reveal = !p.human && this.strat.revealsWhenDead?.(p);
+    // (Not a Lunatic who'll say they were the Lunatic: see lunaticReveals().)
+    const reveal =
+      !p.human &&
+      !(p.role === "lunatic" && p.lunaticTeam) &&
+      this.strat.revealsWhenDead?.(p);
 
     if (reveal && p.claim !== reveal) {
       // (A Pixie says what they were mad about being.)
@@ -1579,10 +1588,15 @@ export class Engine {
   // "high" good character (a Demon bluff nobody claims, if there is one;
   // else one that isn't in play), with made-up information, and claim it
   // from now on. Returns the Public Log line, or null if there's no
-  // character to fake.
+  // character to fake. (Never a teammate's claim, heard or not: the team
+  // knows each other's bluffs.)
   fakeClean(p) {
     const s = this.s;
-    const claimed = new Set(s.players.map((x) => claimHeard(x, p)).filter(Boolean));
+    const claimed = new Set(
+      s.players
+        .flatMap((x) => [claimHeard(x, p), x !== p && x.alignment === "evil" ? x.claim : null])
+        .filter(Boolean),
+    );
     const inPlay = new Set(s.players.flatMap((x) => [x.role, x.shown]));
     const fits = (id) =>
       DEMON_KILL_PRIORITY[id] === "high" &&
@@ -1619,13 +1633,23 @@ export class Engine {
     if (p.mad?.previous) {
       p.mad.previous = role;
     }
+
+    // (A Pixie bluffer "mad" about a character drops it: they answer as
+    // the new claim from now on, not the old one. See strategy pixieMad().)
+    const pixieWas = p.pixieMad ? p.pixieRole : null;
+
+    p.pixieMad = false;
+    p.pixieRole = null;
+    p.pixieMemories = null;
     lied(s, { kind: "fake", byId: p.id, said: role, truth: p.role });
     this.claimPublicly(p);
     heard(s, p, memories);
     s.publicLog.push(line);
     this.audit(
       "come_clean",
-      `${line.replace(/^Day \d+ — /, "")} (fake: they're the ${name(p.role)})`,
+      `${line.replace(/^Day \d+ — /, "")} (fake: they're the ${name(p.role)}${
+        pixieWas ? `; no longer "mad" about the ${name(pixieWas)}` : ""
+      })`,
       { playerId: p.id, from: was, fake: true },
     );
 
@@ -2301,6 +2325,9 @@ export class Engine {
 
       if (mayor) {
         this.finish(mayor.alignment, "Mayor final-three victory.");
+      } else {
+        // (Anyone claiming the Mayor isn't one: see lunaticReveals().)
+        s.mayorFailed = s.day;
       }
     }
 
@@ -2329,7 +2356,7 @@ export class Engine {
 
     let next =
       before >= 5
-        ? this.s.players.find((x) => x.alive && x.role === "scarletwoman")
+        ? this.s.players.find((x) => x.role === "scarletwoman" && works(x))
         : null;
 
     if (!next && self && dead.role === "imp") {
@@ -2489,8 +2516,10 @@ export class Engine {
 
       if (holder) {
         lines.push(
-          `${as(x)} claims the ${name(x.claim)}, which ${holder.label} ${
-            holder.role === holder.shown ? "really is" : "thinks they are"
+          `${as(x)} claims the ${name(x.claim)}, which ${holder.human ? "you" : holder.label} ${
+            holder.role !== holder.shown
+              ? holder.human ? "think you are" : "thinks they are"
+              : holder.human ? "really are" : "really is"
           }${holder.alive ? "" : " (dead)"}.`,
         );
       }
