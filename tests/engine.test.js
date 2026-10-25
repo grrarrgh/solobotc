@@ -48,6 +48,7 @@ import {
   isTwin,
   claimTo,
   stanceOn,
+  heard,
   fooledBy,
   sideOf,
 } from "../src/strategy.js";
@@ -63,7 +64,14 @@ import { artistInfo } from "../src/characters/townsfolk/artist.js";
 import { savantInfo, savantBluff } from "../src/characters/townsfolk/savant.js";
 import { sageInfo } from "../src/characters/townsfolk/sage.js";
 import { evilTwinInfo } from "../src/characters/minion/eviltwin.js";
-import { bluffTonight, backStory, gainedRole, hiddenStory } from "../src/bluff.js";
+import {
+  bluffTonight,
+  backStory,
+  gainedRole,
+  hiddenStory,
+  bluffMode,
+} from "../src/bluff.js";
+import { NEVER_BLUFFED } from "../src/data.js";
 import { shuffle, sample, rng, byId } from "../src/util.js";
 
 const script = JSON.parse(
@@ -1998,7 +2006,7 @@ test("an evil Empath bluffer next to a teammate always says 0", () => {
   }
 });
 
-test("an evil Empath bluffer with no teammate beside them keeps their number until a neighbour dies", () => {
+test("an evil Empath bluffer next to you says 0, and keeps it: you're never anyone's suspect", () => {
   for (let i = 0; i < 20; i++) {
     const s = base(`empath-bluff-good-${i}`);
     const imp = s.players[4];
@@ -2022,7 +2030,7 @@ test("an evil Empath bluffer with no teammate beside them keeps their number unt
 
     s.night = 2;
     assert.equal(report(), first);
-    assert.notEqual(first, "Empath number: 0.");
+    assert.equal(first, "Empath number: 0.");
 
     // The Butler dies; the new neighbours are you and the Baron (a teammate).
     s.players[2].alive = false;
@@ -9612,5 +9620,164 @@ test("Legion never kills a good player at night once only 2 good players are lef
     e.legionNight();
 
     assert.ok(p[1].alive, `seed ${seed}`);
+  }
+});
+
+// ── Bluffs (see bluff.js) ────────────────────────────────────
+
+test("a good pretender's made-up information never names a character nobody would believably be", () => {
+  const believable = (m) =>
+    !NEVER_BLUFFED.some((id) => m.text.replace(/^[^:]*: /, "").includes(name(id)));
+
+  for (let seed = 0; seed < 40; seed++) {
+    const { s, p, strat, e } = trNight(`never-bluffed-${seed}`, [null, "mutant", "noble"], 1);
+    const mutant = p[1];
+
+    e.night();
+    e.execute(p[2]);
+    s.night = 2;
+
+    for (const id of s.script.ids.filter(
+      (x) => alignment(x) === "good" && !NEVER_BLUFFED.includes(x),
+    )) {
+      for (const m of backStory(s, mutant, id, strat)) {
+        assert.ok(believable(m), `seed ${seed}, as the ${id}: ${m.text}`);
+      }
+    }
+  }
+});
+
+test("a good pretender's made-up Empath number stays the same while their neighbours do", () => {
+  for (let seed = 0; seed < 20; seed++) {
+    const { s, p, strat } = trNight(`story-empath-${seed}`, [null, "mutant"], 3);
+    const numbers = backStory(s, p[1], "empath", strat).map((m) => m.text);
+
+    assert.equal(numbers.length, 3);
+    assert.equal(new Set(numbers).size, 1, `seed ${seed}: ${numbers.join(" / ")}`);
+  }
+});
+
+test("made-up information never casts suspicion on a player the town is sure is good", () => {
+  const { s, p, strat } = trNight("sure-good", [null, null, "villageidiot", "baron"], 2);
+  const [, , sureGood, baron] = p;
+
+  baron.claim = "villageidiot";
+  s.confirmed = { [sureGood.id]: { level: "certain" } };
+  strat.villageIdiot = () => sureGood;
+
+  assert.equal(bluffTonight(s, baron, strat).text, `Village Idiot: ${sureGood.label} is good.`);
+});
+
+test("a Spy's bluff about a Townsfolk is never true while the Vortox lives", () => {
+  const { s, p } = trNight("spy-vortox", [null, "spy", null, null, "vortox"], 2);
+  const spy = p[1];
+
+  assert.equal(bluffMode(s, spy, "empath"), "lie");
+  // (An Outsider's information isn't false under the Vortox.)
+  assert.equal(bluffMode(s, spy, "butler"), "truth");
+
+  p[4].alive = false;
+  assert.equal(bluffMode(s, spy, "empath"), "truth");
+});
+
+test("a hiding Mutant acts out their Townsfolk claim, and what they make up never mixes with what they learned", () => {
+  const { s, p, e } = trNight("mutant-acts", [null, "mutant", "chef"], 1);
+  const [, mutant, chef] = p;
+
+  e.night();
+
+  const learned = mutant.memories.length;
+
+  // A Slayer's shot: in public, to no effect.
+  mutant.claim = "slayer";
+  e.strat.slay = () => chef;
+  e.npcShots();
+
+  assert.ok(chef.alive);
+  assert.ok(mutant.shotUsed);
+  assert.ok(s.publicLog.some((x) => x.includes(`${mutant.label} claims Slayer and shoots ${chef.label}.`)));
+
+  // A Gossip's statement goes in their made-up story.
+  mutant.claim = "gossip";
+  hiddenStory(s, mutant, e.strat);
+  e.gossipSays(mutant, chef, "demon");
+
+  assert.equal(mutant.memories.length, learned);
+  assert.match(mutant.bluffState.hidden.memories.at(-1).text, /^Gossip: said /);
+});
+
+test("every good character on every script can be bluffed, by a good or an evil pretender", () => {
+  const files = JSON.parse(fs.readFileSync(new URL("../scripts/index.json", import.meta.url)));
+
+  for (const file of files) {
+    const raw = JSON.parse(fs.readFileSync(new URL(`../scripts/${file}`, import.meta.url)));
+    const s = createState(raw, 10, `bluff-all-${file}`);
+    const e = new Engine(s);
+
+    e.start();
+    settle(e);
+
+    const good = s.players.find((x) => !x.human && x.alignment === "good");
+    const evil = s.players.find((x) => !x.human && x.alignment === "evil");
+
+    for (const id of s.script.ids.filter((x) => alignment(x) === "good")) {
+      for (const p of [good, evil]) {
+        const was = p.claim;
+
+        p.claim = id;
+        assert.doesNotThrow(() => backStory(s, p, id, e.strat), `${file}: ${p.alignment} as the ${id}`);
+        assert.doesNotThrow(() => bluffTonight(s, p, e.strat), `${file}: ${p.alignment} as the ${id}`);
+        p.claim = was;
+      }
+    }
+  }
+});
+
+test("a good player's cover story acts out its Professor, only against a player they strongly suspect", () => {
+  const { s, p, e } = trNight("cover-professor", [null, "chef", "noble"], 2);
+  const [, chef, noble] = p;
+
+  chef.cover = { kind: "bait", as: "professor", night: 1, memories: [] };
+  noble.alive = false;
+  noble.claim = "noble";
+  e.claimPublicly(noble);
+  e.strat.onceReady = () => true;
+
+  // Nobody they suspect: they don't use it.
+  e.bluffs();
+  assert.ok(!chef.professorUsed);
+
+  // A dead player they know lied: chosen, "and stayed dead".
+  chef.certainSuspect = noble.id;
+  e.bluffs();
+  assert.ok(chef.professorUsed);
+  assert.equal(chef.professorExposed, noble.id);
+  assert.match(chef.cover.memories.at(-1).text, new RegExp(`^Professor: chose ${noble.label}, who stayed dead\.$`));
+  assert.ok(!chef.memories.some((m) => m.role === "professor"));
+});
+
+test("you're never anyone's suspect: no made-up information, nor anything said, casts suspicion on you", () => {
+  for (let seed = 0; seed < 20; seed++) {
+    const { s, p, strat } = trNight(`never-you-${seed}`, [null, "mutant", null, "baron"], 2);
+    const [you, mutant, , baron] = p;
+
+    // A good pretender's and an evil bluffer's made-up information.
+    for (const role of ["fortuneteller", "empath", "noble", "investigator", "amnesiac"]) {
+      for (const owner of [mutant, baron]) {
+        for (const m of backStory(s, owner, role, strat).filter((x) =>
+          (x.targets ?? []).includes(you.id),
+        )) {
+          assert.notEqual(stanceOn(s, m, you, owner), "suspicious", `seed ${seed}: ${m.text}`);
+        }
+      }
+    }
+
+    // What an NPC says in public is never taken as suspicion of you.
+    const yes = { role: "fortuneteller", text: `Fortune Teller: YES for You and ${baron.label}.`, targets: [you.id, baron.id] };
+
+    s.statements = [];
+    heard(s, mutant, [yes]);
+    assert.ok(!s.statements.some((st) => st.targetId === you.id && st.type === "suspicious"));
+    assert.ok(s.statements.some((st) => st.targetId === baron.id && st.type === "suspicious"));
   }
 });

@@ -1,14 +1,35 @@
 import { team } from "../../data.js";
-import { pick, claimHeard } from "../../util.js";
+import { byId, pick, claimHeard } from "../../util.js";
 import { nameable } from "../../storyteller.js";
 import { bluffState } from "../../bluff.js";
 
 const balloonText = (t) => `Balloonist: shown ${t.label}.`;
 
 // The Balloonist: a player of a different character type from the one
-// shown last night (any type on Night 1). (What they were shown is kept in
-// storyteller.js secretInfo().)
+// shown last night (any type on Night 1).
 export const info = {
+  nights: "each",
+
+  // The type of player they were shown (tomorrow's must differ), and for a
+  // working one, the types seen so far this cycle (a type seen again
+  // starts a new one).
+  keep(s, p, m) {
+    const t = byId(s, m.targets[0]);
+
+    if (t) {
+      const k = team(t.role);
+      const cycle = p.balloonCycle ?? [];
+
+      p.balloonType = k;
+
+      if (m.functioning) {
+        p.balloonCycle = cycle.includes(k) ? [k] : [...cycle, k];
+      }
+    }
+
+    return m;
+  },
+
   // A working Balloonist sees each type in play once, in random order
   // (p.balloonCycle), then starts again with another random order.
   truth(s, p) {

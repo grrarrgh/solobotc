@@ -8,6 +8,7 @@ const flowerText = (yes) =>
 
 // The Flowergirl: whether a Demon voted today.
 export const info = {
+  nights: "later",
   truth(s) {
     return { targets: [], text: flowerText(demonVoted(s)) };
   },
@@ -23,5 +24,11 @@ export const info = {
 
   random(s) {
     return { targets: [], text: flowerText(s.r() < 0.5) };
+  },
+
+  // A good pretender's (see bluff.js): at random, but never "a Demon voted"
+  // on a day with no votes.
+  story(s) {
+    return { targets: [], text: flowerText(s.dayVoters.length > 0 && s.r() < 0.5) };
   },
 };

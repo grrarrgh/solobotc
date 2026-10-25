@@ -46,6 +46,8 @@ function falseNoble(s, p) {
 
 // The Noble: 3 players, 1 and only 1 of them evil.
 export const info = {
+  stance: () => "suspicious",
+  nights: "first",
   truth(s, p) {
     const named = nameable(s, p);
     const bad = pick(named.filter(registersEvil), s.r);
@@ -71,6 +73,20 @@ export const info = {
       !helpEvil &&
       (p.alignment === "good" || (p.role === "marionette" && !p.toldEvil));
     const ts = misled ? sample(nameable(s, p), 3, s.r) : falseNoble(s, p);
+
+    return ts.length === 3
+      ? { targets: ts.map((x) => x.id), text: nobleText(ts) }
+      : { targets: [], text: "No information." };
+  },
+
+  // A good pretender's (see bluff.js): any 3 other NPCs (never you: you're
+  // never anyone's suspect).
+  story(s, p) {
+    const ts = sample(
+      s.players.filter((x) => x.id !== p.id && !x.human),
+      3,
+      s.r,
+    );
 
     return ts.length === 3
       ? { targets: ts.map((x) => x.id), text: nobleText(ts) }

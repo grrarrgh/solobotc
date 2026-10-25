@@ -98,6 +98,8 @@ export const gambler = {
 // The Gambler, as told by someone claiming it without its ability (see
 // bluff.js madeUpChoice()): their "guess" tonight (not on Night 1).
 export const info = {
+  // A Gambler who died guessing knows they were wrong.
+  stance: (m) => (/, and died\.$/.test(m.text) ? "suspicious" : "trust"),
   choice(s, p, strat) {
     const guess = s.night > 1 ? strat.gamble(s, p) : null;
 

@@ -1,5 +1,5 @@
-import { name, alignment } from "../../data.js";
-import { byId, pick, shuffle } from "../../util.js";
+import { name, alignment, NEVER_BLUFFED, roleByName } from "../../data.js";
+import { byId, pick, shuffle, claimHeard } from "../../util.js";
 import { goodRoles, evilRoles } from "../../storyteller.js";
 import { bluffState } from "../../bluff.js";
 
@@ -8,6 +8,12 @@ const dreamText = (t, a, b) =>
 
 // The Dreamer: a chosen player is 1 of 2 characters, one good and one evil.
 export const info = {
+  // The 2 characters it names (see strategy stanceOn()): their claim not
+  // among them, they lied.
+  named: (m) =>
+    (m.text.match(/ is the (.+) or the (.+)\.$/)?.slice(1) ?? []).map(roleByName).filter(Boolean),
+  claimStance: (m, roles, claim) => (roles.includes(claim) ? null : "suspicious"),
+  nights: "each",
   truth(s, p, strat) {
     const t = strat.dream(s, p);
 
@@ -74,6 +80,25 @@ export const info = {
     return t
       ? { targets, text: dreamText(t, ...shuffle(pair, s.r)) }
       : { targets: [], text: "No information." };
+  },
+
+  // A good pretender's (see bluff.js): the player they "dream" is the good
+  // character they heard them claim (or any believable one), or an evil
+  // character at random, as a real Dreamer's would be if their claim is
+  // true.
+  story(s, p, strat, targets) {
+    const t = byId(s, targets[0]);
+
+    if (!t) {
+      return { targets: [], text: "No information." };
+    }
+
+    const believable = (id) => alignment(id) === "good" && !NEVER_BLUFFED.includes(id);
+    const claim = claimHeard(t, p);
+    const good = believable(claim) ? claim : pick(goodRoles(s).filter(believable), s.r);
+    const bad = pick(evilRoles(s), s.r);
+
+    return { targets, text: dreamText(t, ...shuffle([good, bad], s.r)) };
   },
 
   // An evil player bluffing the Dreamer: the player they dream is the

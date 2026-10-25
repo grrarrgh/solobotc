@@ -84,6 +84,8 @@ import {
   AMNESIAC_GUESSES,
 } from "./characters/townsfolk/amnesiac.js";
 import { evilTwinInfo } from "./characters/minion/eviltwin.js";
+import { infoOf } from "./characters/info.js";
+import { PAIR_TEAM } from "./characters/pairinfo.js";
 import { bluffTonight, backStory, bluffState, gainedRole } from "./bluff.js";
 
 export { claimTo, claimHeard, tick };
@@ -139,7 +141,7 @@ export const sideOf = (p) =>
 
 // Whether p (playing for evil) counts x as a teammate.
 // (The Lunatic counts themself: the Demon of their imagined team.)
-const teammate = (p, x) =>
+export const teammate = (p, x) =>
   thinksEvil(p)
     ? x.id === p.id || (p.lunaticTeam ?? []).includes(x.id)
     : x.alignment === "evil" || fooledBy(p, x);
@@ -165,6 +167,10 @@ export function abilityUsed(p, role) {
 
   return role in used ? Boolean(used[role]) : null;
 }
+
+// Whether good NPC p acts out `role` without its ability (see
+// storyteller.js bluffing()).
+const pretends = (p, role) => sideOf(p) === "good" && bluffing(p, role);
 
 // One of the Evil Twin pair (good or evil).
 export const isTwin = (s, x) =>
@@ -218,127 +224,18 @@ export function speak(text) {
   return said.charAt(0).toUpperCase() + said.slice(1);
 }
 
-const ROLE_BY_NAME = new Map(Object.keys(ROLES).map((id) => [name(id), id]));
-
 // Whether a piece of information makes its owner trust ("trust") or suspect
-// ("suspicious") the players it names, or says nothing either way (null).
-function infoStance(m) {
-  const t = m.text;
+// ("suspicious") the players it names, or says nothing either way (null):
+// see each character's `stance`. (Their own pick, who to protect or their
+// master, tells a Monk, Innkeeper or Butler nothing.)
+const infoStance = (m) => infoOf(m.role)?.stance?.(m) ?? null;
 
-  switch (m.role) {
-    case "fortuneteller":
-      return /: YES for/.test(t) ? "suspicious" : "trust";
-    case "empath":
-      return /number: 0\./.test(t) ? "trust" : "suspicious";
-    case "investigator":
-    case "sage":
-    case "eviltwin":
-    case "lunatic":
-    case "noble":
-      return "suspicious";
-    case "professor":
-      return /, who stayed dead\.$/.test(t) ? "suspicious" : null;
-    // A Moonchild whose pick didn't die: maybe evil.
-    case "moonchild":
-      return /, who didn't die\.$/.test(t) ? "suspicious" : null;
-    case "exorcist":
-    // (The Demon a Puzzlemaster learned; the Fisherman's evil player, or
-    // the 3 the Demon is among.)
-    case "puzzlemaster":
-      return "suspicious";
-    case "fisherman":
-      return / is good: /.test(t)
-        ? "trust"
-        : / is evil\.$|The Demon is one of /.test(t)
-          ? "suspicious"
-          : null;
-    // A Gambler who died guessing knows they were wrong.
-    case "gambler":
-      return /, and died\.$/.test(t) ? "suspicious" : "trust";
-    case "washerwoman":
-    case "grandmother":
-      return "trust";
-    case "villageidiot":
-      return / is evil\.$/.test(t) ? "suspicious" : "trust";
-    // Only once the Amnesiac knows what their information means (see
-    // AMNESIAC_ABILITIES).
-    case "amnesiac":
-      return !m.known
-        ? null
-        : m.amnesiac === "neighbours"
-          ? /: YES\.$/.test(t)
-            ? "suspicious"
-            : "trust"
-          : m.amnesiac === "demonneighbour"
-            ? /: YES\.$/.test(t)
-              ? "suspicious"
-              : null
-            : m.amnesiac === "evilneighbours"
-              ? /number: 0\./.test(t)
-                ? "trust"
-                : "suspicious"
-              : m.amnesiac === "evilpairs"
-                ? null
-                : m.amnesiac === "goodplayer"
-                  ? "trust"
-                  : "suspicious";
-    // Their own pick (who to protect, or their master) tells them nothing.
-    case "monk":
-    case "butler":
-    case "innkeeper":
-      return null;
-    case "gossip":
-      return / is (evil|the Demon|a Minion)\.$/.test(t)
-        ? "suspicious"
-        : / is a Townsfolk\.$/.test(t)
-          ? "trust"
-          : null;
-    case "artist": {
-      const yes = /: YES\.$/.test(t);
-
-      if (/ is (evil|the Demon|a Minion):/.test(t)) {
-        return yes ? "suspicious" : "trust";
-      }
-
-      return / is a Townsfolk:/.test(t) ? (yes ? "trust" : "suspicious") : null;
-    }
-    case "ravenkeeper": {
-      const seen = ROLE_BY_NAME.get(t.match(/ is (.+)\.$/)?.[1]);
-
-      return seen && alignment(seen) === "evil" ? "suspicious" : "trust";
-    }
-    default:
-      return null;
-  }
-}
-
-
-const PAIR_ROLES = ["washerwoman", "librarian", "investigator"];
 
 // The characters a piece of information says a player is (or might be): a
 // Ravenkeeper's or Grandmother's one, a Dreamer's two, or the character one
-// of a Washerwoman's, Librarian's or Investigator's pair is.
-function namedCharacters(m) {
-  const get = (re) =>
-    (m.text.match(re)?.slice(1) ?? [])
-      .map((x) => ROLE_BY_NAME.get(x))
-      .filter(Boolean);
-
-  switch (m.role) {
-    case "ravenkeeper":
-      return get(/ is (.+)\.$/);
-    case "grandmother":
-      return get(/, the (.+)\.$/);
-    case "dreamer":
-      return get(/ is the (.+) or the (.+)\.$/);
-    case "washerwoman":
-    case "librarian":
-    case "investigator":
-      return get(/ is (?:the )?(.+)\.$/);
-    default:
-      return [];
-  }
-}
+// of a Washerwoman's, Librarian's or Investigator's pair is (see each
+// character's `named`).
+const namedCharacters = (m) => infoOf(m.role)?.named?.(m) ?? [];
 
 // Whether piece of information m makes its owner trust ("trust") or suspect
 // ("suspicious") player t, or neither (null). Information that says what
@@ -359,29 +256,15 @@ export function stanceOn(s, m, t, viewer = null) {
     return infoStance(m);
   }
 
-  if (PAIR_ROLES.includes(m.role)) {
-    const other = byId(
-      s,
-      m.targets.find((id) => id !== t.id),
-    );
-    const otherClaim = other && claimTo(other, viewer);
+  // (A pair's character reads against the other player's claim too.)
+  const other = byId(
+    s,
+    m.targets.find((id) => id !== t.id),
+  );
+  const otherClaim = other && claimTo(other, viewer);
+  const own = infoOf(m.role)?.claimStance?.(m, roles, claim, otherClaim);
 
-    if (roles.includes(claim)) {
-      return m.role === "investigator" ? "suspicious" : "trust";
-    }
-
-    if (roles.includes(otherClaim)) {
-      return null;
-    }
-
-    return otherClaim ? "suspicious" : infoStance(m);
-  }
-
-  if (m.role === "dreamer") {
-    return roles.includes(claim) ? null : "suspicious";
-  }
-
-  return roles.includes(claim) ? "trust" : "suspicious";
+  return own !== undefined ? own : roles.includes(claim) ? "trust" : "suspicious";
 }
 
 // What p's information m says against t's claim, as a reason to suspect
@@ -390,7 +273,7 @@ function contradiction(m, t, p) {
   const roles = namedCharacters(m);
   const claim = claimTo(t, p);
 
-  if (!roles.length || !claim || roles.includes(claim) || PAIR_ROLES.includes(m.role)) {
+  if (!roles.length || !claim || roles.includes(claim) || PAIR_TEAM[m.role]) {
     return null;
   }
 
@@ -406,7 +289,8 @@ const STRONG_EVIDENCE = 3;
 // Records what p just said (information naming players, and their
 // opinion), so good NPCs can weigh it (see evidence()): in public, or in
 // private `to` one listener, who alone hears it. (Nothing is kept for the
-// human: you weigh it yourself.)
+// human: you weigh it yourself. Nor is suspicion of you: you're never
+// anyone's suspect.)
 export function heard(s, p, memories, opinion = null, to = null) {
   if (to?.human) {
     return;
@@ -414,7 +298,14 @@ export function heard(s, p, memories, opinion = null, to = null) {
 
   const list = to ? (to.heard ??= []) : (s.statements ??= []);
   const say = (type, targetId, source) => {
-    if (["trust", "suspicious"].includes(type) && targetId && targetId !== p.id) {
+    const you = byId(s, targetId)?.human;
+
+    if (
+      ["trust", "suspicious"].includes(type) &&
+      targetId &&
+      targetId !== p.id &&
+      !(type === "suspicious" && you)
+    ) {
       list.push({ byId: p.id, day: s.day, type, targetId, source, at: tick(s) });
     }
   };
@@ -558,6 +449,20 @@ export class SimpleStrategy {
   // against them, if it's at least EVIDENCE_TO_SUSPECT (keeping their
   // current suspect on a tie), else their current hunch, else anyone they
   // don't trust.
+  // The player in `pool` good NPC p strongly suspects (see
+  // STRONG_EVIDENCE), or one they know is lying; null if none. What a good
+  // player acting out a character without its ability (a cover story, a
+  // hiding Mutant...) aims its public act at (a Slayer's shot, a Gossip's
+  // statement...), so it never incriminates anyone without good reason.
+  strongSuspect(s, p, pool) {
+    const t = this.reasoned(s, p, pool);
+
+    return t &&
+      (t.id === p.certainSuspect || this.evidence(s, p, t).score >= STRONG_EVIDENCE)
+      ? t
+      : null;
+  }
+
   reasoned(s, p, pool) {
     // Someone they know is lying (a Gambler who died guessing them).
     const certain = pool.find((x) => x.id === p.certainSuspect);
@@ -2461,11 +2366,9 @@ export class SimpleStrategy {
       return null;
     }
 
-    return this.suspect(
-      s,
-      p,
-      this.others(s, p),
-    );
+    return pretends(p, "slayer")
+      ? this.strongSuspect(s, p, this.others(s, p))
+      : this.suspect(s, p, this.others(s, p));
   }
 
   // A Butler picks any other living player as master.
@@ -3171,6 +3074,11 @@ export class SimpleStrategy {
       return null;
     }
 
+    // (A good player's cover story: only one they strongly suspect.)
+    if (sideOf(p) === "good") {
+      return this.strongSuspect(s, p, dead);
+    }
+
     return pick(accusers.length ? accusers : dead, s.r);
   }
 
@@ -3184,7 +3092,9 @@ export class SimpleStrategy {
       return null;
     }
 
-    const target = this.suspect(s, p, this.others(s, p));
+    const target = pretends(p, "gossip")
+      ? this.strongSuspect(s, p, this.others(s, p))
+      : this.suspect(s, p, this.others(s, p));
 
     return target
       ? { target, question: pick(["demon", "minion", "evil"], s.r) }

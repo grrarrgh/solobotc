@@ -77,3 +77,8 @@ export const evilTwinInfo = (s, twin) => ({
   trigger: "normal",
   functioning: true,
 });
+
+// How the good twin's information reads (see strategy stanceOn()).
+export const info = {
+  stance: () => "suspicious",
+};

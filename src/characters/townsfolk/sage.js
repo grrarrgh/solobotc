@@ -9,7 +9,7 @@ import {
   killHelps,
 } from "../../storyteller.js";
 import { pick, sample, shuffle, whose } from "../../util.js";
-import { bluffMode } from "../../bluff.js";
+import { dayBluff } from "../../bluff.js";
 
 // The Sage, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -28,7 +28,7 @@ export const sage = {
     } else if (bluffing(p, "sage")) {
       this.rememberBluff(
         p,
-        sageInfo(s, p, bluffMode(p, true)),
+        dayBluff(s, p, "sage", this.strat, (mode) => sageInfo(s, p, mode), true),
       );
     }
   },
@@ -68,3 +68,8 @@ export function sageInfo(s, p, mode) {
     functioning: mode === "truth",
   };
 }
+
+// How the Sage's information reads (see strategy stanceOn()).
+export const info = {
+  stance: () => "suspicious",
+};

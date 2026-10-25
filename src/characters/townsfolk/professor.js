@@ -1,5 +1,5 @@
 import { name, team } from "../../data.js";
-import { ability, works, who, choiceInfo } from "../../storyteller.js";
+import { ability, works, who, choiceInfo, bluffing } from "../../storyteller.js";
 import { heard, claimTo, lied } from "../../strategy.js";
 
 // The Professor, mixed into Engine.prototype (see characters/index.js),
@@ -99,7 +99,9 @@ export const professor = {
         t.claim,
       )}."`;
 
-      const m = p.memories.findLast((x) => x.role === "professor");
+      const m = [...p.memories, ...(p.cover?.memories ?? [])].findLast(
+        (x) => x.role === "professor",
+      );
 
       p.professorExposed = null;
       s.exposed = [...new Set([...(s.exposed ?? []), t.id])];
@@ -124,11 +126,13 @@ export const professor = {
 
   // A Professor bluffer "uses" it once, from Night 2, on a dead player who
   // claimed a Townsfolk, and says in the morning they stayed dead (see
-  // professorReveals()): they lied, so their word counts against them.
+  // professorReveals()): they lied, so their word counts against them. (A
+  // good player's cover story only on one they strongly suspect: see
+  // strategy professorBluff().)
   professorBluff(p) {
     const s = this.s;
 
-    if (p.claim !== "professor" || p.professorUsed || s.night < 2) {
+    if (!bluffing(p, "professor") || p.professorUsed || s.night < 2) {
       return;
     }
 
@@ -143,4 +147,10 @@ export const professor = {
       });
     }
   },
+};
+
+// How the Professor's information reads (see strategy stanceOn()): a
+// player who claimed a Townsfolk and stayed dead lied.
+export const info = {
+  stance: (m) => (/, who stayed dead\.$/.test(m.text) ? "suspicious" : null),
 };

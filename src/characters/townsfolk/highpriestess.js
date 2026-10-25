@@ -71,6 +71,7 @@ function priestessPick(s, p, truth = true) {
 
 // The High Priestess: who the Storyteller believes they should talk to most.
 export const info = {
+  nights: "each",
   truth(s, p) {
     const t = priestessPick(s, p);
 

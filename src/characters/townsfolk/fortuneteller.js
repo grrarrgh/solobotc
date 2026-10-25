@@ -1,5 +1,5 @@
 import { isDemon, framed } from "../../storyteller.js";
-import { byId, bySeat, pick, shuffle } from "../../util.js";
+import { byId, bySeat, pick, sample, shuffle } from "../../util.js";
 
 const fortuneText = (yes, ts) =>
   `Fortune Teller: ${yes ? "YES" : "NO"} for ${bySeat(ts)
@@ -13,6 +13,9 @@ const fortuneYes = (s, ts) =>
 
 // The Fortune Teller: is either of 2 chosen players a Demon?
 export const info = {
+  // A YES: one of them may be the Demon; a NO vouches for both.
+  stance: (m) => (/: YES for/.test(m.text) ? "suspicious" : "trust"),
+  nights: "each",
   truth(s, p, strat) {
     const ts = strat.ft(s, p);
 
@@ -59,6 +62,20 @@ export const info = {
       targets: ts.map((x) => x.id),
       text: fortuneText(yes, ts),
     };
+  },
+
+  // A good pretender's (see bluff.js): 2 other NPCs of their own (never
+  // you: you're never anyone's suspect), and YES or NO at random.
+  story(s, p) {
+    const ts = sample(
+      s.players.filter((x) => x.alive && !x.human && x !== p),
+      2,
+      s.r,
+    );
+
+    return ts.length === 2
+      ? { targets: ts.map((x) => x.id), text: fortuneText(s.r() < 0.5, ts) }
+      : { targets: [], text: "No information." };
   },
 
   random(s, p, targets) {

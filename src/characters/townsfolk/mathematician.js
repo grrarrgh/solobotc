@@ -66,6 +66,11 @@ export function mathNote(s, p) {
 // The Mathematician: how many players' abilities worked abnormally tonight
 // because of another character.
 export const info = {
+  nights: "each",
+
+  // (The true count, and who it counts, for the log: see engine remember().)
+  keep: (s, p, m, truth) => (truth ? { ...m, logNote: mathNote(s, p) } : m),
+
   truth(s, p) {
     return {
       targets: [],

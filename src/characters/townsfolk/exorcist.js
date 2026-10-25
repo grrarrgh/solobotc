@@ -46,6 +46,8 @@ export const exorcist = {
 // bluff.js madeUpChoice()): the player they "chose" tonight (not on
 // Night 1).
 export const info = {
+  // (Only the Demon learns anything from the choice.)
+  stance: () => "suspicious",
   choice(s, p, strat) {
     const t = s.night > 1 ? strat.exorcist(s, p) : null;
 

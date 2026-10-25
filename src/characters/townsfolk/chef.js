@@ -15,6 +15,7 @@ export function chefCount(s) {
 
 // The Chef: how many pairs of evil players sit next to each other.
 export const info = {
+  nights: "first",
   truth(s) {
     return { targets: [], text: `Chef number: ${chefCount(s)}.` };
   },

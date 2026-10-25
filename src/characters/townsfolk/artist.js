@@ -7,7 +7,7 @@ import {
   isDemon,
   listLabels,
 } from "../../storyteller.js";
-import { bluffMode } from "../../bluff.js";
+import { dayBluff } from "../../bluff.js";
 
 // The Artist, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -39,7 +39,9 @@ export const artist = {
       } else {
         this.rememberBluff(
           p,
-          artistInfo(s, ask.targets, ask.question, bluffMode(p)),
+          dayBluff(s, p, "artist", this.strat, (mode) =>
+            artistInfo(s, ask.targets, ask.question, mode),
+          ),
         );
       }
     }
@@ -101,3 +103,16 @@ export function artistInfo(s, targets, q, mode) {
     functioning: mode === "truth",
   };
 }
+
+// How the Artist's answer reads (see strategy stanceOn()).
+export const info = {
+  stance(m) {
+    const yes = /: YES\.$/.test(m.text);
+
+    if (/ is (evil|the Demon|a Minion):/.test(m.text)) {
+      return yes ? "suspicious" : "trust";
+    }
+
+    return / is a Townsfolk:/.test(m.text) ? (yes ? "trust" : "suspicious") : null;
+  },
+};

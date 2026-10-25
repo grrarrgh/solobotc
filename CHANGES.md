@@ -2,6 +2,74 @@
 
 Newest first.
 
+## New Features & Improvements: Bluffs for Every Good Character
+
+A rework of how information and bluffs are made, in three phases. Every good character can now be bluffed, by good and evil players alike, through one set of rules, and each character's information lives in that character's own module. Phases 1 and 2 only moved code: 640 seeded games (every script, 8 to 15 seats) gave byte-identical logs before and after each step. Phase 3 changed how bluffs play.
+
+### Phase 1: each character's information in its own module
+
+- Each character's information moved out of the long `if (role === …)` chains in src/storyteller.js and into its own module (`src/characters/<team>/<id>.js`), as `export const info = { … }`. It holds the true information (`truth`), the false information a drunk or poisoned player hears (`lie`, which helps the evil team, or `random`), and, for the 8 characters who choose each night (Monk, Sailor, Butler, Gambler...), what someone without the ability says they chose (`choice`).
+- 17 new modules for characters that had none: Washerwoman, Librarian, Investigator, Chef, Empath, Fortune Teller, Undertaker, Clockmaker, Dreamer, Mathematician, Balloonist, Village Idiot, High Priestess, Flowergirl, Town Crier, Oracle and Noble. The Washerwoman, Librarian and Investigator share src/characters/pairinfo.js.
+- src/characters/info.js finds any character's `info` (`infoOf()`). It's built on first use: the character modules and storyteller.js import each other.
+- src/storyteller.js went from 2,499 lines to 1,367.
+
+### Phase 2: one place for bluffs
+
+- The day and death information moved into its characters' modules too: Artist, Seamstress, Sage, Juggler, Savant, Fisherman, Puzzlemaster and Chambermaid, and what the Monk, Butler, Gambler, Snake Charmer, Gossip, Philosopher and Evil Twin remember. A new src/characters/townsfolk/ravenkeeper.js took the Ravenkeeper out of `engine kill()`.
+- New src/bluff.js: everything said in a character's name by someone without its ability goes through it.
+  - `bluffTonight()`: an evil player's bluff each night (was `bluffInfo()`).
+  - `backStory()`: the story so far for anyone who takes up a claim mid-game: Cerenovus madness, a mad Pixie, an evil player faking coming clean (was `madInfo()`).
+  - `keepStory()` and `hiddenStory()`: a good player's cover story, or a hiding Mutant or Damsel, growing each morning (were two near-identical strategy methods).
+  - `bluffMode()`: the one rule that a working Spy, who has seen the Grimoire, tells the truth. It was written out separately in 7 modules.
+- `p.bluffState` holds everything a pretender has made up, so their story holds together. It replaces 10 scattered fields: `bluffGained`, `bluffGainedNight`, a bluffer's `cannibalFrom`, `madGained`, `madCannibal`, `hideInfo`, `pixieMemories` / `pixieDay`, `dreamBluffs`, `savantSaid` and `balloonClaimed`.
+- Character-specific bluffs live with their character: the Seamstress's and Courtier's once-per-game bluff (`info.once`), and the Philosopher's and Professor's bluffs (out of `engine bluffs()`).
+- src/storyteller.js went down to 592 lines: the Storyteller's own logic (who gets what information, the lean, the scapegoat).
+
+### Phase 3: bluffs that fit what the bluffer knows
+
+- What a bluffer knows (`knows()` in src/bluff.js):
+  - a good player: who they trust, from their own information or because the town is sure of them; and who they know lied in public, or whom their own information suspects;
+  - an evil player: their team (the Lunatic's imagined team, for the Lunatic), and who the town is sure of.
+  - Either way, each piece of information is read against the claims they've heard.
+- One rule, `fits()`, that all made-up information goes through, made-up night choices included:
+  - it never casts suspicion on you: you're always good, and never anyone's suspect. This rule wins over the others: when nothing fits, the bluffer says the last thing they made up that doesn't suspect you;
+  - it never casts suspicion on someone the bluffer is sure is good, or on an evil bluffer's teammate;
+  - a good bluffer's never vouches for someone they know is evil;
+  - a good bluffer's never names the Pixie, the Mutant, the Lunatic or the Drunk (the new `neverBluffed` in src/characters/catalog.js, NEVER_BLUFFED). Nor do they ever claim one. Evil bluffers still bluff the Pixie and fake the Lunatic, never claiming either while alive.
+  - Information that doesn't fit is made up again, up to BLUFF_TRIES (6) times. If nothing fits, log.txt says so: "Player 4 (Imp) could make up nothing that fits what they know, so says: …". (It never happened in 640 test games.)
+- A good pretender's information is random, but sensible (each character's `story`):
+  - Empath: the same number while the same neighbours sit either side (0 next to you).
+  - Oracle: never fewer evil dead than they said before, never more than are dead.
+  - Undertaker: the character the executed player claimed; "Nobody was executed." when nobody was. Before, a made-up Undertaker named a random character on a day with no execution.
+  - Flowergirl and Town Crier: never "a Demon voted" (or "a Minion nominated") on a day with no votes (or nominations).
+  - Grandmother: the grandchild's claim. Dreamer: the dreamed player's claim as the good character.
+  - Washerwoman, Librarian, Investigator: 2 other NPCs (never you), and a believable character, one of the pair claims if they do; otherwise that none is in play.
+  - Fortune Teller and Noble: other NPCs of their own (never you). Amnesiac: NO, or 0, next to you; any players it names are other NPCs.
+- A made-up Philosopher or Cannibal story never "gains" a character in NEVER_BLUFFED. Before, a good player's made-up Cannibal could "eat" a Mutant or Lunatic they'd heard claimed.
+- The Spy and evil bluffs:
+  - A Spy's true information from a day or death ability (Artist, Fisherman, Juggler, Savant, Sage, Ravenkeeper, Puzzlemaster) becomes a lie when it would give a teammate away, as night information already did.
+  - A Spy never tells the truth about a Townsfolk while the Vortox lives: the evil team knows every Townsfolk's information is false.
+  - A Spy bluffing the Puzzlemaster follows the same rule as everywhere else (before, it always lied).
+  - An evil Ravenkeeper bluffer who chooses a teammate, or a player the town is sure of, names the character they claim. Before, it named a random one, which looked like suspicion of the teammate.
+  - An evil Village Idiot bluffer never calls a player the town is sure of evil.
+  - An evil Empath or Amnesiac bluffer next to you says 0 (or NO), as they already did next to a teammate: anything more would cast suspicion on you.
+  - A Lunatic bluffing the Village Idiot no longer "learns" that one of their imagined teammates is evil.
+- Good pretenders act out their claim, as a real one would, to no effect:
+  - A hiding Mutant or Damsel, or a player the Cerenovus made mad, uses their claim's day ability: Slayer shots, Gossip statements, Artist, Fisherman, Juggler, Huntsman, Puzzlemaster, Amnesiac. Before, only evil players, the Lunatic and a mad Pixie did.
+  - A good player's cover story uses its Professor too.
+  - A good pretender's public act (a Slayer shot, a Gossip statement, a Professor's "chose X, who stayed dead") only ever goes at a player they strongly suspect (STRONG_EVIDENCE), or know lied (`strongSuspect()` in src/strategy.js). With nobody like that, they don't act. Evil bluffers' acts still go at a good player who claims the same character, then the scapegoat (at SCAPEGOAT_CHANCE), then any good player.
+  - What a good pretender makes up goes into their story (the cover story's, the hiding Mutant's, or today's madness), never into what they really learned (`madeUpMemories()`). Anything that comes after the act ends (a Juggler's count the night after madness ends) is dropped.
+  - A mad Savant's made-up visit counts as today's visit: before, they could visit twice.
+- Everything about a character's information is in its module (`info`). Besides what it says, there's when it wakes (`nights`: "first", "each" or "later"), what it leaves behind (`keep`: the Grandmother's grandchild link, the Balloonist's type, the Amnesiac's secret ability, the Mathematician's log note), and how it reads (`stance`: does it trust or suspect the players it names? `named` and `claimStance`: the characters it names, against their claims). These were the hard-coded lists in `actsTonight()` and `infoStance()`, `namedCharacters()` and `stanceOn()` in src/strategy.js. (This step only moved code: the logs were byte-identical.)
+- You're never anyone's suspect: an NPC's statement is never recorded as suspicion of you (strategy `heard()`). NPCs already never suspected, accused, nominated or acted against you. The Storyteller's own information is unchanged: an Empath next to you with an evil neighbour still gets 1, and you can still be an Investigator's "other" player.
+- Checked over 640 games on every script:
+  - no bluff or made-up story cast suspicion on you;
+  - nearly all of the 3,219 evil bluffs and 412 good made-up pieces fit what their bluffer knew. The 32 that didn't were all safe for you. 25 were an evil Exorcist bluffer late in the game with only teammates left to choose from;
+  - no living evil player ever claimed the Pixie or the Lunatic (35 Pixie bluffers, 46 fake Lunatics);
+  - no good pretender named a NEVER_BLUFFED character;
+  - win rates are unchanged: good won 285 games, as before.
+- 8 new tests, including one that plays every good character on every script as a good and an evil pretender.
+
 ## New Features: Lunatic Reveals & Fake Lunatic Bluffs
 
 - A Lunatic claiming the Mayor comes clean the morning after a day with 3 alive ends with no execution and no Mayor win: "I'm not the Mayor: there was no Mayor win. I'm the Lunatic: I thought I was the Pukka. My Minions were Player 3 and Player 7." As before, a Lunatic who dies says so the next morning if the game goes on. Once they know, they play for good and stop "killing" at night.

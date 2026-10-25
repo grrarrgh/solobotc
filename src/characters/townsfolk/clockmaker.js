@@ -18,6 +18,7 @@ function clockmakerCount(s) {
 
 // The Clockmaker: how many steps from the Demon to its nearest Minion.
 export const info = {
+  nights: "first",
   truth(s) {
     return { targets: [], text: `Clockmaker number: ${clockmakerCount(s)}.` };
   },

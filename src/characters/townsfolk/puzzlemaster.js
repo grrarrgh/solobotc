@@ -11,6 +11,7 @@ import {
 } from "../../storyteller.js";
 import { untwinned } from "../../strategy.js";
 import { pick } from "../../util.js";
+import { dayBluff } from "../../bluff.js";
 
 // The Puzzlemaster, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -55,11 +56,13 @@ export const puzzlemaster = {
   },
 
   // p's one guess at who the puzzle made drunk: they learn "the Demon" (see
-  // puzzleInfo()). A bluffer's is always false.
+  // puzzleInfo()). A bluffer's is made up (see bluff.js dayBluff()).
   puzzleGuess(p, t) {
     const s = this.s;
     const real = ability(p) === "puzzlemaster" && !bluffing(p, "puzzlemaster");
-    const info = puzzleInfo(s, p, t, real ? infoMode(s, p) : "lie");
+    const info = real
+      ? puzzleInfo(s, p, t, infoMode(s, p))
+      : dayBluff(s, p, "puzzlemaster", this.strat, (mode) => puzzleInfo(s, p, t, mode));
 
     p.puzzleUsed = true;
 
@@ -159,3 +162,9 @@ export function puzzleInfo(s, p, t, mode) {
     functioning: mode === "truth",
   };
 }
+
+// How the Puzzlemaster's information reads (see strategy stanceOn()): the
+// player they learned is the Demon.
+export const info = {
+  stance: () => "suspicious",
+};

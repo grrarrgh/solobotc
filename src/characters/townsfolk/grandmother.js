@@ -1,4 +1,4 @@
-import { name, alignment } from "../../data.js";
+import { name, alignment, NEVER_BLUFFED, roleByName } from "../../data.js";
 import { pick } from "../../util.js";
 import { works, nameable, goodRoles } from "../../storyteller.js";
 import { claimHeard } from "../../strategy.js";
@@ -21,6 +21,21 @@ export const grandmother = {
 
 // The Grandmother: a good player, and their character.
 export const info = {
+  nights: "first",
+  stance: () => "trust",
+  // The character it names their grandchild as (see strategy stanceOn()).
+  named: (m) => [roleByName(m.text.match(/, the (.+)\.$/)?.[1])].filter(Boolean),
+
+  // (The link to her real grandchild exists even if she's misinformed:
+  // whether their death kills her is checked when the Demon strikes.)
+  keep(s, p, m, truth) {
+    if (truth) {
+      p.grandchild = truth.targets[0] ?? null;
+    }
+
+    return m;
+  },
+
   truth(s, p) {
     const g = pick(
       nameable(s, p).filter((x) => x.alignment === "good"),
@@ -63,6 +78,26 @@ export const info = {
     return {
       targets: [g.id],
       text: grandchildText(g, pick(goodRoles(s), s.r)),
+    };
+  },
+
+  // A good pretender's (see bluff.js): any other player as their
+  // grandchild, as the good character they heard them claim (or failing
+  // that, any good one).
+  story(s, p) {
+    const g = pick(
+      s.players.filter((x) => x.id !== p.id),
+      s.r,
+    );
+    const believable = (id) => alignment(id) === "good" && !NEVER_BLUFFED.includes(id);
+    const claim = claimHeard(g, p);
+
+    return {
+      targets: [g.id],
+      text: grandchildText(
+        g,
+        believable(claim) ? claim : pick(goodRoles(s).filter(believable), s.r),
+      ),
     };
   },
 };

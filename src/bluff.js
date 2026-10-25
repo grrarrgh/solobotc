@@ -12,14 +12,24 @@
 // module decides which to use, and when. A good pretender's story is random;
 // an evil one's helps their team, never giving a teammate away.
 //
+// Whatever they make up has to fit what they know (see knows() and fits()).
 // What a pretender has made up so far is kept in p.bluffState (see
 // bluffState()), so their story holds together.
-import { team, alignment, FIRST_NIGHT_INFO } from "./data.js";
+import {
+  team,
+  alignment,
+  name,
+  FIRST_NIGHT_INFO,
+  NEVER_BLUFFED,
+  BLUFF_TRIES,
+} from "./data.js";
 import { byId, pick } from "./util.js";
+import { logNames } from "./log.js";
 import {
   demonTo,
   works,
   isDrunk,
+  vortoxActive,
   nameable,
   oneOf,
   goodRoles,
@@ -27,11 +37,11 @@ import {
   trueInfo,
   falseInfo,
   unreliableInfo,
-  secretInfo,
+  keepInfo,
   amnesiacKey,
   INFO_ROLES,
 } from "./storyteller.js";
-import { stanceOn } from "./strategy.js";
+import { stanceOn, sideOf, teammate, sure } from "./strategy.js";
 import { infoOf } from "./characters/info.js";
 import { PAIR_TEAM } from "./characters/pairinfo.js";
 import { grandchildText } from "./characters/townsfolk/grandmother.js";
@@ -51,7 +61,9 @@ const FIRST_NIGHT = FIRST_NIGHT_INFO;
 // - hidden: a hiding Mutant's or Damsel's story ({ as, memories });
 // - pixie: a mad Pixie's story, made up afresh each day ({ day, memories });
 // - dreamed, savantSaid, balloonType: what an evil Dreamer, Savant or
-//   Balloonist bluffer said before, so they don't contradict it.
+//   Balloonist bluffer said before, so they don't contradict it;
+// - said: what a good pretender said before, by character (see each
+//   character's `story`).
 export const bluffState = (p) =>
   (p.bluffState ??= {
     gained: null,
@@ -62,18 +74,213 @@ export const bluffState = (p) =>
     dreamed: {},
     savantSaid: [],
     balloonType: null,
+    said: {},
   });
 
 // The ability evil bluffer p says they gained (see bluffState()), or null.
 export const gainedRole = (p) => p.bluffState?.gained?.role ?? null;
 
-// How a bluffer's made-up information comes out: true ("truth") for a
-// working Spy, who has seen the Grimoire; otherwise "lie". (`deadOk`: for
-// information they get as they die, the Sage's or the Ravenkeeper's.)
-export const bluffMode = (p, deadOk = false) =>
-  p.role === "spy" && !isDrunk(p) && !p.poisoned && (deadOk || works(p))
+// Where made-up information for `role` that NPC p acts out goes (see
+// storyteller.js bluffing()): what a mad player made up today, while the
+// Cerenovus's madness lasts; a cover story's, or a hiding Mutant's or
+// Damsel's, story; otherwise
+// their memories (an evil bluffer repeats their bluffs as their own, and a
+// mad Pixie's are kept apart; see strategy spoken()). Null for a good
+// player who no longer acts it out (a Juggler's count the night after
+// their madness ended), whose real memories it must never mix with.
+export function madeUpMemories(p, role) {
+  const hidden = p.bluffState?.hidden;
+
+  if (p.mad?.role === role && p.mad.previous !== null) {
+    return (p.mad.memories ??= []);
+  }
+
+  if (p.cover?.as === role) {
+    return (p.cover.memories ??= []);
+  }
+
+  if (sideOf(p) !== "good" || p.pixieMad) {
+    return p.memories;
+  }
+
+  return hidden?.as === role && p.claim === role ? (hidden.memories ??= []) : null;
+}
+
+// How an evil bluffer's made-up information for `role` comes out: true
+// ("truth") for a working Spy, who has seen the Grimoire; otherwise "lie".
+// (Not for a Townsfolk while the Vortox lives: the team knows it makes
+// every Townsfolk's information false, so true information would give the
+// bluffer away.) (`deadOk`: for information they get as they die, the
+// Sage's or the Ravenkeeper's.)
+export const bluffMode = (s, p, role, deadOk = false) =>
+  p.role === "spy" &&
+  !isDrunk(p) &&
+  !p.poisoned &&
+  (deadOk || works(p)) &&
+  !(team(role) === "townsfolk" && vortoxActive(s))
     ? "truth"
     : "lie";
+
+// ── What a bluffer knows ────────────────────────────────────
+
+// What NPC p knows, from where they sit, when they make something up:
+// - side: the team they play for ("good", or "evil": the evil team, and the
+//   Lunatic, who thinks they're its Demon);
+// - good: the players they're sure are good: anyone confirmed good in
+//   public (see strategy sure()), and for a good player, anyone their own
+//   information vouches for (see strategy trusted());
+// - evil: the players they know are evil: for an evil player, their team
+//   (as they believe it: see strategy teammate()); for a good player,
+//   anyone caught lying in public, or whom their own information suspects
+//   (see strategy liars() and ownStance()).
+// The claims they've heard count too: each piece of information is read
+// against them (see strategy stanceOn()).
+export function knows(s, p, strat) {
+  const side = sideOf(p);
+  const others = s.players.filter((x) => x !== p);
+
+  if (side === "evil") {
+    return {
+      side,
+      good: new Set(sure(s)),
+      evil: new Set(others.filter((x) => teammate(p, x)).map((x) => x.id)),
+    };
+  }
+
+  return {
+    side,
+    good: strat.trusted(s, p),
+    evil: new Set([
+      ...strat.liars(s, p),
+      ...others.filter((x) => strat.ownStance(s, p, x) === "suspicious").map((x) => x.id),
+    ]),
+  };
+}
+
+// Whether made-up information m (with its `role`, `text` and `targets`)
+// fits what p knows (see knows()):
+// - it never casts suspicion on you (the human: always good, and never
+//   anyone's suspect), on anyone p is sure is good, nor (for an evil player)
+//   on a teammate, which would give them away;
+// - a good player's never vouches for anyone they know is evil, and never
+//   names a character nobody would believably be (NEVER_BLUFFED: the Pixie,
+//   the Mutant...).
+export function fits(s, p, m, know) {
+  const said = m.text.replace(/^[^:]*: /, "");
+
+  if (know.side === "good" && NEVER_BLUFFED.some((id) => said.includes(name(id)))) {
+    return false;
+  }
+
+  return (m.targets ?? []).every((id) => {
+    const t = byId(s, id);
+    const stance = t && t !== p ? stanceOn(s, m, t, p) : null;
+
+    return stance === "suspicious"
+      ? !t.human && !know.good.has(id) && !(know.side === "evil" && know.evil.has(id))
+      : stance === "trust"
+        ? !(know.side === "good" && know.evil.has(id))
+        : true;
+  });
+}
+
+// What making up information changes in p, to stay consistent later (each
+// character's `lie` and `story` may remember what they said), so an attempt
+// that doesn't fit can be undone (see undo()).
+const draft = (p) =>
+  structuredClone({
+    p: {
+      empathBluff: p.empathBluff,
+      oracleSaid: p.oracleSaid,
+      pixieRole: p.pixieRole,
+      lastPicks: p.lastPicks,
+    },
+    state: {
+      dreamed: bluffState(p).dreamed,
+      savantSaid: bluffState(p).savantSaid,
+      balloonType: bluffState(p).balloonType,
+      said: bluffState(p).said,
+    },
+  });
+
+// Puts back what draft() saved (in place: a story being made up may be
+// part of p.bluffState).
+const undo = (p, d) => {
+  const copy = structuredClone(d);
+
+  Object.assign(p, copy.p);
+  Object.assign(bluffState(p), copy.state);
+};
+
+// Whether made-up information m casts suspicion on you (the human), which
+// it never should (see fits()).
+const suspectsYou = (s, p, m) =>
+  (m.targets ?? []).some((id) => {
+    const t = byId(s, id);
+
+    return t?.human && stanceOn(s, m, t, p) === "suspicious";
+  });
+
+// Made-up information from make() (with its `role`) that fits what p knows
+// (see fits()): up to BLUFF_TRIES attempts, each one's changes to p undone
+// before the next. Failing that, the last attempt that doesn't cast
+// suspicion on you (you're never anyone's suspect, whatever else they know),
+// or else the last attempt.
+export function madeUp(s, p, strat, make) {
+  const know = knows(s, p, strat);
+  const before = draft(p);
+  let m = null;
+  let safe = null;
+
+  for (let i = 0; i < BLUFF_TRIES; i++) {
+    if (i) {
+      undo(p, before);
+    }
+
+    m = make();
+
+    if (!m || fits(s, p, m, know)) {
+      return m;
+    }
+
+    if (!suspectsYou(s, p, m)) {
+      safe = { m, state: draft(p) };
+    }
+  }
+
+  if (safe) {
+    undo(p, safe.state);
+    m = safe.m;
+  }
+
+  s.audit.push({
+    id: s.auditId++,
+    group: s.phase === "night" ? `Night ${s.night}` : `Day ${s.day}`,
+    type: "bluff",
+    text: `${p.label} (${name(p.role)}) could make up nothing that fits what they know, so says: ${m.text}`,
+    data: { playerId: p.id, misfit: true },
+    names: logNames(s),
+  });
+
+  return m;
+}
+
+// What a pretender reports from a day (or death) ability `role`:
+// make(mode) gives it, by `mode` (see bluffMode()). An evil bluffer's lies
+// (or a Spy's truth) and a good pretender's random answers, either way
+// only if it fits what they know (see madeUp()): a Spy's truth that would
+// give a teammate away becomes a lie.
+export function dayBluff(s, p, role, strat, make, deadOk = false) {
+  if (sideOf(p) === "good") {
+    return madeUp(s, p, strat, () => make("random"));
+  }
+
+  const truth = bluffMode(s, p, role, deadOk) === "truth" && make("truth");
+
+  return truth && fits(s, p, truth, knows(s, p, strat))
+    ? truth
+    : madeUp(s, p, strat, () => make("lie"));
+}
 
 // ── Tonight's bluff ─────────────────────────────────────────
 
@@ -91,7 +298,7 @@ export function bluffTonight(s, p, strat) {
     ["philosopher", "cannibal"].includes(p.claim) ||
     (p.claim === "pixie" && gainedRole(p));
   const role = gains ? gainedRole(p) : p.claim;
-  const mode = bluffMode(p);
+  const mode = bluffMode(s, p, role);
   const gainedTonight =
     p.claim === "cannibal" &&
     p.bluffState?.gained?.night === s.night &&
@@ -108,7 +315,7 @@ export function bluffTonight(s, p, strat) {
   }
 
   if (chooses(role)) {
-    return madeUpChoice(s, p, role, strat, mode);
+    return madeUp(s, p, strat, () => madeUpChoice(s, p, role, strat, mode));
   }
 
   if (!actsTonight(role, s.night) && !gainedTonight) {
@@ -116,7 +323,8 @@ export function bluffTonight(s, p, strat) {
   }
 
   const confirm = confirmDemon(s, p, role);
-  // (A working Spy tells the truth, unless it points at a teammate.)
+  // (A working Spy tells the truth, unless it doesn't fit what they know,
+  // as when it points at a teammate: see fits().)
   // (What an Amnesiac's means, as the bluffer "knows" it, decides that.)
   const truth =
     !confirm && mode === "truth"
@@ -126,13 +334,20 @@ export function bluffTonight(s, p, strat) {
           ...(role === "amnesiac" && { amnesiac: amnesiacKey(s, p), known: true }),
         }
       : null;
-  const truthful = Boolean(truth) && !givesAway(s, p, truth);
+  const truthful = Boolean(truth) && fits(s, p, truth, knows(s, p, strat));
   const { text, targets } =
     confirm ??
-    (truthful ? truth : evilBluff(s, p, role, strat));
+    (truthful
+      ? truth
+      : madeUp(s, p, strat, () => ({
+          role,
+          ...evilBluff(s, p, role, strat),
+          // (Read as they'll remember it: see the end.)
+          ...(role === "amnesiac" && { amnesiac: amnesiacKey(s, p), known: true }),
+        })));
 
   // (A bluffer "knows" what their Amnesiac information means.)
-  return secretInfo(s, p, {
+  return keepInfo(s, p, {
     night: s.night,
     role,
     text,
@@ -185,15 +400,6 @@ function confirmDemon(s, p, role) {
   return null;
 }
 
-// Whether information m, in evil player p's mouth, points at one of their
-// teammates (see strategy stanceOn()).
-const givesAway = (s, p, m) =>
-  (m.targets ?? []).some((id) => {
-    const x = byId(s, id);
-
-    return x && x !== p && x.alignment === "evil" && stanceOn(s, m, x, p) === "suspicious";
-  });
-
 // Whether `role` chooses each night (see each character's `choice`).
 const chooses = (role) => Boolean(infoOf(role)?.choice);
 
@@ -210,8 +416,9 @@ function madeUpChoice(s, p, role, strat, mode) {
 // Made-up but plausible information for p claiming `role`: what that
 // character would have learned on each night so far. Choice characters (see
 // chooses()) report choices; a Savant reports today's visit. A good player's
-// answers are random; an evil player's are made up to help their team, as
-// their bluffs are (see evilBluff()), never giving a teammate away.
+// answers are random, but sensible (see goodStory()); an evil player's are
+// made up to help their team, as their bluffs are (see evilBluff()). Either
+// way, only what fits what they know (see madeUp()).
 //
 // A Cannibal or Philosopher has another character's ability (see
 // storyGained()): its made-up information, from the night it's gained (a
@@ -235,7 +442,9 @@ export function backStory(s, p, role, strat) {
     }
 
     if (chooses(used)) {
-      const m = madeUpChoice(view, p, used, strat, evilSide ? "lie" : "random");
+      const m = madeUp(view, p, strat, () =>
+        madeUpChoice(view, p, used, strat, evilSide ? "lie" : "random"),
+      );
 
       if (m) {
         out.push(m);
@@ -249,19 +458,37 @@ export function backStory(s, p, role, strat) {
     }
 
     const { targets } = trueInfo(view, p, used, strat);
-    const info = !evilSide
-      ? unreliableInfo(view, p, used, targets)
-      : evilBluff(view, p, used, strat);
+    const info = madeUp(view, p, strat, () => ({
+      role: used,
+      ...(evilSide
+        ? evilBluff(view, p, used, strat)
+        : goodStory(view, p, used, strat, targets)),
+    }));
 
-    out.push({ night, role: used, ...info, trigger: "normal", functioning: false });
+    out.push({ night, ...info, trigger: "normal", functioning: false });
   }
 
+  // (Today's visit is the day's one: see characters/townsfolk/savant.js.)
   if (role === "savant") {
-    out.push(evilSide ? savantBluff(s, p) : savantInfo(s, p, "random"));
+    p.savantDay = s.day;
+    out.push(
+      madeUp(s, p, strat, () =>
+        evilSide ? savantBluff(s, p) : savantInfo(s, p, "random"),
+      ),
+    );
   }
 
   return out;
 }
+
+// A good pretender's made-up information for `role`: the character's own
+// `story` if random information wouldn't be sensible (an Empath's number
+// that changes with the same neighbours, an Undertaker naming a character
+// nobody claimed...), else random. (`targets`: who the character would
+// have chosen.)
+const goodStory = (s, p, role, strat, targets) =>
+  infoOf(role)?.story?.(s, p, strat, targets) ??
+  unreliableInfo(s, p, role, targets);
 
 // For a made-up story (see backStory()), the ability a claimed Cannibal or
 // Philosopher has on `night`: { role, from } (the night it was gained),
@@ -271,7 +498,7 @@ export function backStory(s, p, role, strat) {
 //   characters/townsfolk/cannibal.js), if good, from the night after.
 // - A Philosopher: a good character with information on the script, chosen
 //   once, from Night 1, as an NPC Philosopher chooses at once.
-// (Never the Pixie, whose information would give them away.)
+// (Never a character nobody would believably be: see NEVER_BLUFFED.)
 function storyGained(s, p, role, night) {
   const state = bluffState(p);
 
@@ -279,7 +506,8 @@ function storyGained(s, p, role, night) {
     state.philosopher ??= pick(
       goodRoles(s).filter(
         (id) =>
-          !["philosopher", "pixie", "drunk", "lunatic"].includes(id) &&
+          id !== "philosopher" &&
+          !NEVER_BLUFFED.includes(id) &&
           INFO_ROLES.includes(id),
       ),
       s.r,
@@ -298,11 +526,11 @@ function storyGained(s, p, role, night) {
   const eaten =
     last &&
     (last.as ??= pick(
-      goodRoles(s).filter((id) => INFO_ROLES.includes(id) && id !== "pixie"),
+      goodRoles(s).filter((id) => INFO_ROLES.includes(id) && !NEVER_BLUFFED.includes(id)),
       s.r,
     ));
 
-  return eaten && alignment(eaten) === "good" && eaten !== "pixie"
+  return eaten && alignment(eaten) === "good" && !NEVER_BLUFFED.includes(eaten)
     ? { role: eaten, from: last.night }
     : null;
 }

@@ -9,6 +9,7 @@ const crierText = (yes) =>
 
 // The Town Crier: whether a Minion nominated today.
 export const info = {
+  nights: "later",
   truth(s) {
     return { targets: [], text: crierText(minionNominated(s)) };
   },
@@ -24,5 +25,11 @@ export const info = {
 
   random(s) {
     return { targets: [], text: crierText(s.r() < 0.5) };
+  },
+
+  // A good pretender's (see bluff.js): at random, but never "a Minion
+  // nominated" on a day with no nominations.
+  story(s) {
+    return { targets: [], text: crierText(s.dayNominators.length > 0 && s.r() < 0.5) };
   },
 };

@@ -7,7 +7,7 @@ import {
   wrongNumber,
 } from "../../storyteller.js";
 import { byId, pick } from "../../util.js";
-import { bluffMode } from "../../bluff.js";
+import { dayBluff } from "../../bluff.js";
 
 // The Juggler, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -24,7 +24,10 @@ export const juggler = {
       if (ability(p) === "juggler" && p.alignment === "good") {
         this.remember(p, jugglerInfo(s, guesses, infoMode(s, p)));
       } else {
-        this.rememberBluff(p, jugglerInfo(s, guesses, bluffMode(p)));
+        this.rememberBluff(
+          p,
+          dayBluff(s, p, "juggler", this.strat, (mode) => jugglerInfo(s, guesses, mode)),
+        );
       }
 
       p.juggle = null;

@@ -47,7 +47,13 @@ import { byId, bySeat, pick, shuffle } from "./util.js";
 import { formatLog, logNames } from "./log.js";
 import { abilities, living } from "./abilities.js";
 import { characters } from "./characters/index.js";
-import { backStory, keepStory, hiddenStory, bluffState } from "./bluff.js";
+import {
+  backStory,
+  keepStory,
+  hiddenStory,
+  bluffState,
+  madeUpMemories,
+} from "./bluff.js";
 
 const KEY_MOMENT_TYPES = new Set([
   "poison",
@@ -646,7 +652,7 @@ export class Engine {
 
   // Evil NPCs gather night info to report for the role they are bluffing
   // (see bluff.js bluffTonight(); a Philosopher's or Professor's bluff is in
-  // its own module).
+  // its own module). A good player's cover story uses its Professor too.
   bluffs() {
     const s = this.s;
 
@@ -657,7 +663,12 @@ export class Engine {
         (p.alignment === "evil" || p.role === "lunatic") &&
         !["marionette", "ogre"].includes(p.role);
 
-      if (p.human || !p.alive || !bluffer) {
+      if (p.human || !p.alive) {
+        continue;
+      }
+
+      if (!bluffer) {
+        this.professorBluff(p);
         continue;
       }
 
@@ -673,12 +684,22 @@ export class Engine {
   }
 
   // Bluffed info is stored for the NPC to repeat, but is not real information.
+  // (Where it's kept: see bluff.js madeUpMemories(). Nowhere, for a good
+  // player who no longer acts that character out.)
   rememberBluff(p, info) {
-    p.memories.push(info);
+    const into = madeUpMemories(p, info.role);
+
+    if (!into) {
+      return;
+    }
+
+    into.push(info);
 
     this.audit(
       "bluff",
-      `${p.label} (${name(p.role)}) bluffed: ${info.text}`,
+      `${p.label} (${name(p.role)}) ${
+        sideOf(p) === "good" && !p.pixieMad ? "made up" : "bluffed"
+      }: ${info.text}`,
       { playerId: p.id, ...info },
     );
   }

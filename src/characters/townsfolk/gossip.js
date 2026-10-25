@@ -10,6 +10,7 @@ import {
   bluffing,
 } from "../../storyteller.js";
 import { artistTruth } from "./artist.js";
+import { madeUpMemories } from "../../bluff.js";
 import { heard, untwinned } from "../../strategy.js";
 import { pick, Whose, byId } from "../../util.js";
 
@@ -97,7 +98,8 @@ export const gossip = {
       truth,
       effective: ability(p) === "gossip" && works(p),
     });
-    p.memories.push(info);
+    // (A bluffer's statement is made up: see bluff.js madeUpMemories().)
+    (ability(p) === "gossip" ? p.memories : (madeUpMemories(p, "gossip") ?? [])).push(info);
     heard(s, p, [info]);
 
     if (p.human) {
@@ -150,3 +152,13 @@ export const gossipInfo = (s, t, q) => ({
   trigger: "day",
   functioning: true,
 });
+
+// How a Gossip's statement reads (see strategy stanceOn()).
+export const info = {
+  stance: (m) =>
+    / is (evil|the Demon|a Minion)\.$/.test(m.text)
+      ? "suspicious"
+      : / is a Townsfolk\.$/.test(m.text)
+        ? "trust"
+        : null,
+};

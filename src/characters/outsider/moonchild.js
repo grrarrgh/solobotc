@@ -98,3 +98,9 @@ export const moonchild = {
     }
   },
 };
+
+// How a Moonchild's information reads (see strategy stanceOn()): a pick who
+// didn't die may be evil.
+export const info = {
+  stance: (m) => (/, who didn't die\.$/.test(m.text) ? "suspicious" : null),
+};

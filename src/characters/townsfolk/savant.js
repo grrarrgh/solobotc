@@ -10,7 +10,7 @@ import {
   scapegoat,
 } from "../../storyteller.js";
 import { pick, sample, shuffle } from "../../util.js";
-import { bluffMode, bluffState } from "../../bluff.js";
+import { dayBluff, bluffState } from "../../bluff.js";
 
 // The Savant, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -33,7 +33,9 @@ export const savant = {
       } else {
         this.rememberBluff(
           p,
-          bluffMode(p) === "truth" ? savantInfo(s, p, "truth") : savantBluff(s, p),
+          dayBluff(s, p, "savant", this.strat, (mode) =>
+            mode === "lie" ? savantBluff(s, p) : savantInfo(s, p, mode),
+          ),
         );
       }
     }

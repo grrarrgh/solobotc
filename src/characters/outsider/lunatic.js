@@ -147,3 +147,9 @@ export const lunatic = {
     );
   },
 };
+
+// How a Lunatic's coming clean reads (see strategy stanceOn()): their
+// "Minions" are suspicious.
+export const info = {
+  stance: () => "suspicious",
+};

@@ -129,6 +129,7 @@ const pixieOptions = (s, p, notInPlay = false) => {
 // The Pixie: a Townsfolk in play, to be "mad" about. (They remember which,
 // as p.pixieRole.)
 export const info = {
+  nights: "first",
   truth(s, p) {
     const id = pick(pixieOptions(s, p), s.r);
 

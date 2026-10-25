@@ -289,6 +289,33 @@ const demonish = (x) => isDemon(x) || x.role === "recluse";
 // The Amnesiac: each night, what their secret ability (amnesiacKey()) tells
 // them.
 export const info = {
+  // Which secret ability it's from, and whether they know what it means
+  // (see stance()).
+  keep: (s, p, m) => ({
+    ...m,
+    amnesiac: amnesiacKey(s, p),
+    known: m.known ?? Boolean(p.amnesiacKnown),
+  }),
+
+  // Only once the Amnesiac knows what it means (see AMNESIAC_ABILITIES).
+  stance(m) {
+    const yes = /: YES\.$/.test(m.text);
+
+    if (!m.known || m.amnesiac === "evilpairs") {
+      return null;
+    }
+
+    return m.amnesiac === "neighbours"
+      ? yes ? "suspicious" : "trust"
+      : m.amnesiac === "demonneighbour"
+        ? yes ? "suspicious" : null
+        : m.amnesiac === "evilneighbours"
+          ? /number: 0\./.test(m.text) ? "trust" : "suspicious"
+          : m.amnesiac === "goodplayer"
+            ? "trust"
+            : "suspicious";
+  },
+  nights: "each",
   truth(s, p) {
     const key = amnesiacKey(s, p);
     const named = nameable(s, p);
@@ -325,9 +352,12 @@ export const info = {
     const key = amnesiacKey(s, p);
     const named = nameable(s, p);
     const good = named.filter((x) => !covered(p, x) && !isDemon(x));
-    const mates = p.alignment === "evil" && evilNear(s, p).length > 0;
+    const mates =
+      p.alignment === "evil" &&
+      (evilNear(s, p).length > 0 || neigh(s, p).some((x) => x.human));
 
-    // (An evil bluffer next to a teammate says NO, or 0.)
+    // (An evil bluffer next to a teammate, or to you, says NO, or 0: you're
+    // never anyone's suspect.)
     if (key === "neighbours") {
       return amnesiacYes(!mates && !neigh(s, p).some(registersEvil), neigh(s, p));
     }
@@ -360,6 +390,25 @@ export const info = {
       : sample(good, 2, s.r);
 
     return amnesiacPlayers(pair.every(Boolean) && pair.length === 2 ? bySeat(pair) : []);
+  },
+
+  // A good pretender's (see bluff.js): at random, but never casting
+  // suspicion on you (you're never anyone's suspect): next to you, NO or 0;
+  // any players it names are other NPCs.
+  story(s, p) {
+    const key = amnesiacKey(s, p);
+    const shape = AMNESIAC_ABILITIES[key].shape;
+    const near = neigh(s, p);
+    const you = near.some((x) => x.human);
+    const npcs = s.players.filter((x) => x.id !== p.id && !x.human);
+
+    return shape === "yesno"
+      ? amnesiacYes(!you && s.r() < 0.5, near)
+      : shape === "number"
+        ? key === "evilneighbours"
+          ? amnesiacNumber(you ? 0 : Math.floor(s.r() * 3), near)
+          : amnesiacNumber(Math.floor(s.r() * 3))
+        : amnesiacPlayers(sample(npcs, shape === "player" ? 1 : 2, s.r));
   },
 
   random(s, p) {

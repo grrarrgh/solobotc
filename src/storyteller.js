@@ -2,6 +2,7 @@ import {
   FIRST_NIGHT_INFO,
   ONGOING_INFO,
   FINAL_THREE_MARGIN,
+  HIDDEN_OUTSIDERS,
   name,
   team,
   alignment,
@@ -18,7 +19,6 @@ import {
 import { logNames } from "./log.js";
 import { AMNESIAC_ABILITIES } from "./characters/townsfolk/amnesiac.js";
 import { infoOf } from "./characters/info.js";
-import { mathNote } from "./characters/townsfolk/mathematician.js";
 
 // Drunk: the Drunk themselves, anyone made drunk "from now on" (by a
 // Sweetheart's death or a Philosopher choosing their character), and anyone
@@ -62,17 +62,24 @@ export const ability = (p) =>
     : (p.gained ?? p.role);
 
 // Whether NPC p acts out `role` in public without having its ability: an
-// evil player (or the Lunatic) bluffing it, or a mad Pixie claiming it (a
-// real one, or a Drunk or Marionette shown the Pixie; see
-// characters/townsfolk/pixie.js). They use it as a real one would, to no
-// effect, and any information it gives them is made up.
+// evil player (or the Lunatic) bluffing it; a mad Pixie claiming it (a real
+// one, or a Drunk or Marionette shown the Pixie; see
+// characters/townsfolk/pixie.js); a good Mutant or Damsel hiding behind it
+// (see HIDDEN_OUTSIDERS); anyone the Cerenovus made mad as it today; or a
+// good player whose cover story it is (see strategy coverFor()). They use it
+// as a real one would, to no effect, and any information it gives them is
+// made up (see bluff.js madeUpMemories()). (A good one only acts against a
+// player they strongly suspect: see strategy strongSuspect().)
 export const bluffing = (p, role) =>
   !p.human &&
-  p.claim === role &&
   ability(p) !== role &&
-  (p.alignment === "evil" ||
-    p.role === "lunatic" ||
-    ((p.role === "pixie" || p.shown === "pixie") && p.pixieMad));
+  (p.cover?.as === role ||
+    (p.claim === role &&
+      (p.alignment === "evil" ||
+        p.role === "lunatic" ||
+        ((p.role === "pixie" || p.shown === "pixie") && p.pixieMad) ||
+        HIDDEN_OUTSIDERS.includes(p.role) ||
+        (p.mad?.role === role && p.mad.previous !== null))));
 
 // A player and their character, for the log: "Player 4, the Poisoner".
 export const who = (x) => `${x.label}, the ${name(x.role)}`;
@@ -258,29 +265,12 @@ export const registersEvil = (p) =>
 const evil = registersEvil;
 
 const FIRST_NIGHT = FIRST_NIGHT_INFO;
-const EACH_NIGHT = [
-  "empath",
-  "villageidiot",
-  "highpriestess",
-  "fortuneteller",
-  "dreamer",
-  "mathematician",
-  "balloonist",
-  "amnesiac",
-];
-const LATER_NIGHTS = ["undertaker", "flowergirl", "towncrier", "oracle"];
 
-// Whether an information role wakes tonight.
+// Whether an information role wakes tonight (see each character's `nights`).
 export function actsTonight(role, night) {
-  if (FIRST_NIGHT.includes(role) || role === "pixie") {
-    return night === 1;
-  }
+  const nights = infoOf(role)?.nights;
 
-  if (EACH_NIGHT.includes(role)) {
-    return true;
-  }
-
-  return LATER_NIGHTS.includes(role) && night > 1;
+  return nights === "first" ? night === 1 : nights === "each" || (nights === "later" && night > 1);
 }
 
 // In seat order (see bySeat()).
@@ -526,13 +516,8 @@ export function nightInfo(s, p, strat) {
     return null;
   }
 
-  let { text, targets } = trueInfo(s, p, role, strat);
-
-  // The Grandmother's link to her real grandchild exists even if she is
-  // misinformed; whether it kills her is checked when the Demon strikes.
-  if (role === "grandmother") {
-    p.grandchild = targets[0] ?? null;
-  }
+  const truth = trueInfo(s, p, role, strat);
+  let { text, targets } = truth;
 
   // The Drunk always hears something wrong, as does every Townsfolk under the
   // Vortox; poisoned players hear noise. On Night 1, the Poisoner's pick
@@ -551,42 +536,25 @@ export function nightInfo(s, p, strat) {
     ({ text, targets } = unreliableInfo(s, p, role, targets));
   }
 
-  return secretInfo(s, p, {
-    night: s.night,
-    role,
-    text,
-    targets,
-    trigger: "normal",
-    functioning: mode === "truth",
-    // (For the log: see engine remember().)
-    ...(role === "mathematician" ? { logNote: mathNote(s, p) } : {}),
-  });
+  return keepInfo(
+    s,
+    p,
+    {
+      night: s.night,
+      role,
+      text,
+      targets,
+      trigger: "normal",
+      functioning: mode === "truth",
+    },
+    truth,
+  );
 }
 
-// What a night's information leaves behind: the type of player a Balloonist
-// was shown (tomorrow's must differ), and which secret ability an
-// Amnesiac's information is from (see infoStance() in strategy.js: it means
-// something to them once they've guessed it).
-export function secretInfo(s, p, info) {
-  const t = byId(s, info.targets[0]);
-
-  if (info.role === "balloonist" && t) {
-    const k = team(t.role);
-    const cycle = p.balloonCycle ?? [];
-
-    p.balloonType = k;
-
-    // (A type seen again starts a new cycle.)
-    if (info.functioning) {
-      p.balloonCycle = cycle.includes(k) ? [k] : [...cycle, k];
-    }
-  }
-
-  return info.role === "amnesiac"
-    ? {
-        ...info,
-        amnesiac: amnesiacKey(s, p),
-        known: info.known ?? Boolean(p.amnesiacKnown),
-      }
-    : info;
+// What a night's information leaves behind, as it's remembered (see each
+// character's `keep`: the type of player a Balloonist was shown, the
+// Grandmother's link to her grandchild...). (`truth`: the correct
+// information, when the Storyteller gives it, as it may differ.)
+export function keepInfo(s, p, info, truth = null) {
+  return infoOf(info.role)?.keep?.(s, p, info, truth) ?? info;
 }

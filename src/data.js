@@ -247,6 +247,18 @@ export const BAIT_ROLES = where((c) => c.bait); // survive, or gain from, a nigh
 export const HIDE_NEVER = where((c) => c.neverHides);
 export const HIDE_NEVER_AS = where((c) => c.neverHiddenAs);
 
+// Never claimed, nor named in made-up information, by a good player who
+// pretends (see bluff.js fits()): nobody would believably be one.
+export const NEVER_BLUFFED = where((c) => c.neverBluffed);
+
+// The character with this name ("Fortune Teller" → "fortuneteller"), or
+// undefined: for reading the characters a piece of information names.
+const ROLE_BY_NAME = new Map(Object.keys(CHARACTERS).map((id) => [CHARACTERS[id].name, id]));
+export const roleByName = (n) => ROLE_BY_NAME.get(n);
+// How many times a bluffer makes up a piece of information until it fits
+// what they know (see bluff.js madeUp()); after that, the last one stands.
+export const BLUFF_TRIES = 6;
+
 // Outsiders who claim a Townsfolk while alive, and admit it once dead: the
 // Mutant ("mad" they're not one) and the Damsel (hiding from the Minions).
 // See claimFor() and strategy revealsWhenDead().

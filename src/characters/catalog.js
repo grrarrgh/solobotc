@@ -20,6 +20,8 @@
 //   publicInfo: chance an NPC shares their information in public (see
 //     PUBLIC_INFO_CHANCE);
 //   bait, neverHides, neverHiddenAs: cover stories (see BAIT_ROLES);
+//   neverBluffed: a good player pretending never claims it, and their
+//     made-up information never names it (see NEVER_BLUFFED);
 //   protects: a protection character (see PROTECTION_ROLES);
 //   notForHuman: never dealt to you (see FORBIDDEN_HUMAN);
 //   vsLegion: a strong Townsfolk against Legion, favoured in Legion games
@@ -367,6 +369,7 @@ export const CHARACTERS = {
       "You start knowing 1 in-play Townsfolk. If you were mad that you were this character, you gain their ability when they die.",
     kill: "med",
     neverHiddenAs: true,
+    neverBluffed: true,
     notForHuman: true,
   },
   highpriestess: {
@@ -456,6 +459,7 @@ export const CHARACTERS = {
     ability:
       "You do not know you are the Drunk. You think you are a Townsfolk character, but you are not.",
     neverHiddenAs: true,
+    neverBluffed: true,
     notForHuman: true,
   },
   recluse: {
@@ -488,6 +492,7 @@ export const CHARACTERS = {
       "If you are \"mad\" about being an Outsider, you might be executed.",
     kill: "low",
     neverHiddenAs: true,
+    neverBluffed: true,
     notForHuman: true,
   },
   damsel: {
@@ -548,6 +553,7 @@ export const CHARACTERS = {
       "You think you are a Demon, but you are not. The Demon knows who you are & who you choose at night.",
     kill: "avoid", // thinks they're the Demon, and the Demon knows who they pick
     neverHiddenAs: true,
+    neverBluffed: true,
     notForHuman: true,
   },
   ogre: {

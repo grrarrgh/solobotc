@@ -1,4 +1,4 @@
-import { name, team } from "../data.js";
+import { name, team, NEVER_BLUFFED, roleByName } from "../data.js";
 import { pick, sample, shuffle, claimHeard, whose } from "../util.js";
 import {
   isMinion,
@@ -24,6 +24,26 @@ export const pairInfo = (role) => {
   const wanted = PAIR_TEAM[role];
 
   return {
+    // The character it names (see strategy stanceOn()).
+    named: (m) => [roleByName(m.text.match(/ is (?:the )?(.+)\.$/)?.[1])].filter(Boolean),
+
+    // A pair player who claims it is who it says (vouched for; for the
+    // Investigator's Minion, suspected); if the other one claims it, it says
+    // nothing about them; if neither does, though both have claimed, one is
+    // lying (suspicious). (With the other's claim unknown, how it reads on
+    // its own: see each character's `stance`.)
+    claimStance(m, roles, claim, otherClaim) {
+      if (roles.includes(claim)) {
+        return this.stance?.(m) ?? "trust";
+      }
+
+      if (roles.includes(otherClaim)) {
+        return null;
+      }
+
+      return otherClaim ? "suspicious" : (this.stance?.(m) ?? null);
+    },
+
     truth(s, p) {
       const real = pick(
         nameable(s, p).filter(
@@ -135,6 +155,27 @@ export const pairInfo = (role) => {
             ? oneOf(pair[0], pair[1], shown)
             : "No matching character is in play.",
       };
+    },
+
+    // A good pretender's (see bluff.js): any 2 other NPCs (never you: you're
+    // never anyone's suspect), and a
+    // believable character of the team (never one in NEVER_BLUFFED): one a
+    // player of the pair claims, if they claim one; failing that, that none
+    // is in play.
+    story(s, p) {
+      const pair = sample(
+        s.players.filter((x) => x.id !== p.id && !x.human),
+        2,
+        s.r,
+      );
+      const believable = (id) => team(id) === wanted && !NEVER_BLUFFED.includes(id);
+      const claimed = pair.map((x) => claimHeard(x, p)).filter(believable);
+      const shown =
+        pick(claimed, s.r) ?? pick(s.script.ids.filter(believable), s.r);
+
+      return shown && pair.length === 2
+        ? { targets: pair.map((x) => x.id), text: oneOf(pair[0], pair[1], shown) }
+        : { targets: [], text: "No matching character is in play." };
     },
   };
 };

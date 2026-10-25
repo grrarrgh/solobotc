@@ -9,7 +9,7 @@ import {
   listLabels,
 } from "../../storyteller.js";
 import { pick, sample } from "../../util.js";
-import { bluffMode } from "../../bluff.js";
+import { dayBluff } from "../../bluff.js";
 
 // The Fisherman, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -35,7 +35,10 @@ export const fisherman = {
       if (ability(p) === "fisherman" && p.alignment === "good") {
         this.remember(p, fishermanInfo(s, p, infoMode(s, p)));
       } else {
-        this.rememberBluff(p, fishermanInfo(s, p, bluffMode(p)));
+        this.rememberBluff(
+          p,
+          dayBluff(s, p, "fisherman", this.strat, (mode) => fishermanInfo(s, p, mode)),
+        );
       }
     }
   },
@@ -139,3 +142,14 @@ export function fishermanInfo(s, p, mode) {
     functioning: mode === "truth",
   };
 }
+
+// How the Fisherman's advice reads (see strategy stanceOn()): a good player
+// vouched for, or an evil player (or 3 the Demon is among).
+export const info = {
+  stance: (m) =>
+    / is good: /.test(m.text)
+      ? "trust"
+      : / is evil\.$|The Demon is one of /.test(m.text)
+        ? "suspicious"
+        : null,
+};
