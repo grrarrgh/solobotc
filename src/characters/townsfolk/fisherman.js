@@ -1,10 +1,15 @@
 import {
   ability,
-  works,
   infoMode,
   bluffing,
-  fishermanInfo,
+  registersEvil,
+  isDemon,
+  nameable,
+  framed,
+  listLabels,
 } from "../../storyteller.js";
+import { pick, sample } from "../../util.js";
+import { bluffMode } from "../../bluff.js";
 
 // The Fisherman, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -30,9 +35,7 @@ export const fisherman = {
       if (ability(p) === "fisherman" && p.alignment === "good") {
         this.remember(p, fishermanInfo(s, p, infoMode(s, p)));
       } else {
-        const spy = p.role === "spy" && works(p);
-
-        this.rememberBluff(p, fishermanInfo(s, p, spy ? "truth" : "lie"));
+        this.rememberBluff(p, fishermanInfo(s, p, bluffMode(p)));
       }
     }
   },
@@ -61,3 +64,78 @@ export const fisherman = {
     return info.text;
   },
 };
+
+// The Fisherman's tips: each a true and a false version ({ ids, text }),
+// never about the human. That a player is evil (a Minion; falsely, a good
+// player, the evil team's scapegoat first); that the Demon is one of 3
+// players (falsely, 3 who aren't); that a player is good, so not to execute
+// them (the scapegoat first; falsely, an evil player).
+function fishermanTips(s, p) {
+  const named = nameable(s, p).filter((x) => x.alive && !x.human);
+  const d = named.find(isDemon);
+  const good = named.filter((x) => !registersEvil(x));
+  const goat = framed(s, p);
+  const scape = good.includes(goat) ? goat : pick(good, s.r);
+  const minion = pick(
+    named.filter((x) => registersEvil(x) && !isDemon(x)),
+    s.r,
+  );
+  const shield = pick(
+    named.filter((x) => x.alignment === "evil"),
+    s.r,
+  );
+  const tip = (ts, text) => ts && { ids: ts.map((x) => x.id), text };
+  const three = d && [d, ...sample(named.filter((x) => x !== d), 2, s.r)];
+  const notThree = sample(
+    named.filter((x) => !isDemon(x)),
+    3,
+    s.r,
+  );
+  const demonIn = (ts) => `The Demon is one of ${listLabels(ts)}.`;
+
+  return [
+    minion &&
+      scape && {
+        yes: tip([minion], `${minion.label} is evil.`),
+        no: tip([scape], `${scape.label} is evil.`),
+      },
+    three?.length === 3 &&
+      notThree.length === 3 && {
+        yes: tip(three, demonIn(three)),
+        no: tip(notThree, demonIn(notThree)),
+      },
+    scape &&
+      shield && {
+        yes: tip([scape], `${scape.label} is good: don't execute them.`),
+        no: tip([shield], `${shield.label} is good: don't execute them.`),
+      },
+  ].filter(Boolean);
+}
+
+// The Fisherman's visit (once per game, by day): the Storyteller's advice,
+// one tip (see fishermanTips()): true, false ("lie": a Drunk, a poisoned
+// Fisherman, the Vortox, an evil bluffer) or either ("random").
+export function fishermanInfo(s, p, mode) {
+  const f = pick(fishermanTips(s, p), s.r);
+  const said = !f
+    ? null
+    : mode === "truth"
+      ? f.yes
+      : mode === "lie"
+        ? f.no
+        : s.r() < 0.5
+          ? f.yes
+          : f.no;
+
+  return {
+    day: s.day,
+    night: s.night,
+    role: "fisherman",
+    text: said
+      ? `Fisherman: the Storyteller's advice: ${said.text}`
+      : "Fisherman: the Storyteller has no advice.",
+    targets: said?.ids ?? [],
+    trigger: "day",
+    functioning: mode === "truth",
+  };
+}

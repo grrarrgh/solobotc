@@ -1,8 +1,9 @@
 // Each character's `info`, from their own module: the information they
-// learn (`truth`, and for a drunk or poisoned one `lie` or `random`; see
-// storyteller.js infoMode()), and what's said in their name by someone
-// without their ability (`bluff`, an evil player's own; `choice`, a made-up
-// night choice).
+// learn each night (`truth`, and for a drunk or poisoned one `lie` or
+// `random`; see storyteller.js infoMode()), and what's said in their name by
+// someone without their ability (see bluff.js): `choice`, a made-up night
+// choice; `bluff`, an evil player's own bluff, when it isn't just `lie`;
+// `once`, an evil player's once-per-game night choice.
 //
 // (Kept apart from characters/index.js, and built on first use: the
 // character modules and storyteller.js import each other, so nothing here
@@ -12,6 +13,7 @@ import { info as balloonist } from "./townsfolk/balloonist.js";
 import { info as chambermaid } from "./townsfolk/chambermaid.js";
 import { info as chef } from "./townsfolk/chef.js";
 import { info as clockmaker } from "./townsfolk/clockmaker.js";
+import { info as courtier } from "./townsfolk/courtier.js";
 import { info as dreamer } from "./townsfolk/dreamer.js";
 import { info as empath } from "./townsfolk/empath.js";
 import { info as exorcist } from "./townsfolk/exorcist.js";
@@ -29,6 +31,7 @@ import { info as noble } from "./townsfolk/noble.js";
 import { info as oracle } from "./townsfolk/oracle.js";
 import { info as pixie } from "./townsfolk/pixie.js";
 import { info as sailor } from "./townsfolk/sailor.js";
+import { info as seamstress } from "./townsfolk/seamstress.js";
 import { info as snakecharmer } from "./townsfolk/snakecharmer.js";
 import { info as towncrier } from "./townsfolk/towncrier.js";
 import { info as undertaker } from "./townsfolk/undertaker.js";
@@ -48,6 +51,7 @@ export const infoOf = (role) =>
     chambermaid,
     chef,
     clockmaker,
+    courtier,
     dreamer,
     empath,
     exorcist,
@@ -65,6 +69,7 @@ export const infoOf = (role) =>
     oracle,
     pixie,
     sailor,
+    seamstress,
     snakecharmer,
     towncrier,
     undertaker,

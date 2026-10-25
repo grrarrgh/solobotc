@@ -2,6 +2,7 @@ import { name, team } from "../../data.js";
 import { works } from "../../storyteller.js";
 import { claimHeard } from "../../strategy.js";
 import { pick } from "../../util.js";
+import { bluffState, gainedRole } from "../../bluff.js";
 
 // An NPC pretending to be the Pixie: an evil player, or the Lunatic, whose
 // bluff it is.
@@ -84,10 +85,10 @@ export const pixie = {
         x.alive &&
         pixieBluffer(x) &&
         x.pixieMad &&
-        !x.bluffGained &&
+        !gainedRole(x) &&
         (dead.role === x.pixieRole || claimHeard(dead, x) === x.pixieRole),
     )) {
-      p.bluffGained = p.pixieRole;
+      bluffState(p).gained = { role: p.pixieRole };
 
       this.audit(
         "pixie",

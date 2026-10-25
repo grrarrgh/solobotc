@@ -1,5 +1,6 @@
 import { name } from "../../data.js";
-import { ability, works, philosopherInfo, who } from "../../storyteller.js";
+import { ability, works, who } from "../../storyteller.js";
+import { bluffState } from "../../bluff.js";
 
 // The Philosopher, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -58,4 +59,38 @@ export const philosopher = {
 
     this.remember(p, philosopherInfo(s, role));
   },
+
+  // A Philosopher bluffer "gains" an in-play Townsfolk on their first night
+  // (implying its real holder is drunk), then bluffs as it (see bluff.js
+  // bluffTonight()). (A Philosopher or Cannibal the Mezepheles turned evil
+  // bluffs what they really gained, and from when: a Cannibal's changes with
+  // each execution, and a first-night ability is used the night it's gained.)
+  philosopherBluff(p) {
+    const s = this.s;
+    const state = bluffState(p);
+
+    if (["philosopher", "cannibal"].includes(p.claim) && p.turnedEvil && p.gained) {
+      state.gained = { ...state.gained, role: p.gained, night: p.gainedNight };
+    }
+
+    if (p.claim !== "philosopher" || state.gained?.role) {
+      return;
+    }
+
+    const role = this.strat.philosopherBluff(s, p);
+
+    if (role) {
+      state.gained = { ...state.gained, role };
+      this.rememberBluff(p, philosopherInfo(s, role));
+    }
+  },
 };
+
+export const philosopherInfo = (s, role) => ({
+  night: s.night,
+  role: "philosopher",
+  text: `Philosopher: gained the ${name(role)} ability.`,
+  targets: [],
+  trigger: "normal",
+  functioning: true,
+});

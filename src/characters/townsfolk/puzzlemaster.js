@@ -6,7 +6,8 @@ import {
   infoMode,
   bluffing,
   who,
-  puzzleInfo,
+  nameable,
+  framed,
 } from "../../storyteller.js";
 import { untwinned } from "../../strategy.js";
 import { pick } from "../../util.js";
@@ -122,3 +123,39 @@ export const puzzlemaster = {
     return this.puzzleGuess(h, t).text;
   },
 };
+
+// The Puzzlemaster's guess (once): `t` is who they think their puzzle made
+// drunk (s.puzzle; see characters/townsfolk/puzzlemaster.js). A right guess
+// (working: `mode` "truth") learns the Demon; a wrong one, or a misinformed
+// Puzzlemaster's, a player who isn't the Demon (the evil team's scapegoat
+// first); "random", anyone. Never the human as the "Demon".
+export function puzzleInfo(s, p, t, mode) {
+  const right = s.puzzle?.drunkId === t.id;
+  const named = nameable(s, p).filter((x) => !x.human);
+  const d = s.players.find((x) => (x.alive || x.undead) && isDemon(x));
+  const goat = framed(s, p);
+  const wrong = named.filter((x) => !isDemon(x));
+  const shown =
+    mode === "truth" && right && d
+      ? d
+      : mode === "random"
+        ? pick(named, s.r)
+        : wrong.includes(goat)
+          ? goat
+          : pick(wrong, s.r);
+
+  return {
+    day: s.day,
+    night: s.night,
+    role: "puzzlemaster",
+    text: shown
+      ? `Puzzlemaster: guessed ${t.human ? "you are" : `${t.label} is`} drunk; the Demon is ${shown.label}.`
+      : `Puzzlemaster: guessed ${t.human ? "you are" : `${t.label} is`} drunk.`,
+    // (Only the "Demon": the guess says nothing about anyone.)
+    targets: shown ? [shown.id] : [],
+    guessId: t.id,
+    right,
+    trigger: "day",
+    functioning: mode === "truth",
+  };
+}

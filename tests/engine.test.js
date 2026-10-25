@@ -52,20 +52,18 @@ import {
   sideOf,
 } from "../src/strategy.js";
 import {
-  ravenInfo,
-  artistInfo,
-  savantInfo,
   nightInfo,
   infoMode,
   amnesiacKey,
-  bluffInfo,
-  madInfo,
   lean,
   scapegoat,
-  evilTwinInfo,
-  sageInfo,
-  savantBluff,
 } from "../src/storyteller.js";
+import { ravenInfo } from "../src/characters/townsfolk/ravenkeeper.js";
+import { artistInfo } from "../src/characters/townsfolk/artist.js";
+import { savantInfo, savantBluff } from "../src/characters/townsfolk/savant.js";
+import { sageInfo } from "../src/characters/townsfolk/sage.js";
+import { evilTwinInfo } from "../src/characters/minion/eviltwin.js";
+import { bluffTonight, backStory, gainedRole, hiddenStory } from "../src/bluff.js";
 import { shuffle, sample, rng, byId } from "../src/util.js";
 
 const script = JSON.parse(
@@ -3519,7 +3517,7 @@ test("an evil Philosopher bluffer gains an in-play Townsfolk and bluffs as it", 
 
   // The only in-play information Townsfolk is the Chef (the Spy registers
   // good, so the true Chef number is 0).
-  assert.equal(imp.bluffGained, "chef");
+  assert.equal(gainedRole(imp), "chef");
   assert.equal(imp.memories[0].text, "Philosopher: gained the Chef ability.");
   assert.match(imp.memories[1].text, /^Chef number: [12]\.$/);
 });
@@ -3853,7 +3851,7 @@ test("an evil Pixie bluffer is never mad about a character a teammate claims", (
     bluffer.claim = "pixie";
     bluffer.bluff = "pixie";
     team_.forEach((x, k) => (x.claim = townsfolk[k]));
-    bluffInfo(s, bluffer, strat);
+    bluffTonight(s, bluffer, strat);
 
     assert.ok(!team_.some((x) => x.claim === bluffer.pixieRole), `seed ${i}: ${bluffer.pixieRole}`);
   }
@@ -6959,8 +6957,8 @@ test("an evil Cannibal bluffer gains the executee's claimed ability, and bluffs 
   e.claimPublicly(chef); // the town knows them as the Chef
   e.execute(chef);
 
-  assert.equal(baron.bluffGained, "chef");
-  assert.equal(baron.cannibalFrom, chef.id);
+  assert.equal(gainedRole(baron), "chef");
+  assert.equal(baron.bluffState.gained.fromId, chef.id);
 
   // The next night they "learn" a Chef number (a first-night ability).
   s.night++;
@@ -7394,7 +7392,7 @@ test("a Balloonist bluffer names players whose claimed types change each night",
     for (let night = 1; night <= 4; night++) {
       s.night = night;
 
-      const info = bluffInfo(s, p[4], strat);
+      const info = bluffTonight(s, p[4], strat);
 
       types.push(team(byId(s, info.targets[0]).claim));
     }
@@ -7463,7 +7461,7 @@ test("an evil Dreamer bluffer's dreams hold up against the town's claims", () =>
     for (let night = 1; night <= 5; night++) {
       s.night = night;
 
-      const info = bluffInfo(s, p[3], strat);
+      const info = bluffTonight(s, p[3], strat);
       const t = byId(s, info.targets[0]);
       const [, a, b] = info.text.match(/ is the (.+) or the (.+)\.$/);
       const ids = [a, b].map((x) => Object.keys(ROLES).find((id) => name(id) === x));
@@ -8631,7 +8629,7 @@ test("an evil Grandmother bluffer names their teammate as the character they cla
     minion.claim = "monk";
     imp.claim = "grandmother";
 
-    const info = bluffInfo(s, imp, new SimpleStrategy());
+    const info = bluffTonight(s, imp, new SimpleStrategy());
 
     assert.equal(info.text, `Grandmother: your grandchild is ${minion.label}, the Monk.`);
   }
@@ -8949,7 +8947,7 @@ test("an evil Cannibal bluffer gains the executee's character as best they know 
     const { chef, m, e } = setup("spy");
 
     e.cannibals(chef);
-    assert.equal(m.bluffGained, "chef");
+    assert.equal(gainedRole(m), "chef");
   }
 
   // The Widow saw it on Night 1.
@@ -8957,7 +8955,7 @@ test("an evil Cannibal bluffer gains the executee's character as best they know 
     const { chef, m, e } = setup("widow");
 
     e.cannibals(chef);
-    assert.equal(m.bluffGained, "chef");
+    assert.equal(gainedRole(m), "chef");
   }
 
   // Anyone else: what they heard the executee claim.
@@ -8965,7 +8963,7 @@ test("an evil Cannibal bluffer gains the executee's character as best they know 
     const { chef, m, e } = setup("baron");
 
     e.cannibals(chef);
-    assert.equal(m.bluffGained, "empath");
+    assert.equal(gainedRole(m), "empath");
   }
 
   // A teammate: their bluff, as a real Cannibal would be told.
@@ -8973,7 +8971,7 @@ test("an evil Cannibal bluffer gains the executee's character as best they know 
     const { imp, m, e } = setup("spy");
 
     e.cannibals(imp);
-    assert.equal(m.bluffGained, "monk");
+    assert.equal(gainedRole(m), "monk");
   }
 });
 
@@ -9367,7 +9365,7 @@ test("an evil Noble bluffer always names 3 players, even in an 8-seat Legion gam
 
     p.claim = "noble";
 
-    const info = bluffInfo(s, p, new SimpleStrategy());
+    const info = bluffTonight(s, p, new SimpleStrategy());
 
     bluffers++;
     assert.match(info.text, /^Noble: one of .+ is evil\.$/, `seed ${seed}`);
@@ -9428,7 +9426,7 @@ test("a Cannibal the Mezepheles turned evil bluffs the ability they last ate, fr
   // That night they "learn" as the Noble (a first-night ability).
   s.night = 3;
   e.bluffs();
-  assert.equal(c.bluffGained, "noble");
+  assert.equal(gainedRole(c), "noble");
   assert.match(c.memories.at(-1)?.text ?? "", /^Noble: one of /);
 });
 
@@ -9440,23 +9438,23 @@ test("made-up Cannibal information follows the executions; a made-up Philosopher
   e.claimPublicly(noble);
 
   // Nothing eaten yet: nothing to say.
-  assert.deepEqual(madInfo(s, liar, "cannibal", strat), []);
+  assert.deepEqual(backStory(s, liar, "cannibal", strat), []);
 
   // The Noble is executed: the next night, made-up Noble information.
   e.execute(noble);
   s.night = 2;
 
-  const ate = madInfo(s, liar, "cannibal", strat);
+  const ate = backStory(s, liar, "cannibal", strat);
 
   assert.equal(ate.length, 1);
   assert.match(ate[0].text, /^Noble: one of /);
   assert.equal(ate[0].night, 2);
 
   // A made-up Philosopher gains a good character with information on Night 1.
-  const phil = madInfo(s, liar, "philosopher", strat);
+  const phil = backStory(s, liar, "philosopher", strat);
 
   assert.match(phil[0].text, /^Philosopher: gained the .+ ability\.$/);
-  assert.equal(madInfo(s, liar, "philosopher", strat)[0].text, phil[0].text);
+  assert.equal(backStory(s, liar, "philosopher", strat)[0].text, phil[0].text);
 });
 
 test("a hiding Mutant or Damsel never claims a Townsfolk nobody claims openly", () => {
@@ -9479,20 +9477,20 @@ test("a good player claiming the Cannibal without it 'eats' the executee as they
   e.execute(noble);
 
   // Recorded at the execution: the Noble, as they claimed it.
-  assert.equal(mutant.madCannibal.at(-1).as, "noble");
-  assert.equal(mutant.madCannibal.at(-1).fromId, noble.id);
+  assert.equal(mutant.bluffState.eaten.at(-1).as, "noble");
+  assert.equal(mutant.bluffState.eaten.at(-1).fromId, noble.id);
 
   // The next day, the Cannibal line and made-up (random) Noble information.
   s.night = 2;
   s.day = 2;
   s.talked = [];
-  e.strat.hiddenInfo(s, mutant);
+  hiddenStory(s, mutant, e.strat);
 
   const said = e.ask(mutant.id);
 
   assert.match(said, new RegExp(`I have ${noble.label}'s ability, since they were executed\.`));
   assert.match(said, /Night 2: One of .+ is evil\./);
-  assert.ok(mutant.hideInfo.memories.every((m) => m.functioning === false));
+  assert.ok(mutant.bluffState.hidden.memories.every((m) => m.functioning === false));
 });
 
 test("an NPC Seamstress never chooses a player they know claims the Recluse", () => {
@@ -9564,7 +9562,7 @@ test("an Oracle bluff never says fewer dead players are evil than it said before
         p[3].alive = false;
       }
 
-      const n = Number(/(\d+) dead/.exec(bluffInfo(s, imp, strat).text)[1]);
+      const n = Number(/(\d+) dead/.exec(bluffTonight(s, imp, strat).text)[1]);
 
       assert.ok(n >= last, `seed ${seed}, night ${night}: ${n} after ${last}`);
       assert.ok(n <= s.players.filter((x) => !x.alive).length);

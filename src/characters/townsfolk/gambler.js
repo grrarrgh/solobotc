@@ -1,5 +1,5 @@
 import { name } from "../../data.js";
-import { ability, works, gamblerInfo } from "../../storyteller.js";
+import { ability, works } from "../../storyteller.js";
 import { speak, heard } from "../../strategy.js";
 import { byId } from "../../util.js";
 
@@ -96,7 +96,7 @@ export const gambler = {
 };
 
 // The Gambler, as told by someone claiming it without its ability (see
-// storyteller.js madeUpChoice()): their "guess" tonight (not on Night 1).
+// bluff.js madeUpChoice()): their "guess" tonight (not on Night 1).
 export const info = {
   choice(s, p, strat) {
     const guess = s.night > 1 ? strat.gamble(s, p) : null;
@@ -106,3 +106,20 @@ export const info = {
       : null;
   },
 };
+
+// What a Gambler remembers about their guess. They never learn if it was
+// right, but they know a wrong guess when it kills them.
+// (`self`: they guessed themselves, to be safe.)
+export const gamblerInfo = (s, t, guess, died = false, self = false) => ({
+  night: s.night,
+  role: "gambler",
+  guess,
+  text: self
+    ? "Gambler: guessed myself, to be safe."
+    : `Gambler: guessed ${t.human ? "you are" : `${t.label} is`} the ${name(
+        guess,
+      )}${died ? ", and died" : ""}.`,
+  targets: self ? [] : [t.id],
+  trigger: "normal",
+  functioning: true,
+});

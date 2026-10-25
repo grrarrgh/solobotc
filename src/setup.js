@@ -335,7 +335,6 @@ export function createState(
       vigor: false, // a Minion killed by the Vigormortis keeps their ability
       gained: null, // the ability a Philosopher (or Cannibal, Pixie) gained
       gainedNight: 0, // the night a gained first-night ability is used (Cannibal, Barber swap)
-      bluffGained: null, // ...or that an evil Philosopher bluffer "gained"
       seamUsed: false,
       juggled: false,
       savantDay: 0,

@@ -18,10 +18,8 @@ import {
   nightInfo,
   ability,
   works,
-  ravenInfo,
   isDemon,
   isDrunk,
-  philosopherInfo,
   misinformedBy,
   who,
   steer,
@@ -29,8 +27,6 @@ import {
   killHelps,
   lean,
   leanText,
-  madInfo,
-  choiceInfo,
   bluffing,
 } from "./storyteller.js";
 import {
@@ -51,6 +47,7 @@ import { byId, bySeat, pick, shuffle } from "./util.js";
 import { formatLog, logNames } from "./log.js";
 import { abilities, living } from "./abilities.js";
 import { characters } from "./characters/index.js";
+import { backStory, keepStory, hiddenStory, bluffState } from "./bluff.js";
 
 const KEY_MOMENT_TYPES = new Set([
   "poison",
@@ -647,7 +644,9 @@ export class Engine {
 
   // ── Night actions: Everyone Can Play ──────────────────────
 
-  // Evil NPCs gather night info to report for the role they are bluffing.
+  // Evil NPCs gather night info to report for the role they are bluffing
+  // (see bluff.js bluffTonight(); a Philosopher's or Professor's bluff is in
+  // its own module).
   bluffs() {
     const s = this.s;
 
@@ -662,42 +661,8 @@ export class Engine {
         continue;
       }
 
-      // A Philosopher bluffer "gains" an in-play Townsfolk on their first
-      // night (implying its real holder is drunk), then bluffs as it.
-      // (A Philosopher or Cannibal the Mezepheles turned evil bluffs what
-      // they really gained, and from when: a Cannibal's changes with each
-      // execution, and a first-night ability is used the night it's gained.)
-      if (["philosopher", "cannibal"].includes(p.claim) && p.turnedEvil && p.gained) {
-        p.bluffGained = p.gained;
-        p.bluffGainedNight = p.gainedNight;
-      }
-
-      if (p.claim === "philosopher" && !p.bluffGained) {
-        const role = this.strat.philosopherBluff(s, p);
-
-        if (role) {
-          p.bluffGained = role;
-          this.rememberBluff(p, philosopherInfo(s, role));
-        }
-      }
-
-      // A Professor bluffer "uses" it once, on a dead player who claimed a
-      // Townsfolk, and says in the morning they stayed dead (see
-      // professorReveals()): they lied, so their word counts against them.
-      if (p.claim === "professor" && !p.professorUsed && s.night > 1) {
-        const t = this.strat.professorBluff(s, p);
-
-        if (t) {
-          p.professorUsed = true;
-          p.professorExposed = t.id;
-          this.rememberBluff(p, {
-            ...choiceInfo(s, "professor", "chose", [t]),
-            text: `Professor: chose ${t.label}, who stayed dead.`,
-          });
-        }
-
-        continue;
-      }
+      this.philosopherBluff(p);
+      this.professorBluff(p);
 
       const info = this.strat.bluff(s, p);
 
@@ -1008,27 +973,7 @@ export class Engine {
     // Demon kill always counts as a night death.
     const atNight = this.s.phase === "night" || cause === "demon";
 
-    if (atNight && ability(p) === "ravenkeeper") {
-      const t = this.strat.raven(this.s, p);
-
-      if (t) {
-        this.remember(p, ravenInfo(this.s, p, t));
-      }
-    } else if (
-      atNight &&
-      p.alignment === "evil" &&
-      p.claim === "ravenkeeper"
-    ) {
-      // An evil Ravenkeeper bluffer "learns" a character too; only the Spy's is true.
-      const t = this.strat.raven(this.s, p);
-
-      if (t) {
-        const lie = p.role !== "spy" || isDrunk(p) || p.poisoned;
-
-        this.rememberBluff(p, ravenInfo(this.s, p, t, lie, lie));
-      }
-    }
-
+    this.ravenkeeperDeath(p, atNight);
     this.sageDeath(p, cause);
     this.sweetheartDeath(p);
     this.barberDeath(p);
@@ -1513,7 +1458,7 @@ export class Engine {
       }
 
       if (p.cover) {
-        this.strat.coverInfo(s, p);
+        keepStory(s, p, p.cover, this.strat);
       }
 
       // (A good Mutant or Damsel makes up their Townsfolk's information.)
@@ -1522,7 +1467,7 @@ export class Engine {
         sideOf(p) === "good" &&
         team(p.claim) === "townsfolk"
       ) {
-        this.strat.hiddenInfo(s, p);
+        hiddenStory(s, p, this.strat);
       }
     }
   }
@@ -1615,7 +1560,7 @@ export class Engine {
     }
 
     const was = p.claim;
-    const memories = madInfo(s, p, role, this.strat);
+    const memories = backStory(s, p, role, this.strat);
     const info = memories.map(
       (m) => `${m.day ? `Day ${m.day}` : `Night ${m.night}`}: ${speak(m.text)}`,
     );
@@ -1640,7 +1585,7 @@ export class Engine {
 
     p.pixieMad = false;
     p.pixieRole = null;
-    p.pixieMemories = null;
+    bluffState(p).pixie = null;
     lied(s, { kind: "fake", byId: p.id, said: role, truth: p.role });
     this.claimPublicly(p);
     heard(s, p, memories);

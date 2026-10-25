@@ -1,6 +1,7 @@
 import { name, alignment } from "../../data.js";
 import { byId, pick, shuffle } from "../../util.js";
 import { goodRoles, evilRoles } from "../../storyteller.js";
+import { bluffState } from "../../bluff.js";
 
 const dreamText = (t, a, b) =>
   `Dreamer: ${t.label} is the ${name(a)} or the ${name(b)}.`;
@@ -88,7 +89,7 @@ export const info = {
     }
 
     const claimed = new Set(s.players.map((x) => x.claim));
-    const said = (p.dreamBluffs ??= {})[t.id];
+    const said = bluffState(p).dreamed[t.id];
     const good = goodRoles(s).includes(t.claim)
       ? t.claim
       : pick(goodRoles(s).filter((id) => !claimed.has(id)), s.r) ?? pick(goodRoles(s), s.r);
@@ -104,7 +105,7 @@ export const info = {
     // (Unless they've since claimed something else.)
     const pair = said?.includes(t.claim) ? said : shuffle([good, bad], s.r);
 
-    p.dreamBluffs[t.id] = pair;
+    bluffState(p).dreamed[t.id] = pair;
 
     return { targets: [t.id], text: dreamText(t, ...pair) };
   },

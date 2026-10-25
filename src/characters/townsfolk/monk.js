@@ -1,5 +1,5 @@
 import { name } from "../../data.js";
-import { ability, works, monkInfo } from "../../storyteller.js";
+import { ability, works } from "../../storyteller.js";
 
 // The Monk, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -45,7 +45,7 @@ export const monk = {
 };
 
 // The Monk, as told by someone claiming it without its ability (see
-// storyteller.js madeUpChoice()): the player they "protected" tonight (not
+// bluff.js madeUpChoice()): the player they "protected" tonight (not
 // on Night 1).
 export const info = {
   choice(s, p, strat) {
@@ -54,3 +54,13 @@ export const info = {
     return t ? monkInfo(s, t) : null;
   },
 };
+
+// What a Monk remembers about their own choice.
+export const monkInfo = (s, t, functioning = true) => ({
+  night: s.night,
+  role: "monk",
+  text: `Monk: protected ${t.label} from the Demon.`,
+  targets: [t.id],
+  trigger: "normal",
+  functioning,
+});

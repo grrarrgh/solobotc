@@ -9,7 +9,8 @@ import {
   HIDDEN_OUTSIDERS,
   HIDE_NEVER_AS,
 } from "./data.js";
-import { ability, works, madInfo, isDemon } from "./storyteller.js";
+import { ability, works, isDemon } from "./storyteller.js";
+import { backStory } from "./bluff.js";
 import { speak, heard } from "./strategy.js";
 import { pick, tick } from "./util.js";
 
@@ -270,7 +271,7 @@ export const abilities = {
 
       if (p.mad?.day === s.day && p.mad.previous === null) {
         p.mad.previous = p.claim;
-        p.mad.memories = madInfo(s, p, p.mad.role, this.strat);
+        p.mad.memories = backStory(s, p, p.mad.role, this.strat);
         p.claim = p.mad.role;
       }
     }

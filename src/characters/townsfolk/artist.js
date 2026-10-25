@@ -1,11 +1,13 @@
-import { ARTIST_QUESTIONS } from "../../data.js";
+import { ARTIST_QUESTIONS, team } from "../../data.js";
 import {
   ability,
-  works,
   infoMode,
   bluffing,
-  artistInfo,
+  registersEvil,
+  isDemon,
+  listLabels,
 } from "../../storyteller.js";
+import { bluffMode } from "../../bluff.js";
 
 // The Artist, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -35,11 +37,9 @@ export const artist = {
           artistInfo(s, ask.targets, ask.question, infoMode(s, p)),
         );
       } else {
-        const spy = p.role === "spy" && works(p);
-
         this.rememberBluff(
           p,
-          artistInfo(s, ask.targets, ask.question, spy ? "truth" : "lie"),
+          artistInfo(s, ask.targets, ask.question, bluffMode(p)),
         );
       }
     }
@@ -73,3 +73,31 @@ export const artist = {
     return info.text;
   },
 };
+
+// Whether "t is <evil / the Demon / a Minion / ...>" is true (as t
+// registers): an Artist's question, or a Gossip's statement.
+export const artistTruth = (t, q) =>
+  q === "evil" ? registersEvil(t) : q === "demon" ? isDemon(t) : team(t.role) === q;
+
+// The Storyteller's yes/no answer to an Artist asking about one or more
+// players ("is any of them ...?"). `mode` is "truth", "lie" (an evil bluffer,
+// or a Drunk or poisoned Artist) or "random".
+export function artistInfo(s, targets, q, mode) {
+  const ts = [].concat(targets);
+  const truth = ts.some((t) => artistTruth(t, q));
+  const yes =
+    mode === "truth" ? truth : mode === "lie" ? !truth : s.r() < 0.5;
+  const who = ts.length > 1 ? `any of ${listLabels(ts)}` : ts[0].label;
+
+  return {
+    day: s.day,
+    night: s.night,
+    role: "artist",
+    text: `Artist: asked if ${who} is ${ARTIST_QUESTIONS[q]}: ${
+      yes ? "YES" : "NO"
+    }.`,
+    targets: ts.map((t) => t.id),
+    trigger: "day",
+    functioning: mode === "truth",
+  };
+}

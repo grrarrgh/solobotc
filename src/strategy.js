@@ -69,10 +69,7 @@ import {
 } from "./data.js";
 import {
   ability,
-  bluffInfo,
-  madInfo,
   steer,
-  evilTwinInfo,
   scapegoat,
   isDrunk,
   isDemon,
@@ -86,6 +83,8 @@ import {
   AMNESIAC_ABILITIES,
   AMNESIAC_GUESSES,
 } from "./characters/townsfolk/amnesiac.js";
+import { evilTwinInfo } from "./characters/minion/eviltwin.js";
+import { bluffTonight, backStory, bluffState, gainedRole } from "./bluff.js";
 
 export { claimTo, claimHeard, tick };
 
@@ -156,7 +155,7 @@ export function abilityUsed(p, role) {
     artist: p.artistUsed,
     seamstress: p.seamUsed,
     juggler: p.juggled,
-    philosopher: p.gained ?? p.bluffGained,
+    philosopher: p.gained ?? gainedRole(p),
     virgin: p.virginUsed,
     fool: p.foolUsed,
     courtier: p.courtierUsed,
@@ -496,10 +495,10 @@ const explained = (x, role) =>
 // Pixie's (see characters/townsfolk/pixie.js).
 //
 // A living good Mutant or Damsel hiding behind a Townsfolk claim gives the
-// information they made up for it instead (see hiddenInfo()).
+// information they made up for it instead (see bluff.js hiddenStory()).
 export const spoken = (p) =>
-  p.alive && p.hideInfo && p.claim === p.hideInfo.as
-    ? p.hideInfo.memories
+  p.alive && p.bluffState?.hidden && p.claim === p.bluffState.hidden.as
+    ? p.bluffState.hidden.memories
     : p.alive && p.claim !== "pixie"
       ? p.memories.filter((m) => m.role !== "pixie")
       : p.memories;
@@ -961,7 +960,14 @@ export class SimpleStrategy {
     // see engine cannibals().)
     const from =
       claim === "cannibal" &&
-      byId(s, p.role === "cannibal" || p.alignment === "evil" ? p.cannibalFrom : p.madCannibal?.at(-1)?.fromId);
+      byId(
+        s,
+        p.role === "cannibal"
+          ? p.cannibalFrom
+          : p.alignment === "evil"
+            ? p.bluffState?.gained?.fromId
+            : p.bluffState?.eaten.at(-1)?.fromId,
+      );
 
     return from
       ? `I have ${from.human ? "your" : `${from.label}'s`} ability, since they were executed.`
@@ -988,7 +994,7 @@ export class SimpleStrategy {
     return (p.role === "pixie" || p.shown === "pixie" || p.bluff === "pixie") &&
       p.pixieMad &&
       !p.gained &&
-      !p.bluffGained
+      !gainedRole(p)
       ? "pixie"
       : null;
   }
@@ -1027,16 +1033,17 @@ export class SimpleStrategy {
   // they're mad about, with made-up information to match (made up afresh
   // each day).
   pixieMad(s, p) {
-    if (!p.pixieMad || p.gained || p.bluffGained || !p.alive) {
+    if (!p.pixieMad || p.gained || gainedRole(p) || !p.alive) {
       return null;
     }
 
-    if (p.pixieDay !== s.day) {
-      p.pixieDay = s.day;
-      p.pixieMemories = madInfo(s, p, p.pixieRole, this);
+    const state = bluffState(p);
+
+    if (state.pixie?.day !== s.day) {
+      state.pixie = { day: s.day, memories: backStory(s, p, p.pixieRole, this) };
     }
 
-    return { role: p.pixieRole, memories: p.pixieMemories };
+    return { role: p.pixieRole, memories: state.pixie.memories };
   }
 
   // For an Evil Twin: their good twin, and the good twin's information to
@@ -1120,7 +1127,7 @@ export class SimpleStrategy {
   //
   // A good NPC with a cover story (see coverFor()) tells listener `to`
   // their cover character instead, unless they tell `to` the truth (see
-  // truthTo()), with made-up information to match (see coverInfo()):
+  // truthTo()), with made-up information to match (see bluff.js keepStory()):
   // baiting, with an opinion drawn from it; hiding, with no reasons for
   // their opinion (which could give them away).
   answer(s, p, to = null) {
@@ -1264,31 +1271,6 @@ export class SimpleStrategy {
     );
 
     return as ? { kind, as, night: s.night } : null;
-  }
-
-  // A cover story's made-up information for the cover character, kept from
-  // day to day: tonight's is added each morning (none for a character with
-  // nothing to learn).
-  coverInfo(s, p) {
-    const c = p.cover;
-    const fresh = madInfo(s, p, c.as, this).filter(
-      (m) => !c.memories || (m.night === s.night && !m.day),
-    );
-
-    c.memories = [...(c.memories ?? []), ...fresh];
-  }
-
-  // A good Mutant or Damsel hiding behind a Townsfolk claim (see
-  // HIDDEN_OUTSIDERS) makes up that Townsfolk's information, at random, as
-  // a cover story would: kept from day to day, tonight's added each morning
-  // (afresh if their claim changed). See spoken().
-  hiddenInfo(s, p) {
-    const h = p.hideInfo?.as === p.claim ? p.hideInfo : (p.hideInfo = { as: p.claim, memories: null });
-    const fresh = madInfo(s, p, h.as, this).filter(
-      (m) => !h.memories || (m.night === s.night && !m.day),
-    );
-
-    h.memories = [...(h.memories ?? []), ...fresh];
   }
 
   // Whether p, with a cover story, tells listener `to` the truth: a player
@@ -3239,6 +3221,6 @@ export class SimpleStrategy {
 
   // Night info an evil NPC reports for their bluff (true only for the Spy).
   bluff(s, p) {
-    return bluffInfo(s, p, this);
+    return bluffTonight(s, p, this);
   }
 }

@@ -1,4 +1,5 @@
-import { ability, infoMode, chambermaidInfo } from "../../storyteller.js";
+import { ability, infoMode, wrongNumber, listLabels } from "../../storyteller.js";
+import { pick } from "../../util.js";
 
 // The Chambermaid, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -23,7 +24,7 @@ export const chambermaid = {
 };
 
 // The Chambermaid, as told by someone claiming it without its ability (see
-// storyteller.js madeUpChoice()): their 2 "choices", with a number by
+// bluff.js madeUpChoice()): their 2 "choices", with a number by
 // `mode` (see infoMode()).
 export const info = {
   choice(s, p, strat, mode) {
@@ -32,3 +33,24 @@ export const info = {
     return picks ? chambermaidInfo(s, picks[0], picks[1], mode) : null;
   },
 };
+
+// The Chambermaid: how many of two players woke tonight due to their
+// ability.
+export function chambermaidInfo(s, a, b, mode) {
+  const n = [a, b].filter((x) => (s.woke ?? []).includes(x.id)).length;
+  const said =
+    mode === "truth"
+      ? n
+      : mode === "lie"
+        ? wrongNumber(s, n)
+        : pick([0, 1, 2], s.r);
+
+  return {
+    night: s.night,
+    role: "chambermaid",
+    text: `Chambermaid: ${said} of ${listLabels([a, b])} woke tonight.`,
+    targets: [a.id, b.id],
+    trigger: "normal",
+    functioning: mode === "truth",
+  };
+}

@@ -1,11 +1,13 @@
 import { name } from "../../data.js";
 import {
   ability,
-  works,
   infoMode,
-  jugglerInfo,
   bluffing,
+  range,
+  wrongNumber,
 } from "../../storyteller.js";
+import { byId, pick } from "../../util.js";
+import { bluffMode } from "../../bluff.js";
 
 // The Juggler, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -22,9 +24,7 @@ export const juggler = {
       if (ability(p) === "juggler" && p.alignment === "good") {
         this.remember(p, jugglerInfo(s, guesses, infoMode(s, p)));
       } else {
-        const spy = p.role === "spy" && works(p);
-
-        this.rememberBluff(p, jugglerInfo(s, guesses, spy ? "truth" : "lie"));
+        this.rememberBluff(p, jugglerInfo(s, guesses, bluffMode(p)));
       }
 
       p.juggle = null;
@@ -84,3 +84,29 @@ export const juggler = {
     }
   },
 };
+
+// The Juggler, the night after juggling: how many guesses were right. (Or,
+// by their jinx, the Cannibal who ate the Juggler `juggler`.)
+export function jugglerInfo(s, guesses, mode, juggler = null) {
+  const n = guesses.filter((g) => byId(s, g.id)?.role === g.role).length;
+  const options = range(0, guesses.length);
+  const said =
+    mode === "truth"
+      ? n
+      : mode === "lie"
+        ? (wrongNumber(s, n, options) ?? n)
+        : pick(options, s.r);
+
+  return {
+    night: s.night,
+    role: juggler ? "cannibal" : "juggler",
+    text: `${juggler ? "Cannibal" : "Juggler"}: ${said} of ${
+      juggler ? `${juggler.label}'s` : "my"
+    } ${guesses.length} guess${
+      guesses.length === 1 ? "" : "es"
+    } ${said === 1 ? "was" : "were"} correct.`,
+    targets: guesses.map((g) => g.id),
+    trigger: "normal",
+    functioning: mode === "truth",
+  };
+}

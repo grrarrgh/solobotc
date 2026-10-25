@@ -1,6 +1,7 @@
 import { team } from "../../data.js";
 import { pick, claimHeard } from "../../util.js";
 import { nameable } from "../../storyteller.js";
+import { bluffState } from "../../bluff.js";
 
 const balloonText = (t) => `Balloonist: shown ${t.label}.`;
 
@@ -36,12 +37,12 @@ export const info = {
     if (p.alignment === "evil") {
       const claimed = (x) => team(claimHeard(x, p)) ?? null;
       const differs = named.filter(
-        (x) => claimed(x) && claimed(x) !== p.balloonClaimed,
+        (x) => claimed(x) && claimed(x) !== bluffState(p).balloonType,
       );
       const unknown = named.filter((x) => !claimed(x));
       const t = pick(differs.length ? differs : unknown.length ? unknown : named, s.r);
 
-      p.balloonClaimed = t ? claimed(t) : null;
+      bluffState(p).balloonType = t ? claimed(t) : null;
 
       return t
         ? { targets: [t.id], text: balloonText(t) }

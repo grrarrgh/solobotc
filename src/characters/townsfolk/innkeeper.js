@@ -62,7 +62,7 @@ export const innkeeper = {
 };
 
 // The Innkeeper, as told by someone claiming it without its ability (see
-// storyteller.js madeUpChoice()): the 2 players they "protected" tonight
+// bluff.js madeUpChoice()): the 2 players they "protected" tonight
 // (not on Night 1).
 export const info = {
   choice(s, p, strat) {

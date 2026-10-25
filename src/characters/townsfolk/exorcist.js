@@ -43,7 +43,7 @@ export const exorcist = {
 };
 
 // The Exorcist, as told by someone claiming it without its ability (see
-// storyteller.js madeUpChoice()): the player they "chose" tonight (not on
+// bluff.js madeUpChoice()): the player they "chose" tonight (not on
 // Night 1).
 export const info = {
   choice(s, p, strat) {

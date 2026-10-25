@@ -8,9 +8,8 @@ import {
   killHelps,
   who,
   bluffing,
-  artistTruth,
-  gossipInfo,
 } from "../../storyteller.js";
+import { artistTruth } from "./artist.js";
 import { heard, untwinned } from "../../strategy.js";
 import { pick, Whose, byId } from "../../util.js";
 
@@ -140,3 +139,14 @@ export const gossip = {
     return `You said "${t.label} is ${ARTIST_QUESTIONS[question]}."`;
   },
 };
+
+// A Gossip's public statement, as they remember it.
+export const gossipInfo = (s, t, q) => ({
+  day: s.day,
+  night: s.night,
+  role: "gossip",
+  text: `Gossip: said ${t.label} is ${ARTIST_QUESTIONS[q]}.`,
+  targets: [t.id],
+  trigger: "day",
+  functioning: true,
+});

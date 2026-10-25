@@ -1,10 +1,7 @@
 import {
-  ARTIST_QUESTIONS,
   FIRST_NIGHT_INFO,
   ONGOING_INFO,
   FINAL_THREE_MARGIN,
-  RECLUSE_SAGE_CHANCE,
-  COUNTS,
   name,
   team,
   alignment,
@@ -13,19 +10,14 @@ import {
   byId,
   bySeat,
   pick,
-  sample,
-  shuffle,
   claimHeard,
   claimTo,
   whose,
   Whose,
 } from "./util.js";
 import { logNames } from "./log.js";
-import { stanceOn } from "./strategy.js";
 import { AMNESIAC_ABILITIES } from "./characters/townsfolk/amnesiac.js";
 import { infoOf } from "./characters/info.js";
-import { PAIR_TEAM } from "./characters/pairinfo.js";
-import { grandchildText } from "./characters/townsfolk/grandmother.js";
 import { mathNote } from "./characters/townsfolk/mathematician.js";
 
 // Drunk: the Drunk themselves, anyone made drunk "from now on" (by a
@@ -291,48 +283,6 @@ export function actsTonight(role, night) {
   return LATER_NIGHTS.includes(role) && night > 1;
 }
 
-// What a Monk remembers about their own choice.
-export const monkInfo = (s, t, functioning = true) => ({
-  night: s.night,
-  role: "monk",
-  text: `Monk: protected ${t.label} from the Demon.`,
-  targets: [t.id],
-  trigger: "normal",
-  functioning,
-});
-
-// What a Butler remembers about the master they chose.
-export const butlerInfo = (s, t) => ({
-  night: s.night,
-  role: "butler",
-  text: `Butler: chose ${t.label} as master.`,
-  targets: [t.id],
-  trigger: "normal",
-  functioning: true,
-});
-
-// What a Gambler remembers about their guess. They never learn if it was
-// right, but they know a wrong guess when it kills them.
-// (`self`: they guessed themselves, to be safe.)
-export const gamblerInfo = (s, t, guess, died = false, self = false) => ({
-  night: s.night,
-  role: "gambler",
-  guess,
-  text: self
-    ? "Gambler: guessed myself, to be safe."
-    : `Gambler: guessed ${t.human ? "you are" : `${t.label} is`} the ${name(
-        guess,
-      )}${died ? ", and died" : ""}.`,
-  targets: self ? [] : [t.id],
-  trigger: "normal",
-  functioning: true,
-});
-
-// Whether "t is <evil / the Demon / a Minion / ...>" is true (as t
-// registers): an Artist's question, or a Gossip's statement.
-export const artistTruth = (t, q) =>
-  q === "evil" ? evil(t) : q === "demon" ? isDemon(t) : team(t.role) === q;
-
 // In seat order (see bySeat()).
 export const listLabels = (players) => {
   const ts = bySeat(players);
@@ -351,29 +301,6 @@ export const oneOf = (a, b, role) => {
 
   return `One of ${x.label} and ${y.label} is ${name(role)}.`;
 };
-
-// The Storyteller's yes/no answer to an Artist asking about one or more
-// players ("is any of them ...?"). `mode` is "truth", "lie" (an evil bluffer,
-// or a Drunk or poisoned Artist) or "random".
-export function artistInfo(s, targets, q, mode) {
-  const ts = [].concat(targets);
-  const truth = ts.some((t) => artistTruth(t, q));
-  const yes =
-    mode === "truth" ? truth : mode === "lie" ? !truth : s.r() < 0.5;
-  const who = ts.length > 1 ? `any of ${listLabels(ts)}` : ts[0].label;
-
-  return {
-    day: s.day,
-    night: s.night,
-    role: "artist",
-    text: `Artist: asked if ${who} is ${ARTIST_QUESTIONS[q]}: ${
-      yes ? "YES" : "NO"
-    }.`,
-    targets: ts.map((t) => t.id),
-    trigger: "day",
-    functioning: mode === "truth",
-  };
-}
 
 export const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 
@@ -454,426 +381,6 @@ export function infoMode(s, p, deadOk = false) {
   return p.poisoned ? misled : "truth";
 }
 
-// The Seamstress: are these two players the same alignment?
-export function seamstressInfo(s, a, b, mode) {
-  const same = evil(a) === evil(b);
-  const say = mode === "truth" ? same : mode === "lie" ? !same : s.r() < 0.5;
-
-  return {
-    night: s.night,
-    role: "seamstress",
-    text: `Seamstress: ${listLabels([a, b])} are ${
-      say ? "the same alignment" : "different alignments"
-    }.`,
-    targets: [a.id, b.id],
-    trigger: "normal",
-    functioning: mode === "truth",
-  };
-}
-
-// The Sage, killed by the Demon: the Demon is one of two players.
-// By the Recluse and Sage jinx, a living Recluse might register as the
-// Demon (at RECLUSE_SAGE_CHANCE): shown in the Demon's place.
-export function sageInfo(s, p, mode) {
-  const demon = s.players.find((x) => x.alive && isDemon(x));
-  const recluse = s.players.find((x) => x.alive && x !== p && x.role === "recluse");
-  const d =
-    mode === "truth" && demon && recluse && s.r() < RECLUSE_SAGE_CHANCE
-      ? recluse
-      : demon;
-  const others = nameable(s, p).filter((x) => x !== d && x !== demon);
-  const pair =
-    mode === "truth" && d
-      ? [
-          d,
-          pick(
-            steer(s, others, killHelps, `the other player ${whose(p)} Sage sees`),
-            s.r,
-          ),
-        ]
-      : mode === "lie" || !d
-        ? sample(others, 2, s.r)
-        : sample(nameable(s, p), 2, s.r);
-  const [a, b] = shuffle(pair.filter(Boolean), s.r);
-
-  return {
-    night: s.night,
-    role: "sage",
-    text: b ? `Sage: the Demon is ${a.label} or ${b.label}.` : "No information.",
-    targets: [a, b].filter(Boolean).map((x) => x.id),
-    trigger: "death",
-    functioning: mode === "truth",
-  };
-}
-
-// The Juggler, the night after juggling: how many guesses were right. (Or,
-// by their jinx, the Cannibal who ate the Juggler `juggler`.)
-export function jugglerInfo(s, guesses, mode, juggler = null) {
-  const n = guesses.filter((g) => byId(s, g.id)?.role === g.role).length;
-  const options = range(0, guesses.length);
-  const said =
-    mode === "truth"
-      ? n
-      : mode === "lie"
-        ? (wrongNumber(s, n, options) ?? n)
-        : pick(options, s.r);
-
-  return {
-    night: s.night,
-    role: juggler ? "cannibal" : "juggler",
-    text: `${juggler ? "Cannibal" : "Juggler"}: ${said} of ${
-      juggler ? `${juggler.label}'s` : "my"
-    } ${guesses.length} guess${
-      guesses.length === 1 ? "" : "es"
-    } ${said === 1 ? "was" : "were"} correct.`,
-    targets: guesses.map((g) => g.id),
-    trigger: "normal",
-    functioning: mode === "truth",
-  };
-}
-
-// Things a Savant can be told, each as a true and a false statement (and
-// the players it names). Never about the human, and about different players
-// from the Savant's last visit where possible.
-function savantFacts(s, p) {
-  const all = nameable(s, p).filter((x) => !x.human);
-  const last = p.lastPicks?.savant ?? [];
-  const fresh = all.filter((x) => !last.includes(x.id));
-  const others = fresh.filter((x) => x.alive).length >= 2 ? fresh : all;
-  const t = pick(
-    others.filter((x) => x.alive),
-    s.r,
-  );
-  const c = pick(others, s.r);
-  const d = s.players.find((x) => x.alive && isDemon(x));
-  const x = pick(
-    others.filter((y) => y.alive && y !== d),
-    s.r,
-  );
-  const outsiders = s.players.filter(
-    (y) => team(y.role) === "outsider",
-  ).length;
-  const thereAre = (n) =>
-    `There ${n === 1 ? "is 1 Outsider" : `are ${n} Outsiders`} in play.`;
-  const near = Boolean(d && x && neigh(s, x).includes(d));
-
-  return [
-    t && {
-      ids: [t.id],
-      yes: `${t.label} is ${evil(t) ? "evil" : "good"}.`,
-      no: `${t.label} is ${evil(t) ? "good" : "evil"}.`,
-    },
-    {
-      ids: [],
-      yes: thereAre(outsiders),
-      no: thereAre(outsiders ? outsiders + (s.r() < 0.5 ? -1 : 1) : 1),
-    },
-    c && {
-      ids: [c.id],
-      yes: `${c.label} is the ${name(c.role)}.`,
-      no: `${c.label} is the ${name(
-        pick(
-          s.script.ids.filter((id) => id !== c.role),
-          s.r,
-        ),
-      )}.`,
-    },
-    d &&
-      x && {
-        ids: [x.id],
-        yes: `The Demon is ${near ? "" : "not "}a neighbour of ${x.label}.`,
-        no: `The Demon is ${near ? "not " : ""}a neighbour of ${x.label}.`,
-      },
-  ].filter(Boolean);
-}
-
-// The Savant's daily visit: two statements, one true and one false (both
-// false for a Drunk or under the Vortox; either way when poisoned).
-export function savantInfo(s, p, mode) {
-  const [a, b] = sample(savantFacts(s, p), 2, s.r);
-
-  // Remembered so the next visit is about other players.
-  p.lastPicks = { ...p.lastPicks, savant: [...a.ids, ...b.ids] };
-
-  const said =
-    mode === "truth"
-      ? shuffle([a.yes, b.no], s.r)
-      : mode === "lie"
-        ? [a.no, b.no]
-        : [a, b].map((f) => (s.r() < 0.5 ? f.yes : f.no));
-
-  return {
-    day: s.day,
-    night: s.night,
-    role: "savant",
-    text: `Savant: one of these is true:\n"${said[0]}"\n"${said[1]}"`,
-    targets: [],
-    trigger: "day",
-    functioning: mode === "truth",
-  };
-}
-
-// An evil Savant bluffer's daily visit: two made-up statements, each one
-// true or false at random, but never one that hurts their team. A teammate
-// is only ever "good", or the character they claim; only a good player is
-// ever "evil" (never the evil team's scapegoat "good"); a character named is
-// never an evil one in play (that would give it away); the Demon is only
-// ever misplaced, never next to a teammate; and the Outsider count is only
-// true when no Minion changed it. Never the same statement twice, nor the
-// same kind of statement about a player twice (see p.savantSaid), and the
-// two are about different things. (The Lunatic's team is the one they
-// imagine, with themself as the Demon.)
-export function savantBluff(s, p) {
-  const lunatic = p.role === "lunatic";
-  const mine = (x) =>
-    lunatic
-      ? x === p || (p.lunaticTeam ?? []).includes(x.id)
-      : x.alignment === "evil";
-  const demon = lunatic ? p : s.players.find((x) => x.alive && isDemon(x));
-  const goat = lunatic ? null : scapegoat(s);
-  const inPlay = new Set(s.players.map((x) => x.role));
-  const said = new Set(p.savantSaid ?? []);
-  const options = [];
-  // `group`: what it's about (only one statement each a day); `keys`: what
-  // can't be said again.
-  const add = (group, kind, text, ids = []) => {
-    const keys = [text, ...ids.map((id) => `${kind}:${id}`)];
-
-    if (!keys.some((k) => said.has(k))) {
-      options.push({ group, keys, text, ids });
-    }
-  };
-
-  for (const x of s.players.filter((y) => y.alive && !y.human && y !== p)) {
-    if (x !== goat) {
-      add(x.id, "alignment", `${x.label} is good.`, [x.id]);
-    }
-
-    if (!mine(x)) {
-      add(x.id, "alignment", `${x.label} is evil.`, [x.id]);
-    }
-
-    const role = mine(x)
-      ? alignment(x.claim) === "good" && x.claim !== x.role
-        ? x.claim
-        : null
-      : pick(
-          s.script.ids.filter(
-            (id) =>
-              !(alignment(id) === "evil" && inPlay.has(id)) &&
-              !(x === goat && id === x.role),
-          ),
-          s.r,
-        );
-
-    if (role) {
-      add(x.id, "character", `${x.label} is the ${name(role)}.`, [x.id]);
-    }
-
-    const near = neigh(s, x);
-
-    if (demon && near.includes(demon)) {
-      add(x.id, "demon", `The Demon is not a neighbour of ${x.label}.`, [x.id]);
-    } else if (demon && !near.some(mine)) {
-      add(x.id, "demon", `The Demon is a neighbour of ${x.label}.`, [x.id]);
-    }
-  }
-
-  const outsiders = s.players.filter((y) => team(y.role) === "outsider").length;
-  const base = COUNTS[s.players.length]?.[1] ?? outsiders;
-
-  for (let n = Math.max(0, base - 1); n <= base + 1; n++) {
-    if (n !== outsiders || outsiders === base) {
-      add(
-        "outsiders",
-        "outsiders",
-        `There ${n === 1 ? "is 1 Outsider" : `are ${n} Outsiders`} in play.`,
-      );
-    }
-  }
-
-  const a = pick(options, s.r);
-  const b = a && pick(options.filter((o) => o.group !== a.group), s.r);
-
-  // (With nothing left to say, which takes many days, a plain lie.)
-  if (!b) {
-    return savantInfo(s, p, "lie");
-  }
-
-  p.savantSaid = [...said, ...a.keys, ...b.keys];
-
-  return {
-    day: s.day,
-    night: s.night,
-    role: "savant",
-    text: `Savant: one of these is true:\n"${a.text}"\n"${b.text}"`,
-    targets: [],
-    trigger: "day",
-    functioning: false,
-  };
-}
-
-// The Fisherman's tips: each a true and a false version ({ ids, text }),
-// never about the human. That a player is evil (a Minion; falsely, a good
-// player, the evil team's scapegoat first); that the Demon is one of 3
-// players (falsely, 3 who aren't); that a player is good, so not to execute
-// them (the scapegoat first; falsely, an evil player).
-function fishermanTips(s, p) {
-  const named = nameable(s, p).filter((x) => x.alive && !x.human);
-  const d = named.find(isDemon);
-  const good = named.filter((x) => !evil(x));
-  const goat = framed(s, p);
-  const scape = good.includes(goat) ? goat : pick(good, s.r);
-  const minion = pick(
-    named.filter((x) => evil(x) && !isDemon(x)),
-    s.r,
-  );
-  const shield = pick(
-    named.filter((x) => x.alignment === "evil"),
-    s.r,
-  );
-  const tip = (ts, text) => ts && { ids: ts.map((x) => x.id), text };
-  const three = d && [d, ...sample(named.filter((x) => x !== d), 2, s.r)];
-  const notThree = sample(
-    named.filter((x) => !isDemon(x)),
-    3,
-    s.r,
-  );
-  const demonIn = (ts) => `The Demon is one of ${listLabels(ts)}.`;
-
-  return [
-    minion &&
-      scape && {
-        yes: tip([minion], `${minion.label} is evil.`),
-        no: tip([scape], `${scape.label} is evil.`),
-      },
-    three?.length === 3 &&
-      notThree.length === 3 && {
-        yes: tip(three, demonIn(three)),
-        no: tip(notThree, demonIn(notThree)),
-      },
-    scape &&
-      shield && {
-        yes: tip([scape], `${scape.label} is good: don't execute them.`),
-        no: tip([shield], `${shield.label} is good: don't execute them.`),
-      },
-  ].filter(Boolean);
-}
-
-// The Fisherman's visit (once per game, by day): the Storyteller's advice,
-// one tip (see fishermanTips()): true, false ("lie": a Drunk, a poisoned
-// Fisherman, the Vortox, an evil bluffer) or either ("random").
-export function fishermanInfo(s, p, mode) {
-  const f = pick(fishermanTips(s, p), s.r);
-  const said = !f
-    ? null
-    : mode === "truth"
-      ? f.yes
-      : mode === "lie"
-        ? f.no
-        : s.r() < 0.5
-          ? f.yes
-          : f.no;
-
-  return {
-    day: s.day,
-    night: s.night,
-    role: "fisherman",
-    text: said
-      ? `Fisherman: the Storyteller's advice: ${said.text}`
-      : "Fisherman: the Storyteller has no advice.",
-    targets: said?.ids ?? [],
-    trigger: "day",
-    functioning: mode === "truth",
-  };
-}
-
-// The Puzzlemaster's guess (once): `t` is who they think their puzzle made
-// drunk (s.puzzle; see characters/townsfolk/puzzlemaster.js). A right guess
-// (working: `mode` "truth") learns the Demon; a wrong one, or a misinformed
-// Puzzlemaster's, a player who isn't the Demon (the evil team's scapegoat
-// first); "random", anyone. Never the human as the "Demon".
-export function puzzleInfo(s, p, t, mode) {
-  const right = s.puzzle?.drunkId === t.id;
-  const named = nameable(s, p).filter((x) => !x.human);
-  const d = s.players.find((x) => (x.alive || x.undead) && isDemon(x));
-  const goat = framed(s, p);
-  const wrong = named.filter((x) => !isDemon(x));
-  const shown =
-    mode === "truth" && right && d
-      ? d
-      : mode === "random"
-        ? pick(named, s.r)
-        : wrong.includes(goat)
-          ? goat
-          : pick(wrong, s.r);
-
-  return {
-    day: s.day,
-    night: s.night,
-    role: "puzzlemaster",
-    text: shown
-      ? `Puzzlemaster: guessed ${t.human ? "you are" : `${t.label} is`} drunk; the Demon is ${shown.label}.`
-      : `Puzzlemaster: guessed ${t.human ? "you are" : `${t.label} is`} drunk.`,
-    // (Only the "Demon": the guess says nothing about anyone.)
-    targets: shown ? [shown.id] : [],
-    guessId: t.id,
-    right,
-    trigger: "day",
-    functioning: mode === "truth",
-  };
-}
-
-// What the good twin learns about the Evil Twin.
-export const evilTwinInfo = (s, twin) => ({
-  night: s.night,
-  role: "eviltwin",
-  // (The Evil Twin repeats this naming the good twin, who may be you.)
-  text: `Evil Twin: ${twin.label} ${twin.human ? "are" : "is"} your Evil Twin.`,
-  targets: [twin.id],
-  trigger: "normal",
-  functioning: true,
-});
-
-export const philosopherInfo = (s, role) => ({
-  night: s.night,
-  role: "philosopher",
-  text: `Philosopher: gained the ${name(role)} ability.`,
-  targets: [],
-  trigger: "normal",
-  functioning: true,
-});
-
-export const snakeInfo = (s, t) => ({
-  night: s.night,
-  role: "snakecharmer",
-  text: `Snake Charmer: chose ${t.label}.`,
-  targets: [t.id],
-  trigger: "normal",
-  functioning: true,
-});
-
-// The Chambermaid: how many of two players woke tonight due to their
-// ability.
-export function chambermaidInfo(s, a, b, mode) {
-  const n = [a, b].filter((x) => (s.woke ?? []).includes(x.id)).length;
-  const said =
-    mode === "truth"
-      ? n
-      : mode === "lie"
-        ? wrongNumber(s, n)
-        : pick([0, 1, 2], s.r);
-
-  return {
-    night: s.night,
-    role: "chambermaid",
-    text: `Chambermaid: ${said} of ${listLabels([a, b])} woke tonight.`,
-    targets: [a.id, b.id],
-    trigger: "normal",
-    functioning: mode === "truth",
-  };
-}
-
 // What a player who chose other players (or a character) remembers about
 // their choice: the Sailor, Exorcist, Innkeeper, Courtier and Professor.
 export const choiceInfo = (s, role, verb, ts) => ({
@@ -889,24 +396,19 @@ export const choiceInfo = (s, role, verb, ts) => ({
   functioning: true,
 });
 
-// A Gossip's public statement, as they remember it.
-export const gossipInfo = (s, t, q) => ({
-  day: s.day,
-  night: s.night,
-  role: "gossip",
-  text: `Gossip: said ${t.label} is ${ARTIST_QUESTIONS[q]}.`,
-  targets: [t.id],
-  trigger: "day",
-  functioning: true,
-});
-
 // The players p's `role` information named on earlier nights, as far as
 // they've learned or said it: their own information, or what they made up
 // (a cover story, madness, a mad Pixie, a hiding Mutant or Damsel). So a
 // Village Idiot or High Priestess doesn't get the same player again.
 export function shownBefore(s, p, role) {
   return new Set(
-    [p.memories, p.cover?.memories, p.hideInfo?.memories, p.pixieMemories, p.mad?.memories]
+    [
+      p.memories,
+      p.cover?.memories,
+      p.bluffState?.hidden?.memories,
+      p.bluffState?.pixie?.memories,
+      p.mad?.memories,
+    ]
       .flat()
       .filter((m) => m && m.role === role && !m.day && m.night < s.night)
       .flatMap((m) => m.targets ?? []),
@@ -928,7 +430,7 @@ export const amnesiacKey = (s, p) =>
 const noInfo = () => ({ targets: [], text: "No information." });
 
 // Correct information for `role`, seen from player p's seat.
-function trueInfo(s, p, role, strat) {
+export function trueInfo(s, p, role, strat) {
   return infoOf(role)?.truth?.(s, p, strat) ?? noInfo();
 }
 
@@ -937,16 +439,16 @@ function trueInfo(s, p, role, strat) {
 // the evil team: it frames the scapegoat and vouches for evil players.
 // (`helpEvil`: a good player's lie that must help evil, the Poisoner's Night 1
 // pick, where a misinformed Noble's 3 would otherwise be random.)
-function falseInfo(s, p, role, strat, helpEvil = false) {
+export function falseInfo(s, p, role, strat, helpEvil = false) {
   return infoOf(role)?.lie?.(s, p, strat, helpEvil) ?? noInfo();
 }
 
 // Random information (e.g. a mad player's made-up information).
-function unreliableInfo(s, p, role, targets) {
+export function unreliableInfo(s, p, role, targets) {
   return infoOf(role)?.random?.(s, p, targets) ?? { targets, text: "No information." };
 }
 
-const INFO_ROLES = [...FIRST_NIGHT_INFO, ...ONGOING_INFO];
+export const INFO_ROLES = [...FIRST_NIGHT_INFO, ...ONGOING_INFO];
 
 // The good NPC the evil team agrees to frame. Kept until they die, then a new
 // one is chosen, preferring good NPCs the evil team knows claim an
@@ -1065,7 +567,7 @@ export function nightInfo(s, p, strat) {
 // was shown (tomorrow's must differ), and which secret ability an
 // Amnesiac's information is from (see infoStance() in strategy.js: it means
 // something to them once they've guessed it).
-function secretInfo(s, p, info) {
+export function secretInfo(s, p, info) {
   const t = byId(s, info.targets[0]);
 
   if (info.role === "balloonist" && t) {
@@ -1087,281 +589,4 @@ function secretInfo(s, p, info) {
         known: info.known ?? Boolean(p.amnesiacKnown),
       }
     : info;
-}
-
-// An evil bluffer's made-up information for `role`: the character's own
-// bluff if it has one (the Dreamer's goes by what players claim), else a lie.
-const evilBluff = (s, p, role, strat) =>
-  infoOf(role)?.bluff?.(s, p, strat) ?? falseInfo(s, p, role, strat);
-
-// A Minion bluffing a first-night role uses it to back up the Demon's claim:
-// as Washerwoman or Librarian they name the Demon as one of the pair (if the
-// Demon claims a character of the team they learn about); as Grandmother they
-// name the Demon as their grandchild. Returns null when the role can't help.
-function confirmDemon(s, p, role) {
-  // (Shown the Magician too, they back up whichever they think it is.)
-  const d = demonTo(s, p);
-  const claim = d?.claim;
-
-  if (team(p.role) !== "minion" || !d) {
-    return null;
-  }
-
-  if (PAIR_TEAM[role] && team(claim) === PAIR_TEAM[role]) {
-    const others = nameable(s, p).filter((x) => x.id !== d.id);
-    const good = others.filter((x) => x.alignment === "good");
-    const other = pick(good.length ? good : others, s.r);
-
-    if (!other) {
-      return null;
-    }
-
-    const pair = s.r() < 0.5 ? [d, other] : [other, d];
-
-    return {
-      targets: pair.map((x) => x.id),
-      text: oneOf(pair[0], pair[1], claim),
-    };
-  }
-
-  if (role === "grandmother" && alignment(claim) === "good") {
-    return { targets: [d.id], text: grandchildText(d, claim) };
-  }
-
-  return null;
-}
-
-// Whether information m, in evil player p's mouth, points at one of their
-// teammates (see strategy stanceOn()).
-const givesAway = (s, p, m) =>
-  (m.targets ?? []).some((id) => {
-    const x = byId(s, id);
-
-    return x && x !== p && x.alignment === "evil" && stanceOn(s, m, x, p) === "suspicious";
-  });
-
-// Whether `role` chooses each night (see each character's `choice`).
-const chooses = (role) => Boolean(infoOf(role)?.choice);
-
-// What a player claiming a character who chooses each night, without its
-// ability (an evil bluffer, a "mad" player, or a good player's cover
-// story), says they chose tonight: an invented choice, or null if that
-// character doesn't choose tonight. (For the Chambermaid, also a number, by
-// `mode`: see infoMode().)
-function madeUpChoice(s, p, role, strat, mode) {
-  return infoOf(role)?.choice?.(s, p, strat, mode) ?? null;
-}
-
-// Made-up but plausible information for a player who is "mad" (the
-// Cerenovus) about being `role`: what that character would have learned on
-// each night so far. Choice characters (see chooses()) report choices; a
-// Savant reports today's visit. A good player's answers are random; an evil
-// player's (faking coming clean, or made mad as a fresh bluff) are made up
-// to help their team, as their bluffs are (see falseInfo()), never giving a
-// teammate away.
-//
-// A Cannibal or Philosopher has another character's ability (see
-// madGained()): its made-up information, from the night it's gained (a
-// first-night one, just that night), and the Philosopher's choice.
-export function madInfo(s, p, role, strat) {
-  const out = [];
-  const evilSide = p.alignment === "evil";
-
-  for (let night = 1; night <= s.night; night++) {
-    const view = { ...s, night };
-    const gain = madGained(s, p, role, night);
-    const used = gain ? gain.role : role;
-    const fresh = Boolean(gain) && gain.from === night;
-
-    if (role === "philosopher" && fresh) {
-      out.push({ ...philosopherInfo(view, used), functioning: false });
-    }
-
-    if (gain === null) {
-      continue;
-    }
-
-    if (chooses(used)) {
-      const m = madeUpChoice(view, p, used, strat, evilSide ? "lie" : "random");
-
-      if (m) {
-        out.push(m);
-      }
-
-      continue;
-    }
-
-    if (!actsTonight(used, night) && !(fresh && FIRST_NIGHT.includes(used))) {
-      continue;
-    }
-
-    const { targets } = trueInfo(view, p, used, strat);
-    const info = !evilSide
-      ? unreliableInfo(view, p, used, targets)
-      : evilBluff(view, p, used, strat);
-
-    out.push({ night, role: used, ...info, trigger: "normal", functioning: false });
-  }
-
-  if (role === "savant") {
-    out.push(evilSide ? savantBluff(s, p) : savantInfo(s, p, "random"));
-  }
-
-  return out;
-}
-
-// For made-up information (see madInfo()), the ability a claimed Cannibal
-// or Philosopher has on `night`: { role, from } (the night it was gained),
-// null if they have none yet, or undefined for any other character.
-// - A Cannibal: the last player executed before that night, as the
-//   character p heard them claim when they were executed (see engine
-//   cannibals()), if good, from the night after.
-// - A Philosopher: a good character with information on the script, chosen
-//   once (p.madGained), from Night 1, as an NPC Philosopher chooses at once.
-// (Never the Pixie, whose information would give them away.)
-function madGained(s, p, role, night) {
-  if (role === "philosopher") {
-    p.madGained ??= pick(
-      goodRoles(s).filter(
-        (id) =>
-          !["philosopher", "pixie", "drunk", "lunatic"].includes(id) &&
-          INFO_ROLES.includes(id),
-      ),
-      s.r,
-    );
-
-    return p.madGained ? { role: p.madGained, from: 1 } : null;
-  }
-
-  if (role !== "cannibal") {
-    return undefined;
-  }
-
-  const last = (p.madCannibal ?? []).filter((x) => x.night <= night).at(-1);
-  // (A real Cannibal isn't told the character: with no claim to go by, one
-  // with information, chosen once for that executee.)
-  const eaten =
-    last &&
-    (last.as ??= pick(
-      goodRoles(s).filter((id) => INFO_ROLES.includes(id) && id !== "pixie"),
-      s.r,
-    ));
-
-  return eaten && alignment(eaten) === "good" && eaten !== "pixie"
-    ? { role: eaten, from: last.night }
-    : null;
-}
-
-// What an evil NPC reports for the role they are bluffing. A Minion backs up
-// the Demon's claim when their role allows it; otherwise a working Spy has
-// seen the Grimoire and tells the truth, and every other evil player lies.
-// (Some characters have their own bluff: see evilBluff().)
-export function bluffInfo(s, p, strat) {
-  // A Philosopher or Cannibal bluffer reports for the character they
-  // "gained" (nothing until they have one); a first-night one the night
-  // after they gain it, as a real Cannibal would.
-  // (A Pixie bluffer who "gained" theirs claims the Pixie again.)
-  const gains =
-    ["philosopher", "cannibal"].includes(p.claim) ||
-    (p.claim === "pixie" && p.bluffGained);
-  const role = gains ? p.bluffGained : p.claim;
-  const spy = p.role === "spy" && works(p);
-  const gainedTonight =
-    p.claim === "cannibal" &&
-    p.bluffGainedNight === s.night &&
-    FIRST_NIGHT.includes(role);
-
-  if (!role) {
-    return null;
-  }
-
-  // Once per game, on a night of their choosing.
-  if (role === "seamstress") {
-    const picks = !p.seamUsed && strat.seamstress(s, p);
-
-    if (!picks) {
-      return null;
-    }
-
-    p.seamUsed = true;
-
-    return seamstressInfo(s, picks[0], picks[1], spy ? "truth" : "lie");
-  }
-
-  if (role === "courtier") {
-    const id = !p.courtierUsed && strat.courtier(s, p);
-
-    if (!id) {
-      return null;
-    }
-
-    p.courtierUsed = true;
-
-    return choiceInfo(s, "courtier", "chose", id);
-  }
-
-  if (chooses(role)) {
-    return madeUpChoice(s, p, role, strat, spy ? "truth" : "lie");
-  }
-
-  if (!actsTonight(role, s.night) && !gainedTonight) {
-    return null;
-  }
-
-  const confirm = confirmDemon(s, p, role);
-  // (A working Spy tells the truth, unless it points at a teammate.)
-  // (What an Amnesiac's means, as the bluffer "knows" it, decides that.)
-  const truth =
-    !confirm && p.role === "spy" && works(p)
-      ? {
-          role,
-          ...trueInfo(s, p, role, strat),
-          ...(role === "amnesiac" && { amnesiac: amnesiacKey(s, p), known: true }),
-        }
-      : null;
-  const truthful = Boolean(truth) && !givesAway(s, p, truth);
-  const { text, targets } =
-    confirm ??
-    (truthful ? truth : evilBluff(s, p, role, strat));
-
-  // (A bluffer "knows" what their Amnesiac information means.)
-  return secretInfo(s, p, {
-    night: s.night,
-    role,
-    text,
-    targets,
-    trigger: "normal",
-    functioning: truthful,
-    ...(role === "amnesiac" && { known: true }),
-  });
-}
-
-// The Ravenkeeper is already dead here, so works() can't be used. A Drunk,
-// or an evil bluffer passing `lie`, names a character the target is not.
-// With `frame`, a good target is named as an evil character on the script.
-export function ravenInfo(s, p, t, lie = isDrunk(p), frame = false) {
-  const functioning = !lie && !isDrunk(p) && !p.poisoned;
-  const evilRoles =
-    frame && t.alignment === "good"
-      ? s.script.ids.filter((id) => alignment(id) === "evil")
-      : [];
-  const seen = lie
-    ? pick(
-        evilRoles.length
-          ? evilRoles
-          : s.script.ids.filter((id) => id !== t.role),
-        s.r,
-      )
-    : functioning
-      ? t.role
-      : pick(s.script.ids, s.r);
-
-  return {
-    night: s.night,
-    role: "ravenkeeper",
-    text: `${t.label} is ${name(seen)}.`,
-    targets: [t.id],
-    trigger: "death",
-    functioning,
-  };
 }

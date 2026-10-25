@@ -28,6 +28,7 @@ import { philosopher } from "./townsfolk/philosopher.js";
 import { pixie } from "./townsfolk/pixie.js";
 import { professor } from "./townsfolk/professor.js";
 import { puzzlemaster } from "./townsfolk/puzzlemaster.js";
+import { ravenkeeper } from "./townsfolk/ravenkeeper.js";
 import { sage } from "./townsfolk/sage.js";
 import { sailor } from "./townsfolk/sailor.js";
 import { savant } from "./townsfolk/savant.js";
@@ -91,6 +92,7 @@ export const characters = {
   pixie,
   professor,
   puzzlemaster,
+  ravenkeeper,
   sage,
   sailor,
   savant,

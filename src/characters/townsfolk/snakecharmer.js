@@ -1,5 +1,5 @@
 import { name } from "../../data.js";
-import { ability, works, isDemon, snakeInfo } from "../../storyteller.js";
+import { ability, works, isDemon } from "../../storyteller.js";
 
 // The Snake Charmer, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -78,7 +78,7 @@ export const snakecharmer = {
 };
 
 // The Snake Charmer, as told by someone claiming it without its ability
-// (see storyteller.js madeUpChoice()): the player they "chose" tonight.
+// (see bluff.js madeUpChoice()): the player they "chose" tonight.
 export const info = {
   choice(s, p, strat) {
     const t = strat.snake(s, p);
@@ -86,3 +86,12 @@ export const info = {
     return t ? snakeInfo(s, t) : null;
   },
 };
+
+export const snakeInfo = (s, t) => ({
+  night: s.night,
+  role: "snakecharmer",
+  text: `Snake Charmer: chose ${t.label}.`,
+  targets: [t.id],
+  trigger: "normal",
+  functioning: true,
+});

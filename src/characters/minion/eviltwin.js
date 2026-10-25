@@ -1,4 +1,4 @@
-import { works, evilTwinInfo } from "../../storyteller.js";
+import { works } from "../../storyteller.js";
 
 // The Evil Twin, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -66,3 +66,14 @@ export const eviltwin = {
     }
   },
 };
+
+// What the good twin learns about the Evil Twin.
+export const evilTwinInfo = (s, twin) => ({
+  night: s.night,
+  role: "eviltwin",
+  // (The Evil Twin repeats this naming the good twin, who may be you.)
+  text: `Evil Twin: ${twin.label} ${twin.human ? "are" : "is"} your Evil Twin.`,
+  targets: [twin.id],
+  trigger: "normal",
+  functioning: true,
+});

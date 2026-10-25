@@ -68,3 +68,20 @@ export const courtier = {
     }
   },
 };
+
+// The Courtier, as told by an evil bluffer (see bluff.js bluffTonight()):
+// once per game, on a night of their choosing, the character they "chose";
+// null on other nights.
+export const info = {
+  once(s, p, strat) {
+    const id = !p.courtierUsed && strat.courtier(s, p);
+
+    if (!id) {
+      return null;
+    }
+
+    p.courtierUsed = true;
+
+    return choiceInfo(s, "courtier", "chose", id);
+  },
+};
