@@ -2,6 +2,24 @@
 
 Newest first.
 
+## Bug Fixes & Improvements: Varied Bluffs, the Gambler, the Mathematician, Self-Votes & the Setup Page
+
+From logs 19–21 (Extension Cord, Catfishing, Bad Moon Rising), and a check across every script of how often made-up information names the same player as the night before, against how often real information does.
+
+- Bluffs naming the same player:
+  - Made-up information (`madeUp()` in src/bluff.js) that names just the player(s) the same character's made-up information named last time counts as a poor fit. They try again, passing over those players (`p.avoidTargets`, honoured by strategy `fresh()`, which every choice goes through), and only keep it if nothing else fits. The log says so ("names the same player(s) as last time, for want of anything else that fits"). The Empath (the same 2 neighbours) and the Amnesiac are exempt.
+  - A made-up story is made night by night in one go (`backStory()`), and the nights made so far now count as said (`bluffState(p).building`). So "never someone shown before" (`shownBefore()`, e.g. the High Priestess) and the check above hold within it. What was really said wins over a story remade for the same night (`keepStory()`).
+  - Previous-night repeats in bluffs dropped sharply, now close to real players' rates: the Gambler from 9% to 2%, the Fortune Teller from 15% to 7%. Evil Monk bluffers now vary night to night, and repeat only in end games where nobody else fits (logged).
+- Gossip: never says just what they said yesterday. They pick someone they haven't talked about before while they suspect anyone else, and another statement if it's the same player. An evil bluffer slanders other good players they haven't yet, never a teammate, their Lleech's host or you. Real Gossips repeated themselves 70% of the time, now 1%; Gossip bluffers 60%, now 16%. In log 21 the Pukka (Gossip) said "Goon is the Demon" two days running.
+- Gambler: only ever guesses a character they've heard claimed, in public or to them, never a hunch (the guess that their suspect was a random Demon or Minion on the script, GAMBLER_WILD_GUESS_CHANCE, is gone). Someone they haven't guessed before comes first. The same goes for a Gambler bluffer or cover story.
+- Mathematician, kept simple: every living player who is drunk or poisoned counts, once each, however many times and whatever their ability did tonight (it used to need their ability to have acted tonight). Dead players don't count. The Vortox and the Lunatic jinx count as before. The script sheet and character popup say so, under the ability: characters can now have a `note` in src/characters/catalog.js (`NOTES` in src/data.js) on how this game simplifies them.
+- Round Robin: a player made mad today says they're the character they're mad about, and nothing else, as when asked. In log 20, a Snake Charmer mad as the Savant read out their Snake Charmer choices as the Savant's.
+- Votes: nobody votes to execute themself, not even for your pick in the final 3. The exceptions are a Goblin (or Alchemist-Goblin) who claimed it today, and a Boomdandy. In logs 19–21, a Puzzlemaster, a Grandmother, a Spy and a Dreamer voted for their own execution.
+- High Priestess bluffs: kept apart by the Poppy Grower, an evil bluffer never sends you to a teammate they don't know.
+- Setup page: a card of its own (New game: Script, Seats, Seed, Start), with an i next to the script that opens the selected script's sheet. It closes like any popup.
+- Script sheet: each team's characters (Townsfolk, Outsiders, Minions, Demons, and the Fabled) are listed alphabetically.
+- Final reveal: each day's NPC talks are collapsed ("Who talked to whom") until opened, and "Open all" leaves them be.
+
 ## Bug Fixes: Outed Evil Bluffs
 
 Every claim and bluff by or of the 10 Outed Evil characters was checked against what that character would really do, and what the bluffer knows. A new test plays 120 whole games on Outed Evil (8 to 15 seats) and checks every claim after every logged event.

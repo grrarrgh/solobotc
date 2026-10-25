@@ -1773,8 +1773,10 @@ export class Engine {
       if (p.human) {
         claim = p.claim;
         memories = p.memories;
-      } else if (truthful && p.pixieMad && p.alive) {
-        // (A living Pixie claims their character, never the Pixie.)
+      } else if ((truthful && p.pixieMad && p.alive) || (truthful && p.mad?.day === s.day)) {
+        // (A living Pixie claims their character, never the Pixie; a player
+        // the Cerenovus made mad today, the character they're mad about, as
+        // they do when asked.)
         ({ claim, memories } = this.strat.answer(s, p));
       } else if (truthful) {
         claim = this.strat.revealsWhenDead?.(p) ?? p.claim;

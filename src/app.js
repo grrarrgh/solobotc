@@ -1,5 +1,6 @@
 import {
   ROLES,
+  NOTES,
   name,
   team,
   COUNTS,
@@ -23,7 +24,7 @@ import {
   TOWN_SQUARE_SIZE_MAX,
   JINXES,
 } from "./data.js";
-import { createState } from "./setup.js";
+import { createState, parseScript } from "./setup.js";
 import { ability, minionAbility } from "./storyteller.js";
 import { WIZARD_WISHES } from "./characters/minion/wizard.js";
 import { Engine } from "./engine.js";
@@ -133,6 +134,7 @@ function showRole(id) {
   $("role-sheet").innerHTML = `<h2 class="role-${team(id) === "fabled" ? "fabled" : alignment(id)}">${esc(name(id))}</h2>
     <p class="role-team team-${team(id)}">${esc(TEAM_NAMES[team(id)] ?? "")}</p>
     <p>${esc(ability)}</p>
+    ${NOTES[id] ? `<p class="ability-note">${esc(NOTES[id])}</p>` : ""}
     ${
       ability.includes("*")
         ? '<p class="script-footnote">* Not the first night.</p>'
@@ -708,16 +710,17 @@ const TEAMS = [
 
 // Opens the script popup: the characters (see scriptSheet()), or, with
 // `nights`, the night order (see nightSheet()). The button in its top corner
-// switches between them.
-function showScript(nights = false) {
-  $("script-sheet").innerHTML = nights ? nightSheet() : scriptSheet();
+// switches between them. (`script`: this game's, or, from the setup page,
+// the one selected there.)
+function showScript(nights = false, script = s.script) {
+  $("script-sheet").innerHTML = nights ? nightSheet(script) : scriptSheet(script);
   $("night-order").innerHTML = nights
     ? "📜 Characters"
     : `${MOON_SVG} Night order`;
   $("night-order").onclick = (ev) => {
     // (Pressing anywhere else on the popup closes it.)
     ev.stopPropagation();
-    showScript(!nights);
+    showScript(!nights, script);
   };
 
   if (!$("script-dialog").open) {
@@ -729,8 +732,8 @@ function showScript(nights = false) {
 
 // The script's night order: who wakes on the first night, and on the others,
 // in order, with what happens (see characters/nightorder.js).
-function nightSheet() {
-  const { first, other } = nightOrder(s.script.ids);
+function nightSheet(script) {
+  const { first, other } = nightOrder(script.ids);
   const list = (steps) =>
     `<ol class="night-order-list">
       ${steps
@@ -746,7 +749,7 @@ function nightSheet() {
     </ol>`;
 
   return `<h2>Night order</h2>
-    <p class="script-author">${esc(s.script.meta.name)}</p>
+    <p class="script-author">${esc(script.meta.name)}</p>
     <h3>First night</h3>
     ${list(first)}
     <h3>Other nights</h3>
@@ -754,15 +757,17 @@ function nightSheet() {
     <p class="script-footnote">Minion and Demon info: 7 or more players. Characters not listed don't wake at night.</p>`;
 }
 
-// The script's characters and abilities by team, its Fabled, and the jinxes
-// between its characters (see JINXES).
-function scriptSheet() {
-  const { meta } = s.script;
-  const ids = [...s.script.ids, ...(s.script.fabled ?? [])];
+// The script's characters and abilities by team (each in alphabetical
+// order), its Fabled, and the jinxes between its characters (see JINXES).
+function scriptSheet(script) {
+  const { meta } = script;
+  const ids = [...script.ids, ...(script.fabled ?? [])];
   const jinxes = JINXES.filter((j) => j.ids.every((id) => ids.includes(id)));
 
   const sections = TEAMS.map(([t, title]) => {
-    const roles = ids.filter((id) => team(id) === t);
+    const roles = ids
+      .filter((id) => team(id) === t)
+      .sort((x, y) => name(x).localeCompare(name(y)));
 
     return roles.length
       ? `<h3 class="team-${t}">${title}</h3>
@@ -770,7 +775,9 @@ function scriptSheet() {
           ${roles
             .map(
               (id) =>
-                `<dt class="role-${t === "fabled" ? "fabled" : alignment(id)}">${esc(name(id))}</dt><dd>${esc(ABILITIES[id] ?? "")}</dd>`,
+                `<dt class="role-${t === "fabled" ? "fabled" : alignment(id)}">${esc(name(id))}</dt><dd>${esc(ABILITIES[id] ?? "")}${
+                  NOTES[id] ? `<span class="ability-note">${esc(NOTES[id])}</span>` : ""
+                }</dd>`,
             )
             .join("")}
         </dl>`
@@ -1165,9 +1172,12 @@ function timeline(r) {
           .map(
             (ev) => `<li class="event ${keyIds.has(ev.id) ? "key" : ""}">
               <span class="event-tag">${esc(eventTag(ev.type))}</span>
-              <span class="event-text">${linkRoles(ev.text)}${
-                ev.type === "vote_result" ? voters(ev, r) : ""
-              }</span>
+              <span class="event-text">${
+                // (Who the NPCs talked to: long, so collapsed until opened.)
+                ev.type === "talks"
+                  ? `<details class="npc-talks"><summary>Who talked to whom</summary>${linkRoles(ev.text)}</details>`
+                  : linkRoles(ev.text)
+              }${ev.type === "vote_result" ? voters(ev, r) : ""}</span>
             </li>`,
           )
           .join("")}</ol>
@@ -1273,7 +1283,8 @@ function reveal() {
   };
 
   $("timeline-open").onclick = () => {
-    const all = [...$("audit").querySelectorAll("details")];
+    // (The day and night sections; not the NPC talks inside them.)
+    const all = [...$("audit").querySelectorAll("details.tl-section")];
     const open = !all.every((d) => d.open);
 
     all.forEach((d) => (d.open = open));
@@ -1797,6 +1808,15 @@ $("size-up").onclick = () => setSquareSize(squareSize + TOWN_SQUARE_SIZE_STEP);
 setSquareSize(squareSize);
 
 $("seats").onchange = closeCountInfo;
+
+// The setup page's i: the selected script's sheet (closes like any popup).
+$("script-info").onclick = () => {
+  try {
+    showScript(false, parseScript(scripts[+$("script").value].raw));
+  } catch (err) {
+    $("error").textContent = err.message;
+  }
+};
 
 // Pressing a popup (or the dimmed backdrop around it) closes it.
 for (const id of ["script-dialog", "role-dialog", "phase-dialog"]) {

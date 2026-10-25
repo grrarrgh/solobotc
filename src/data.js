@@ -27,6 +27,9 @@ export const ROLES = Object.fromEntries(
 // Official ability text (`ability` in CHARACTERS), shown on the script
 // sheet. "*" means "not the first night".
 export const ABILITIES = each("ability");
+// Where this game simplifies a character's ability, how (see the
+// catalogue's `note`).
+export const NOTES = each("note");
 
 export const name = (id) => ROLES[id]?.[0] ?? id;
 export const team = (id) => ROLES[id]?.[1];
@@ -508,10 +511,6 @@ export const VIGORMORTIS_MINION_PRIORITY = "high";
 // before AFTER_DAY, then at START_CHANCE, rising by STEP_CHANCE a day. E.g.
 // the Slayer: Day 2 20%, Day 3 40%... (The Juggler always juggles on Day 1.)
 export const ONCE_PER_GAME = each("oncePerGame");
-
-// The chance an NPC Gambler guesses a random character, not their target's
-// claim.
-export const GAMBLER_WILD_GUESS_CHANCE = 0.25;
 
 // The chance an NPC Juggler guesses a player's claim, not a random character.
 export const JUGGLER_CLAIM_GUESS_CHANCE = 0.5;

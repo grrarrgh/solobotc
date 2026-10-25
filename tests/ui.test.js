@@ -297,3 +297,21 @@ test("a Goblin claim gets a popup card of its own, in red", () => {
   assert.match(app, /goblin: "👺 Goblin claim"/);
   assert.match(css, /\.phase-goblin \{\s*border-color: #ef6b72;/);
 });
+
+test("the setup page is a card of its own, with an i by the script that opens its sheet", () => {
+  assert.match(html, /<section id="setup" class="setup-page">/);
+  assert.match(html, /id="script-info"[\s\S]*?class="info-button"/);
+  assert.match(app, /showScript\(false, parseScript\(scripts\[\+\$\("script"\)\.value\]\.raw\)\)/);
+  assert.match(css, /\.setup-page \{/);
+});
+
+test("the script sheet lists each team's characters alphabetically, with any note on how the game simplifies them", () => {
+  assert.match(app, /\.sort\(\(x, y\) => name\(x\)\.localeCompare\(name\(y\)\)\)/);
+  assert.match(app, /NOTES\[id\] \? `<span class="ability-note">/);
+  assert.match(css, /\.ability-note \{/);
+});
+
+test("the Final reveal's NPC talks are collapsed until opened, and Open all leaves them be", () => {
+  assert.match(app, /<details class="npc-talks"><summary>Who talked to whom<\/summary>/);
+  assert.match(app, /querySelectorAll\("details\.tl-section"\)/);
+});

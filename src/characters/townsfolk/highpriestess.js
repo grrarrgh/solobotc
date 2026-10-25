@@ -40,7 +40,9 @@ function priestessPick(s, p, truth = true) {
   const helps = (x) => (worthTalking(s, x) ? "good" : "evil");
 
   if (!truth) {
-    const mates = pool.filter((x) => x.alignment === "evil");
+    // (An evil bluffer sends you to a teammate, as one worth avoiding: never
+    // one they don't know, while the Poppy Grower keeps them apart.)
+    const mates = p.poppyBlind ? [] : pool.filter((x) => x.alignment === "evil");
     const dull = pool.filter((x) => helps(x) === "evil");
 
     return pick(p.alignment === "evil" && mates.length ? mates : dull.length ? dull : pool, s.r);

@@ -12,6 +12,8 @@
 //     Storyteller's rule for the game, never dealt; see FABLED), ability (the
 //     official text, shown on the script sheet; "*" means "not the first
 //     night");
+//   note: how this game runs the character, where it simplifies the
+//     official ability (shown under it on the script sheet: see NOTES);
 //   info: "first" (learns something on the first night only) or "ongoing"
 //     (keeps learning on later nights; see FIRST_NIGHT_INFO_SHARE);
 //   kill: how keen the Demon is to kill them (see DEMON_KILL_PRIORITY);
@@ -207,6 +209,7 @@ export const CHARACTERS = {
     team: "townsfolk",
     ability:
       "Each night, you learn how many players' abilities worked abnormally (since dawn) due to another character's ability.",
+    note: "Kept simple here: every living player who is drunk or poisoned counts, once each, however many times.",
     info: "ongoing",
     kill: "med",
   },

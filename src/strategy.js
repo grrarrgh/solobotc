@@ -16,7 +16,6 @@ import {
   BARBER_MIN_GAIN,
   KILL_PRIORITY_CHANCE,
   DEMON_STAR_PASS_CHANCE,
-  GAMBLER_WILD_GUESS_CHANCE,
   SCAPEGOAT_CHANCE,
   WITCH_HUMAN_CHANCE,
   JUGGLER_CLAIM_GUESS_CHANCE,
@@ -1592,6 +1591,17 @@ export class SimpleStrategy {
     // Alchemist with the ability: good would win).
     const goblin = (s.goblinClaims ?? []).some((x) => x.id === n.id && x.day === s.day);
 
+    // (Nobody votes to execute themself, not even for your pick in the final
+    // 3: except a Goblin (or Alchemist-Goblin) who claimed it today, as that's
+    // the win, and a Boomdandy, whose team wants it executed (see below).)
+    if (v === n && goblin && minionAbility(v) === "goblin") {
+      return true;
+    }
+
+    if (v === n && !this.boomdandy(s, v, n)) {
+      return false;
+    }
+
     if (goblin && sideOf(v) !== "evil") {
       return s.r() < GOBLIN_GOOD_VOTE_CHANCE;
     }
@@ -1715,6 +1725,14 @@ export class SimpleStrategy {
   // ongoing ability doesn't pick the same player twice; failing that, those
   // they didn't pick last time; failing that, all of `pool`.
   fresh(p, key, pool) {
+    // (A bluffer's made-up choice that named just last time's player(s)
+    // tries again without them, while there's anyone else: see bluff.js
+    // madeUp().)
+    const avoid = p.avoidTargets ?? [];
+    const others = pool.filter((x) => !avoid.includes(x.id));
+
+    pool = others.length ? others : pool;
+
     const ever = p.picked?.[key] ?? [];
     const last = p.lastPicks?.[key] ?? [];
     const never = pool.filter((x) => !ever.includes(x.id));
@@ -2658,23 +2676,14 @@ export class SimpleStrategy {
   }
 
   // A Gambler tests what they've heard: they guess another living player
-  // is the character that player claimed (see claimHeard()), which kills
-  // them if it's a lie. At GAMBLER_WILD_GUESS_CHANCE they follow a hunch
-  // instead: their suspect is a Demon or Minion on the script. With no claim
-  // to go on, they guess themselves (`self`), which is safe and learns
-  // nothing. A wrong guess kills a working Gambler. (A Gambler bluffer, or a
-  // cover story, guesses the same way.)
+  // is the character that player claimed, in public or to them (see
+  // claimHeard()), which kills them if it's a lie: never a hunch (a Demon
+  // or Minion nobody claims). Someone they haven't guessed before first
+  // (see fresh()). With no claim to go on, they guess themselves (`self`),
+  // which is safe and learns nothing. A wrong guess kills a working Gambler.
+  // (A Gambler bluffer, or a cover story, guesses the same way.)
   gamble(s, p) {
     const pool = this.pickable(s, p);
-    const suspect = pool.find((x) => x.id === p.suspicion?.targetId);
-    const evil = s.script.ids.filter((id) => alignment(id) === "evil");
-
-    if (suspect && evil.length && s.r() < GAMBLER_WILD_GUESS_CHANCE) {
-      this.noted(p, "gamble", suspect);
-
-      return { target: suspect, role: pick(evil, s.r), told: false };
-    }
-
     const known = this.fresh(
       p,
       "gamble",
@@ -3400,13 +3409,34 @@ export class SimpleStrategy {
       return null;
     }
 
-    const target = pretends(p, "gossip")
-      ? this.strongSuspect(s, p, this.others(s, p))
-      : this.suspect(s, p, this.others(s, p));
+    // (Someone they haven't talked about before, while they suspect anyone
+    // else (see fresh()); never just what they said yesterday: a statement
+    // the night showed false, or that's done its work, says nothing new.)
+    const choose = (pool) =>
+      pretends(p, "gossip") ? this.strongSuspect(s, p, pool) : this.suspect(s, p, pool);
+    const all = this.others(s, p);
+    const fresh = this.fresh(p, "gossip", all);
+    // (An evil bluffer may as well slander any good player they haven't yet:
+    // never a teammate, their Lleech's host, or you.)
+    const slander =
+      sideOf(p) === "evil"
+        ? pick(fresh.filter((x) => goodTo(p, x) && !spares(s, p, x)), s.r)
+        : null;
+    const target = choose(fresh) ?? slander ?? choose(all);
+    if (!target) {
+      return null;
+    }
 
-    return target
-      ? { target, question: pick(["demon", "minion", "evil"], s.r) }
-      : null;
+    const last = p.gossipLast;
+    const questions = ["demon", "minion", "evil"].filter(
+      (q) => !(last?.targetId === target.id && last.question === q),
+    );
+    const question = pick(questions, s.r);
+
+    this.noted(p, "gossip", target);
+    p.gossipLast = { targetId: target.id, question };
+
+    return { target, question };
   }
 
   // The Godfather kills a good NPC, the way the Demon picks.

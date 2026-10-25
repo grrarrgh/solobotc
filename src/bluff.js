@@ -229,11 +229,38 @@ const suspectsYou = (s, p, m) =>
 // before the next. Failing that, the last attempt that doesn't cast
 // suspicion on you (you're never anyone's suspect, whatever else they know),
 // or else the last attempt.
+// Characters whose information naturally names the same players night after
+// night: the Empath's living neighbours; the Amnesiac's, by their secret
+// ability.
+const REPEATS_OK = ["empath", "amnesiac"];
+
+// Whether made-up m names just the player(s) that p's last made-up
+// information for the same character did: a real one's choices, and the
+// Storyteller's, change from night to night (and the Exorcist can't choose
+// last night's player).
+function repeats(p, m) {
+  if (!m.targets?.length || REPEATS_OK.includes(m.role)) {
+    return false;
+  }
+
+  // (What was really said wins over a story being made afresh for the same
+  // night: see keepStory().)
+  const last = [...(p.bluffState?.building ?? []), ...(madeUpMemories(p, m.role) ?? [])]
+    .filter((x) => x.role === m.role && x !== m && !x.day && (m.night ?? Infinity) > (x.night ?? -1))
+    .sort((a, b) => a.night - b.night)
+    .at(-1);
+  const key = (x) => [...(x.targets ?? [])].sort().join(",");
+
+  return Boolean(last) && key(last) === key(m);
+}
+
 export function madeUp(s, p, strat, make) {
   const know = knows(s, p, strat);
   const before = draft(p);
   let m = null;
   let safe = null;
+  // (One that fits, but names who last time's did: if nothing else fits.)
+  let again = null;
 
   for (let i = 0; i < BLUFF_TRIES; i++) {
     if (i) {
@@ -242,13 +269,39 @@ export function madeUp(s, p, strat, make) {
 
     m = make();
 
-    if (!m || fits(s, p, m, know)) {
+    if (!m) {
       return m;
     }
 
-    if (!suspectsYou(s, p, m)) {
+    const fit = fits(s, p, m, know);
+
+    if (fit && !repeats(p, m)) {
+      return m;
+    }
+
+    if (fit) {
+      again ??= { m, state: draft(p) };
+      // (The next tries pass them over: see strategy fresh().)
+      p.avoidTargets = m.targets;
+    } else if (!suspectsYou(s, p, m)) {
       safe = { m, state: draft(p) };
     }
+  }
+
+  p.avoidTargets = null;
+
+  if (again) {
+    undo(p, again.state);
+    s.audit.push({
+      id: s.auditId++,
+      group: s.phase === "night" ? `Night ${s.night}` : `Day ${s.day}`,
+      type: "bluff",
+      text: `${p.label} (${name(p.role)}) names the same player(s) as last time, for want of anything else that fits: ${again.m.text}`,
+      data: { playerId: p.id },
+      names: logNames(s),
+    });
+
+    return again.m;
   }
 
   if (safe) {
@@ -429,7 +482,21 @@ function madeUpChoice(s, p, role, strat, mode) {
 export function backStory(s, p, role, strat) {
   const out = [];
   const evilSide = p.alignment === "evil";
+  // (The nights made up so far count as said, so the next don't repeat
+  // them: see shownBefore(), repeats().)
+  const state = bluffState(p);
+  const was = state.building;
 
+  state.building = out;
+
+  try {
+    return storyNights(s, p, role, strat, out, evilSide);
+  } finally {
+    state.building = was;
+  }
+}
+
+function storyNights(s, p, role, strat, out, evilSide) {
   for (let night = 1; night <= s.night; night++) {
     const view = { ...s, night };
     const gain = storyGained(s, p, role, night);

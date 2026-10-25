@@ -33,11 +33,32 @@
         <h1>Solo Clocktower</h1>
       </header>
 
-      <section id="setup">
-        <label>Seats <select id="seats"></select></label>
-        <label>Script <select id="script"></select></label>
-        <label>Seed <input id="seed" value="42" /></label>
-        <button id="random-seed" type="button">Random Seed</button>
+      <!-- The setup page: a page of its own until the game starts. The i next
+           to the script opens its script sheet. -->
+      <section id="setup" class="setup-page">
+        <h2>New game</h2>
+        <div class="setup-row">
+          <label for="script">Script</label>
+          <select id="script"></select>
+          <button
+            id="script-info"
+            type="button"
+            class="info-button"
+            title="Show this script"
+            aria-label="Show this script"
+          >
+            i
+          </button>
+        </div>
+        <div class="setup-row">
+          <label for="seats">Seats</label>
+          <select id="seats"></select>
+        </div>
+        <div class="setup-row">
+          <label for="seed">Seed</label>
+          <input id="seed" value="42" />
+          <button id="random-seed" type="button">Random Seed</button>
+        </div>
         <button id="start">Start</button>
         <p id="error"></p>
       </section>

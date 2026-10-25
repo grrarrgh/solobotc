@@ -75,9 +75,9 @@ import {
   hiddenStory,
   bluffMode,
 } from "../src/bluff.js";
-import { NEVER_BLUFFED } from "../src/data.js";
+import { NEVER_BLUFFED, NOTES } from "../src/data.js";
 import { infoOf } from "../src/characters/info.js";
-import { shuffle, sample, rng, byId } from "../src/util.js";
+import { shuffle, sample, rng, byId, claimHeard as claimHeardBy } from "../src/util.js";
 
 const script = JSON.parse(
   fs.readFileSync(new URL("../scripts/trouble-brewing.json", import.meta.url)),
@@ -2314,19 +2314,45 @@ test("an NPC Gambler can die by their own ability", () => {
 
   role(gambler, "gambler", "good");
 
-  // A hunch (within GAMBLER_WILD_GUESS_CHANCE): their good suspect is the
-  // first evil character on the script, which is wrong.
-  const suspect = s.players.find(
-    (x) => !x.human && x !== gambler && x.alive && x.alignment === "good",
-  );
+  // The only claim they've heard is an evil player's lie: guessing it, they
+  // die.
+  const liar = s.players.find((x) => !x.human && x.alive && x.alignment === "evil");
 
-  gambler.suspicion = { targetId: suspect.id, day: s.day };
-  s.r = () => 0;
+  for (const x of s.players) {
+    x.claimKnown = false;
+    x.publicClaim = null;
+  }
 
+  gambler.toldMe = {};
+  liar.claim = "chef";
+  e.claimPublicly(liar);
   e.night();
 
   assert.equal(gambler.alive, false);
   assert.equal(gambler.death, "gambler");
+  assert.ok(gambler.memories.some((m) => m.text === `Gambler: guessed ${liar.label} is the Chef, and died.`));
+});
+
+test("a Gambler (and a Gambler bluffer) only ever guesses a character they've heard claimed, never a hunch", () => {
+  for (let seed = 0; seed < 60; seed++) {
+    const strat = new SimpleStrategy();
+    const s = createState(script, 10, `gambler-heard-${seed}`);
+    const [gambler, bluffer] = s.players.filter((x) => !x.human);
+
+    role(gambler, "gambler", "good");
+    s.night = 2;
+    gambler.suspicion = { targetId: bluffer.id, day: 1 };
+
+    for (let i = 0; i < 5; i++) {
+      s.r = rng(`gambler-heard-${seed}-${i}`);
+
+      for (const p of [gambler, bluffer]) {
+        const g = strat.gamble(s, p);
+
+        assert.ok(g.self || g.role === claimHeardBy(g.target, p), `${p.label} guessed ${g.role}`);
+      }
+    }
+  }
 });
 
 test("the Demon can target its own Minions, by their kill priority", () => {
@@ -8119,7 +8145,7 @@ test("a Goon the Pit-Hag made from an evil player never turns good (their jinx)"
   assert.ok(p[1].drunkTonight);
 });
 
-test("the Mathematician counts a Marionette who woke to use their ability, not only one with information (their jinx)", () => {
+test("the Mathematician counts a Marionette (their jinx), whatever their ability did tonight", () => {
   const { s, p, strat } = cfNight("math-marionette-monk", [null, "mathematician", "marionette"], 2);
   const count = () => Number(nightInfo(s, p[1], strat).text.match(/(\d+)/)[1]);
 
@@ -8128,21 +8154,32 @@ test("the Mathematician counts a Marionette who woke to use their ability, not o
 
   const n = count();
 
-  // (A Monk wakes every night to protect someone: it didn't work.)
+  // (Kept simple: a Marionette is drunk, so always counts, Soldier or Monk.)
   p[2].shown = "monk";
-  assert.equal(count(), n + 1);
+  assert.equal(count(), n);
+  assert.ok(n >= 1);
 });
 
-test("the Mathematician doesn't count a poisoned or drunk player whose ability did nothing tonight", () => {
+test("the Mathematician counts every living drunk or poisoned player, once each, whatever their ability did tonight", () => {
   const { s, p, strat } = cfNight("math-idle-poisoned", [null, "mathematician", "ravenkeeper", "empath"], 1);
   const count = () => Number(nightInfo(s, p[1], strat).text.match(/(\d+)/)[1]);
   const n = count();
 
-  // A poisoned Ravenkeeper didn't wake; a poisoned Empath got information.
+  // A poisoned Ravenkeeper didn't wake, and still counts; so does a poisoned
+  // Empath.
   p[2].poisoned = true;
-  assert.equal(count(), n);
-  p[3].poisoned = true;
   assert.equal(count(), n + 1);
+  p[3].poisoned = true;
+  assert.equal(count(), n + 2);
+
+  // Poisoned and drunk: still 1.
+  p[3].drunkTonight = true;
+  assert.equal(count(), n + 2);
+
+  // Dead: not counted.
+  p[2].alive = false;
+  assert.equal(count(), n + 1);
+  assert.match(NOTES.mathematician, /every living player who is drunk or poisoned counts, once each/);
 });
 
 test("the Ravenkeeper never chooses you", () => {
@@ -11261,6 +11298,130 @@ test("on Outed Evil, every claim and bluff fits its character, all game", () => 
   }
 
   assert.ok(seen.feared > 0, JSON.stringify(seen));
+});
+
+// ── Bluffs that don't keep naming the same player; log 19–21 fixes ──
+
+test("a Gossip never says just what they said yesterday, and an evil one slanders other good players", () => {
+  const s = base("gossip-fresh");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron] = s.players;
+
+  role(baron, "baron", "evil");
+  baron.claim = "gossip";
+  strat.strongSuspect = (st, p, pool) => pool.find((x) => x === chef) ?? null;
+  strat.suspect = (st, p, pool) => pool.find((x) => x === chef) ?? null;
+
+  const said = [];
+
+  for (let day = 1; day <= 4; day++) {
+    s.day = day;
+    s.r = rng(`gossip-fresh-${day}`);
+
+    const g = strat.gossip(s, baron, true);
+
+    said.push(`${g.target.label}:${g.question}`);
+  }
+
+  for (let i = 1; i < said.length; i++) {
+    assert.notEqual(said[i], said[i - 1], said.join(" | "));
+  }
+
+  assert.ok(said.some((x) => x.startsWith(butler.label)), said.join(" | "));
+});
+
+test("made-up choices don't name last time's player while anyone else fits; when nobody does, the log says why", () => {
+  let varied = 0;
+  let nights = 0;
+
+  for (let seed = 0; seed < 30; seed++) {
+    const s = createState(script, 12, `monk-vary-${seed}`);
+    const e = new Engine(s);
+    const imp = s.players.find((x) => x.role === "imp");
+
+    imp.claim = "monk";
+    imp.bluff = "monk";
+    e.start();
+
+    for (let t = 0; t < 4 && !s.winner; t++) {
+      settle(e);
+
+      if (s.phase === "day" && !s.winner) {
+        e.endDay();
+      }
+    }
+
+    const ms = imp.memories.filter((m) => m.role === "monk");
+
+    for (let i = 1; i < ms.length; i++) {
+      nights++;
+      varied += ms[i].targets[0] !== ms[i - 1].targets[0] ? 1 : 0;
+
+      if (ms[i].targets[0] === ms[i - 1].targets[0]) {
+        assert.ok(
+          s.audit.some((x) => /names the same player\(s\) as last time, for want of anything else that fits/.test(x.text)),
+          `seed ${seed}`,
+        );
+      }
+    }
+  }
+
+  assert.ok(nights > 0 && varied / nights > 0.9, `${varied} of ${nights}`);
+});
+
+test("in the Round Robin, a player made mad today says they're the character they're mad about, and nothing else", () => {
+  const s = base("rr-mad");
+  const e = new Engine(s);
+  const chef = s.players[1];
+
+  s.players.forEach((x, i) => (x.alive = i < 4));
+  s.nominationsOpen = true;
+  chef.memories = [{ night: 1, role: "chef", text: "Chef number: 0.", targets: [] }];
+  chef.mad = { role: "savant", day: s.day, previous: "chef", memories: [] };
+  chef.claim = "savant";
+  e.roundRobin();
+
+  const line = s.publicLog.at(-1).split("\n").find((x) => x.startsWith(`${chef.label}:`));
+
+  assert.match(line, /I am the Savant\./);
+  assert.doesNotMatch(line, /Chef number/);
+});
+
+test("nobody votes to execute themself, even for your pick in the final 3, but a Goblin who claimed it or a Boomdandy", () => {
+  const s = base("self-vote");
+  const strat = new SimpleStrategy();
+  const [, chef, , baron] = s.players;
+
+  // Good or evil, any day, your nomination or not.
+  for (let i = 0; i < 50; i++) {
+    s.r = rng(`self-vote-${i}`);
+    assert.equal(strat.vote(s, chef, chef, { yes: 4, needed: 3, nominator: s.players[0] }), false);
+    assert.equal(strat.vote(s, baron, baron, { yes: 4, needed: 3 }), false);
+  }
+
+  s.players.forEach((x, i) => (x.alive = i < 3));
+  assert.equal(strat.vote(s, chef, chef, { humanChoice: true }), false);
+  assert.equal(strat.vote(s, s.players[2], chef, { humanChoice: true }), true);
+
+  // A Goblin who claimed it today votes for themself.
+  const t = minionDay("self-vote-goblin", "goblin");
+
+  t.s.goblinClaims = [{ id: t.p[3].id, day: t.s.day }];
+  assert.equal(strat.vote(t.s, t.p[3], t.p[3]), true);
+});
+
+test("an evil High Priestess bluffer kept apart by the Poppy Grower never sends you to an unknown teammate", () => {
+  const s = base("hp-blind");
+  const [, , , baron, imp] = s.players;
+
+  role(baron, "baron", "evil");
+  baron.poppyBlind = true;
+  baron.claim = "highpriestess";
+
+  for (let i = 0; i < 30; i++) {
+    s.r = rng(`hp-blind-${i}`);
+    assert.notEqual(infoOf("highpriestess").lie(s, baron).targets[0], imp.id);
+  }
 });
 
 test("whole games play out with the General, Heretic and Politician", () => {

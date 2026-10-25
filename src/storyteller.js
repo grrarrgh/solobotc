@@ -425,6 +425,8 @@ export function shownBefore(s, p, role) {
       p.bluffState?.hidden?.memories,
       p.bluffState?.pixie?.memories,
       p.mad?.memories,
+      // (A made-up story, as it's being made: see bluff.js backStory().)
+      p.bluffState?.building,
     ]
       .flat()
       .filter((m) => m && m.role === role && !m.day && m.night < s.night)
