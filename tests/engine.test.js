@@ -58,6 +58,7 @@ import {
   amnesiacKey,
   lean,
   scapegoat,
+  jinxBarred,
 } from "../src/storyteller.js";
 import { ravenInfo } from "../src/characters/townsfolk/ravenkeeper.js";
 import { artistInfo } from "../src/characters/townsfolk/artist.js";
@@ -72,6 +73,7 @@ import {
   bluffMode,
 } from "../src/bluff.js";
 import { NEVER_BLUFFED } from "../src/data.js";
+import { infoOf } from "../src/characters/info.js";
 import { shuffle, sample, rng, byId } from "../src/util.js";
 
 const script = JSON.parse(
@@ -9779,5 +9781,447 @@ test("you're never anyone's suspect: no made-up information, nor anything said, 
     heard(s, mutant, [yes]);
     assert.ok(!s.statements.some((st) => st.targetId === you.id && st.type === "suspicious"));
     assert.ok(s.statements.some((st) => st.targetId === baron.id && st.type === "suspicious"));
+  }
+});
+
+// ── Outed Evil, phase 1: the General, Heretic and Politician ─────
+
+// Outed Evil's characters the game has so far, with a few more evil ones
+// (and the Spy) for the Heretic's jinxes.
+const outedSoFar = [
+  { id: "_meta", name: "Outed Evil (so far)" },
+  ...["sailor", "general", "snakecharmer", "fortuneteller", "savant", "philosopher", "huntsman", "fisherman", "juggler", "cannibal", "tealady"],
+  ...["lunatic", "barber", "politician", "damsel", "heretic"],
+  ...["poisoner", "baron", "spy", "scarletwoman"],
+  "imp",
+  "sentinel",
+];
+
+// The General's information, told truly or falsely.
+const generalText = (s, p, mode) => infoOf("general")[mode](s, p).text;
+
+test("the General learns who the Storyteller believes is winning, from the lean", () => {
+  const s = createState(outedSoFar, 10, "general");
+  const general = s.players.find((x) => !x.human && x.alignment === "good");
+
+  role(general, "general", "good");
+  s.night = 2;
+
+  // Evil far ahead (every good NPC dead but the General): the Storyteller
+  // helps good, so believes evil is winning.
+  for (const p of s.players.filter((x) => x.alignment === "good" && x !== general && !x.human)) {
+    p.alive = false;
+  }
+
+  assert.equal(lean(s), "good");
+  assert.equal(generalText(s, general, "truth"), "General: evil is winning.");
+  assert.equal(generalText(s, general, "lie"), "General: good is winning.");
+
+  // Evil all dead but the Demon: good is winning.
+  for (const p of s.players) {
+    p.alive = p.alignment === "good" || team(p.role) === "demon";
+  }
+
+  assert.equal(lean(s), "evil");
+  assert.equal(generalText(s, general, "truth"), "General: good is winning.");
+  assert.equal(generalText(s, general, "lie"), "General: neither team is winning.");
+});
+
+test("the General's night information goes in the log with the Storyteller's workings", () => {
+  const s = createState(outedSoFar, 10, "general-log");
+  const general = s.players.find((x) => !x.human && x.alignment === "good");
+  const e = new Engine(s);
+
+  role(general, "general", "good");
+  e.start();
+  settle(e);
+
+  assert.ok(general.memories.some((m) => m.role === "general" && /^General: /.test(m.text)));
+  assert.ok(s.audit.some((x) => /General: .* winning\. \[the Storyteller (is helping|isn't leaning)/.test(x.text)));
+
+  // A good or an evil pretender can bluff it.
+  for (const p of [s.players.find((x) => !x.human && x.alignment === "good" && x !== general), s.players.find((x) => !x.human && x.alignment === "evil")]) {
+    p.claim = "general";
+    assert.ok(backStory(s, p, "general", e.strat).every((m) => /^General: .* winning\.$/.test(m.text)));
+    assert.doesNotThrow(() => bluffTonight(s, p, e.strat));
+  }
+});
+
+test("the Heretic turns the result around, even dead, unless drunk or poisoned", () => {
+  for (const [state, winner] of [[{}, "evil"], [{ alive: false }, "evil"], [{ poisoned: true }, "good"]]) {
+    const s = base(`heretic-${winner}`);
+    const e = new Engine(s);
+
+    role(s.players[2], "heretic", "good");
+    Object.assign(s.players[2], state);
+    e.finish("good", "Demon died.");
+
+    assert.equal(s.winner, winner, JSON.stringify(state));
+
+    if (winner === "evil") {
+      assert.equal(s.reason, "Demon died. But the Heretic turns it around: evil wins.");
+      assert.ok(s.audit.some((x) => x.type === "heretic"));
+    }
+  }
+});
+
+test("the Politician who nominated, or cast a deciding vote on, the execution that lost the game turns and wins", () => {
+  let s;
+  const pol = () => s.players[2];
+  const vote = (nominatorId, voterIds, count, needed) => {
+    s.voteHistory = [{ day: s.day, nominatorId, nomineeId: s.players[1].id, voterIds, count, needed }];
+    s.executing = s.players[1].id;
+  };
+  const game = (seed) => {
+    s = base(seed);
+    role(pol(), "politician", "good");
+
+    return new Engine(s);
+  };
+
+  // Nominated it.
+  let e = game("politician-nominated");
+
+  vote(pol().id, [], 3, 3);
+  e.finish("evil", "Saint executed.");
+  assert.equal(pol().alignment, "evil");
+  assert.match(
+    s.audit.find((x) => x.type === "politician").text,
+    /nominated the execution that lost the game: they turn evil, and win\./,
+  );
+
+  // A deciding vote (exactly the votes needed); then one that wasn't.
+  for (const [count, turned] of [[3, true], [4, false]]) {
+    e = game(`politician-vote-${count}`);
+    vote(s.players[3].id, [pol().id, s.players[3].id, s.players[4].id], count, 3);
+    e.finish("evil", "Saint executed.");
+    assert.equal(pol().alignment, turned ? "evil" : "good", `${count} votes`);
+  }
+
+  // Lost at night: nobody's execution.
+  e = game("politician-night");
+  e.finish("evil", "Two alive remain.");
+  assert.equal(pol().alignment, "good");
+  assert.match(s.audit.find((x) => x.type === "politician").text, /wasn't the most responsible/);
+
+  // A poisoned one has no ability.
+  e = game("politician-poisoned");
+  pol().poisoned = true;
+  vote(pol().id, [], 3, 3);
+  e.finish("evil", "Saint executed.");
+  assert.equal(pol().alignment, "good");
+});
+
+test("an execution records who it was lost by, only while it's under way", () => {
+  const s = base("politician-executing");
+  const e = new Engine(s);
+  let seen = null;
+
+  role(s.players[1], "saint", "good");
+  e.finish = function (winner) {
+    seen = this.s.executing;
+    this.s.winner = winner;
+  };
+  e.execute(s.players[1]);
+
+  assert.equal(seen, s.players[1].id);
+  assert.equal(s.executing, null);
+});
+
+test("the Heretic is never in play with the Baron, Godfather, Pit-Hag, Spy or Widow (their jinx)", () => {
+  const jinxed = ["baron", "godfather", "pithag", "spy", "widow"];
+  const raw = [
+    { id: "_meta", name: "Heretic jinxes" },
+    ...["washerwoman", "librarian", "investigator", "chef", "empath", "fortuneteller", "undertaker", "monk", "slayer", "soldier", "ravenkeeper", "virgin", "mayor"],
+    ...["heretic", "saint", "recluse", "butler"],
+    ...jinxed,
+    ...["poisoner", "scarletwoman", "assassin", "cerenovus", "witch"],
+    "imp",
+  ];
+  let heretics = 0;
+  let left = 0;
+
+  for (const id of jinxed) {
+    assert.ok(
+      JINXES.some(
+        (j) =>
+          j.exclusive &&
+          j.ids.includes("heretic") &&
+          j.ids.includes(id) &&
+          j.text === "Only 1 jinxed character can be in play.",
+      ),
+      id,
+    );
+  }
+
+  for (let seed = 0; seed < 300; seed++) {
+    const s = createState(raw, 12, `heretic-jinx-${seed}`);
+    const roles = s.players.map((p) => p.role);
+
+    if (roles.includes("heretic")) {
+      heretics++;
+      assert.ok(!roles.some((x) => jinxed.includes(x)), roles.join(","));
+    }
+
+    left += s.audit.some((x) => x.type === "jinx" && /^The Heretic is left out/.test(x.text)) ? 1 : 0;
+  }
+
+  assert.ok(heretics > 0 && left > 0, `${heretics} Heretics, ${left} left out`);
+});
+
+test("the Heretic and a Baron, Godfather, Pit-Hag, Spy or Widow are never in play together, all game", () => {
+  const jinxed = ["baron", "godfather", "pithag", "spy", "widow"];
+  // (With every character that changes who's what: the Philosopher, Barber,
+  // Snake Charmer, Fang Gu, Huntsman, Scarlet Woman...)
+  const raw = [
+    { id: "_meta", name: "Heretic jinxes, all game" },
+    ...["philosopher", "snakecharmer", "huntsman", "cannibal", "washerwoman", "librarian", "chef", "empath", "fortuneteller", "undertaker", "monk", "slayer", "mayor"],
+    ...["heretic", "barber", "damsel", "politician", "saint", "recluse", "butler"],
+    ...jinxed,
+    ...["scarletwoman", "poisoner"],
+    ...["imp", "fanggu"],
+  ];
+  const inPlay = (s) => s.players.flatMap((x) => [x.role, x.gained].filter(Boolean));
+  let heretics = 0;
+  let jinxedGames = 0;
+
+  for (let g = 0; g < 120; g++) {
+    const s = createState(raw, 8 + (g % 8), `heretic-all-game-${g}`);
+    const e = new Engine(s);
+    const audit = e.audit.bind(e);
+    const check = (when) => {
+      const roles = inPlay(s);
+
+      assert.ok(
+        !roles.includes("heretic") || !roles.some((x) => jinxed.includes(x)),
+        `game ${g}, ${when}: ${roles.join(", ")}`,
+      );
+    };
+
+    // (Checked after everything that happens.)
+    e.audit = (...args) => {
+      const r = audit(...args);
+
+      check(args[1]);
+      return r;
+    };
+
+    check("setup");
+    heretics += inPlay(s).includes("heretic") ? 1 : 0;
+    jinxedGames += inPlay(s).some((x) => jinxed.includes(x)) ? 1 : 0;
+    e.start();
+
+    for (let turn = 0; turn < 40 && !s.winner; turn++) {
+      settle(e);
+
+      if (s.winner) {
+        break;
+      }
+
+      if (s.phase === "day") {
+        e.endDay();
+      }
+    }
+
+    check("game over");
+  }
+
+  assert.ok(heretics > 0 && jinxedGames > 0, `${heretics} with the Heretic, ${jinxedGames} with a jinxed one`);
+});
+
+test("a Philosopher can't gain the Heretic while a jinxed character is in play, and one who did turns the result around", () => {
+  const s = createState([...outedSoFar, "pithag"], 10, "philosopher-heretic");
+  const phil = s.players.find((x) => !x.human && x.alignment === "good");
+  const human = s.players.find((x) => x.human);
+  const strat = new SimpleStrategy();
+
+  role(phil, "philosopher", "good");
+  s.night = 1;
+
+  for (const p of s.players.filter((x) => x.alignment === "evil" && team(x.role) === "minion").slice(0, 1)) {
+    role(p, "baron", "evil");
+  }
+
+  strat.onceReady = () => true;
+  assert.ok(jinxBarred(s).has("heretic"));
+
+  for (let i = 0; i < 200; i++) {
+    assert.notEqual(strat.philosopher(s, phil), "heretic");
+  }
+
+  // As you: it isn't offered.
+  role(human, "philosopher", "good");
+  const e = new Engine(s);
+
+  e.night();
+  assert.ok(!(s.pending?.characters ?? []).includes("heretic"));
+  assert.ok((s.pending?.characters ?? []).length > 0);
+
+  // With nothing jinxed in play, a Philosopher Heretic turns it around.
+  const t = base("philosopher-heretic-flip");
+
+  role(t.players[2], "philosopher", "good");
+  t.players[2].gained = "heretic";
+  new Engine(t).finish("good", "Demon died.");
+  assert.equal(t.winner, "evil");
+});
+
+test("the Pit-Hag never makes a Heretic; one she makes the Politician from an evil player stays evil", () => {
+  const strat = new SimpleStrategy();
+  const s = createState([...outedSoFar, "pithag"], 10, "pithag-heretic");
+  const h = s.players.find((x) => !x.human && x.alignment === "evil");
+
+  role(h, "pithag", "evil");
+  s.night = 2;
+
+  for (let i = 0; i < 200; i++) {
+    assert.notEqual(strat.pithag(s, h)?.role, "heretic");
+  }
+
+  const pol = s.players.find((x) => !x.human && x.alignment === "evil" && x !== h);
+
+  role(pol, "politician", "evil");
+  pol.politicianStaysEvil = true;
+  s.voteHistory = [{ day: s.day, nominatorId: pol.id, nomineeId: h.id, voterIds: [], count: 9, needed: 9 }];
+  s.executing = h.id;
+  new Engine(s).politicianEnd("good");
+  assert.equal(pol.alignment, "evil");
+});
+
+test("a good Politician's vote might count as evil to Legion (their jinx)", () => {
+  let vetoed = 0;
+
+  for (let seed = 0; seed < 40; seed++) {
+    const s = base(`legion-politician-${seed}`);
+    const e = new Engine(s);
+
+    role(s.players[4], "legion", "evil");
+    role(s.players[3], "legion", "evil");
+    role(s.players[2], "politician", "good");
+
+    const records = [2, 3, 4].map((i) => ({ playerId: s.players[i].id, counted: true }));
+
+    if (e.legionVeto(records, 3)) {
+      vetoed++;
+      assert.ok(s.audit.some((x) => /\(Politician\) registered as evil to Legion/.test(x.text)));
+    }
+  }
+
+  assert.ok(vetoed > 0 && vetoed < 40, `${vetoed} of 40`);
+});
+
+test("the Heretic votes for players they trust, not their suspect, and never nominates them", () => {
+  const s = base("heretic-votes");
+  const strat = new SimpleStrategy();
+  const v = s.players[2];
+  const sus = s.players[4];
+
+  role(v, "heretic", "good");
+  strat.opinion = () => ({ type: "suspicious", targetId: sus.id });
+  strat.suspicion = (_, p) => (p.suspicion = { targetId: sus.id, score: 99, reasons: [] });
+
+  let yes = 0;
+
+  for (let i = 0; i < 200; i++) {
+    yes += strat.vote(s, v, sus) ? 1 : 0;
+  }
+
+  assert.ok(yes < 100, `${yes} of 200`);
+  assert.equal(strat.nomination(s, v), null);
+});
+
+test("an NPC Heretic hides behind a Townsfolk claim, even once dead", () => {
+  let heretics = 0;
+
+  for (let seed = 0; seed < 200; seed++) {
+    const s = createState(outedSoFar, 12, `heretic-hides-${seed}`);
+
+    for (const p of s.players.filter((x) => x.role === "heretic" && !x.human)) {
+      heretics++;
+      assert.equal(team(p.claim), "townsfolk", `seed ${seed}`);
+      p.alive = false;
+      assert.equal(new SimpleStrategy().revealsWhenDead(p), null);
+    }
+  }
+
+  assert.ok(heretics > 0);
+});
+
+test("in the final 3, the Heretic says so if evil looks about to lose; else an evil NPC might bluff it", () => {
+  // Final 3: you, the Heretic (a good NPC) and the Imp; the rest dead.
+  const final3 = (seed) => {
+    const s = base(seed);
+    const e = new Engine(s);
+
+    s.script = { ...s.script, ids: [...s.script.ids, "heretic"] };
+    role(s.players[1], "heretic", "good");
+    s.players[1].claim = "chef";
+    s.players[2].alive = false;
+    s.players[3].alive = false;
+
+    return { s, e, heretic: s.players[1], minion: s.players[3], imp: s.players[4] };
+  };
+
+  // Not sure of anyone: they keep hiding, and the Imp, unsuspected, doesn't bluff.
+  let { s, e, heretic, imp, minion } = final3("heretic-quiet");
+
+  e.strat.suspicion = () => null;
+  e.hereticReveals();
+  assert.equal(heretic.claim, "chef");
+  assert.equal(s.hereticClaim, undefined);
+
+  // Sure of the Imp: they say so in public.
+  ({ s, e, heretic, imp } = final3("heretic-sure"));
+  e.strat.suspicion = (_, p) => (p === heretic ? { targetId: imp.id, score: 9 } : null);
+  e.hereticReveals();
+  assert.equal(heretic.claim, "heretic");
+  assert.equal(s.hereticClaim, heretic.id);
+  assert.equal(
+    s.publicLog.at(-1),
+    `Day 1 — ${heretic.label} says: "I said I was the Chef, but I'm the Heretic: whoever wins, loses. If good wins today, good loses."`,
+  );
+  assert.match(s.audit.at(-1).text, /\(the real Heretic; they're sure .* is evil\)$/);
+
+  // Only once.
+  e.hereticReveals();
+  assert.equal(s.publicLog.filter((x) => /the Heretic: whoever wins/.test(x)).length, 1);
+
+  // Not before the final 3.
+  ({ s, e, heretic, imp } = final3("heretic-early"));
+  s.players[2].alive = true;
+  e.strat.suspicion = (_, p) => (p === heretic ? { targetId: imp.id, score: 9 } : null);
+  e.hereticReveals();
+  assert.equal(heretic.claim, "chef");
+
+  // No Heretic in play, and you marked the Imp evil: a dead Minion might claim it.
+  let bluffed = 0;
+
+  for (let seed = 0; seed < 40; seed++) {
+    ({ s, e, heretic, imp, minion } = final3(`heretic-bluff-${seed}`));
+    role(heretic, "chef", "good");
+    minion.alive = false;
+    e.strat.suspicion = () => null;
+    e.mark(imp.id, "evil");
+    e.hereticReveals();
+
+    if (s.hereticClaim) {
+      bluffed++;
+      assert.equal(s.hereticClaim, minion.id);
+      assert.equal(minion.claim, "heretic");
+      assert.match(s.audit.at(-1).text, /\(fake: they're the Baron; you marked the Demon .* evil\)$/);
+      assert.ok(s.liesToYou?.some((x) => x.byId === minion.id && x.said === "heretic") ?? true);
+    } else {
+      assert.match(s.audit.at(-1).text, /could claim to be the Heretic .* but doesn't\.$/);
+    }
+  }
+
+  assert.ok(bluffed > 0 && bluffed < 40, `${bluffed} of 40`);
+});
+
+test("whole games play out with the General, Heretic and Politician", () => {
+  for (let g = 0; g < 40; g++) {
+    const { s } = playOut(outedSoFar, 8 + (g % 8), `outed-1-${g}`);
+
+    assert.ok([null, "good", "evil"].includes(s.winner));
   }
 });

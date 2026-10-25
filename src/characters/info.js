@@ -28,6 +28,7 @@ import { info as fisherman } from "./townsfolk/fisherman.js";
 import { info as flowergirl } from "./townsfolk/flowergirl.js";
 import { info as fortuneteller } from "./townsfolk/fortuneteller.js";
 import { info as gambler } from "./townsfolk/gambler.js";
+import { info as general } from "./townsfolk/general.js";
 import { info as gossip } from "./townsfolk/gossip.js";
 import { info as grandmother } from "./townsfolk/grandmother.js";
 import { info as highpriestess } from "./townsfolk/highpriestess.js";
@@ -78,6 +79,7 @@ export const infoOf = (role) =>
     flowergirl,
     fortuneteller,
     gambler,
+    general,
     gossip,
     grandmother,
     highpriestess,

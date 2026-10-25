@@ -40,10 +40,12 @@ import { virgin } from "./townsfolk/virgin.js";
 import { barber } from "./outsider/barber.js";
 import { butler } from "./outsider/butler.js";
 import { damsel } from "./outsider/damsel.js";
+import { heretic } from "./outsider/heretic.js";
 import { klutz } from "./outsider/klutz.js";
 import { lunatic } from "./outsider/lunatic.js";
 import { moonchild } from "./outsider/moonchild.js";
 import { ogre } from "./outsider/ogre.js";
+import { politician } from "./outsider/politician.js";
 import { sweetheart } from "./outsider/sweetheart.js";
 import { tinker } from "./outsider/tinker.js";
 
@@ -103,10 +105,12 @@ export const characters = {
   barber,
   butler,
   damsel,
+  heretic,
   klutz,
   lunatic,
   moonchild,
   ogre,
+  politician,
   sweetheart,
   tinker,
   assassin,

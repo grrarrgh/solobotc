@@ -3,6 +3,7 @@ import {
   ONGOING_INFO,
   FINAL_THREE_MARGIN,
   HIDDEN_OUTSIDERS,
+  exclusiveWith,
   name,
   team,
   alignment,
@@ -125,6 +126,11 @@ export function misinformedBy(s, p) {
 // Zombuul that only registers as dead.
 export const works = (p) =>
   (p.alive || p.vigor || p.undead) && !isDrunk(p) && !p.poisoned;
+
+// The characters that can't come into play now, by a jinx with one that's
+// in play, or whose ability is (`exclusive`: the Heretic with a Baron, Spy...).
+export const jinxBarred = (s) =>
+  new Set(s.players.flatMap((x) => [x.role, x.gained].filter(Boolean)).flatMap(exclusiveWith));
 
 // The Vortox makes every Townsfolk's information false.
 export const vortoxActive = (s) =>

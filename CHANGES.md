@@ -2,6 +2,28 @@
 
 Newest first.
 
+## New Script: Outed Evil (in progress)
+
+Outed Evil (scripts/Outed Evil_5_0_0.json, by Manny) has 10 characters the game didn't have yet. They're being added in 4 phases. The script goes in the script list (scripts/index.json) once all of them are in. Its Travellers (Thief, Bureaucrat, Butcher, Apprentice, Deviant) are left out, as on every script. The Sentinel was already in the game.
+
+- scripts/Outed Evil_5_0_0.json reformatted to match the other scripts: one character per line.
+
+### Phase 1: the General, Heretic and Politician
+
+- General (src/characters/townsfolk/general.js): each night, learns which alignment the Storyteller believes is winning ("General: evil is winning.", "General: neither team is winning."). That's the side the Storyteller's lean (`lean()` in src/storyteller.js) isn't helping: when it's helping good, evil is winning. With no lean, neither. Drunk or poisoned, they hear that good is winning when it isn't, and "neither" when it is. The log shows the Storyteller's workings with what they learned. It can be bluffed like any other information character. You can be dealt it.
+- Heretic (src/characters/outsider/heretic.js): whoever wins, loses, and whoever loses, wins, even if the Heretic is dead (not while drunk or poisoned). The result banner gives the reason ("Demon died. But the Heretic turns it around: evil wins."), and the log and Final reveal have a "heretic" entry. An NPC Heretic quietly works against their own team's in-game win: they vote for players they trust, hold back from their suspect, and never nominate their suspect. You can be dealt it.
+  - An NPC Heretic hides behind a Townsfolk claim, with made-up information, as the Mutant and Damsel do (it joins HIDDEN_OUTSIDERS). Unlike them, they don't admit it once dead.
+  - In the final 3, once per game, they say so in public at dawn if evil looks about to lose: they're sure a living player is evil, or you marked one evil ("Player 4 says: "I said I was the Chef, but I'm the Heretic: whoever wins, loses. If good wins today, good loses."").
+  - Evil can bluff it. With no Heretic speaking up, and evil looking about to lose (you marked the Demon evil, or a living good NPC is sure of them), an evil NPC claims to be the Heretic at HERETIC_BLUFF_CHANCE (0.5), to have you spare the Demon. They pick, in order: whoever took the Heretic as their bluff, a dead teammate, a living Minion, and the Demon last. The bluff counts as a lie to you, and the log says which claim was real or fake and why, including when an evil NPC could have bluffed but didn't.
+  - Good players never pretend to be the Heretic as a cover story (`neverHiddenAs`).
+- Politician (src/characters/outsider/politician.js): if they were the player most responsible for their team losing, they change alignment and win, even if dead (not while drunk or poisoned). Most responsible means the game was lost by an execution the Politician nominated, or one where they voted and it got exactly the votes it needed (`politicianBlame()`). Executions now record who they were lost by while under way (`s.executing`). Each vote in `s.voteHistory` also keeps the votes it got (`count`) and needed (`needed`). At game end, every Politician on the losing team gets a log line saying whether they were responsible, and whether they turned. You can be dealt it.
+- Jinxes (`JINXES` in src/data.js), from the official list (wiki.bloodontheclocktower.com/Djinn):
+  - Heretic & Baron, Godfather, Pit-Hag, Spy, Widow: "Only 1 jinxed character can be in play." These are marked `exclusive`. Setup leaves the Heretic out once one of the others is dealt, with a "jinx" line in the setup log ("The Heretic is left out: only 1 of it and the Baron can be in play."). The Pit-Hag never makes a Heretic. A Philosopher can't gain an ability jinxed with a character in play (`jinxBarred()` in src/storyteller.js): NPCs never choose it, and you aren't offered it. Other ways characters change (the Barber, Snake Charmer, Fang Gu, Huntsman, Demon succession) can't bring one in. A test plays 120 whole games full of these characters and checks the rule after every logged event. (Heretic & Lleech join these in a later phase.)
+  - A Philosopher who gains the Heretic ability (with nothing jinxed in play) turns the result around too.
+  - Pit-Hag & Politician: an evil player she makes the Politician can't turn good. (It never comes up: the Pit-Hag only makes good players Outsiders.)
+  - Legion & Politician: a good Politician's vote counts as evil to Legion at LEGION_POLITICIAN_CHANCE (0.5), so an execution where every other voter is Legion can fail. The log says when it does.
+- `exclusiveWith()` in src/data.js lists the characters jinxed never to be in play with a given one.
+
 ## New Features & Improvements: Bluffs for Every Good Character
 
 A rework of how information and bluffs are made, in three phases. Every good character can now be bluffed, by good and evil players alike, through one set of rules, and each character's information lives in that character's own module. Phases 1 and 2 only moved code: 640 seeded games (every script, 8 to 15 seats) gave byte-identical logs before and after each step. Phase 3 changed how bluffs play.

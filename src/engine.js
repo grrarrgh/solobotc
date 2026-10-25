@@ -28,6 +28,7 @@ import {
   lean,
   leanText,
   bluffing,
+  jinxBarred,
 } from "./storyteller.js";
 import {
   SimpleStrategy,
@@ -68,6 +69,8 @@ const KEY_MOMENT_TYPES = new Set([
   "fool",
   "moonchild",
   "assassin",
+  "heretic",
+  "politician",
   "advocate",
   "snakecharmer",
   "witch",
@@ -333,14 +336,16 @@ export class Engine {
           "Choose 2 players: they can't die tonight, but 1 of them is drunk until dusk.",
       },
       // (Not a character whose ability needs what you never face: see
-      // FORBIDDEN_HUMAN.)
+      // FORBIDDEN_HUMAN. Nor one jinxed with a character in play: see
+      // jinxBarred().)
       philosopher: !h.gained && {
         count: 0,
         characters: s.script.ids.filter(
           (id) =>
             alignment(id) === "good" &&
             id !== "philosopher" &&
-            !FORBIDDEN_HUMAN.has(id),
+            !FORBIDDEN_HUMAN.has(id) &&
+            !jinxBarred(s).has(id),
         ),
         optional: true,
         prompt:
@@ -594,6 +599,7 @@ export class Engine {
       this.revivedDawn();
       this.professorReveals();
       this.lunaticReveals();
+      this.hereticReveals();
       this.npcGossips();
       this.pixieMadness();
       this.marionetteDawn();
@@ -2097,12 +2103,15 @@ export class Engine {
       });
     }
 
-    // Who nominated and voted for whom is public: good NPCs weigh it.
+    // Who nominated and voted for whom is public: good NPCs weigh it. (With
+    // the votes it got and needed: see politicianBlame().)
     (s.voteHistory ??= []).push({
       day: s.day,
       nominatorId: nominator.id,
       nomineeId: id,
       voterIds: records.filter((x) => x.attempted).map((x) => x.playerId),
+      count,
+      needed,
     });
     const previous = s.block;
     const enough = count >= threshold;
@@ -2187,6 +2196,9 @@ export class Engine {
     }
 
     s.executedToday = true;
+    // (While it's under way, a game it ends was lost by it: see
+    // politicianBlame().)
+    s.executing = p.id;
 
     // What happened is added to this line once it's known (see below).
     const line = this.announce(`Day ${s.day} — ${p.label} is executed.`);
@@ -2229,6 +2241,8 @@ export class Engine {
     } else if (died && !this.goodTwinExecuted(p)) {
       this.check();
     }
+
+    s.executing = null;
   }
 
   // Ends the day: whoever is marked for execution is executed; with nobody
@@ -2372,6 +2386,11 @@ export class Engine {
       );
       return;
     }
+
+    // (The Heretic turns the result around; then a Politician who lost it
+    // for their team joins the winners.)
+    ({ winner, reason } = this.hereticFlip(winner, reason));
+    this.politicianEnd(winner);
 
     this.s.winner = winner;
     this.s.reason = reason;

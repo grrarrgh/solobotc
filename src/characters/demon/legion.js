@@ -1,4 +1,9 @@
-import { alignment, LEGION_STEER_SLACK, LEGION_GOOD_MIN } from "../../data.js";
+import {
+  alignment,
+  LEGION_STEER_SLACK,
+  LEGION_GOOD_MIN,
+  LEGION_POLITICIAN_CHANCE,
+} from "../../data.js";
 import { works } from "../../storyteller.js";
 import { untwinned } from "../../strategy.js";
 import { pick } from "../../util.js";
@@ -114,10 +119,28 @@ export const legion = {
 
     if (
       counted.length < threshold ||
-      !s.players.some((x) => x.alive && x.role === "legion" && works(x)) ||
-      !counted.every((x) => this.player(x.playerId).alignment === "evil")
+      !s.players.some((x) => x.alive && x.role === "legion" && works(x))
     ) {
       return false;
+    }
+
+    // (A good Politician might register as evil: their jinx.)
+    const politicians = counted
+      .map((x) => this.player(x.playerId))
+      .filter((p) => p.alignment === "good" && p.role === "politician");
+    const evil = (p) =>
+      p.alignment === "evil" ||
+      (politicians.includes(p) && s.r() < LEGION_POLITICIAN_CHANCE);
+
+    if (!counted.every((x) => evil(this.player(x.playerId)))) {
+      return false;
+    }
+
+    if (politicians.length) {
+      this.audit(
+        "legion",
+        `${politicians.map((p) => p.label).join(", ")} (Politician) registered as evil to Legion.`,
+      );
     }
 
     for (const x of counted) {

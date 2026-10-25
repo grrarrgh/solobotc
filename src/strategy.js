@@ -66,6 +66,7 @@ import {
   LEGION_GOOD_VOTE_CHANCE,
   LEGION_SACRIFICE_VOTE_CHANCE,
   LEGION_HEARSAY_FACTOR,
+  exclusiveWith,
 } from "./data.js";
 import {
   ability,
@@ -74,6 +75,7 @@ import {
   isDrunk,
   isDemon,
   atFinal,
+  jinxBarred,
   works,
   bluffing,
   shownBefore,
@@ -890,7 +892,10 @@ export class SimpleStrategy {
       return null;
     }
 
-    const hidden = [p.role, p.bluff].find((x) => HIDDEN_OUTSIDERS.includes(x));
+    // (Not the Heretic: they only say so in the final 3. See heretic.js.)
+    const hidden = [p.role, p.bluff].find(
+      (x) => HIDDEN_OUTSIDERS.includes(x) && x !== "heretic",
+    );
 
     if (hidden) {
       return hidden;
@@ -1499,7 +1504,8 @@ export class SimpleStrategy {
     const sus = this.suspicion(s, p);
     const t = sus && byId(s, sus.targetId);
 
-    return t?.alive && !t.human && sus.score >= NPC_NOMINATE_EVIDENCE
+    // (The Heretic never nominates their suspect: see vote().)
+    return t?.alive && !t.human && p.role !== "heretic" && sus.score >= NPC_NOMINATE_EVIDENCE
       ? { target: t, score: sus.score, reasons: p.suspicion.reasons }
       : null;
   }
@@ -1574,13 +1580,16 @@ export class SimpleStrategy {
 
     const o = this.opinion(s, v);
     const about = o.targetId === n.id ? o.type : null;
+    // (The Heretic wants their team to lose, quietly: they hold back from
+    // their suspect and vote for players they trust.)
+    const heretic = v.role === "heretic";
 
     if (about === "suspicious") {
-      return s.r() < GOOD_VOTE_MAX;
+      return s.r() < (heretic ? GOOD_VOTE_MIN : GOOD_VOTE_MAX);
     }
 
     if (about === "trust" || this.trusted(s, v).has(n.id)) {
-      return s.r() < GOOD_VOTE_MIN;
+      return s.r() < (heretic ? GOOD_VOTE_MAX : GOOD_VOTE_MIN);
     }
 
     // Your nomination counts as evidence too (humanTrusted), on top of
@@ -2586,9 +2595,14 @@ export class SimpleStrategy {
     }
 
     const inPlay = new Set(s.players.map((x) => x.role));
-    // (Never the Lunatic: its "ability" is believing they're the Demon.)
+    const barred = jinxBarred(s);
+    // (Never the Lunatic: its "ability" is believing they're the Demon. Nor
+    // one jinxed with a character in play: see jinxBarred().)
     const good = s.script.ids.filter(
-      (id) => alignment(id) === "good" && !["philosopher", "lunatic"].includes(id),
+      (id) =>
+        alignment(id) === "good" &&
+        !["philosopher", "lunatic"].includes(id) &&
+        !barred.has(id),
     );
     const fresh = good.filter(
       (id) => ONGOING_INFO.includes(id) && !inPlay.has(id),
@@ -2917,10 +2931,15 @@ export class SimpleStrategy {
     }
 
     // (Never the Lunatic: a Lunatic made mid-game has no Demon or "Minions"
-    // to believe in.)
+    // to believe in. Nor anyone jinxed with the Pit-Hag never to be in play
+    // with her: the Heretic.)
     const role = pick(
       s.script.ids.filter(
-        (id) => team(id) === "outsider" && id !== "lunatic" && !tokens.has(id),
+        (id) =>
+          team(id) === "outsider" &&
+          id !== "lunatic" &&
+          !exclusiveWith("pithag").includes(id) &&
+          !tokens.has(id),
       ),
       s.r,
     );

@@ -380,6 +380,14 @@ export const CHARACTERS = {
     info: "ongoing",
     kill: "med",
   },
+  general: {
+    name: "General",
+    team: "townsfolk",
+    ability:
+      "Each night, you learn which alignment the Storyteller believes is winning: good, evil, or neither.",
+    info: "ongoing",
+    kill: "med",
+  },
   villageidiot: {
     name: "Village Idiot",
     team: "townsfolk",
@@ -564,6 +572,21 @@ export const CHARACTERS = {
     kill: "low",
     neverHiddenAs: true,
     notForHuman: true,
+  },
+  politician: {
+    name: "Politician",
+    team: "outsider",
+    ability:
+      "If you were the player most responsible for your team losing, you change alignment & win, even if dead.",
+    kill: "low",
+  },
+  heretic: {
+    name: "Heretic",
+    team: "outsider",
+    ability: "Whoever wins, loses & whoever loses, wins, even if you are dead.",
+    kill: "low",
+    // (Only claimed in the final 3: see characters/outsider/heretic.js.)
+    neverHiddenAs: true,
   },
   poisoner: {
     name: "Poisoner",

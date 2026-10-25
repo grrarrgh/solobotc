@@ -18,6 +18,7 @@ import {
   LEGION_MAJORITY,
   LEGION_STRONG,
   LEGION_STRONG_SHARE,
+  exclusiveWith,
   team,
   alignment,
   name,
@@ -142,8 +143,11 @@ export function createState(
     throw Error(`Choose ${sizes[0]}–${sizes.at(-1)} seats`);
   }
 
+  // (Once the evil team is drawn, characters jinxed never to be in play
+  // with any of them are left out: the Heretic with a Baron, Spy...)
+  let barred = [];
   const r = rng(seed),
-    pool = (t) => script.ids.filter((id) => team(id) === t);
+    pool = (t) => script.ids.filter((id) => team(id) === t && !barred.includes(id));
 
   // Draw roles. Some characters change the Outsider count (the Baron +2,
   // the Fang Gu +1, the Vigormortis -1, the Godfather -1 or +1, the
@@ -165,6 +169,10 @@ export function createState(
     o = Math.min(Math.floor(r() * (o + 1)), good - 1);
     t = good - o;
   }
+
+  barred = [...new Set([...mins, ...demons])].flatMap((x) =>
+    exclusiveWith(x).filter((id) => script.ids.includes(id)),
+  );
   const shift = [...mins, ...demons, ...script.fabled].reduce((n, id) => {
     const k = OUTSIDER_MODIFIERS[id] ?? 0;
 
@@ -664,6 +672,16 @@ export function createState(
   );
 
   const demon = evil.find((x) => team(x.role) === "demon");
+
+  for (const id of new Set(barred)) {
+    setupLog(
+      "jinx",
+      `The ${name(id)} is left out: only 1 of it and the ${players
+        .filter((x) => exclusiveWith(id).includes(x.role))
+        .map((x) => name(x.role))
+        .join(", ")} can be in play.`,
+    );
+  }
 
   setupLog(
     "bluffs",

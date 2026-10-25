@@ -173,7 +173,32 @@ export const JINXES = [
     ids: ["legion", "minstrel"],
     text: "If Legion died by execution today, Legion keeps their ability, but the Minstrel might learn they are Legion.",
   },
+  // `exclusive`: never both in play (setup.js; the Pit-Hag never makes the
+  // Heretic, as she's one of them: strategy pithag())
+  ...["baron", "godfather", "pithag", "spy", "widow"].map((id) => ({
+    ids: ["heretic", id],
+    text: "Only 1 jinxed character can be in play.",
+    exclusive: true,
+  })),
+  // never arises: the Pit-Hag only makes good players Outsiders (strategy
+  // pithag()); characters/minion/pithag.js
+  {
+    ids: ["pithag", "politician"],
+    text: "If the Pit-Hag turns an evil player into the Politician, they can't turn good due to their own ability.",
+  },
+  // at LEGION_POLITICIAN_CHANCE (characters/demon/legion.js legionVeto())
+  { ids: ["legion", "politician"], text: "The Politician might register as evil to Legion." },
 ];
+
+// Characters never in play with `id`, by their jinx (`exclusive`).
+export const exclusiveWith = (id) =>
+  JINXES.filter((j) => j.exclusive && j.ids.includes(id)).flatMap((j) =>
+    j.ids.filter((x) => x !== id),
+  );
+
+// The Legion and Politician jinx: the chance a Politician's vote counts as
+// evil to Legion ("Executions fail if only evil voted").
+export const LEGION_POLITICIAN_CHANCE = 0.5;
 
 // The Recluse and Sage jinx: the chance a Demon-killed Sage is shown a
 // living Recluse in the Demon's place.
@@ -261,8 +286,13 @@ export const BLUFF_TRIES = 6;
 
 // Outsiders who claim a Townsfolk while alive, and admit it once dead: the
 // Mutant ("mad" they're not one) and the Damsel (hiding from the Minions).
-// See claimFor() and strategy revealsWhenDead().
-export const HIDDEN_OUTSIDERS = ["mutant", "damsel"];
+// See claimFor() and strategy revealsWhenDead(). The Heretic hides too, but
+// only says so in the final 3 (see characters/outsider/heretic.js).
+export const HIDDEN_OUTSIDERS = ["mutant", "damsel", "heretic"];
+
+// The Heretic in the final 3: the chance an evil NPC claims to be the
+// Heretic when evil looks about to lose (so you'd want good to "lose").
+export const HERETIC_BLUFF_CHANCE = 0.5;
 
 // The chance an evil player whose bluff is a Mutant or Damsel keeps it,
 // hiding behind a Townsfolk (one not in play, if a Spy or Widow saw the

@@ -62,6 +62,11 @@ export const pithag = {
         target.goonStaysEvil = true;
       }
 
+      // (Nor does a Politician: theirs.)
+      if (role === "politician" && target.alignment === "evil") {
+        target.politicianStaysEvil = true;
+      }
+
       target.role = role;
       target.shown = role;
       // (A "first night" ability is used tonight: see startsTonight().)
