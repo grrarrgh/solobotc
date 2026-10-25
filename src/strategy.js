@@ -66,6 +66,12 @@ import {
   LEGION_GOOD_VOTE_CHANCE,
   LEGION_SACRIFICE_VOTE_CHANCE,
   LEGION_HEARSAY_FACTOR,
+  GOBLIN_GOOD_VOTE_CHANCE,
+  GOBLIN_PUSH_SHORT,
+  GOBLIN_PUSH_CHANCE,
+  CERENOVUS_GOBLIN_CHANCE,
+  FEARMONGER_PUSH_CHANCE,
+  FEARMONGER_CAUTION,
   exclusiveWith,
 } from "./data.js";
 import {
@@ -683,6 +689,13 @@ export class SimpleStrategy {
     // They voted for an execution that failed (Legion): only evil voted.
     if ((s.failedExecutions ?? []).some((f) => f.voterIds.includes(t.id))) {
       add(W.failedExecution, "they voted for an execution that failed, so they're evil");
+    }
+
+    // They showed they're evil in public (see engine outed()).
+    const outed = (s.outed ?? []).find((x) => x.id === t.id);
+
+    if (outed) {
+      add(W.outedEvil, outed.why);
     }
 
     // Their claimed ability visibly failed (see engine failed()).
@@ -1501,11 +1514,34 @@ export class SimpleStrategy {
       };
     }
 
+    // (A Fearmonger nominates their chosen player; the evil team, their
+    // Goblin, once they've nearly the votes to execute them.)
+    const push = this.fearPush(s, p) ?? this.goblinPush(s, p);
+
+    if (push) {
+      const claim = claimTo(push, p);
+
+      return {
+        target: push,
+        score: NPC_NOMINATE_EVIDENCE + 1,
+        reasons: [
+          claim
+            ? `they claim the ${name(claim)}, and I don't believe it`
+            : "they won't say what they are",
+        ],
+      };
+    }
+
     const sus = this.suspicion(s, p);
     const t = sus && byId(s, sus.targetId);
 
-    // (The Heretic never nominates their suspect: see vote().)
-    return t?.alive && !t.human && p.role !== "heretic" && sus.score >= NPC_NOMINATE_EVIDENCE
+    // (The Heretic never nominates their suspect: see vote(). Nobody good
+    // nominates a player who claimed the Goblin: they'd claim it again.)
+    return t?.alive &&
+      !t.human &&
+      p.role !== "heretic" &&
+      !(sideOf(p) === "good" && (s.goblinClaims ?? []).some((x) => x.id === t.id)) &&
+      sus.score >= NPC_NOMINATE_EVIDENCE
       ? { target: t, score: sus.score, reasons: p.suspicion.reasons }
       : null;
   }
@@ -1529,6 +1565,19 @@ export class SimpleStrategy {
   // living or dead, vote for whoever you nominate (or asked to have
   // nominated), whatever they think of them.
   vote(s, v, n, tally = null) {
+    // A player who claimed the Goblin today: executing them could win it for
+    // evil, so good players hardly ever vote, even for your pick; the evil
+    // team always does.
+    const goblin = (s.goblinClaims ?? []).some((x) => x.id === n.id && x.day === s.day);
+
+    if (goblin && sideOf(v) !== "evil") {
+      return s.r() < GOBLIN_GOOD_VOTE_CHANCE;
+    }
+
+    if (goblin && sideOf(v) === "evil" && teammate(v, n)) {
+      return true;
+    }
+
     if (tally?.humanChoice && atFinal(s) && sideOf(v) !== "evil") {
       return true;
     }
@@ -1583,9 +1632,17 @@ export class SimpleStrategy {
     // (The Heretic wants their team to lose, quietly: they hold back from
     // their suspect and vote for players they trust.)
     const heretic = v.role === "heretic";
+    // (Once the Fearmonger has chosen, any execution an NPC they don't trust
+    // nominated might be the one that loses: they hold back, even on their
+    // suspect. See FEARMONGER_CAUTION.)
+    const yours = tally?.nominator?.human;
+    const wary =
+      s.fearmongerChose && !yours && !(tally?.nominator && this.trusted(s, v).has(tally.nominator.id))
+        ? FEARMONGER_CAUTION
+        : 1;
 
     if (about === "suspicious") {
-      return s.r() < (heretic ? GOOD_VOTE_MIN : GOOD_VOTE_MAX);
+      return s.r() < (heretic ? GOOD_VOTE_MIN : GOOD_VOTE_MAX) * wary;
     }
 
     if (about === "trust" || this.trusted(s, v).has(n.id)) {
@@ -1594,7 +1651,6 @@ export class SimpleStrategy {
 
     // Your nomination counts as evidence too (humanTrusted), on top of
     // HUMAN_NOMINATION_BONUS.
-    const yours = tally?.nominator?.human;
 
     // With Legion on the script, a vote for anyone but their suspect (or
     // your pick) could be the one good vote an evil nomination needs: they
@@ -1610,7 +1666,7 @@ export class SimpleStrategy {
           (yours ? EVIDENCE_WEIGHT.humanTrusted : 0)) +
       (yours ? HUMAN_NOMINATION_BONUS : 0);
 
-    return s.r() < Math.min(GOOD_VOTE_MAX, Math.max(GOOD_VOTE_MIN, chance));
+    return s.r() < Math.min(GOOD_VOTE_MAX, Math.max(GOOD_VOTE_MIN, chance)) * wary;
   }
 
   // ── Picking players ────────────────────────────────────────
@@ -1754,6 +1810,91 @@ export class SimpleStrategy {
     return b && !s.nominated.includes(b.id) && this.demonHeat(s) < BOOMDANDY_HEAT
       ? b
       : null;
+  }
+
+  // The player Fearmonger p nominates today, or null: their chosen player
+  // (see fearmonger()), when a good NPC suspects them, or else at
+  // FEARMONGER_PUSH_CHANCE (decided once a day).
+  fearPush(s, p) {
+    const t = p.role === "fearmonger" && byId(s, p.fearTarget);
+
+    if (!t?.alive || t.human || s.nominated.includes(t.id)) {
+      return null;
+    }
+
+    const suspected = s.players.some(
+      (x) => x.alive && !x.human && x.alignment === "good" && x.suspicion?.targetId === t.id,
+    );
+
+    if (p.fearPushDay?.day !== s.day) {
+      p.fearPushDay = { day: s.day, yes: s.r() < FEARMONGER_PUSH_CHANCE };
+    }
+
+    return suspected || p.fearPushDay.yes ? t : null;
+  }
+
+  // The Goblin evil NPC p nominates today, or null: their teammate (not
+  // themself), once the evil team's living votes are at most
+  // GOBLIN_PUSH_SHORT short of marking anyone (at GOBLIN_PUSH_CHANCE,
+  // decided once a day).
+  goblinPush(s, p) {
+    const g = s.players.find(
+      (x) => x !== p && x.alive && x.role === "goblin" && sideOf(p) === "evil" && teammate(p, x),
+    );
+
+    if (!g || s.nominated.includes(g.id)) {
+      return null;
+    }
+
+    const alive = s.players.filter((x) => x.alive);
+    const votes = alive.filter((x) => x.alignment === "evil").length;
+    const needed = Math.max(Math.ceil(alive.length / 2), (s.block?.count ?? 0) + 1);
+
+    if (votes + GOBLIN_PUSH_SHORT < needed) {
+      return null;
+    }
+
+    if (p.goblinPushDay?.day !== s.day) {
+      p.goblinPushDay = { day: s.day, yes: s.r() < GOBLIN_PUSH_CHANCE };
+    }
+
+    return p.goblinPushDay.yes ? g : null;
+  }
+
+  // The Fearmonger's choice tonight: last night's, while they're a living
+  // good NPC; else the good NPC the most good NPCs suspect (the town's next
+  // execution), or any good NPC. (Never you: NPCs never nominate you.)
+  fearmonger(s, p) {
+    const last = byId(s, p.fearTarget);
+
+    if (last?.alive && !last.human && last.alignment === "good") {
+      return last;
+    }
+
+    const pool = untwinned(
+      s,
+      s.players.filter((x) => x.alive && !x.human && x !== p && goodTo(p, x)),
+    );
+    const heat = (t) =>
+      s.players.filter(
+        (x) => x.alive && !x.human && x.alignment === "good" && x.suspicion?.targetId === t.id,
+      ).length;
+    const most = Math.max(0, ...pool.map(heat));
+
+    return pick(most ? pool.filter((t) => heat(t) === most) : pool, s.r);
+  }
+
+  // Who Psychopath p kills in public today: whoever the Demon would kill
+  // (see demon()), but never a teammate or themself.
+  psychopath(s, p) {
+    const t = this.demon(s, p);
+
+    return t?.alive && t !== p && goodTo(p, t)
+      ? t
+      : pick(
+          untwinned(s, s.players.filter((x) => x.alive && x !== p && goodTo(p, x))),
+          s.r,
+        );
   }
 
   // The Fisherman visits the Storyteller once (timed by
@@ -2881,6 +3022,19 @@ export class SimpleStrategy {
     );
     const own = target && [target.role, ability(target), target.claim];
     const tokens = new Set(s.players.flatMap((x) => [x.role, x.shown]));
+
+    // (Their jinx: the Cerenovus may make a good NPC mad that they're the
+    // Goblin, so they'd claim it when nominated: see goblin.js.)
+    if (
+      target &&
+      !evil &&
+      !target.human &&
+      s.script.ids.includes("goblin") &&
+      s.r() < CERENOVUS_GOBLIN_CHANCE
+    ) {
+      return { target, role: "goblin" };
+    }
+
     const role =
       target &&
       pick(

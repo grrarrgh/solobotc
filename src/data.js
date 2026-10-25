@@ -186,6 +186,12 @@ export const JINXES = [
     ids: ["pithag", "politician"],
     text: "If the Pit-Hag turns an evil player into the Politician, they can't turn good due to their own ability.",
   },
+  // at CERENOVUS_GOBLIN_CHANCE (strategy cerenovus()); they claim it when
+  // nominated (characters/minion/goblin.js)
+  {
+    ids: ["cerenovus", "goblin"],
+    text: "The Cerenovus may choose to make a player mad that they are the Goblin.",
+  },
   // at LEGION_POLITICIAN_CHANCE (characters/demon/legion.js legionVeto())
   { ids: ["legion", "politician"], text: "The Politician might register as evil to Legion." },
 ];
@@ -294,6 +300,34 @@ export const HIDDEN_OUTSIDERS = ["mutant", "damsel", "heretic"];
 // Heretic when evil looks about to lose (so you'd want good to "lose").
 export const HERETIC_BLUFF_CHANCE = 0.5;
 
+// The Goblin (characters/minion/goblin.js): the chance an NPC Goblin claims
+// it when nominated; the chance a good NPC votes to execute a player who
+// claimed the Goblin today (evil wins if they're one); and, once the evil
+// team's living votes are at most this many short of marking anyone, the
+// chance a teammate nominates their Goblin.
+export const GOBLIN_CLAIM_CHANCE = 0.75;
+export const GOBLIN_GOOD_VOTE_CHANCE = 0.05;
+export const GOBLIN_PUSH_SHORT = 1;
+export const GOBLIN_PUSH_CHANCE = 0.5;
+// The Cerenovus and Goblin jinx: the chance the Cerenovus makes a good
+// player mad that they're the Goblin (when it's on the script).
+export const CERENOVUS_GOBLIN_CHANCE = 0.2;
+
+// The Fearmonger (characters/minion/fearmonger.js): the chance an NPC
+// Fearmonger nominates their chosen player on a day nobody suspects them
+// (they always do when a good NPC does); and, once a Fearmonger has chosen,
+// how much less likely a good NPC is to vote on a hunch (their usual
+// chance, times this), as any execution might be the one that loses.
+export const FEARMONGER_PUSH_CHANCE = 0.3;
+export const FEARMONGER_CAUTION = 0.5;
+
+// The Psychopath (characters/minion/psychopath.js): the chance an NPC
+// Psychopath kills in public, each day, until they've done it once (then
+// they're known, and kill every day).
+export const PSYCHOPATH_KILL_CHANCE = 0.35;
+// Roshambo: what beats what.
+export const ROSHAMBO = { rock: "scissors", paper: "rock", scissors: "paper" };
+
 // The chance an evil player whose bluff is a Mutant or Damsel keeps it,
 // hiding behind a Townsfolk (one not in play, if a Spy or Widow saw the
 // Grimoire); otherwise they take another bluff.
@@ -343,6 +377,7 @@ export const EVIDENCE_WEIGHT = {
   abilityUnused: 0.5, // late on, still hasn't used a public ability they claim (Slayer, Juggler)
   damselGuess: 6, // guessed the Damsel in public: only a Minion's guess counts
   failedExecution: 6, // voted for an execution that failed (Legion): only evil voted
+  outedEvil: 8, // showed they're evil in public: a Psychopath's kill, a Goblin claim (s.outed)
 };
 
 // With a Pixie on the script, a double claim of a Townsfolk might be a mad

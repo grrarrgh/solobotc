@@ -490,6 +490,7 @@ export class Engine {
     this.twinInfo();
     this.witch();
     this.cerenovus();
+    this.fearmonger();
     this.pitHag();
     this.mezepheles();
     this.advocate();
@@ -605,6 +606,8 @@ export class Engine {
       this.marionetteDawn();
       this.npcDamselGuesses();
       this.dawnComeClean();
+      this.fearmongerDawn();
+      this.psychopathKills();
       this.npcTalks();
     }
 
@@ -1424,6 +1427,16 @@ export class Engine {
     );
   }
 
+  // p showed they're evil in public (`why`: a Psychopath's kill, a Goblin
+  // claim): good NPCs count it against them (see strategy evidence()).
+  outed(p, why) {
+    const s = this.s;
+
+    if (!(s.outed ??= []).some((x) => x.id === p.id)) {
+      s.outed.push({ id: p.id, day: s.day, why });
+    }
+  }
+
   // p's claimed ability visibly failed (`why`): good NPCs count it against
   // them (see strategy evidence()).
   failed(p, why) {
@@ -1749,8 +1762,12 @@ export class Engine {
   nominationReveals(n, intro = null) {
     const s = this.s;
     const lines = intro ? [intro] : [];
+    // (A Goblin, or a player mad that they're one, may say so: see goblin.js.)
+    const goblin = this.goblinClaim(n);
 
-    if (n.cover) {
+    if (goblin) {
+      lines.push(goblin);
+    } else if (n.cover) {
       if (s.r() < COME_CLEAN_NOMINATED_CHANCE) {
         lines.push(this.comeClean(n));
       }
@@ -1914,6 +1931,10 @@ export class Engine {
 
     if (this.nominatedToday(id)) {
       throw Error("Already nominated today.");
+    }
+
+    if (s.roshambo) {
+      throw Error("Throw first.");
     }
 
     return n;
@@ -2217,13 +2238,36 @@ export class Engine {
 
     // ...and so can a good player while the Pacifist lives.
     const spared = !advocated && p.alive && this.pacifistSaves(p);
-    const died = !advocated && !spared && this.kill(p, "execution");
+    // (A Psychopath only dies if they lose roshambo: against you, it waits
+    // for your throw. See psychopath.js.)
+    const rosh = !advocated && !spared && !dead ? this.psychopathExecuted(p) : null;
+    const execution = { line, dead, before, boom, saved: advocated || spared };
+
+    if (rosh === "pending") {
+      s.roshambo.execution = execution;
+      return;
+    }
+
+    this.executionEnds(p, { ...execution, survives: rosh === "survives" });
+  }
+
+  // The rest of p's execution: whether they die, and what that does.
+  executionEnds(p, { line, dead, before, boom, saved, survives }) {
+    const s = this.s;
+    const died = !saved && !survives && this.kill(p, "execution");
+    const nominatorId = (s.voteHistory ?? []).findLast(
+      (x) => x.day === s.day && x.nomineeId === p.id,
+    )?.nominatorId;
 
     if (dead) {
       s.publicLog[line] += " And nothing happens because they are already dead.";
     } else if (!died) {
       s.publicLog[line] += " But does not die.";
-      this.survivedExecution(p);
+
+      // (A Psychopath's roshambo explains it.)
+      if (!survives) {
+        this.survivedExecution(p);
+      }
     }
 
     if (died) {
@@ -2231,7 +2275,16 @@ export class Engine {
       this.cannibals(p);
     }
 
+    // (Executed, dead or not: a Goblin who claimed it today, or the
+    // Fearmonger's chosen player whom they nominated, ends the game.)
+    const lost = !dead && (this.goblinWins(p) || this.fearmongerWins(p, nominatorId));
+
     // (goodTwinExecuted() ends the game if the good twin was executed.)
+    if (lost) {
+      s.executing = null;
+      return;
+    }
+
     if (died && p.role === "saint") {
       this.finish("evil", "Saint executed.");
     } else if (died && isDemon(p)) {
@@ -2260,6 +2313,10 @@ export class Engine {
 
     if (s.boom) {
       throw Error("Point at a player first.");
+    }
+
+    if (s.roshambo) {
+      throw Error("Throw first.");
     }
 
     this.audit("end_day", `You ended Day ${s.day}.`);
@@ -2291,6 +2348,22 @@ export class Engine {
     if (p) {
       this.execute(p);
 
+      // (Your roshambo against a Psychopath waits for your throw: see
+      // roshambo(), which ends the day.)
+      if (s.roshambo) {
+        s.roshambo.from = from;
+        return;
+      }
+    }
+
+    this.dayEnds(p, from);
+  }
+
+  // The day's end, once its execution (of p, if anyone) is done.
+  dayEnds(p, from) {
+    const s = this.s;
+
+    if (p) {
       // (The Boomdandy's countdown waits for you: see boomPoint().)
       if (s.boom) {
         this.phaseCard("dusk", from);

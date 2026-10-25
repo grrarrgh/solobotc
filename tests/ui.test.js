@@ -266,3 +266,15 @@ test("every popup closes when you press anywhere", () => {
   assert.match(app, /!ev\.target\.closest\("#size-popup button, #size-settings"\)/);
   assert.match(app, /if \(!\$\("count-popup"\)\.hidden && !ev\.target\.closest\("#count-info"\)\) \{\s*closeCountInfo\(\);/);
 });
+
+test("roshambo against the Psychopath you nominated: rock, paper or scissors, in place of the day's controls", () => {
+  assert.match(html, /id="roshambo-choice" class="night-choice" hidden/);
+
+  for (const t of ["rock", "paper", "scissors"]) {
+    assert.match(html, new RegExp(`data-throw="${t}"`));
+  }
+
+  assert.match(app, /\$\("roshambo-choice"\)\.hidden = !s\.roshambo/);
+  assert.match(app, /e\.roshambo\(b\.dataset\.throw\)/);
+  assert.match(app, /!!s\.roshambo \|\| s\.phase !== "day"/);
+});

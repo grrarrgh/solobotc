@@ -42,6 +42,10 @@ export const FIRST_NIGHT = [
   ["eviltwin", "The twins learn who each other are, and the other's character."],
   ["witch", "Chooses a player: if they nominate tomorrow, they die."],
   ["cerenovus", "Chooses a player and a good character: they must be mad about it tomorrow."],
+  [
+    "fearmonger",
+    "Chooses a player: if the Fearmonger nominates and executes them, their team loses. Everyone learns if it's a new player.",
+  ],
   ["pukka", "Chooses a player: they're poisoned."],
   ["pixie", "Learns a Townsfolk in play."],
   [
@@ -89,6 +93,10 @@ export const OTHER_NIGHTS = [
   ["devilsadvocate", "Chooses a living player (not last night's): if executed tomorrow, they don't die."],
   ["witch", "Chooses a player: if they nominate tomorrow, they die."],
   ["cerenovus", "Chooses a player and a good character: they must be mad about it tomorrow."],
+  [
+    "fearmonger",
+    "Chooses a player: if the Fearmonger nominates and executes them, their team loses. Everyone learns if it's a new player.",
+  ],
   ["pithag", "Chooses a player and a character: they become that character."],
   ["mezepheles", "On Night 2 or 3, if alive, a good player becomes evil (and learns it)."],
   ["scarletwoman", "If she became the Demon today, she learns it."],

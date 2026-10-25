@@ -2,11 +2,22 @@
 
 Newest first.
 
-## New Script: Outed Evil (in progress)
+### Phase 2: the Goblin, Fearmonger and Psychopath
 
-Outed Evil (scripts/Outed Evil_5_0_0.json, by Manny) has 10 characters the game didn't have yet. They're being added in 4 phases. The script goes in the script list (scripts/index.json) once all of them are in. Its Travellers (Thief, Bureaucrat, Butcher, Apprentice, Deviant) are left out, as on every script. The Sentinel was already in the game.
-
-- scripts/Outed Evil_5_0_0.json reformatted to match the other scripts: one character per line.
+- Goblin (src/characters/minion/goblin.js): when nominated, an NPC Goblin claims it in public at GOBLIN_CLAIM_CHANCE (0.75) ("Player 6 says: "I'm the Goblin! Execute me today, and evil wins.""). If they're executed that day, dead or not and not drunk or poisoned, their team wins.
+  - Good NPCs vote to execute a player who claimed the Goblin today only at GOBLIN_GOOD_VOTE_CHANCE (0.05), even in the final 3 when it's your pick. They never nominate one who has claimed it, and the evil team always votes for them.
+  - Once the evil team's living votes are at most GOBLIN_PUSH_SHORT (1) short of marking anyone, an evil NPC nominates their Goblin at GOBLIN_PUSH_CHANCE (0.5), decided once a day.
+- Fearmonger (src/characters/minion/fearmonger.js): each night, chooses a player. That's the same one while they live; otherwise the good NPC the most good NPCs suspect, as the town's likely next execution, and never you. A new choice that worked is announced at dawn ("The Storyteller: the Fearmonger has chosen a new player."). If the Fearmonger nominates and executes that player, the player's team loses.
+  - An NPC Fearmonger nominates their player whenever a good NPC suspects them, or else at FEARMONGER_PUSH_CHANCE (0.3), decided once a day.
+  - Once a Fearmonger has chosen, good NPCs hold back on nominations made by NPCs they don't trust: they vote at FEARMONGER_CAUTION (0.5) times their usual chance, even on their own suspect. Your nominations are exempt.
+- Psychopath (src/characters/minion/psychopath.js):
+  - At dawn, before nominations, an NPC Psychopath may choose a player in public, and that player dies ("Player 3 publicly chooses Player 7: they die."). Until they've done it once, it's at PSYCHOPATH_KILL_CHANCE (0.35) a day; after that, every day. They pick whoever the Demon would kill, never a teammate. Drunk or poisoned, nothing happens.
+  - If executed, a working Psychopath plays roshambo against their nominator, and only dies if they lose. They win ties, so they die 1 time in 3. Each round is announced ("Roshambo: Player 3 throws rock; Player 5 throws scissors. The Psychopath wins.").
+  - If you nominated them, ending the day waits for your throw: Rock, Paper or Scissors buttons appear in place of the day's controls (`#roshambo-choice`; `roshambo()`). Then the day ends as usual.
+- Publicly outed evil: a Psychopath's kill, or a Goblin claim, goes in `s.outed` (engine `outed()`), and good NPCs weigh it as evidence (EVIDENCE_WEIGHT.outedEvil, 8).
+- Executions: `execute()` is split. `executionEnds()` holds what follows the execution, and `dayEnds()` the rest of the day, so a roshambo can wait for you. A Goblin's or Fearmonger's win is checked first, whether the player died or not.
+- Jinx: Cerenovus & Goblin: "The Cerenovus may choose to make a player mad that they are the Goblin." At CERENOVUS_GOBLIN_CHANCE (0.2), a good NPC (never you) is made mad that they're the Goblin. They claim it when nominated, and executing them does nothing. The Goblin has no other jinxes with characters in the game; the Fearmonger's and Psychopath's are with characters the game doesn't have.
+- Logging: the Goblin's claim (real, real but drunk or poisoned, or mad), and their win. The Fearmonger's choice each night (new, or "again"; failed if drunk or poisoned), the announcement, and the win. The Psychopath's kill, and every roshambo round with its result.
 
 ### Phase 1: the General, Heretic and Politician
 
@@ -23,6 +34,12 @@ Outed Evil (scripts/Outed Evil_5_0_0.json, by Manny) has 10 characters the game 
   - Pit-Hag & Politician: an evil player she makes the Politician can't turn good. (It never comes up: the Pit-Hag only makes good players Outsiders.)
   - Legion & Politician: a good Politician's vote counts as evil to Legion at LEGION_POLITICIAN_CHANCE (0.5), so an execution where every other voter is Legion can fail. The log says when it does.
 - `exclusiveWith()` in src/data.js lists the characters jinxed never to be in play with a given one.
+
+## New Script: Outed Evil (in progress)
+
+Outed Evil (scripts/Outed Evil_5_0_0.json, by Manny) has 10 characters the game didn't have yet. They're being added in 4 phases. The script goes in the script list (scripts/index.json) once all of them are in. Its Travellers (Thief, Bureaucrat, Butcher, Apprentice, Deviant) are left out, as on every script. The Sentinel was already in the game.
+
+- scripts/Outed Evil_5_0_0.json reformatted to match the other scripts: one character per line.
 
 ## New Features & Improvements: Bluffs for Every Good Character
 

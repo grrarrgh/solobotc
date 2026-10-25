@@ -54,12 +54,15 @@ import { boomdandy } from "./minion/boomdandy.js";
 import { cerenovus } from "./minion/cerenovus.js";
 import { devilsadvocate } from "./minion/devilsadvocate.js";
 import { eviltwin } from "./minion/eviltwin.js";
+import { fearmonger } from "./minion/fearmonger.js";
+import { goblin } from "./minion/goblin.js";
 import { godfather } from "./minion/godfather.js";
 import { marionette } from "./minion/marionette.js";
 import { mezepheles } from "./minion/mezepheles.js";
 import { mastermind } from "./minion/mastermind.js";
 import { pithag } from "./minion/pithag.js";
 import { poisoner } from "./minion/poisoner.js";
+import { psychopath } from "./minion/psychopath.js";
 import { widow } from "./minion/widow.js";
 import { witch } from "./minion/witch.js";
 
@@ -118,12 +121,15 @@ export const characters = {
   cerenovus,
   devilsadvocate,
   eviltwin,
+  fearmonger,
+  goblin,
   godfather,
   marionette,
   mezepheles,
   mastermind,
   pithag,
   poisoner,
+  psychopath,
   widow,
   witch,
   fanggu,

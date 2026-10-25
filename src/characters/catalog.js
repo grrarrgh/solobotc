@@ -681,6 +681,27 @@ export const CHARACTERS = {
       "On your 1st night, look at the Grimoire & choose a player: they are poisoned. 1 good player knows a Widow is in play.",
     kill: "avoid",
   },
+  goblin: {
+    name: "Goblin",
+    team: "minion",
+    ability:
+      "If you publicly claim to be the Goblin when nominated & are executed that day, your team wins.",
+    kill: "avoid",
+  },
+  fearmonger: {
+    name: "Fearmonger",
+    team: "minion",
+    ability:
+      "Each night, choose a player: if you nominate & execute them, their team loses. All players know if you choose a new player.",
+    kill: "avoid",
+  },
+  psychopath: {
+    name: "Psychopath",
+    team: "minion",
+    ability:
+      "Each day, before nominations, you may publicly choose a player: they die. If executed, you only die if you lose roshambo.",
+    kill: "avoid",
+  },
   boomdandy: {
     name: "Boomdandy",
     team: "minion",

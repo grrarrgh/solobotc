@@ -1514,9 +1514,11 @@ function draw() {
   renderMark(t);
   renderNightChoice();
 
-  $("actions").hidden = !!s.winner || !t || !!s.pending || !!s.boom;
+  $("actions").hidden = !!s.winner || !t || !!s.pending || !!s.boom || !!s.roshambo;
   $("day-controls").hidden =
-    !!s.winner || !!s.pending || !!s.boom || s.phase !== "day";
+    !!s.winner || !!s.pending || !!s.boom || !!s.roshambo || s.phase !== "day";
+  // Your roshambo against the Psychopath you nominated (see e.roshambo()).
+  $("roshambo-choice").hidden = !s.roshambo || !!s.winner;
   // The Boomdandy's countdown: you select who you point at until it runs
   // out (see boomCountdown()).
   $("boom-choice").hidden = !s.boom || !!s.winner;
@@ -1917,6 +1919,19 @@ async function yourNomination(fn) {
 $("start-nominations").onclick = () => openNominations();
 
 $("npc-nominations").onclick = () => npcNominate();
+
+// Your throw against the Psychopath; then the day ends.
+document.querySelectorAll("#roshambo-choice [data-throw]").forEach((b) => {
+  b.onclick = () => {
+    try {
+      e.roshambo(b.dataset.throw);
+      $("roshambo-error").textContent = "";
+      render();
+    } catch (err) {
+      $("roshambo-error").textContent = err.message;
+    }
+  };
+});
 
 $("round-robin").onclick = () => {
   try {

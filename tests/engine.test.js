@@ -1457,6 +1457,11 @@ function settle(e) {
     e.boomPoint(e.s.players.find((p) => p.alive && !p.human).id);
   }
 
+  // (Roshambo against a Psychopath you nominated: you throw rock.)
+  if (e.s.roshambo) {
+    e.roshambo("rock");
+  }
+
   while (e.s.pending) {
     const c = e.s.pending;
 
@@ -10216,6 +10221,309 @@ test("in the final 3, the Heretic says so if evil looks about to lose; else an e
   }
 
   assert.ok(bluffed > 0 && bluffed < 40, `${bluffed} of 40`);
+});
+
+// ── Outed Evil, phase 2: the Goblin, Fearmonger and Psychopath ───
+
+// Outed Evil's characters the game has so far (no Spy or Baron: just the
+// script's own Minions, and the Cerenovus for the Goblin's jinx).
+const outedSoFar2 = [
+  { id: "_meta", name: "Outed Evil (so far)" },
+  ...["sailor", "general", "snakecharmer", "fortuneteller", "savant", "philosopher", "huntsman", "fisherman", "juggler", "cannibal", "tealady"],
+  ...["lunatic", "barber", "politician", "damsel", "heretic"],
+  ...["poisoner", "goblin", "fearmonger", "psychopath"],
+  "imp",
+  "sentinel",
+];
+
+// A 5-player Day 1 (see base()) where p[3] is `minion`, with the vote
+// nominating `nominee` already recorded as marking them.
+function minionDay(seed, minion) {
+  const s = base(seed);
+  const e = new Engine(s);
+
+  role(s.players[3], minion, "evil");
+
+  return { s, e, p: s.players };
+}
+
+const voted = (s, nominator, nominee, count = 3) =>
+  (s.voteHistory ??= []).push({
+    day: s.day,
+    nominatorId: nominator.id,
+    nomineeId: nominee.id,
+    voterIds: [],
+    count,
+    needed: 3,
+  });
+
+test("the Goblin claims it when nominated; executed that day, evil wins", () => {
+  const { s, e, p } = minionDay("goblin", "goblin");
+  const goblin = p[3];
+
+  s.r = () => 0; // (always claims)
+  const lines = e.nominationReveals(goblin);
+
+  assert.equal(lines[0], `Day 1 — ${goblin.label} says: "I'm the Goblin! Execute me today, and evil wins."`);
+  assert.equal(goblin.claim, "goblin");
+  assert.ok(goblin.claimKnown);
+  assert.ok(s.outed.some((x) => x.id === goblin.id));
+  assert.match(s.audit.find((x) => x.type === "goblin").text, /\(the real Goblin\)$/);
+
+  // Good NPCs hardly ever vote for them, even for your pick in the final 3;
+  // the evil team does.
+  s.r = () => 0.5;
+  assert.equal(e.strat.vote(s, p[1], goblin, { humanChoice: true }), false);
+  assert.equal(e.strat.vote(s, p[4], goblin), true);
+
+  voted(s, p[1], goblin);
+  e.execute(goblin);
+  assert.equal(s.winner, "evil");
+  assert.equal(s.reason, "The Goblin claimed it when nominated, and was executed.");
+});
+
+test("a Goblin who didn't claim it today, or is poisoned, is just executed", () => {
+  for (const setup of [
+    (s, g) => (s.goblinClaims = [{ id: g.id, day: s.day - 1 }]),
+    (s, g) => {
+      s.goblinClaims = [{ id: g.id, day: s.day }];
+      g.poisoned = true;
+    },
+  ]) {
+    const { s, e, p } = minionDay("goblin-no", "goblin");
+    const goblin = p[3];
+
+    setup(s, goblin);
+    voted(s, p[1], goblin);
+    e.execute(goblin);
+    assert.equal(s.winner, null);
+    assert.equal(goblin.alive, false);
+  }
+});
+
+test("good NPCs never nominate a player who claimed the Goblin; the evil team nominates its Goblin once it nearly has the votes", () => {
+  const { s, e, p } = minionDay("goblin-nominate", "goblin");
+  const goblin = p[3];
+
+  s.goblinClaims = [{ id: goblin.id, day: 1 }];
+  s.day = 2;
+  e.strat.suspicion = (_, x) => (x.suspicion = { targetId: goblin.id, score: 99, reasons: [] });
+  assert.equal(e.strat.nomination(s, p[1]), null);
+
+  // 2 evil of 5 alive: 1 vote short of the 3 needed.
+  s.r = () => 0;
+  assert.equal(e.strat.nomination(s, p[4])?.target, goblin);
+
+  // 2 short (7 alive, 4 needed): not yet.
+  const t = minionDay("goblin-nominate-far", "goblin");
+
+  t.s.players.push(...createState(script, 8, "extra").players.slice(5, 7).map((x) => ({ ...x, alignment: "good", alive: true })));
+  t.s.r = () => 0;
+  assert.equal(t.e.strat.goblinPush(t.s, t.p[4]), null);
+});
+
+test("the Cerenovus may make a good NPC mad that they're the Goblin: they claim it when nominated, and it does nothing", () => {
+  const { s, e, p } = minionDay("cerenovus-goblin", "cerenovus");
+  const mad = p[1];
+
+  s.script = { ...s.script, ids: [...s.script.ids, "goblin"] };
+  s.phase = "night";
+  s.night = 2;
+  // (Not a teammate: the first draw; then the Goblin.)
+  let draws = 0;
+
+  s.r = () => (draws++ ? 0 : 0.99);
+  assert.equal(e.strat.cerenovus(s, p[3])?.role, "goblin");
+
+  mad.mad = { role: "goblin", day: 1, previous: "chef" };
+  mad.claim = "goblin";
+  s.phase = "day";
+  s.night = 1;
+  assert.match(e.nominationReveals(mad)[0], /says: "I'm the Goblin!/);
+  assert.match(s.audit.find((x) => x.type === "goblin").text, /mad that they're the Goblin: the Cerenovus\)$/);
+  assert.ok(JINXES.some((j) => j.ids.includes("cerenovus") && j.ids.includes("goblin")));
+
+  voted(s, p[2], mad);
+  e.execute(mad);
+  assert.equal(s.winner, null);
+});
+
+test("the Fearmonger's new choice is announced at dawn; nominating and executing them makes their team lose", () => {
+  const { s, e, p } = minionDay("fearmonger", "fearmonger");
+  const f = p[3];
+  const t = p[1];
+
+  e.strat.fearmonger = () => t;
+  s.phase = "night";
+  s.night = 2;
+  e.fearmonger();
+  assert.equal(f.fearTarget, t.id);
+  assert.match(s.audit.at(-1).text, new RegExp(`chose ${t.label}; if they nominate and execute them, good loses\\.$`));
+
+  s.day = 2;
+  e.fearmongerDawn();
+  assert.equal(s.publicLog.at(-1), "Day 2 — The Storyteller: the Fearmonger has chosen a new player.");
+  assert.equal(s.fearmongerChose, 2);
+
+  // The same choice again: no announcement.
+  s.night = 3;
+  e.fearmonger();
+  s.day = 3;
+  e.fearmongerDawn();
+  assert.equal(s.fearmongerChose, 2);
+  assert.match(s.audit.findLast((x) => x.type === "fearmonger").text, / again;/);
+
+  // Someone else nominated them: nothing.
+  voted(s, p[2], t);
+  e.execute(t);
+  assert.equal(s.winner, null);
+
+  // The Fearmonger did.
+  const g = minionDay("fearmonger-win", "fearmonger");
+
+  g.p[3].fearTarget = g.p[2].id;
+  voted(g.s, g.p[3], g.p[2]);
+  g.e.execute(g.p[2]);
+  assert.equal(g.s.winner, "evil");
+  assert.equal(g.s.reason, `The Fearmonger nominated and executed ${g.p[2].label}, their chosen player.`);
+
+  // Poisoned: nothing.
+  const h = minionDay("fearmonger-poisoned", "fearmonger");
+
+  h.p[3].fearTarget = h.p[2].id;
+  h.p[3].poisoned = true;
+  voted(h.s, h.p[3], h.p[2]);
+  h.e.execute(h.p[2]);
+  assert.equal(h.s.winner, null);
+});
+
+test("the Fearmonger chooses the good NPC the town suspects, nominates them, and good NPCs grow wary", () => {
+  const { s, e, p } = minionDay("fearmonger-choice", "fearmonger");
+  const f = p[3];
+
+  p[2].suspicion = { targetId: p[1].id };
+  p[4].suspicion = { targetId: p[1].id };
+  assert.equal(new SimpleStrategy().fearmonger(s, f), p[1]);
+  assert.notEqual(new SimpleStrategy().fearmonger(s, f), p[0]);
+
+  f.fearTarget = p[1].id;
+  assert.equal(e.strat.nomination(s, f)?.target, p[1]);
+
+  // On a hunch, good NPCs vote half as often once the Fearmonger has chosen.
+  const strat = new SimpleStrategy();
+  const count = (chose) => {
+    let yes = 0;
+
+    s.fearmongerChose = chose;
+
+    for (let i = 0; i < 400; i++) {
+      s.r = rng(`wary-${chose}-${i}`);
+      yes += strat.vote(s, p[2], p[4], { nominator: p[3] }) ? 1 : 0;
+    }
+
+    return yes;
+  };
+
+  strat.opinion = () => ({ type: null, targetId: null });
+  strat.evidence = () => ({ score: 0, reasons: [] });
+  assert.ok(count(1) < count(null) * 0.75, `${count(1)} vs ${count(null)}`);
+});
+
+test("the Psychopath kills in public at dawn, and is known to be evil", () => {
+  const { s, e, p } = minionDay("psychopath", "psychopath");
+  const psycho = p[3];
+
+  e.strat.psychopath = () => p[1];
+  s.r = () => 0;
+  e.psychopathKills();
+
+  assert.equal(p[1].alive, false);
+  assert.equal(p[1].death, "psychopath");
+  assert.match(s.publicLog.join("\n"), new RegExp(`${psycho.label} publicly chooses ${p[1].label}: they die\\.`));
+  assert.equal(psycho.claim, "psychopath");
+  assert.ok(s.outed.some((x) => x.id === psycho.id));
+  assert.ok(new SimpleStrategy().evidence(s, p[2], psycho).score >= 8);
+
+  // Once they've killed, every day.
+  s.day = 2;
+  s.r = () => 0.99;
+  e.strat.psychopath = () => p[2];
+  e.psychopathKills();
+  assert.equal(p[2].alive, false);
+
+  // Drunk or poisoned: nothing happens (but they're still outed).
+  const t = minionDay("psychopath-poisoned", "psychopath");
+
+  t.p[3].poisoned = true;
+  t.e.strat.psychopath = () => t.p[1];
+  t.s.r = () => 0;
+  t.e.psychopathKills();
+  assert.ok(t.p[1].alive);
+  assert.match(t.s.publicLog.at(-1), /But nothing happens\.$/);
+});
+
+test("an executed Psychopath plays roshambo against their nominator, winning ties", () => {
+  let survived = 0;
+  let died = 0;
+
+  for (let seed = 0; seed < 60; seed++) {
+    const { s, e, p } = minionDay(`roshambo-${seed}`, "psychopath");
+
+    voted(s, p[1], p[3]);
+    e.execute(p[3]);
+
+    const line = s.publicLog.find((x) => /Roshambo: /.test(x));
+    const [, mine, theirs] = line.match(/throws (\w+); .* throws (\w+)\./);
+    const wins = mine === theirs || { rock: "scissors", paper: "rock", scissors: "paper" }[mine] === theirs;
+
+    assert.equal(p[3].alive, wins, line);
+    assert.match(line, mine === theirs ? /A tie: the Psychopath wins ties\.$/ : wins ? /The Psychopath wins\.$/ : /The Psychopath loses\.$/);
+    survived += wins ? 1 : 0;
+    died += wins ? 0 : 1;
+  }
+
+  // (About 2 in 3 survive.)
+  assert.ok(survived > died && died > 0, `${survived} survived, ${died} died`);
+});
+
+test("roshambo against a Psychopath you nominated waits for your throw, then the day ends", () => {
+  const { s, e, p } = minionDay("roshambo-you", "psychopath");
+  const psycho = p[3];
+
+  s.block = { nomineeId: psycho.id, count: 3 };
+  voted(s, p[0], psycho);
+  e.endDay();
+
+  assert.equal(s.roshambo?.psychopathId, psycho.id);
+  assert.equal(s.phase, "day");
+  assert.throws(() => e.endDay(), /Throw first/);
+  assert.throws(() => e.roshambo("lizard"), /rock, paper or scissors/);
+
+  e.roshambo("rock");
+  assert.equal(s.roshambo, null);
+  assert.ok(s.publicLog.some((x) => /Roshambo: .* you throw rock\./.test(x)));
+  // (Night fell, and a new day began.)
+  assert.ok(s.day === 2 || s.winner, `day ${s.day}`);
+});
+
+test("whole games play out with the Goblin, Fearmonger and Psychopath, and each does its thing", () => {
+  const seen = { goblin: 0, fearmonger: 0, announce: 0, psychopath: 0, roshambo: 0 };
+
+  for (let g = 0; g < 80; g++) {
+    const { s } = playOut(outedSoFar2, 8 + (g % 8), `outed-2-${g}`);
+    const text = s.audit.map((x) => x.text).join("\n");
+
+    assert.ok([null, "good", "evil"].includes(s.winner));
+    seen.goblin += /I'm the Goblin!/.test(text) ? 1 : 0;
+    seen.fearmonger += s.audit.some((x) => x.type === "fearmonger") ? 1 : 0;
+    seen.announce += s.publicLog.some((x) => /the Fearmonger has chosen a new player/.test(x)) ? 1 : 0;
+    seen.psychopath += /publicly chooses/.test(s.publicLog.join("\n")) ? 1 : 0;
+    seen.roshambo += /Roshambo: /.test(text) ? 1 : 0;
+  }
+
+  for (const [k, n] of Object.entries(seen)) {
+    assert.ok(n > 0, `${k}: ${JSON.stringify(seen)}`);
+  }
 });
 
 test("whole games play out with the General, Heretic and Politician", () => {
