@@ -30,3 +30,13 @@ export const butler = {
     }
   },
 };
+
+// The Butler, as told by someone claiming it without its ability (see
+// storyteller.js madeUpChoice()): the master they "chose" tonight.
+export const info = {
+  choice(s, p, strat) {
+    const t = strat.butler(s, p);
+
+    return t ? butlerInfo(s, t) : null;
+  },
+};

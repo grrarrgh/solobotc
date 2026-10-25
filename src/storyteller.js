@@ -23,7 +23,10 @@ import {
 import { logNames } from "./log.js";
 import { stanceOn } from "./strategy.js";
 import { AMNESIAC_ABILITIES } from "./characters/townsfolk/amnesiac.js";
-import { FIRST_NIGHT as NIGHT_ONE_ORDER, OTHER_NIGHTS } from "./characters/nightorder.js";
+import { infoOf } from "./characters/info.js";
+import { PAIR_TEAM } from "./characters/pairinfo.js";
+import { grandchildText } from "./characters/townsfolk/grandmother.js";
+import { mathNote } from "./characters/townsfolk/mathematician.js";
 
 // Drunk: the Drunk themselves, anyone made drunk "from now on" (by a
 // Sweetheart's death or a Philosopher choosing their character), and anyone
@@ -253,12 +256,14 @@ export const killHelps = (x) => (x.alignment === "evil" ? "good" : "evil");
 
 // How a player registers to information abilities. (A drunk or poisoned
 // Spy has no ability, so registers as what they are.)
-const evil = (p) =>
+export const registersEvil = (p) =>
   p.role === "recluse"
     ? true
     : p.role === "spy" && !isDrunk(p) && !p.poisoned
       ? false
       : p.alignment === "evil";
+
+const evil = registersEvil;
 
 const FIRST_NIGHT = FIRST_NIGHT_INFO;
 const EACH_NIGHT = [
@@ -273,15 +278,8 @@ const EACH_NIGHT = [
 ];
 const LATER_NIGHTS = ["undertaker", "flowergirl", "towncrier", "oracle"];
 
-// The team each "one of these two players is X" role learns about.
-const PAIR_TEAM = {
-  washerwoman: "townsfolk",
-  librarian: "outsider",
-  investigator: "minion",
-};
-
 // Whether an information role wakes tonight.
-function actsTonight(role, night) {
+export function actsTonight(role, night) {
   if (FIRST_NIGHT.includes(role) || role === "pixie") {
     return night === 1;
   }
@@ -292,11 +290,6 @@ function actsTonight(role, night) {
 
   return LATER_NIGHTS.includes(role) && night > 1;
 }
-
-const fortuneText = (yes, ts) =>
-  `Fortune Teller: ${yes ? "YES" : "NO"} for ${bySeat(ts)
-    .map((x) => x.label)
-    .join(" and ")}.`;
 
 // What a Monk remembers about their own choice.
 export const monkInfo = (s, t, functioning = true) => ({
@@ -341,7 +334,7 @@ export const artistTruth = (t, q) =>
   q === "evil" ? evil(t) : q === "demon" ? isDemon(t) : team(t.role) === q;
 
 // In seat order (see bySeat()).
-const listLabels = (players) => {
+export const listLabels = (players) => {
   const ts = bySeat(players);
 
   return ts.length < 2
@@ -353,7 +346,7 @@ const listLabels = (players) => {
 };
 
 // "One of A and B is the X" (in seat order, so which is which doesn't show).
-const oneOf = (a, b, role) => {
+export const oneOf = (a, b, role) => {
   const [x, y] = bySeat([a, b]);
 
   return `One of ${x.label} and ${y.label} is ${name(role)}.`;
@@ -382,13 +375,10 @@ export function artistInfo(s, targets, q, mode) {
   };
 }
 
-const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
-
-// Possible Clockmaker answers: 1 up to half the circle.
-const clockRange = (s) => range(1, Math.max(1, Math.floor(s.players.length / 2)));
+export const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 
 // Nearest living neighbours on each side.
-function neigh(s, p) {
+export function neigh(s, p) {
   const a = s.players;
   const n = a.length;
   const i = a.indexOf(p);
@@ -408,136 +398,25 @@ function neigh(s, p) {
   return o;
 }
 
-// Count adjacent evil pairs around the circle.
-function chefCount(s) {
-  let n = 0;
-
-  s.players.forEach((x, i) => {
-    if (evil(x) && evil(s.players[(i + 1) % s.players.length])) {
-      n++;
-    }
-  });
-
-  return n;
-}
-
-const empathCount = (s, p) => neigh(s, p).filter(evil).length;
-
-const fortuneYes = (s, ts) =>
-  ts.some((x) => isDemon(x) || x.id === s.red || x.role === "recluse");
-
-const executed = (s) => byId(s, s.lastExecution);
-
-// Seats from the Demon to its nearest Minion, the shorter way round.
-function clockmakerCount(s) {
-  const n = s.players.length;
-  const d = s.players.findIndex(isDemon);
-  const steps = s.players
-    .map((x, i) => [x, Math.abs(i - d)])
-    .filter(([x], i) => isMinion(x) && i !== d)
-    .map(([, k]) => Math.min(k, n - k));
-
-  return d < 0 || !steps.length ? 0 : Math.min(...steps);
-}
-
 // Any of the options except the true number (0–2 by default), preferring
 // one just above or below it, so a lie isn't obviously wrong.
-function wrongNumber(s, n, options = [0, 1, 2]) {
+export function wrongNumber(s, n, options = [0, 1, 2]) {
   const wrong = options.filter((k) => k !== n);
   const near = wrong.filter((k) => Math.abs(k - n) === 1);
 
   return pick(near.length ? near : wrong, s.r);
 }
 
-const otherGood = (s, p) =>
-  nameable(s, p).filter((x) => x.alignment === "good");
+export const goodRoles = (s) => s.script.ids.filter((id) => alignment(id) === "good");
 
-const goodRoles = (s) => s.script.ids.filter((id) => alignment(id) === "good");
-
-const grandchildText = (g, role) =>
-  `Grandmother: your grandchild is ${g.label}, the ${name(role)}.`;
+export const evilRoles = (s) => s.script.ids.filter((id) => alignment(id) === "evil");
 
 // Players p's information can name: everyone but p, and never the human in
 // an evil player's (bluffed) information.
-const nameable = (s, p) =>
+export const nameable = (s, p) =>
   s.players.filter(
     (x) => x.id !== p.id && !(p.alignment === "evil" && x.human),
   );
-
-// ── More characters' information ────────────────────────────
-
-
-const evilRoles = (s) => s.script.ids.filter((id) => alignment(id) === "evil");
-
-const dreamText = (t, a, b) =>
-  `Dreamer: ${t.label} is the ${name(a)} or the ${name(b)}.`;
-
-// Players whose ability worked abnormally tonight because of another
-// character: anyone poisoned or made drunk whose ability did something
-// tonight (information tonight, waking in the night order: a Monk, Butler,
-// Spy, Poisoner, the Demon..., or a Soldier the Demon chose), and Townsfolk with
-// information tonight under the Vortox. (An approximation of the
-// Mathematician's count.) By their jinxes, a Drunk or Marionette whose
-// ability failed tonight counts too, and so does a Lunatic who "attacked" a
-// player the Demon didn't choose tonight. Each comes with why, for the log.
-function mathCounted(s, p) {
-  const vortox = vortoxActive(s);
-  const strayLunatic = (x) =>
-    x.role === "lunatic" &&
-    s.lunaticPickNight === s.night &&
-    !(s.demonChose?.night === s.night && s.demonChose.ids.includes(s.lunaticPick));
-
-  const failed = (x) => x.poisoned || isDrunk(x);
-  const order = s.night === 1 ? NIGHT_ONE_ORDER : OTHER_NIGHTS;
-  const usedTonight = (x) =>
-    actsTonight(ability(x), s.night) ||
-    order.some(([id]) => id === ability(x)) ||
-    (s.woke ?? []).includes(x.id) ||
-    (ability(x) === "soldier" &&
-      s.demonChose?.night === s.night &&
-      s.demonChose.ids.includes(x.id));
-
-  return s.players
-    .filter((x) => x !== p && (x.alive || x.vigor))
-    .map((x) =>
-      failed(x) && usedTonight(x)
-        ? { x, why: misinformedBy(s, x) }
-        : strayLunatic(x)
-          ? { x, why: "the Lunatic attacked a player the Demon didn't choose" }
-          : vortox && team(x.role) === "townsfolk" && actsTonight(ability(x), s.night)
-            ? { x, why: "the Vortox" }
-            : null,
-    )
-    .filter(Boolean);
-}
-
-const mathCount = (s, p) => mathCounted(s, p).length;
-
-// The true count, and who it counts, for the log (see engine remember()).
-function mathNote(s, p) {
-  const counted = mathCounted(s, p);
-
-  return `true count ${counted.length}${
-    counted.length
-      ? `: ${counted.map(({ x, why }) => `${x.label} (${name(x.role)}), ${why}`).join("; ")}`
-      : ""
-  }`;
-}
-
-// What the Flowergirl and Town Crier learn about the day just gone.
-const demonVoted = (s) => s.dayVoters.some((id) => isDemon(byId(s, id)));
-const minionNominated = (s) =>
-  s.dayNominators.some((id) => byId(s, id) && isMinion(byId(s, id)));
-
-const deadCount = (s) => s.players.filter((x) => !x.alive).length;
-const deadEvil = (s) => s.players.filter((x) => !x.alive && evil(x)).length;
-
-const flowerText = (yes) =>
-  `Flowergirl: a Demon ${yes ? "voted" : "did not vote"} today.`;
-const crierText = (yes) =>
-  `Town Crier: a Minion ${yes ? "nominated" : "did not nominate"} today.`;
-const oracleText = (n) =>
-  `Oracle: ${n} dead player${n === 1 ? " is" : "s are"} evil.`;
 
 // How a player's information comes out: "lie" (false, and as helpful to the
 // evil team as the evil team's own bluffs) for the Drunk (or anyone made
@@ -1021,13 +900,6 @@ export const gossipInfo = (s, t, q) => ({
   functioning: true,
 });
 
-const nobleText = (ts) => `Noble: one of ${listLabels(ts)} is evil.`;
-
-const idiotText = (t, isEvil) =>
-  `Village Idiot: ${t.label} is ${isEvil ? "evil" : "good"}.`;
-
-const priestessText = (t) => `High Priestess: talk to ${t.label}.`;
-
 // The players p's `role` information named on earlier nights, as far as
 // they've learned or said it: their own information, or what they made up
 // (a cover story, madness, a mad Pixie, a hiding Mutant or Damsel). So a
@@ -1041,345 +913,37 @@ export function shownBefore(s, p, role) {
   );
 }
 
-// Whether the High Priestess would do well to talk to x: an evil player
-// (whose bluff may not hold up), or a good player with information: true
-// (an Oracle's number counts, though it names nobody), or wrong (drunk or
-// poisoned, to be set right).
-function worthTalking(s, x) {
-  if (x.alignment === "evil") {
-    return true;
-  }
-
-  return x.memories.some(
-    (m) =>
-      m.functioning === false ||
-      (m.functioning && !/^No information\.?$/.test(m.text) && m.role !== "philosopher"),
-  );
-}
-
-// Who the Storyteller believes the High Priestess should talk to most: a
-// living NPC worth talking to (see worthTalking()), unless the Storyteller
-// is helping evil (see lean()), when it's one who isn't. Misinformed
-// (`truth` false), a good player who isn't worth it; an evil bluffer names
-// a teammate, who backs them up.
-function priestessPick(s, p, truth = true) {
-  // (Never one they were shown before, while there's anyone else.)
-  const living = s.players.filter((x) => x.alive && !x.human && x !== p);
-  const seen = shownBefore(s, p, "highpriestess");
-  const unseen = living.filter((x) => !seen.has(x.id));
-  const pool = unseen.length ? unseen : living;
-  const helps = (x) => (worthTalking(s, x) ? "good" : "evil");
-
-  if (!truth) {
-    const mates = pool.filter((x) => x.alignment === "evil");
-    const dull = pool.filter((x) => helps(x) === "evil");
-
-    return pick(p.alignment === "evil" && mates.length ? mates : dull.length ? dull : pool, s.r);
-  }
-
-  const side = lean(s) ?? "good";
-  const better = pool.filter((x) => helps(x) === side);
-
-  // (Only noted when it's what they'll learn: a misinformed High Priestess
-  // learns something else; see nightInfo().)
-  if (
-    lean(s) &&
-    works(p) &&
-    !(team(p.role) === "townsfolk" && vortoxActive(s)) &&
-    better.length &&
-    better.length < pool.length
-  ) {
-    leanNote(
-      s,
-      `who ${whose(p)} High Priestess should talk to: one of ${bySeat(better)
-        .map((x) => x.label)
-        .join(", ")}.`,
-    );
-  }
-
-  return pick(better.length ? better : pool, s.r);
-}
-
-const balloonText = (t) => `Balloonist: shown ${t.label}.`;
-
-// The Balloonist: a player of a different character type from the one shown
-// last night (any type on Night 1). A working Balloonist sees each type in
-// play once, in random order (p.balloonCycle, kept in secretInfo()), then
-// starts again with another random order.
-function balloonTrue(s, p) {
-  const named = nameable(s, p);
-  const inPlay = [...new Set(named.map((x) => team(x.role)))].filter(
-    (k) => k !== p.balloonType,
-  );
-  const left = inPlay.filter((k) => !(p.balloonCycle ?? []).includes(k));
-  const type = pick(left.length ? left : inPlay, s.r);
-
-  return pick(
-    named.filter((x) => team(x.role) === type),
-    s.r,
-  );
-}
-
 // The Amnesiac's secret ability (see AMNESIAC_ABILITIES), given the first
 // time it's needed. (Also for a Drunk shown the Amnesiac, and anyone
 // bluffing it.)
 export const amnesiacKey = (s, p) =>
   (p.amnesiac ??= pick(Object.keys(AMNESIAC_ABILITIES), s.r));
 
-// The Amnesiac's information, said without saying what it means:
-// "Amnesiac: YES.", "Amnesiac: Player 5.", "Amnesiac: Player 3 and Player 7.".
-const amnesiacYes = (yes, ts) => ({
-  targets: ts.map((x) => x.id),
-  text: `Amnesiac: ${yes ? "YES" : "NO"}.`,
-});
-const amnesiacPlayers = (ts) =>
-  ts.length
-    ? { targets: ts.map((x) => x.id), text: `Amnesiac: ${listLabels(ts)}.` }
-    : { targets: [], text: "No information." };
-const amnesiacNumber = (n, ts = []) => ({
-  targets: ts.map((x) => x.id),
-  text: `Amnesiac number: ${n}.`,
-});
-// Whether a player registers as the Demon (as the Recluse might).
-const demonish = (x) => isDemon(x) || x.role === "recluse";
-const pixieText = (role) => `Pixie: the ${name(role)} is in play.`;
+// ── Each character's information ────────────────────────────
+//
+// Each character's own module has its information (see infoOf() in
+// characters/index.js): correct information (`truth`), deliberately false
+// information that helps the evil team (`lie`), and noise (`random`).
 
-// The Townsfolk a Pixie can learn: those in play, or (`notInPlay`) those
-// that aren't. Never the Pixie, nor, for an evil Pixie bluffer, one a
-// teammate claims: they'd claim it too once "mad" about it, and two evil
-// players claiming one character gives them away.
-const pixieOptions = (s, p, notInPlay = false) => {
-  const inPlay = new Set(
-    s.players.filter((x) => x !== p).map((x) => x.role),
-  );
-  const teamClaims = new Set(
-    p.alignment === "evil"
-      ? s.players.filter((x) => x !== p && x.alignment === "evil").map((x) => x.claim)
-      : [],
-  );
-
-  return s.script.ids.filter(
-    (id) =>
-      team(id) === "townsfolk" &&
-      id !== "pixie" &&
-      !teamClaims.has(id) &&
-      inPlay.has(id) !== notInPlay,
-  );
-};
+const noInfo = () => ({ targets: [], text: "No information." });
 
 // Correct information for `role`, seen from player p's seat.
 function trueInfo(s, p, role, strat) {
-  if (role === "noble") {
-    const named = nameable(s, p);
-    const bad = pick(named.filter(evil), s.r);
-    const good = sample(
-      named.filter((x) => !evil(x)),
-      2,
-      s.r,
-    );
+  return infoOf(role)?.truth?.(s, p, strat) ?? noInfo();
+}
 
-    if (!bad || good.length < 2) {
-      return { targets: [], text: "No information." };
-    }
+// Deliberately false information for `role`, as an evil bluffer tells it.
+// A Drunk or poisoned good player hears the same kind of lie, so it helps
+// the evil team: it frames the scapegoat and vouches for evil players.
+// (`helpEvil`: a good player's lie that must help evil, the Poisoner's Night 1
+// pick, where a misinformed Noble's 3 would otherwise be random.)
+function falseInfo(s, p, role, strat, helpEvil = false) {
+  return infoOf(role)?.lie?.(s, p, strat, helpEvil) ?? noInfo();
+}
 
-    const ts = shuffle([bad, ...good], s.r);
-
-    return { targets: ts.map((x) => x.id), text: nobleText(ts) };
-  }
-
-  // (The Pixie remembers which character, to be mad about.)
-  if (role === "pixie") {
-    const id = pick(pixieOptions(s, p), s.r);
-
-    p.pixieRole = id;
-
-    return id
-      ? { targets: [], text: pixieText(id) }
-      : { targets: [], text: "No information." };
-  }
-
-  const wanted = PAIR_TEAM[role];
-
-  if (wanted) {
-    const real = pick(
-      nameable(s, p).filter(
-        (x) => team(x.role) === wanted || (wanted === "minion" && isMinion(x)),
-      ),
-      s.r,
-    );
-
-    if (!real) {
-      return { targets: [], text: "No matching character is in play." };
-    }
-
-    // The other player: for an Investigator, an evil one helps good (and a
-    // good one helps evil); for a Washerwoman or Librarian, the reverse.
-    const fake = pick(
-      steer(
-        s,
-        nameable(s, p).filter((x) => x.id !== real.id),
-        (x) =>
-          role === "investigator" ? killHelps(x) : x.alignment,
-        `the other player ${whose(p)} ${name(role)} sees`,
-      ),
-      s.r,
-    );
-
-    return {
-      targets: [real.id, fake.id],
-      text: oneOf(real, fake, real.role),
-    };
-  }
-
-  if (role === "chef") {
-    return { targets: [], text: `Chef number: ${chefCount(s)}.` };
-  }
-
-  if (role === "empath") {
-    return {
-      targets: neigh(s, p).map((x) => x.id),
-      text: `Empath number: ${empathCount(s, p)}.`,
-    };
-  }
-
-  if (role === "fortuneteller") {
-    const ts = strat.ft(s, p);
-
-    return {
-      targets: ts.map((x) => x.id),
-      text: fortuneText(fortuneYes(s, ts), ts),
-    };
-  }
-
-  if (role === "undertaker") {
-    const x = executed(s);
-
-    return {
-      targets: [],
-      text: x ? `Executed player was ${name(x.role)}.` : "Nobody was executed.",
-    };
-  }
-
-  if (role === "clockmaker") {
-    return { targets: [], text: `Clockmaker number: ${clockmakerCount(s)}.` };
-  }
-
-  if (role === "grandmother") {
-    const g = pick(otherGood(s, p), s.r);
-
-    return g
-      ? { targets: [g.id], text: grandchildText(g, g.role) }
-      : { targets: [], text: "No information." };
-  }
-
-  if (role === "dreamer") {
-    const t = strat.dream(s, p);
-
-    if (!t) {
-      return { targets: [], text: "No information." };
-    }
-
-    // Either twin: the Evil Twin and the good twin's character, so the
-    // twins look the same.
-    const twins = s.twins && [s.twins.evilId, s.twins.goodId].includes(t.id);
-    const evilTwin = twins && byId(s, s.twins.evilId);
-    const goodTwin = twins && byId(s, s.twins.goodId);
-
-    if (evilTwin?.role === "eviltwin" && goodTwin) {
-      return {
-        targets: [t.id],
-        text: dreamText(t, ...shuffle(["eviltwin", goodTwin.role], s.r)),
-      };
-    }
-
-    // One correct character, and one of the opposite alignment.
-    const other = pick(
-      (alignment(t.role) === "good" ? evilRoles(s) : goodRoles(s)).filter(
-        (id) => id !== t.role,
-      ),
-      s.r,
-    );
-
-    return {
-      targets: [t.id],
-      text: dreamText(t, ...shuffle([t.role, other], s.r)),
-    };
-  }
-
-  if (role === "mathematician") {
-    return {
-      targets: [],
-      text: `Mathematician number: ${mathCount(s, p)}.`,
-    };
-  }
-
-  if (role === "balloonist") {
-    const t = balloonTrue(s, p);
-
-    return t
-      ? { targets: [t.id], text: balloonText(t) }
-      : { targets: [], text: "No information." };
-  }
-
-  if (role === "amnesiac") {
-    const key = amnesiacKey(s, p);
-    const named = nameable(s, p);
-
-    if (key === "neighbours") {
-      return amnesiacYes(neigh(s, p).some(evil), neigh(s, p));
-    }
-
-    if (key === "demonneighbour") {
-      return amnesiacYes(neigh(s, p).some(demonish), neigh(s, p));
-    }
-
-    if (key === "evilneighbours") {
-      return amnesiacNumber(empathCount(s, p), neigh(s, p));
-    }
-
-    if (key === "evilpairs") {
-      return amnesiacNumber(chefCount(s));
-    }
-
-    if (key === "goodplayer") {
-      return amnesiacPlayers([pick(named.filter((x) => !evil(x)), s.r)].filter(Boolean));
-    }
-
-    const bad = pick(named.filter(evil), s.r);
-    const good = pick(named.filter((x) => !evil(x)), s.r);
-
-    return amnesiacPlayers(bad && good ? [bad, good] : []);
-  }
-
-  if (role === "villageidiot") {
-    const t = strat.villageIdiot(s, p);
-
-    return t
-      ? { targets: [t.id], text: idiotText(t, evil(t)) }
-      : { targets: [], text: "No information." };
-  }
-
-  if (role === "highpriestess") {
-    const t = priestessPick(s, p);
-
-    return t
-      ? { targets: [t.id], text: priestessText(t) }
-      : { targets: [], text: "No information." };
-  }
-
-  if (role === "flowergirl") {
-    return { targets: [], text: flowerText(demonVoted(s)) };
-  }
-
-  if (role === "towncrier") {
-    return { targets: [], text: crierText(minionNominated(s)) };
-  }
-
-  if (role === "oracle") {
-    return { targets: [], text: oracleText(deadEvil(s)) };
-  }
-
-  return { targets: [], text: "No information." };
+// Random information (e.g. a mad player's made-up information).
+function unreliableInfo(s, p, role, targets) {
+  return infoOf(role)?.random?.(s, p, targets) ?? { targets, text: "No information." };
 }
 
 const INFO_ROLES = [...FIRST_NIGHT_INFO, ...ONGOING_INFO];
@@ -1434,7 +998,7 @@ export function scapegoat(s) {
 
 // The good player false information frames: the evil team's scapegoat
 // (never p themselves).
-function framed(s, p) {
+export function framed(s, p) {
   const goat = scapegoat(s);
 
   return goat && goat !== p ? goat : null;
@@ -1443,613 +1007,10 @@ function framed(s, p) {
 // Whether x is someone p's false information covers for: an evil
 // bluffer's teammates (by alignment: they know the Spy is one of them), or
 // for a misinformed good player, anyone registering as evil.
-const covered = (p, x) => (p.alignment === "evil" ? x.alignment === "evil" : evil(x));
+export const covered = (p, x) => (p.alignment === "evil" ? x.alignment === "evil" : evil(x));
 
 // p's living evil neighbours, whom false information covers for.
-const evilNear = (s, p) => neigh(s, p).filter((x) => covered(p, x));
-
-// A false Noble: 3 players with no evil among them (the evil team's
-// scapegoat first), or failing that 2 evil. Never the Demon (so with too
-// few players to name, the 3 may happen to hold just 1 evil), unless
-// there's nobody else to name (Legion, every one of them a Demon).
-function falseNoble(s, p) {
-  const named = nameable(s, p).filter((x) => !isDemon(x));
-  const good = named.filter((x) => !covered(p, x));
-  const goat = framed(s, p);
-  const three = good.includes(goat)
-    ? [goat, ...sample(good.filter((x) => x !== goat), 2, s.r)]
-    : sample(good, 3, s.r);
-
-  if (three.length === 3) {
-    return shuffle(three, s.r);
-  }
-
-  const bad = sample(named.filter((x) => covered(p, x)), 2, s.r);
-  const ts = [...bad, ...sample(good, 3 - bad.length, s.r)];
-
-  // (Still short, as with Legion, where every evil player is a Demon:
-  // anyone else they can name.)
-  return shuffle(
-    [
-      ...ts,
-      ...sample(
-        nameable(s, p).filter((x) => !ts.includes(x)),
-        3 - ts.length,
-        s.r,
-      ),
-    ],
-    s.r,
-  );
-}
-
-// Deliberately false information for `role`, as an evil bluffer tells it.
-// A Drunk or poisoned good player hears the same kind of lie, so it helps
-// the evil team: it frames the scapegoat and vouches for evil players.
-// (`helpEvil`: a good player's lie that must help evil, the Poisoner's Night 1
-// pick, where a misinformed Noble's 3 would otherwise be random.)
-function falseInfo(s, p, role, strat, helpEvil = false) {
-  const wanted = PAIR_TEAM[role];
-
-  // A misinformed Noble (or a Marionette) sees any 3 players; an evil Noble
-  // bluffer (or a Marionette the Demon has told) frames 3 good ones.
-  if (role === "noble") {
-    const misled =
-      !helpEvil &&
-      (p.alignment === "good" || (p.role === "marionette" && !p.toldEvil));
-    const ts = misled ? sample(nameable(s, p), 3, s.r) : falseNoble(s, p);
-
-    return ts.length === 3
-      ? { targets: ts.map((x) => x.id), text: nobleText(ts) }
-      : { targets: [], text: "No information." };
-  }
-
-  // A misinformed Pixie learns a Townsfolk that isn't in play (and is mad
-  // about it, to no effect).
-  if (role === "pixie") {
-    const id =
-      pick(pixieOptions(s, p, true), s.r) ?? pick(pixieOptions(s, p), s.r);
-
-    p.pixieRole = id;
-
-    return id
-      ? { targets: [], text: pixieText(id) }
-      : { targets: [], text: "No information." };
-  }
-
-  if (wanted) {
-    const shown = pick(
-      s.script.ids.filter((id) => team(id) === wanted),
-      s.r,
-    );
-
-    // Neither named player holds the character; frame good players if
-    // possible. An evil Investigator names the team's scapegoat as one of
-    // the two "Minions".
-    const others = nameable(s, p).filter((x) => x.role !== shown);
-    const good = others.filter((x) => x.alignment === "good");
-    const pool = good.length >= 2 ? good : others;
-    const goat = role === "investigator" ? framed(s, p) : null;
-    const mate =
-      goat &&
-      pool.includes(goat) &&
-      pick(
-        pool.filter((x) => x !== goat),
-        s.r,
-      );
-
-    // A Washerwoman's "Townsfolk" pair gives an evil player cover (and, when
-    // it must help evil, a Librarian's "Outsider" pair).
-    const shield =
-      (role === "washerwoman" || (helpEvil && role === "librarian")) &&
-      pick(
-        others.filter((x) => x.alignment === "evil"),
-        s.r,
-      );
-    const cover =
-      shield &&
-      pick(
-        good.filter((x) => x !== shield),
-        s.r,
-      );
-    const pair = mate
-      ? shuffle([goat, mate], s.r)
-      : cover
-        ? shuffle([shield, cover], s.r)
-        : sample(pool, 2, s.r);
-    // (Vouching for the shield as the Townsfolk they claim, so their story
-    // holds up, rather than a character neither claims.)
-    // (Or, if the shield claims something else, the other player's claim:
-    // the shield is then just the other one of the pair. With a random pair
-    // holding a teammate, as with Legion, the same.)
-    const vouchFor = cover ? [shield, cover] : pair.some((x) => x.alignment === "evil") ? pair : [];
-    const said = vouchFor
-      .map((x) => claimHeard(x, p))
-      .find((x) => x && team(x) === PAIR_TEAM[role]);
-    const vouched = said && p.alignment === "evil" ? said : shown;
-
-    return vouched && pair.length === 2
-      ? {
-          targets: pair.map((x) => x.id),
-          text: oneOf(pair[0], pair[1], vouched),
-        }
-      : shown && pair.length === 2
-      ? {
-          targets: pair.map((x) => x.id),
-          text: oneOf(pair[0], pair[1], shown),
-        }
-      : { targets: [], text: "No matching character is in play." };
-  }
-
-  // Fewer evil pairs than there are, where possible.
-  if (role === "chef") {
-    const n = chefCount(s);
-
-    return {
-      targets: [],
-      text: `Chef number: ${n > 0 ? n - 1 : n + 1}.`,
-    };
-  }
-
-  if (role === "empath") {
-    // Stay consistent: repeat last night's (wrong) number while the same two
-    // neighbours sit either side; once one dies, report a different number.
-    // With the evil team's scapegoat as a neighbour, the number goes up.
-    const near = neigh(s, p);
-    const key = near.map((x) => x.id).join(",");
-    const truth = empathCount(s, p);
-    const last = p.empathBluff;
-    const all = [0, 1, 2].filter((k) => k !== truth && k !== last?.n);
-    const close = all.filter((k) => Math.abs(k - truth) === 1);
-    const options = close.length ? close : all;
-    // With the scapegoat as a neighbour the number goes up; otherwise, with an
-    // evil neighbour, it goes down.
-    const framing = near.includes(framed(s, p))
-      ? options.filter((k) => k > truth)
-      : evilNear(s, p).length
-        ? options.filter((k) => k < truth)
-        : options;
-
-    // (An evil bluffer next to a teammate says 0: anything more points at
-    // them.)
-    const n =
-      p.alignment === "evil" && evilNear(s, p).length
-        ? 0
-        : last && last.key === key && last.n !== truth
-          ? last.n
-          : (pick(framing.length ? framing : options, s.r) ??
-            wrongNumber(s, truth));
-
-    p.empathBluff = { key, n };
-
-    return {
-      targets: near.map((x) => x.id),
-      text: `Empath number: ${n}.`,
-    };
-  }
-
-  if (role === "fortuneteller") {
-    // An evil Fortune Teller "gets a YES" on the scapegoat and another good
-    // player (one that really reads NO, so it's still a lie). A misinformed
-    // good one keeps their own picks: a Demon among them reads NO.
-    const goat = p.alignment === "evil" && framed(s, p);
-    const mate =
-      goat &&
-      pick(
-        s.players.filter(
-          (x) =>
-            x.alive &&
-            !x.human &&
-            x.alignment === "good" &&
-            x !== p &&
-            x !== goat &&
-            !fortuneYes(s, [x]),
-        ),
-        s.r,
-      );
-
-    if (mate && !fortuneYes(s, [goat])) {
-      const ts = shuffle([goat, mate], s.r);
-
-      return { targets: ts.map((x) => x.id), text: fortuneText(true, ts) };
-    }
-
-    const ts = strat.ft(s, p);
-    // (An evil bluffer never says YES with a teammate among them.)
-    const yes =
-      p.alignment === "evil"
-        ? !ts.some((x) => x !== p && x.alignment === "evil")
-        : !fortuneYes(s, ts);
-
-    return {
-      targets: ts.map((x) => x.id),
-      text: fortuneText(yes, ts),
-    };
-  }
-
-  if (role === "undertaker") {
-    const x = executed(s);
-
-    // Everyone saw whether there was an execution, so only the role is a lie.
-    if (!x) {
-      return { targets: [], text: "Nobody was executed." };
-    }
-
-    // A good player "was" evil (the town thinks it got one); an evil player
-    // "was" good (the town thinks it made a mistake).
-    const shown =
-      pick(
-        s.script.ids.filter(
-          (id) => id !== x.role && alignment(id) !== alignment(x.role),
-        ),
-        s.r,
-      ) ??
-      pick(
-        s.script.ids.filter((id) => id !== x.role),
-        s.r,
-      );
-
-    return { targets: [], text: `Executed player was ${name(shown)}.` };
-  }
-
-  if (role === "clockmaker") {
-    const n = wrongNumber(s, clockmakerCount(s), clockRange(s));
-
-    return { targets: [], text: `Clockmaker number: ${n ?? 0}.` };
-  }
-
-  if (role === "grandmother") {
-    // Vouch for an evil player (or anyone else) with a good character they
-    // don't have: the one they claim, so it backs them up instead of
-    // contradicting them.
-    const g =
-      pick(
-        nameable(s, p).filter((x) => x.alignment === "evil"),
-        s.r,
-      ) ?? pick(nameable(s, p), s.r);
-    // (As the bluffer heard it: a claim they didn't hear could differ.)
-    const heardAs = claimHeard(g, p) ?? g.claim;
-    const shown =
-      alignment(heardAs) === "good" && heardAs !== g.role
-        ? heardAs
-        : pick(
-            goodRoles(s).filter((id) => id !== g.role),
-            s.r,
-          );
-
-    return { targets: [g.id], text: grandchildText(g, shown) };
-  }
-
-  if (role === "dreamer") {
-    const t = strat.dream(s, p);
-
-    if (!t) {
-      return { targets: [], text: "No information." };
-    }
-
-    // Neither character is right (unless the only evil character on the
-    // script is theirs, as with Legion).
-    const good = pick(
-      goodRoles(s).filter((id) => id !== t.role),
-      s.r,
-    );
-    const bad =
-      pick(
-        evilRoles(s).filter((id) => id !== t.role),
-        s.r,
-      ) ?? pick(evilRoles(s), s.r);
-
-    return {
-      targets: [t.id],
-      text: dreamText(t, ...shuffle([good, bad], s.r)),
-    };
-  }
-
-  // A player of the same type as last night's (any player on Night 1). An
-  // evil bluffer goes by what players claim instead, so their story holds
-  // up: a player whose claimed type differs from last night's.
-  if (role === "balloonist" && p.alignment === "evil") {
-    const named = nameable(s, p);
-    const claimed = (x) => team(claimHeard(x, p)) ?? null;
-    const differs = named.filter(
-      (x) => claimed(x) && claimed(x) !== p.balloonClaimed,
-    );
-    const unknown = named.filter((x) => !claimed(x));
-    const t = pick(differs.length ? differs : unknown.length ? unknown : named, s.r);
-
-    p.balloonClaimed = t ? claimed(t) : null;
-
-    return t
-      ? { targets: [t.id], text: balloonText(t) }
-      : { targets: [], text: "No information." };
-  }
-
-  if (role === "balloonist") {
-    const named = nameable(s, p);
-    const same = named.filter(
-      (x) => p.balloonType && team(x.role) === p.balloonType,
-    );
-    const t = pick(same.length ? same : named, s.r);
-
-    return t
-      ? { targets: [t.id], text: balloonText(t) }
-      : { targets: [], text: "No information." };
-  }
-
-  // The wrong answer: vouching for an evil player, or framing good ones (the
-  // scapegoat first).
-  if (role === "amnesiac") {
-    const key = amnesiacKey(s, p);
-    const named = nameable(s, p);
-    const good = named.filter((x) => !covered(p, x) && !isDemon(x));
-    const mates = p.alignment === "evil" && evilNear(s, p).length > 0;
-
-    // (An evil bluffer next to a teammate says NO, or 0.)
-    if (key === "neighbours") {
-      return amnesiacYes(!mates && !neigh(s, p).some(evil), neigh(s, p));
-    }
-
-    if (key === "demonneighbour") {
-      return amnesiacYes(!mates && !neigh(s, p).some(demonish), neigh(s, p));
-    }
-
-    if (key === "evilneighbours") {
-      return amnesiacNumber(mates ? 0 : wrongNumber(s, empathCount(s, p)), neigh(s, p));
-    }
-
-    if (key === "evilpairs") {
-      const n = chefCount(s);
-
-      return amnesiacNumber(n > 0 ? n - 1 : n + 1);
-    }
-
-    if (key === "goodplayer") {
-      const t =
-        pick(named.filter((x) => x.alignment === "evil"), s.r) ??
-        pick(named, s.r);
-
-      return amnesiacPlayers(t ? [t] : []);
-    }
-
-    const goat = framed(s, p);
-    const pair = good.includes(goat)
-      ? [goat, pick(good.filter((x) => x !== goat), s.r)]
-      : sample(good, 2, s.r);
-
-    return amnesiacPlayers(pair.every(Boolean) && pair.length === 2 ? bySeat(pair) : []);
-  }
-
-  if (role === "mathematician") {
-    const n = mathCount(s, p);
-    const said = wrongNumber(s, n, range(0, Math.max(3, n + 2)));
-
-    return { targets: [], text: `Mathematician number: ${said}.` };
-  }
-
-  // On a day with no votes (or no nominations), "a Demon voted" (or "a Minion
-  // nominated") would be obviously false, so they tell the truth.
-  if (role === "flowergirl") {
-    return {
-      targets: [],
-      text: flowerText(s.dayVoters.length ? !demonVoted(s) : false),
-    };
-  }
-
-  if (role === "towncrier") {
-    return {
-      targets: [],
-      text: crierText(s.dayNominators.length ? !minionNominated(s) : false),
-    };
-  }
-
-  // The wrong alignment: an evil bluffer "learns" the scapegoat is evil, or
-  // a teammate good.
-  if (role === "villageidiot") {
-    const t = strat.villageIdiot(s, p);
-
-    return t
-      ? {
-          targets: [t.id],
-          text: idiotText(t, p.alignment === "evil" ? !covered(p, t) : !evil(t)),
-        }
-      : { targets: [], text: "No information." };
-  }
-
-  if (role === "highpriestess") {
-    const t = priestessPick(s, p, false);
-
-    return t
-      ? { targets: [t.id], text: priestessText(t) }
-      : { targets: [], text: "No information." };
-  }
-
-  // Never more evil dead than there are dead, and never fewer than they
-  // said before (the dead don't come back), so the lie can't be caught out.
-  if (role === "oracle") {
-    const n = deadEvil(s);
-    const least = Math.min(p.oracleSaid ?? 0, deadCount(s));
-    const said =
-      wrongNumber(s, n, range(least, deadCount(s))) ?? Math.max(n, least);
-
-    p.oracleSaid = said;
-
-    return { targets: [], text: oracleText(said) };
-  }
-
-  return { targets: [], text: "No information." };
-}
-
-// Random information (e.g. a mad player's made-up information).
-function unreliableInfo(s, p, role, targets) {
-  if (role === "noble") {
-    const ts = sample(
-      s.players.filter((x) => x.id !== p.id),
-      3,
-      s.r,
-    );
-
-    return { targets: ts.map((x) => x.id), text: nobleText(ts) };
-  }
-
-  // (A Pixie bluffer goes mad about it, as a real one would: see
-  // characters/townsfolk/pixie.js.)
-  if (role === "pixie") {
-    const id = pick(
-      s.script.ids.filter((x) => team(x) === "townsfolk" && x !== "pixie"),
-      s.r,
-    );
-
-    p.pixieRole = id;
-
-    return { targets: [], text: id ? pixieText(id) : "No information." };
-  }
-
-  if (role === "clockmaker") {
-    return {
-      targets: [],
-      text: `Clockmaker number: ${pick(clockRange(s), s.r)}.`,
-    };
-  }
-
-  if (role === "grandmother") {
-    const g = pick(
-      s.players.filter((x) => x.id !== p.id),
-      s.r,
-    );
-
-    return {
-      targets: [g.id],
-      text: grandchildText(g, pick(goodRoles(s), s.r)),
-    };
-  }
-
-  if (PAIR_TEAM[role]) {
-    const pair = sample(
-      s.players.filter((x) => x.id !== p.id),
-      2,
-      s.r,
-    );
-    const possible = s.script.ids.filter((id) => team(id) === PAIR_TEAM[role]);
-    const shown = pick(possible, s.r);
-
-    return {
-      targets: pair.map((x) => x.id),
-      text:
-        shown && pair.length === 2
-          ? oneOf(pair[0], pair[1], shown)
-          : "No matching character is in play.",
-    };
-  }
-
-  if (role === "chef") {
-    return {
-      targets: [],
-      text: `Chef number: ${Math.floor(s.r() * 3)}.`,
-    };
-  }
-
-  if (role === "empath") {
-    return {
-      targets,
-      text: `Empath number: ${Math.floor(s.r() * 3)}.`,
-    };
-  }
-
-  if (role === "fortuneteller") {
-    const selected = targets
-      .map((id) => byId(s, id))
-      .filter(Boolean);
-
-    return {
-      targets,
-      text: fortuneText(s.r() < 0.5, selected),
-    };
-  }
-
-  if (role === "undertaker") {
-    const shown = pick(s.script.ids, s.r);
-
-    return {
-      targets: [],
-      text: `Executed player was ${name(shown)}.`,
-    };
-  }
-
-  if (role === "dreamer") {
-    const t = byId(s, targets[0]);
-    const pair = [pick(goodRoles(s), s.r), pick(evilRoles(s), s.r)];
-
-    return t
-      ? { targets, text: dreamText(t, ...shuffle(pair, s.r)) }
-      : { targets: [], text: "No information." };
-  }
-
-  if (role === "mathematician") {
-    return {
-      targets: [],
-      text: `Mathematician number: ${pick(range(0, 3), s.r)}.`,
-    };
-  }
-
-  if (role === "balloonist") {
-    const t = pick(nameable(s, p), s.r);
-
-    return t
-      ? { targets: [t.id], text: balloonText(t) }
-      : { targets: [], text: "No information." };
-  }
-
-  if (role === "amnesiac") {
-    const key = amnesiacKey(s, p);
-    const others = s.players.filter((x) => x.id !== p.id);
-
-    const shape = AMNESIAC_ABILITIES[key].shape;
-
-    return shape === "yesno"
-      ? amnesiacYes(s.r() < 0.5, neigh(s, p))
-      : shape === "number"
-        ? amnesiacNumber(Math.floor(s.r() * 3), key === "evilneighbours" ? neigh(s, p) : [])
-        : amnesiacPlayers(sample(others, shape === "player" ? 1 : 2, s.r));
-  }
-
-  if (role === "villageidiot") {
-    const t = byId(s, targets[0]);
-
-    return t
-      ? { targets, text: idiotText(t, s.r() < 0.5) }
-      : { targets: [], text: "No information." };
-  }
-
-  if (role === "highpriestess") {
-    const living = s.players.filter((x) => x.alive && !x.human && x.id !== p.id);
-    const seen = shownBefore(s, p, "highpriestess");
-    const unseen = living.filter((x) => !seen.has(x.id));
-    const t = pick(unseen.length ? unseen : living, s.r);
-
-    return t
-      ? { targets: [t.id], text: priestessText(t) }
-      : { targets: [], text: "No information." };
-  }
-
-  if (role === "flowergirl") {
-    return { targets: [], text: flowerText(s.r() < 0.5) };
-  }
-
-  if (role === "towncrier") {
-    return { targets: [], text: crierText(s.r() < 0.5) };
-  }
-
-  if (role === "oracle") {
-    return {
-      targets: [],
-      text: oracleText(pick(range(0, deadCount(s)), s.r)),
-    };
-  }
-
-  return {
-    targets,
-    text: "No information.",
-  };
-}
+export const evilNear = (s, p) => neigh(s, p).filter((x) => covered(p, x));
 
 export function nightInfo(s, p, strat) {
   const role = ability(p);
@@ -2128,39 +1089,10 @@ function secretInfo(s, p, info) {
     : info;
 }
 
-// An evil player bluffing the Dreamer: the player they dream is the
-// character they claim, or an evil character not in play (so it doesn't give
-// away the evil team's characters) and not claimed, so their story holds up
-// against the town's claims. The same player dreamed again gets the same pair, while their
-// claim stands.
-function dreamerBluff(s, p, strat) {
-  const t = strat.dream(s, p);
-
-  if (!t) {
-    return { targets: [], text: "No information." };
-  }
-
-  const claimed = new Set(s.players.map((x) => x.claim));
-  const said = (p.dreamBluffs ??= {})[t.id];
-  const good = goodRoles(s).includes(t.claim)
-    ? t.claim
-    : pick(goodRoles(s).filter((id) => !claimed.has(id)), s.r) ?? pick(goodRoles(s), s.r);
-  const inPlay = new Set(s.players.map((x) => x.role));
-  const evils = evilRoles(s).filter((id) => !inPlay.has(id));
-  // (With every evil character in play, as with Legion, one that isn't
-  // theirs; failing that, any.)
-  const bad =
-    pick(evils.filter((id) => !claimed.has(id)), s.r) ??
-    pick(evils, s.r) ??
-    pick(evilRoles(s).filter((id) => id !== t.role), s.r) ??
-    pick(evilRoles(s), s.r);
-  // (Unless they've since claimed something else.)
-  const pair = said?.includes(t.claim) ? said : shuffle([good, bad], s.r);
-
-  p.dreamBluffs[t.id] = pair;
-
-  return { targets: [t.id], text: dreamText(t, ...pair) };
-}
+// An evil bluffer's made-up information for `role`: the character's own
+// bluff if it has one (the Dreamer's goes by what players claim), else a lie.
+const evilBluff = (s, p, role, strat) =>
+  infoOf(role)?.bluff?.(s, p, strat) ?? falseInfo(s, p, role, strat);
 
 // A Minion bluffing a first-night role uses it to back up the Demon's claim:
 // as Washerwoman or Librarian they name the Demon as one of the pair (if the
@@ -2208,79 +1140,21 @@ const givesAway = (s, p, m) =>
     return x && x !== p && x.alignment === "evil" && stanceOn(s, m, x, p) === "suspicious";
   });
 
-// Characters who choose each night, and what a player claiming one
-// without its ability (an evil bluffer, a "mad" player, or a good player's
-// cover story) says they chose tonight: an invented choice, or null if that
+// Whether `role` chooses each night (see each character's `choice`).
+const chooses = (role) => Boolean(infoOf(role)?.choice);
+
+// What a player claiming a character who chooses each night, without its
+// ability (an evil bluffer, a "mad" player, or a good player's cover
+// story), says they chose tonight: an invented choice, or null if that
 // character doesn't choose tonight. (For the Chambermaid, also a number, by
 // `mode`: see infoMode().)
-const CHOOSERS = [
-  "snakecharmer",
-  "monk",
-  "chambermaid",
-  "sailor",
-  "exorcist",
-  "innkeeper",
-  "butler",
-  "gambler",
-];
-
 function madeUpChoice(s, p, role, strat, mode) {
-  if (role === "snakecharmer") {
-    const t = strat.snake(s, p);
-
-    return t ? snakeInfo(s, t) : null;
-  }
-
-  if (role === "monk") {
-    const t = s.night > 1 ? strat.monk(s, p) : null;
-
-    return t ? monkInfo(s, t) : null;
-  }
-
-  if (role === "chambermaid") {
-    const picks = strat.chambermaid(s, p);
-
-    return picks ? chambermaidInfo(s, picks[0], picks[1], mode) : null;
-  }
-
-  if (role === "sailor") {
-    const t = strat.sailor(s, p);
-
-    return t ? choiceInfo(s, "sailor", "chose", [t]) : null;
-  }
-
-  if (role === "exorcist") {
-    const t = s.night > 1 ? strat.exorcist(s, p) : null;
-
-    return t ? choiceInfo(s, "exorcist", "chose", [t]) : null;
-  }
-
-  if (role === "innkeeper") {
-    const picks = s.night > 1 ? strat.innkeeper(s, p) : null;
-
-    return picks ? choiceInfo(s, "innkeeper", "protected", picks) : null;
-  }
-
-  if (role === "butler") {
-    const t = strat.butler(s, p);
-
-    return t ? butlerInfo(s, t) : null;
-  }
-
-  if (role === "gambler") {
-    const guess = s.night > 1 ? strat.gamble(s, p) : null;
-
-    return guess
-      ? gamblerInfo(s, guess.target, guess.role, false, guess.self)
-      : null;
-  }
-
-  return null;
+  return infoOf(role)?.choice?.(s, p, strat, mode) ?? null;
 }
 
 // Made-up but plausible information for a player who is "mad" (the
 // Cerenovus) about being `role`: what that character would have learned on
-// each night so far. Choice characters (see CHOOSERS) report choices; a
+// each night so far. Choice characters (see chooses()) report choices; a
 // Savant reports today's visit. A good player's answers are random; an evil
 // player's (faking coming clean, or made mad as a fresh bluff) are made up
 // to help their team, as their bluffs are (see falseInfo()), never giving a
@@ -2307,7 +1181,7 @@ export function madInfo(s, p, role, strat) {
       continue;
     }
 
-    if (CHOOSERS.includes(used)) {
+    if (chooses(used)) {
       const m = madeUpChoice(view, p, used, strat, evilSide ? "lie" : "random");
 
       if (m) {
@@ -2324,9 +1198,7 @@ export function madInfo(s, p, role, strat) {
     const { targets } = trueInfo(view, p, used, strat);
     const info = !evilSide
       ? unreliableInfo(view, p, used, targets)
-      : used === "dreamer"
-        ? dreamerBluff(view, p, strat)
-        : falseInfo(view, p, used, strat);
+      : evilBluff(view, p, used, strat);
 
     out.push({ night, role: used, ...info, trigger: "normal", functioning: false });
   }
@@ -2383,7 +1255,7 @@ function madGained(s, p, role, night) {
 // What an evil NPC reports for the role they are bluffing. A Minion backs up
 // the Demon's claim when their role allows it; otherwise a working Spy has
 // seen the Grimoire and tells the truth, and every other evil player lies.
-// An evil Dreamer bluffer (see dreamerBluff()) goes by what players claim.
+// (Some characters have their own bluff: see evilBluff().)
 export function bluffInfo(s, p, strat) {
   // A Philosopher or Cannibal bluffer reports for the character they
   // "gained" (nothing until they have one); a first-night one the night
@@ -2428,7 +1300,7 @@ export function bluffInfo(s, p, strat) {
     return choiceInfo(s, "courtier", "chose", id);
   }
 
-  if (CHOOSERS.includes(role)) {
+  if (chooses(role)) {
     return madeUpChoice(s, p, role, strat, spy ? "truth" : "lie");
   }
 
@@ -2450,11 +1322,7 @@ export function bluffInfo(s, p, strat) {
   const truthful = Boolean(truth) && !givesAway(s, p, truth);
   const { text, targets } =
     confirm ??
-    (truthful
-      ? truth
-      : role === "dreamer"
-        ? dreamerBluff(s, p, strat)
-        : falseInfo(s, p, role, strat));
+    (truthful ? truth : evilBluff(s, p, role, strat));
 
   // (A bluffer "knows" what their Amnesiac information means.)
   return secretInfo(s, p, {

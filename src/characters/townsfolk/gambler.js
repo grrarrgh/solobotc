@@ -94,3 +94,15 @@ export const gambler = {
     this.audit("gambler", `${p.label}${said}`, { playerId: p.id });
   },
 };
+
+// The Gambler, as told by someone claiming it without its ability (see
+// storyteller.js madeUpChoice()): their "guess" tonight (not on Night 1).
+export const info = {
+  choice(s, p, strat) {
+    const guess = s.night > 1 ? strat.gamble(s, p) : null;
+
+    return guess
+      ? gamblerInfo(s, guess.target, guess.role, false, guess.self)
+      : null;
+  },
+};

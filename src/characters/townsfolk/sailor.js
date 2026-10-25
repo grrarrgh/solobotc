@@ -157,3 +157,13 @@ export const sailor = {
     };
   },
 };
+
+// The Sailor, as told by someone claiming it without its ability (see
+// storyteller.js madeUpChoice()): the player they "chose" tonight.
+export const info = {
+  choice(s, p, strat) {
+    const t = strat.sailor(s, p);
+
+    return t ? choiceInfo(s, "sailor", "chose", [t]) : null;
+  },
+};

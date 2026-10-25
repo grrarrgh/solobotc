@@ -76,3 +76,13 @@ export const snakecharmer = {
     }
   },
 };
+
+// The Snake Charmer, as told by someone claiming it without its ability
+// (see storyteller.js madeUpChoice()): the player they "chose" tonight.
+export const info = {
+  choice(s, p, strat) {
+    const t = strat.snake(s, p);
+
+    return t ? snakeInfo(s, t) : null;
+  },
+};

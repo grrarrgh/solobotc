@@ -60,3 +60,14 @@ export const innkeeper = {
     }
   },
 };
+
+// The Innkeeper, as told by someone claiming it without its ability (see
+// storyteller.js madeUpChoice()): the 2 players they "protected" tonight
+// (not on Night 1).
+export const info = {
+  choice(s, p, strat) {
+    const picks = s.night > 1 ? strat.innkeeper(s, p) : null;
+
+    return picks ? choiceInfo(s, "innkeeper", "protected", picks) : null;
+  },
+};

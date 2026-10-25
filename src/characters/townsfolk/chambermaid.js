@@ -21,3 +21,14 @@ export const chambermaid = {
     }
   },
 };
+
+// The Chambermaid, as told by someone claiming it without its ability (see
+// storyteller.js madeUpChoice()): their 2 "choices", with a number by
+// `mode` (see infoMode()).
+export const info = {
+  choice(s, p, strat, mode) {
+    const picks = strat.chambermaid(s, p);
+
+    return picks ? chambermaidInfo(s, picks[0], picks[1], mode) : null;
+  },
+};

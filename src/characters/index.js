@@ -4,7 +4,9 @@
 // mixed into Engine.prototype (see engine.js), which calls them in night
 // order. (Characters that only need the Storyteller's information or NPC
 // choices, in storyteller.js and strategy.js, have no module here.)
-
+//
+// A module may also export `info`: what that character learns, and what's
+// said in its name (see characters/info.js).
 import { amnesiac } from "./townsfolk/amnesiac.js";
 import { artist } from "./townsfolk/artist.js";
 import { cannibal } from "./townsfolk/cannibal.js";

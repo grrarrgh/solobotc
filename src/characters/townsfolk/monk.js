@@ -43,3 +43,14 @@ export const monk = {
     }
   },
 };
+
+// The Monk, as told by someone claiming it without its ability (see
+// storyteller.js madeUpChoice()): the player they "protected" tonight (not
+// on Night 1).
+export const info = {
+  choice(s, p, strat) {
+    const t = s.night > 1 ? strat.monk(s, p) : null;
+
+    return t ? monkInfo(s, t) : null;
+  },
+};

@@ -1,6 +1,7 @@
-import { name } from "../../data.js";
+import { name, team } from "../../data.js";
 import { works } from "../../storyteller.js";
 import { claimHeard } from "../../strategy.js";
+import { pick } from "../../util.js";
 
 // An NPC pretending to be the Pixie: an evil player, or the Lunatic, whose
 // bluff it is.
@@ -96,5 +97,70 @@ export const pixie = {
         { playerId: p.id, role: p.pixieRole },
       );
     }
+  },
+};
+
+const pixieText = (role) => `Pixie: the ${name(role)} is in play.`;
+
+// The Townsfolk a Pixie can learn: those in play, or (`notInPlay`) those
+// that aren't. Never the Pixie, nor, for an evil Pixie bluffer, one a
+// teammate claims: they'd claim it too once "mad" about it, and two evil
+// players claiming one character gives them away.
+const pixieOptions = (s, p, notInPlay = false) => {
+  const inPlay = new Set(
+    s.players.filter((x) => x !== p).map((x) => x.role),
+  );
+  const teamClaims = new Set(
+    p.alignment === "evil"
+      ? s.players.filter((x) => x !== p && x.alignment === "evil").map((x) => x.claim)
+      : [],
+  );
+
+  return s.script.ids.filter(
+    (id) =>
+      team(id) === "townsfolk" &&
+      id !== "pixie" &&
+      !teamClaims.has(id) &&
+      inPlay.has(id) !== notInPlay,
+  );
+};
+
+// The Pixie: a Townsfolk in play, to be "mad" about. (They remember which,
+// as p.pixieRole.)
+export const info = {
+  truth(s, p) {
+    const id = pick(pixieOptions(s, p), s.r);
+
+    p.pixieRole = id;
+
+    return id
+      ? { targets: [], text: pixieText(id) }
+      : { targets: [], text: "No information." };
+  },
+
+  // A misinformed Pixie learns a Townsfolk that isn't in play (and is mad
+  // about it, to no effect).
+  lie(s, p) {
+    const id =
+      pick(pixieOptions(s, p, true), s.r) ?? pick(pixieOptions(s, p), s.r);
+
+    p.pixieRole = id;
+
+    return id
+      ? { targets: [], text: pixieText(id) }
+      : { targets: [], text: "No information." };
+  },
+
+  // (A Pixie bluffer goes mad about it, as a real one would: see
+  // pixieMadness() above.)
+  random(s, p) {
+    const id = pick(
+      s.script.ids.filter((x) => team(x) === "townsfolk" && x !== "pixie"),
+      s.r,
+    );
+
+    p.pixieRole = id;
+
+    return { targets: [], text: id ? pixieText(id) : "No information." };
   },
 };

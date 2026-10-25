@@ -1,4 +1,20 @@
-import { ability, amnesiacKey, bluffing } from "../../storyteller.js";
+import {
+  ability,
+  amnesiacKey,
+  bluffing,
+  registersEvil,
+  isDemon,
+  neigh,
+  nameable,
+  covered,
+  evilNear,
+  framed,
+  wrongNumber,
+  listLabels,
+} from "../../storyteller.js";
+import { bySeat, pick, sample } from "../../util.js";
+import { chefCount } from "./chef.js";
+import { empathCount } from "./empath.js";
 
 // The Amnesiac's secret abilities: at setup, the Storyteller gives each
 // Amnesiac one of these. Each night they learn something, said without
@@ -250,5 +266,112 @@ export const amnesiac = {
     }
 
     return this.amnesiacAsk(this.human(), q).text;
+  },
+};
+
+// The Amnesiac's information, said without saying what it means:
+// "Amnesiac: YES.", "Amnesiac: Player 5.", "Amnesiac: Player 3 and Player 7.".
+const amnesiacYes = (yes, ts) => ({
+  targets: ts.map((x) => x.id),
+  text: `Amnesiac: ${yes ? "YES" : "NO"}.`,
+});
+const amnesiacPlayers = (ts) =>
+  ts.length
+    ? { targets: ts.map((x) => x.id), text: `Amnesiac: ${listLabels(ts)}.` }
+    : { targets: [], text: "No information." };
+const amnesiacNumber = (n, ts = []) => ({
+  targets: ts.map((x) => x.id),
+  text: `Amnesiac number: ${n}.`,
+});
+// Whether a player registers as the Demon (as the Recluse might).
+const demonish = (x) => isDemon(x) || x.role === "recluse";
+
+// The Amnesiac: each night, what their secret ability (amnesiacKey()) tells
+// them.
+export const info = {
+  truth(s, p) {
+    const key = amnesiacKey(s, p);
+    const named = nameable(s, p);
+
+    if (key === "neighbours") {
+      return amnesiacYes(neigh(s, p).some(registersEvil), neigh(s, p));
+    }
+
+    if (key === "demonneighbour") {
+      return amnesiacYes(neigh(s, p).some(demonish), neigh(s, p));
+    }
+
+    if (key === "evilneighbours") {
+      return amnesiacNumber(empathCount(s, p), neigh(s, p));
+    }
+
+    if (key === "evilpairs") {
+      return amnesiacNumber(chefCount(s));
+    }
+
+    if (key === "goodplayer") {
+      return amnesiacPlayers([pick(named.filter((x) => !registersEvil(x)), s.r)].filter(Boolean));
+    }
+
+    const bad = pick(named.filter(registersEvil), s.r);
+    const good = pick(named.filter((x) => !registersEvil(x)), s.r);
+
+    return amnesiacPlayers(bad && good ? [bad, good] : []);
+  },
+
+  // The wrong answer: vouching for an evil player, or framing good ones (the
+  // scapegoat first).
+  lie(s, p) {
+    const key = amnesiacKey(s, p);
+    const named = nameable(s, p);
+    const good = named.filter((x) => !covered(p, x) && !isDemon(x));
+    const mates = p.alignment === "evil" && evilNear(s, p).length > 0;
+
+    // (An evil bluffer next to a teammate says NO, or 0.)
+    if (key === "neighbours") {
+      return amnesiacYes(!mates && !neigh(s, p).some(registersEvil), neigh(s, p));
+    }
+
+    if (key === "demonneighbour") {
+      return amnesiacYes(!mates && !neigh(s, p).some(demonish), neigh(s, p));
+    }
+
+    if (key === "evilneighbours") {
+      return amnesiacNumber(mates ? 0 : wrongNumber(s, empathCount(s, p)), neigh(s, p));
+    }
+
+    if (key === "evilpairs") {
+      const n = chefCount(s);
+
+      return amnesiacNumber(n > 0 ? n - 1 : n + 1);
+    }
+
+    if (key === "goodplayer") {
+      const t =
+        pick(named.filter((x) => x.alignment === "evil"), s.r) ??
+        pick(named, s.r);
+
+      return amnesiacPlayers(t ? [t] : []);
+    }
+
+    const goat = framed(s, p);
+    const pair = good.includes(goat)
+      ? [goat, pick(good.filter((x) => x !== goat), s.r)]
+      : sample(good, 2, s.r);
+
+    return amnesiacPlayers(pair.every(Boolean) && pair.length === 2 ? bySeat(pair) : []);
+  },
+
+  random(s, p) {
+    const key = amnesiacKey(s, p);
+    const others = s.players.filter((x) => x.id !== p.id);
+
+    const shape = AMNESIAC_ABILITIES[key].shape;
+
+    return shape === "yesno"
+      ? amnesiacYes(s.r() < 0.5, neigh(s, p))
+      : shape === "number"
+        ? amnesiacNumber(Math.floor(s.r() * 3), key === "evilneighbours" ? neigh(s, p) : [])
+        : amnesiacPlayers(sample(others, shape === "player" ? 1 : 2, s.r));
   },
 };
