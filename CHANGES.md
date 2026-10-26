@@ -2,6 +2,14 @@
 
 Newest first.
 
+## Bug Fixes & Improvements: The Dead Juggler, the Klutz's Reasons & Self-Play's Saint
+
+From 30 self-played games, one on each script in turn, 8–15 seats.
+
+- A Juggler who dies before they wake (killed by the Demon that night, or executed the day before) no longer learns how many of their guesses were right: the dead don't wake. Bluffers who die (a Savant mad as the Juggler, say) don't "learn" one either. The log says so (`juggler`).
+- The Klutz's choice now says why in log.txt: a player their information trusts, or one they don't suspect, or at random (and how many they chose from).
+- Self-play no longer nominates or votes for someone who told you they're the Saint (unless there's nobody else to nominate), and its hand in the log says why (`your nomination`, `no vote left`, how many suspect them...).
+
 ## New Features: Self-Play (Testing Only)
 
 - Open the page with `?selfplay` in the address (e.g. `http://localhost:8000/?selfplay`) and the game plays your seat for you, one move every `SELF_PLAY_STEP_MS` (0.7 s), through the same controls and vote animation as your own. A Self-play button under the day counter pauses and resumes it, so you can take over at any point.

@@ -3189,6 +3189,30 @@ test("an NPC Juggler guesses publicly on Day 1 and learns how many were right", 
   );
 });
 
+test("a Juggler the Demon kills before they wake learns nothing", () => {
+  const s = bluffNight("juggler");
+  const [, juggler, butler] = s.players;
+
+  role(juggler, "juggler", "good");
+
+  const strat = new SimpleStrategy();
+
+  strat.juggle = () => [{ id: butler.id, role: "butler" }];
+  strat.demon = () => juggler;
+
+  const e = new Engine(s, strat);
+
+  e.start();
+  e.endDay();
+
+  assert.equal(juggler.alive, false);
+  assert.ok(!juggler.memories.some((m) => m.text.startsWith("Juggler:")));
+  assert.equal(juggler.juggle, null);
+  assert.ok(
+    s.audit.some((x) => x.type === "juggler" && /learns nothing/.test(x.text)),
+  );
+});
+
 test("a Sage killed by the Demon learns it is 1 of 2 players", () => {
   const s = base("sage");
   const sage = s.players[1];

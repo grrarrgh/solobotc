@@ -32,8 +32,8 @@ export const klutz = {
       "klutz",
       `${p.label} (${name(p.role)}) chose ${t.label} (${t.alignment})${
         real ? "" : "; no effect"
-      }.`,
-      { actorId: p.id, targetId: t.id, effective: real },
+      }${p.klutzWhy ? ` (why: ${p.klutzWhy})` : ""}.`,
+      { actorId: p.id, targetId: t.id, effective: real, why: p.klutzWhy ?? null },
     );
 
     if (real && t.alignment === "evil") {

@@ -10,7 +10,7 @@ import { name, ARTIST_QUESTIONS } from "./data.js";
 import { canPick } from "./engine.js";
 import { ability } from "./storyteller.js";
 import { AMNESIAC_GUESSES } from "./characters/townsfolk/amnesiac.js";
-import { rng, pick, sample } from "./util.js";
+import { rng, pick, sample, claimTo } from "./util.js";
 
 // How likely self-play is to use an optional night ability (the Seamstress,
 // Courtier, Philosopher, Huntsman or Professor) on any night it can.
@@ -80,10 +80,17 @@ export class SelfPlay {
     );
   }
 
+  // Whether they've told you they're the Saint (executing them would lose
+  // the game, if it's true).
+  saint(x) {
+    return claimTo(x, this.e.human()) === "saint";
+  }
+
   // Whether your hand goes up for `nomineeId`: never for yourself; always
   // for your own nomination (`yours`); otherwise for the town's top suspects
-  // (at least half as suspected as the most suspected player), and a dead
-  // player's one ghost vote only for the top suspect.
+  // (at least half as suspected as the most suspected player), but never
+  // for someone who told you they're the Saint, and a dead player's one
+  // ghost vote only for the top suspect.
   hand(nomineeId, yours = false) {
     const e = this.e;
     const n = e.player(nomineeId);
@@ -93,9 +100,21 @@ export class SelfPlay {
     const up =
       !n.human &&
       e.canVote() &&
-      (yours || (mine > 0 && (e.human().alive ? mine * 2 >= top : mine === top)));
+      (yours ||
+        (mine > 0 &&
+          !this.saint(n) &&
+          (e.human().alive ? mine * 2 >= top : mine === top)));
+    const why = n.human
+      ? "you"
+      : !e.canVote()
+        ? "no vote left"
+        : yours
+          ? "your nomination"
+          : this.saint(n)
+            ? "they told you they're the Saint"
+            : `${mine} of the town suspect them`;
 
-    this.note(`hand ${up ? "up" : "down"} for ${n.label} (${mine} of the town suspect them).`);
+    this.note(`hand ${up ? "up" : "down"} for ${n.label} (${why}).`);
 
     return up;
   }
@@ -189,7 +208,11 @@ export class SelfPlay {
       return { kind: "open" };
     }
 
-    const t = this.suspect((x) => !e.nominatedToday(x.id));
+    // (Not someone who told you they're the Saint, unless there's nobody
+    // else.)
+    const t =
+      this.suspect((x) => !e.nominatedToday(x.id) && !this.saint(x)) ??
+      this.suspect((x) => !e.nominatedToday(x.id));
     const canNominate = h.alive ? !s.dayNominators.includes(h.id) : true;
 
     if (t && canNominate && this.once("nominate")) {

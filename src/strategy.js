@@ -3007,14 +3007,21 @@ export class SimpleStrategy {
   // player, as a real one would seem to.
   klutz(s, p) {
     const living = s.players.filter((x) => x.alive && x.id !== p.id);
+    // (Why, for the log: p.klutzWhy, see klutz.js.)
+    const because = (t, why) => {
+      p.klutzWhy = why;
+      return t;
+    };
 
     if (p.alignment === "evil") {
-      return (
-        pick(
-          living.filter((x) => x.alignment === "good"),
-          s.r,
-        ) ?? pick(living, s.r)
+      const good = pick(
+        living.filter((x) => x.alignment === "good"),
+        s.r,
       );
+
+      return good
+        ? because(good, "evil, so a good player")
+        : because(pick(living, s.r), "evil, and nobody good is left");
     }
 
     const trusted = new Set();
@@ -3037,9 +3044,22 @@ export class SimpleStrategy {
     );
     const unsuspected = living.filter((x) => !suspected.has(x.id));
 
-    return (
-      pick(believed, s.r) ?? pick(unsuspected, s.r) ?? pick(living, s.r)
-    );
+    const one = pick(believed, s.r);
+
+    if (one) {
+      return because(one, `a player their information trusts (1 of ${believed.length})`);
+    }
+
+    const other = pick(unsuspected, s.r);
+
+    if (other) {
+      return because(
+        other,
+        `nobody their information trusts, so a player they don't suspect (1 of ${unsuspected.length})`,
+      );
+    }
+
+    return because(pick(living, s.r), "they suspect everyone left, so at random");
   }
 
   // The Storyteller's pick for who a dying Sweetheart makes drunk: a good

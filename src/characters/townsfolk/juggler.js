@@ -20,6 +20,18 @@ export const juggler = {
     for (const p of s.players.filter((x) => x.juggle?.night === s.night)) {
       const { guesses } = p.juggle;
 
+      // A Juggler who died before waking (in the night, or executed) learns
+      // nothing: the dead don't wake. (Nor does a bluffer "learn" anything.)
+      if (!p.alive) {
+        p.juggle = null;
+        this.audit(
+          "juggler",
+          `${p.label} died before waking, so learns nothing from their juggle.`,
+          { playerId: p.id },
+        );
+        continue;
+      }
+
       // (A bluffer, even a good one such as a mad Pixie, makes it up.)
       if (ability(p) === "juggler" && p.alignment === "good") {
         this.remember(p, jugglerInfo(s, guesses, infoMode(s, p)));
