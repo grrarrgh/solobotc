@@ -182,19 +182,22 @@ async function load() {
     const files = await getJson("scripts/index.json");
 
     scripts = await Promise.all(
-      files.map(async (f) => ({
-        file: f,
-        raw: await getJson(`scripts/${encodeURIComponent(f)}`),
-      })),
+      files.map(async (f) => {
+        const raw = await getJson(`scripts/${encodeURIComponent(f)}`);
+
+        return {
+          file: f,
+          name: raw.find((y) => y?.id === "_meta")?.name ?? f,
+          raw,
+        };
+      }),
     );
 
+    // The menu lists scripts alphabetically, whatever order index.json has.
+    scripts.sort((a, b) => a.name.localeCompare(b.name));
+
     $("script").innerHTML = scripts
-      .map(
-        (x, i) =>
-          `<option value="${i}">${esc(
-            x.raw.find((y) => y?.id === "_meta")?.name ?? x.file,
-          )}</option>`,
-      )
+      .map((x, i) => `<option value="${i}">${esc(x.name)}</option>`)
       .join("");
   } catch (err) {
     $("error").textContent = err.message;
@@ -2301,4 +2304,6 @@ $("gossip-question").innerHTML = Object.entries(ARTIST_QUESTIONS)
   .map(([k, v]) => `<option value="${k}">"This player is ${esc(v)}."</option>`)
   .join("");
 
+// Each visit starts on a fresh seed; the Random Seed button rolls another.
+randomSeed();
 load();

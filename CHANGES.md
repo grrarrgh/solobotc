@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Improvements: Alphabetical Scripts and a Random Starting Seed
+
+- The setup page's Script menu lists scripts alphabetically by name, whatever order `scripts/index.json` gives them.
+- The Seed box starts on a random seed each time the page loads, instead of always 42; the Random Seed button still rolls a new one.
+
 ## New Features: www.solobotc.com & a Clock Tower Icon
 
 - The game is ready to move to its own address, www.solobotc.com: a `CNAME` file for GitHub Pages, and `.nojekyll` so Pages serves the files as they are.
