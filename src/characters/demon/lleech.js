@@ -53,35 +53,6 @@ export const lleech = {
     }
   },
 
-  // Tonight's targets for Lleech d came up empty, and the only others alive
-  // are their host and you: the Demon never kills you, so the game could
-  // never end. Instead, as in a real game, it kills you (2 alive remain).
-  // Returns whether it did.
-  lleechCornered(d, targets) {
-    const s = this.s;
-    const host = this.player(d.lleechHost);
-    const rest = this.alive().filter((x) => x !== d && x !== host);
-
-    if (targets.some(Boolean) || !host?.alive || rest.length !== 1 || !rest[0].human || !works(d)) {
-      return false;
-    }
-
-    const you = rest[0];
-
-    this.chose(d, you);
-    this.audit(
-      "lleech",
-      `${d.label} (Lleech) has only their host and you left to kill: they kill you.`,
-      { actorId: d.id, targetId: you.id },
-    );
-
-    if (this.kill(you, "demon")) {
-      this.check();
-    }
-
-    return true;
-  },
-
   // The living Lleech whose host is x, if any.
   lleechOf(x) {
     return this.s.players.find((d) => d.alive && d.role === "lleech" && d.lleechHost === x.id);

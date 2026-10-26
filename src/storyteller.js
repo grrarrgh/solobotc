@@ -4,6 +4,7 @@ import {
   FINAL_THREE_MARGIN,
   ADVICE_STAGES,
   HIDDEN_OUTSIDERS,
+  ALCHEMIST_ABILITIES,
   exclusiveWith,
   name,
   team,
@@ -78,6 +79,15 @@ export const wishBarred = (s, p) =>
 // no effect), or their own character's.
 export const minionAbility = (p) =>
   ability(p) === "alchemist" ? (p.alchemist ?? null) : ability(p);
+
+// The Minion abilities an Alchemist could be given now: on the script, and
+// neither in play nor another Alchemist's (see ALCHEMIST_ABILITIES). (For a
+// Philosopher who gains the Alchemist's: see philosopher.js. A real
+// Alchemist's is chosen at setup.)
+export const alchemistOptions = (s) =>
+  s.script.ids.filter(
+    (id) => ALCHEMIST_ABILITIES.includes(id) && !s.players.some((x) => x.role === id || x.alchemist === id),
+  );
 
 // p's Minion ability, for the log: "Fearmonger", or "Alchemist-Fearmonger".
 export const minionLabel = (p) =>
@@ -188,6 +198,11 @@ export const finalCount = (s) =>
 // Whether the game is down to its final 3 (or 2), shown alive.
 export const atFinal = (s) =>
   s.players.filter((x) => x.alive).length <= finalCount(s);
+
+// Whether the game is one execution from its final 3 (or 2): the final 4
+// (or 3), shown alive.
+export const nearFinal = (s) =>
+  s.players.filter((x) => x.alive).length === finalCount(s) + 1;
 
 // lean(), with its workings: { side, n, e, low, high, end } (side null
 // when there's nothing to steer).
@@ -389,6 +404,28 @@ export function neigh(s, p) {
 
   return o;
 }
+
+// The working Tea Lady whose two living neighbours, p among them, are
+// both good (so p can't die), or null. (See abilities guard().)
+export const teaLadyOf = (s, p) =>
+  s.players.find((t) => {
+    if (!t.alive || t === p || ability(t) !== "tealady" || !works(t)) {
+      return false;
+    }
+
+    const near = [...new Set(neigh(s, t))].filter((x) => x !== t);
+
+    return near.length === 2 && near.includes(p) && near.every((x) => x.alignment === "good");
+  }) ?? null;
+
+// Whether x can't die now, whatever kills them, by a lasting protection: a
+// working Sailor, a working Lleech whose host lives, or a Tea Lady's good
+// neighbour. (See abilities guard(), which also has the Innkeeper's, for
+// one night.)
+export const shielded = (s, x) =>
+  Boolean(teaLadyOf(s, x)) ||
+  (ability(x) === "sailor" && works(x)) ||
+  (x.role === "lleech" && works(x) && Boolean(byId(s, x.lleechHost)?.alive));
 
 // Any of the options except the true number (0–2 by default), preferring
 // one just above or below it, so a lie isn't obviously wrong.

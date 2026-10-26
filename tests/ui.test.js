@@ -268,7 +268,7 @@ test("every popup closes when you press anywhere", () => {
   // The confirm popup: anywhere but its buttons is Keep talking.
   assert.match(app, /d\.onclick = \(ev\) => \{\s*if \(!ev\.target\.closest\("button"\)\) \{\s*d\.close\(\);\s*done\(false\);/);
   // The menu (but its − and +) and the role counts.
-  assert.match(app, /!ev\.target\.closest\("#size-popup button, #size-settings"\)/);
+  assert.match(app, /!ev\.target\.closest\("#size-popup button, #size-settings, #menu-seed"\)/);
   assert.match(app, /if \(!\$\("count-popup"\)\.hidden && !ev\.target\.closest\("#count-info"\)\) \{\s*closeCountInfo\(\);/);
 });
 
@@ -314,6 +314,18 @@ test("the setup page starts on Trouble Brewing, with the seed under a collapsed 
   assert.match(app, /scripts\.findIndex\(\(x\) => x\.file === "trouble-brewing\.json"\)/);
   assert.match(html, /<details id="advanced-options" class="advanced-options">\s*<summary>Advanced Options<\/summary>[\s\S]*?id="seed"[\s\S]*?id="random-seed"[\s\S]*?<\/details>/);
   assert.doesNotMatch(html, /<details id="advanced-options"[^>]*\bopen\b/);
+});
+
+test("the menu shows the game's seed under Report a bug, and its log.txt mid-game", () => {
+  assert.match(html, /id="report-bug"[\s\S]*?<small id="menu-seed" class="menu-seed" hidden><\/small>\s*<a id="menu-log" class="menu-link" download="log.txt" hidden/);
+  assert.match(app, /\$\("menu-seed"\)\.textContent = `Seed: \$\{s\.seed\}`;\s*updateLogLink\(\);/);
+  assert.match(app, /\$\("menu-log"\)\.href = link\.href;/);
+});
+
+test("you can nominate yourself, or ask to be nominated", () => {
+  assert.match(html, /<button id="nominate-self" type="button">Nominate yourself<\/button>\s*<button id="request-self" type="button">Ask to be nominated<\/button>/);
+  assert.match(app, /\$\("nominate-self"\)\.onclick = \(\) => yourNomination\(\(\) => e\.nominate\(s\.humanId, null\)\);/);
+  assert.match(app, /yourNomination\(\(\) => e\.requestNomination\(s\.humanId, null\)\)/);
 });
 
 test("under the setup card: How to play (collapsed), About, hidden with it; a footer on every page", () => {

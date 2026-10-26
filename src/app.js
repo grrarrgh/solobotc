@@ -1307,7 +1307,8 @@ function reveal() {
   };
 }
 
-// Points the "Download log.txt" link at a fresh copy of the debug log.
+// Points the "Download log.txt" links (the Final reveal's, and the menu's)
+// at a fresh copy of the debug log.
 function updateLogLink() {
   const link = $("download-log");
 
@@ -1321,6 +1322,7 @@ function updateLogLink() {
       { type: "text/plain" },
     ),
   );
+  $("menu-log").href = link.href;
 }
 
 // ── Performance timing (PERF_LOGGING in data.js) ────────────
@@ -1611,6 +1613,14 @@ function draw() {
     blocked || s.dayNominators.includes(h.id) || wishBarred(s, h);
   $("request-nomination").hidden = false;
   $("request-nomination").disabled = blocked;
+  // Yourself, whoever is selected (your seat can't be): see engine
+  // nominee(). (Not beside the Alchemist-Goblin's own button.)
+  const selfBlocked = e.nominatedToday(h.id) || !!voteAnim || nominating;
+
+  $("nominate-self").hidden = !h.alive || minionAbility(h) === "goblin";
+  $("nominate-self").disabled =
+    selfBlocked || s.dayNominators.includes(h.id) || wishBarred(s, h);
+  $("request-self").disabled = selfBlocked;
   $("pass").disabled = !!voteAnim || nominating;
   // Round Robin: under the nomination buttons once ROUND_ROBIN_ALIVE or
   // fewer are alive; once used, it stays, disabled, for the rest of the game.
@@ -1750,6 +1760,18 @@ function setSquareSize(size) {
 function toggleSizeSettings(open = $("size-popup").hidden) {
   $("size-popup").hidden = !open;
   $("size-settings").setAttribute("aria-expanded", String(open));
+
+  // While a game is on (even mid-game), the menu shows its seed and a
+  // log.txt of everything so far.
+  const game = Boolean(e) && $("setup").hidden;
+
+  $("menu-seed").hidden = !game;
+  $("menu-log").hidden = !game;
+
+  if (open && game) {
+    $("menu-seed").textContent = `Seed: ${s.seed}`;
+    updateLogLink();
+  }
 }
 
 function closeCountInfo() {
@@ -1758,12 +1780,12 @@ function closeCountInfo() {
 }
 
 // Pressing anywhere closes the menu and role-count popups, except their own
-// buttons: the menu's − and + (and the buttons that open them, which toggle
-// them themselves). Escape closes them too.
+// buttons: the menu's − and + and its seed (to select it), and the buttons
+// that open them, which toggle them themselves. Escape closes them too.
 document.addEventListener("click", (ev) => {
   if (
     !$("size-popup").hidden &&
-    !ev.target.closest("#size-popup button, #size-settings")
+    !ev.target.closest("#size-popup button, #size-settings, #menu-seed")
   ) {
     toggleSizeSettings(false);
   }
@@ -2010,6 +2032,9 @@ $("nominate").onclick = () => yourNomination((id) => e.nominate(id, null));
 
 $("request-nomination").onclick = () =>
   yourNomination((id) => e.requestNomination(id, null));
+$("nominate-self").onclick = () => yourNomination(() => e.nominate(s.humanId, null));
+$("request-self").onclick = () =>
+  yourNomination(() => e.requestNomination(s.humanId, null));
 
 // An Alchemist's Minion ability: the Psychopath's kill, the Wizard's wish,
 // the Goblin's self-nomination (see alchemist.js).

@@ -14,6 +14,7 @@ import {
   EVIDENCE_WEIGHT,
   PIXIE_DOUBLE_CLAIM_FACTOR,
   HUMAN_NOMINATION_BONUS,
+  NEAR_FINAL_HUMAN_VOTE_CHANCE,
   GOOD_VOTE_CHANCE,
   GOOD_VOTE_EVIDENCE_STEP,
   ARTIST_QUESTIONS,
@@ -23,6 +24,7 @@ import {
   LEGION_STRONG,
   LEGION_STRONG_SHARE,
   ALCHEMIST_ABILITIES,
+  PHILOSOPHER_AVOID,
   name,
   team,
   alignment,
@@ -64,6 +66,8 @@ import {
   scapegoat,
   jinxBarred,
   adviceLevel,
+  minionAbility,
+  ability,
 } from "../src/storyteller.js";
 import { fishermanInfo } from "../src/characters/townsfolk/fisherman.js";
 import { ravenInfo } from "../src/characters/townsfolk/ravenkeeper.js";
@@ -2455,16 +2459,41 @@ test("the Demon can target its own Minions, by their kill priority", () => {
   }
 });
 
-test("with no good NPC left, the Demon attacks any random NPC", () => {
+test("with only a working Soldier left to attack, the Demon kills you", () => {
+  const s = base("kill-only-soldier");
+  const strat = new SimpleStrategy();
+  const [you, chef, butler, , imp] = s.players;
+
+  butler.alive = false;
+  role(chef, "soldier", "good");
+  assert.equal(strat.demon(s, imp), you);
+
+  // A poisoned one can die; so can a Sailor (made drunk, late on).
+  chef.poisoned = true;
+  assert.equal(strat.demon(s, imp), chef);
+
+  role(chef, "sailor", "good");
+  assert.equal(strat.demon(s, imp), chef);
+});
+
+test("with no good NPC left, the Demon kills you rather than its own Minion", () => {
   const s = base("kill-no-good");
   const strat = new SimpleStrategy();
-  const [, chef, butler, baron, imp] = s.players;
+  const [you, chef, butler, baron, imp] = s.players;
 
   chef.alive = false;
   butler.alive = false;
   s.r = () => 0.99; // no kill-priority chance fires
 
-  // Only the Baron is left (the Demon never attacks the human).
+  // Only the Baron and you are left.
+  assert.equal(strat.demon(s, imp), you);
+  assert.match(imp.killWhy[you.id], /nobody but its own team is left to kill/);
+
+  // Having chosen you already tonight (a Shabaloth's second), nobody.
+  assert.equal(strat.demon(s, imp, [you]), null);
+
+  // With you dead, any random NPC (the Baron).
+  you.alive = false;
   assert.equal(strat.demon(s, imp), baron);
 });
 
@@ -2839,6 +2868,27 @@ test("a Snake Charmer who picks the Demon swaps with them", () => {
   assert.equal(imp.poisoned, true);
   assert.equal(imp.lastingPoison, true);
   assert.equal(s.winner, null);
+});
+
+test("a Philosopher who gained the Snake Charmer's ability and picks the Demon becomes the Demon, without it", () => {
+  const s = bluffNight("philosopher-snake");
+  const phil = s.players[1];
+  const imp = s.players[4];
+
+  role(phil, "philosopher", "good");
+
+  const strat = new SimpleStrategy();
+
+  strat.philosopher = () => "snakecharmer";
+  strat.snake = () => imp;
+  new Engine(s, strat).start();
+
+  assert.equal(phil.role, "imp");
+  assert.equal(phil.alignment, "evil");
+  assert.equal(phil.gained, null);
+  assert.equal(ability(phil), "imp");
+  assert.equal(imp.role, "snakecharmer");
+  assert.ok(s.audit.some((x) => /became the Imp \(and lost the Snake Charmer ability they gained\);/.test(x.text)));
 });
 
 test("a player the Witch cursed dies when they nominate", () => {
@@ -4269,9 +4319,12 @@ test("the Demon never kills either twin, nor does the Mayor's bounce land on one
     assert.ok(t !== good && t !== evil, `night ${i}: ${t?.label}`);
   }
 
-  // With only the twins left to kill, the Demon kills nobody.
+  // With only the twins left to kill, the Demon kills you (see the next
+  // test); with you dead too, nobody.
   s.players[2].alive = false;
 
+  assert.equal(strat.demon(s, imp), s.players[0]);
+  s.players[0].alive = false;
   assert.equal(strat.demon(s, imp), null);
 });
 
@@ -10284,6 +10337,67 @@ test("the Heretic and a Baron, Godfather, Lleech, Pit-Hag, Spy or Widow are neve
   assert.ok(heretics > 0 && jinxedGames > 0, `${heretics} with the Heretic, ${jinxedGames} with a jinxed one`);
 });
 
+test("an NPC Philosopher gains a useful Townsfolk: never an Outsider, nor one it should avoid; the most valuable first", () => {
+  const oe = JSON.parse(
+    fs.readFileSync(new URL("../scripts/Outed Evil_5_0_0.json", import.meta.url)),
+  );
+  const gains = new Set();
+
+  for (let i = 0; i < 200; i++) {
+    const s = createState(oe, 8 + (i % 8), `philosopher-useful-${i}`);
+    const phil = s.players.find((x) => !x.human && x.alignment === "good");
+    const strat = new SimpleStrategy();
+
+    role(phil, "philosopher", "good");
+    s.night = 1;
+    strat.onceReady = () => true;
+
+    const id = strat.philosopher(s, phil);
+
+    gains.add(id);
+    assert.equal(team(id), "townsfolk", `${i}: ${id}`);
+    assert.ok(!PHILOSOPHER_AVOID.includes(id), `${i}: ${id}`);
+    assert.notEqual(id, "philosopher");
+    assert.match(phil.philosopherWhy, /Townsfolk/);
+
+    // The most valuable ("high") on the script, in play or not, comes first.
+    assert.equal(DEMON_KILL_PRIORITY[id], "high", `${i}: ${id}`);
+  }
+
+  assert.ok(gains.size > 1);
+});
+
+test("a Philosopher who gains the Alchemist's ability gets a Minion ability not in play, and uses it", () => {
+  const oe = JSON.parse(
+    fs.readFileSync(new URL("../scripts/Outed Evil_5_0_0.json", import.meta.url)),
+  );
+  const s = createState(oe, 8, "philosopher-alchemist");
+  const phil = s.players.find((x) => !x.human && x.alignment === "good");
+  const strat = new SimpleStrategy();
+
+  role(phil, "philosopher", "good");
+  strat.philosopher = () => "alchemist";
+
+  const e = new Engine(s, strat);
+
+  e.start();
+
+  const inPlay = s.players.map((x) => x.role);
+
+  assert.equal(phil.gained, "alchemist");
+  assert.ok(ALCHEMIST_ABILITIES.includes(phil.alchemist));
+  assert.ok(!inPlay.includes(phil.alchemist));
+  assert.equal(minionAbility(phil), phil.alchemist);
+  assert.ok(
+    s.audit.some((x) =>
+      x.text.includes(`gained the Alchemist ability (the ${name(phil.alchemist)} ability)`),
+    ),
+  );
+  assert.ok(
+    phil.memories.some((m) => m.text === `Alchemist: you have the ${name(phil.alchemist)} ability.`),
+  );
+});
+
 test("a Philosopher can't gain the Heretic while a jinxed character is in play, and one who did turns the result around", () => {
   const s = createState([...outedSoFar, "pithag"], 10, "philosopher-heretic");
   const phil = s.players.find((x) => !x.human && x.alignment === "good");
@@ -10717,6 +10831,58 @@ test("the Psychopath kills in public at dawn, and is known to be evil", () => {
   assert.match(t.s.publicLog.at(-1), /But nothing happens\.$/);
 });
 
+test("the Psychopath never chooses you while a good NPC is left, nor again a player who can't die", () => {
+  const { s, e, p } = minionDay("psychopath-foiled", "psychopath");
+  const [you, tea, butler, psycho] = p;
+  const strat = new SimpleStrategy();
+
+  // The Tea Lady's living neighbours, you and the Butler, are good: the
+  // Butler can't die.
+  role(you, "empath", "good");
+  role(tea, "tealady", "good");
+  e.strat.psychopath = () => butler;
+  s.r = () => 0;
+  e.psychopathKills();
+
+  assert.ok(butler.alive);
+  assert.deepEqual(psycho.foiled, [butler.id]);
+  assert.ok(
+    s.audit.some((x) => x.text === `${psycho.label} (Psychopath) won't choose ${butler.label} again: protected by the Tea Lady.`),
+  );
+
+  // So the Tea Lady, never the Butler or you.
+  for (let i = 0; i < 40; i++) {
+    s.r = rng(`psychopath-foiled-${i}`);
+    assert.equal(strat.psychopath(s, psycho), tea);
+  }
+
+  // With the Tea Lady dead, the Butler can die again.
+  tea.alive = false;
+  s.r = rng("psychopath-unshielded");
+  assert.equal(strat.psychopath(s, psycho), butler);
+
+  // With no good NPC left, you.
+  butler.alive = false;
+  assert.equal(strat.psychopath(s, psycho), you);
+});
+
+test("with only the Lunatic and teammates to kill, the Psychopath and the Demon kill the Lunatic, not you or a teammate", () => {
+  const { s, p } = minionDay("psychopath-lunatic", "psychopath");
+  const [you, lunatic, butler, psycho, imp] = p;
+  const strat = new SimpleStrategy();
+
+  role(lunatic, "lunatic", "good");
+  butler.alive = false;
+
+  for (let i = 0; i < 40; i++) {
+    s.r = rng(`psychopath-lunatic-${i}`);
+    assert.equal(strat.psychopath(s, psycho), lunatic);
+    assert.equal(strat.demon(s, imp), lunatic);
+  }
+
+  assert.ok(you.alive);
+});
+
 test("an executed Psychopath plays roshambo against their nominator, winning ties", () => {
   let survived = 0;
   let died = 0;
@@ -10893,9 +11059,33 @@ test("the Lleech and Slayer jinx: the Slayer's shot kills the Lleech's host (and
   assert.ok(JINXES.some((j) => j.ids.includes("lleech") && j.ids.includes("slayer")));
 });
 
+test("final 4, you the Tea Lady between the Lleech's host and another good player: the Lleech kills you", () => {
+  const s = base("lleech-tealady-final-4");
+  const e = new Engine(s);
+  const [you, host, d, baron, other] = s.players;
+
+  // Seats go round: other, you, host. Both your neighbours are good.
+  role(you, "tealady", "good");
+  role(other, "empath", "good");
+  role(d, "lleech", "evil");
+  d.lleechHost = host.id;
+  baron.alive = false;
+  s.phase = "night";
+
+  // Your other neighbour can't die (your Tea Lady ability), nor can it
+  // kill its host: with nobody else it can kill, it kills you.
+  s.night = 3;
+  e.demon();
+  assert.equal(you.alive, false);
+  assert.ok(other.alive && host.alive);
+  assert.ok(s.audit.some((x) => /chose You \(why: nobody but its own team is left to kill, besides you\); You was killed\./.test(x.text)));
+});
+
 test("left with only their host and you, the Lleech kills you (else the game could never end)", () => {
   const { s, e, p, d, host } = lleechGame("lleech-cornered");
 
+  // (Not the Mayor, whose death might bounce.)
+  role(p[0], "empath", "good");
   p[2].alive = false;
   p[3].alive = false;
   s.phase = "night";
@@ -10905,12 +11095,22 @@ test("left with only their host and you, the Lleech kills you (else the game cou
   assert.equal(p[0].alive, false);
   assert.ok(host.alive);
   assert.equal(s.winner, "evil");
-  assert.ok(s.audit.some((x) => /has only their host and you left to kill: they kill you\./.test(x.text)));
+  assert.ok(s.audit.some((x) => /chose You \(why: nobody but its own team is left to kill, besides you\); You was killed\./.test(x.text)));
 
-  // With anyone else to kill, never you.
+  // With only their host, a Minion and you: you, not their Minion.
+  const m = lleechGame("lleech-minion-left");
+
+  role(m.p[0], "empath", "good");
+  m.p[2].alive = false;
+  m.s.phase = "night";
+  m.s.night = 3;
+  m.e.demon();
+  assert.equal(m.p[0].alive, false);
+  assert.ok(m.p[3].alive);
+
+  // With a good NPC to kill, never you.
   const t = lleechGame("lleech-not-cornered");
 
-  t.p[2].alive = false;
   t.s.phase = "night";
   t.s.night = 3;
   t.e.demon();
@@ -11324,6 +11524,18 @@ test("an Alchemist-Psychopath only kills a player they're sure of, saying so, an
 
   z.s.nominationsOpen = true;
   assert.throws(() => z.e.psychopathKill(z.p[3].id), /unavailable/);
+
+  // A player their kill failed on (here, the Lleech, whose host lives),
+  // they don't choose again while that holds.
+  const w = alchemistDay("alchemist-psychopath-foiled", "psychopath");
+
+  role(w.p[4], "lleech", "evil");
+  w.p[4].lleechHost = w.p[1].id;
+  w.e.strat.strongSuspect = (s, x, pool) => pool.find((y) => y === w.p[4]) ?? null;
+  w.e.psychopathKills();
+  assert.ok(w.p[4].alive);
+  assert.deepEqual(w.a.foiled, [w.p[4].id]);
+  assert.equal(w.e.strat.psychopath(w.s, w.a), null);
 });
 
 test("an Alchemist-Goblin claims it when nominated; executed, good wins; the evil team never votes for them", () => {

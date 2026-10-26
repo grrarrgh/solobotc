@@ -93,6 +93,19 @@ export const psychopath = {
 
     const before = this.alive().length;
     const died = effective && this.kill(t, "psychopath");
+    // (Their kill failing on a player who can't die, they don't choose them
+    // again: see strategy psychopath(). Not a Fool, who can die next time,
+    // nor a Sailor the Storyteller made drunk.)
+    const guarded = effective && !died && t.alive && this.cantDie(t, "psychopath");
+
+    if (guarded) {
+      p.foiled = [...new Set([...(p.foiled ?? []), t.id])];
+      this.audit(
+        "psychopath",
+        `${p.label} (${minionLabel(p)}) won't choose ${t.label} again: ${guarded}.`,
+        { actorId: p.id, targetId: t.id },
+      );
+    }
 
     if (!died) {
       s.publicLog[line] += " But nothing happens.";

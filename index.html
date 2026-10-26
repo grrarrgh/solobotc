@@ -67,6 +67,12 @@
               rel="noopener"
               ><span aria-hidden="true">🐛</span> Report a bug</a
             >
+            <!-- While a game is on: its seed (for a bug report), and its
+                 log so far (see app.js toggleSizeSettings()). -->
+            <small id="menu-seed" class="menu-seed" hidden></small>
+            <a id="menu-log" class="menu-link" download="log.txt" hidden
+              ><span aria-hidden="true">📜</span> Download log.txt</a
+            >
           </div>
         </div>
         <h1>Solo Clocktower</h1>
@@ -170,6 +176,10 @@
                 player you've selected.
               </li>
               <li>
+                <b>Nominate yourself</b> or <b>Ask to be nominated</b>: put
+                yourself up for execution.
+              </li>
+              <li>
                 <b>NPC nominations</b>: let the next player who wants to
                 nominate someone do so. They'll say why.
               </li>
@@ -270,6 +280,10 @@
           <div id="nomination-controls" class="nomination-controls" hidden>
             <button id="nominate">Nominate</button>
             <button id="request-nomination">Request nomination</button>
+            <!-- You can nominate yourself, or ask an NPC to nominate you (say,
+                 to be executed as the Tea Lady, so her neighbours can die). -->
+            <button id="nominate-self" type="button">Nominate yourself</button>
+            <button id="request-self" type="button">Ask to be nominated</button>
             <!-- An Alchemist with the Goblin's ability: nominate yourself and
                  claim it (executed today, good wins). -->
             <button id="goblin-self" type="button" hidden>Nominate yourself (claim the Goblin)</button>

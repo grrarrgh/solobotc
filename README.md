@@ -38,6 +38,7 @@ what they learned, and who they trust or suspect. Then **Share My Info**
 
 - **Nominate** a player (dead players can be nominated too);
 - **Request nomination**: ask someone else to nominate them;
+- **Nominate yourself**, or **Ask to be nominated**;
 - **NPC nominations X**: the next of the X NPCs who want to nominate does
   so, saying why.
 
@@ -64,7 +65,9 @@ execution (💀) and go to night.
 ### Game over
 
 The **Final reveal** shows the Grimoire and a timeline of the whole game;
-**Download log.txt** saves it.
+**Download log.txt** saves it. Mid-game, the ☰ menu shows the game's seed
+and has a **Download log.txt** of the game so far (for a bug report: it
+gives everything away).
 
 ## Scripts
 

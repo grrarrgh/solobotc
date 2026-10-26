@@ -705,6 +705,14 @@ button:disabled {
   text-decoration: underline;
 }
 
+/* The game's seed, under Report a bug: selectable, to copy into a report. */
+.menu-seed {
+  display: block;
+  margin-top: 4px;
+  color: #bbb;
+  user-select: all;
+}
+
 .size-controls button:disabled {
   opacity: 0.4;
   cursor: default;

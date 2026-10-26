@@ -9,6 +9,7 @@ import {
   FIRST_NIGHT_INFO,
   ONGOING_INFO,
   DEMON_KILL_PRIORITY,
+  PHILOSOPHER_AVOID,
   BARBER_VALUE,
   BARBER_OUTSIDER_VALUE,
   BARBER_CONFIRMED_WEIGHT,
@@ -30,6 +31,7 @@ import {
   GOOD_VOTE_MIN,
   GOOD_VOTE_MAX,
   HUMAN_NOMINATION_BONUS,
+  NEAR_FINAL_HUMAN_VOTE_CHANCE,
   EVIL_VOTE_CHANCE,
   EVIL_TEAMMATE_VOTE_CHANCE,
   EVIDENCE_WEIGHT,
@@ -84,6 +86,10 @@ import {
   isDemon,
   wishBarred,
   atFinal,
+  nearFinal,
+  teaLadyOf,
+  alchemistOptions,
+  shielded,
   jinxBarred,
   minionAbility,
   poppyBlocks,
@@ -1613,7 +1619,9 @@ export class SimpleStrategy {
   //
   // In the final 3 (or 2, with a Zombuul), the call is yours: good NPCs,
   // living or dead, vote for whoever you nominate (or asked to have
-  // nominated), whatever they think of them.
+  // nominated), whatever they think of them. In the final 4 (or 3), your
+  // pick sways them: they vote for it at NEAR_FINAL_HUMAN_VOTE_CHANCE at
+  // least.
   vote(s, v, n, tally = null) {
     // A player who claimed the Goblin today: executing them could win it for
     // evil, so good players hardly ever vote, even for your pick. The evil
@@ -1647,6 +1655,18 @@ export class SimpleStrategy {
     }
 
     if (tally?.humanChoice && atFinal(s) && sideOf(v) !== "evil") {
+      return true;
+    }
+
+    // (Not on the Mastermind's extra day, below, whose execution decides
+    // the game.)
+    if (
+      tally?.humanChoice &&
+      nearFinal(s) &&
+      s.mastermindDay !== s.day &&
+      sideOf(v) !== "evil" &&
+      s.r() < NEAR_FINAL_HUMAN_VOTE_CHANCE
+    ) {
       return true;
     }
 
@@ -2018,9 +2038,10 @@ export class SimpleStrategy {
 
   // The living NPC a good Alchemist p suspects enough to use their Minion
   // ability on: one they'd nominate (NPC_NOMINATE_EVIDENCE), or with `sure`,
-  // one they strongly suspect (see strongSuspect()). Null if nobody.
-  alchemistSuspect(s, p, sure = false) {
-    const pool = untwinned(s, this.others(s, p));
+  // one they strongly suspect (see strongSuspect()), not one `avoid`s. Null
+  // if nobody.
+  alchemistSuspect(s, p, sure = false, avoid = () => false) {
+    const pool = untwinned(s, this.others(s, p)).filter((x) => !avoid(x));
 
     if (sure) {
       return this.strongSuspect(s, p, pool) ?? null;
@@ -2104,21 +2125,33 @@ export class SimpleStrategy {
   }
 
   // Who Psychopath p kills in public today: whoever the Demon would kill
-  // (see demon()), but never a teammate or themself.
+  // (see demon()), but never a teammate or themself, nor a player their kill
+  // failed on before (p.foiled: see psychopath.js), while they still can't
+  // die. Failing that, another good NPC; you only when there's none left,
+  // as for the Demon.
   psychopath(s, p) {
+    const foiled = (x) => Boolean(p.foiled?.includes(x.id)) && shielded(s, x);
+
     // (A good Alchemist with the ability: only a player they're sure of.)
     if (sideOf(p) === "good") {
-      return this.alchemistSuspect(s, p, true);
+      return this.alchemistSuspect(s, p, true, foiled);
     }
 
     const t = this.demon(s, p);
 
-    return t?.alive && t !== p && goodTo(p, t) && !spares(s, p, t)
-      ? t
-      : pick(
-          untwinned(s, s.players.filter((x) => x.alive && x !== p && goodTo(p, x) && !spares(s, p, x))),
-          s.r,
-        );
+    if (t?.alive && t !== p && goodTo(p, t) && !spares(s, p, t) && !foiled(t)) {
+      return t;
+    }
+
+    const good = untwinned(
+      s,
+      s.players.filter((x) => x.alive && x !== p && goodTo(p, x) && !spares(s, p, x)),
+    );
+    const npcs = good.filter((x) => !x.human);
+    const fresh = npcs.filter((x) => !foiled(x));
+    const you = good.filter((x) => x.human);
+
+    return pick(fresh.length ? fresh : you.length ? you : npcs, s.r);
   }
 
   // The Fisherman visits the Storyteller once (timed by
@@ -2443,10 +2476,29 @@ export class SimpleStrategy {
         !s.revived?.includes(x.id) &&
         !spares(s, p, x),
     );
+    // Left with nobody it can kill but its own team (and a Lleech's host),
+    // the Demon kills you, as in a real game, rather than a teammate or
+    // nobody; having chosen you already tonight (the Shabaloth, the Po),
+    // nobody else. Nobody it can kill, as the Storyteller knows: not a
+    // working Soldier, nor a Tea Lady's good neighbour (say, when you're the
+    // Tea Lady, both of yours). (A Sailor can die: late on, the Storyteller
+    // makes them drunk; see sailor.js.) (Only now does it ever attack you:
+    // see engine attack().)
+    const you = s.players.find((x) => x.human && x.alive);
+    const safe = (x) => Boolean(teaLadyOf(s, x)) || (x.role === "soldier" && works(x));
+
+    if (isDemon(p) && you && !pool.some((x) => goodTo(p, x) && !safe(x))) {
+      return exclude.includes(you)
+        ? null
+        : because(you, "nobody but its own team is left to kill, besides you");
+    }
+
     const decoys = pool.filter(
       (x) => x.role !== "lunatic" && !p.foiled?.includes(x.id),
     );
-    const options = decoys.length ? decoys : pool;
+    // (Never a teammate to spare the Lunatic, or one its attack bounced off:
+    // with only teammates left besides, them too.)
+    const options = decoys.some((x) => goodTo(p, x)) ? decoys : pool;
     const lunaticPick = options.find((x) => x.id === s.lunaticPick);
     const exorcist = options.find((x) => x.id === p.exorcistId);
     const protector = pick(
@@ -2966,8 +3018,12 @@ export class SimpleStrategy {
   }
 
   // The Philosopher (once per game, timed by ONCE_PER_GAME.philosopher) gains
-  // an ongoing information ability not in play (so nobody is made drunk), or
-  // else any other good character.
+  // a Townsfolk ability that helps the town: never an Outsider's (the
+  // Damsel's, Politician's or Heretic's would do good no good, or harm), nor
+  // one of PHILOSOPHER_AVOID, which would do nothing. The most valuable
+  // first (a "high" DEMON_KILL_PRIORITY), even if it's in play and its
+  // holder is made drunk; then any other. Not in play, when it can. Why
+  // goes in p.philosopherWhy, for the log (see philosopher.js).
   philosopher(s, p) {
     if (!this.onceReady(s, "philosopher", s.night)) {
       return null;
@@ -2975,19 +3031,28 @@ export class SimpleStrategy {
 
     const inPlay = new Set(s.players.map((x) => x.role));
     const barred = jinxBarred(s);
-    // (Never the Lunatic: its "ability" is believing they're the Demon. Nor
-    // one jinxed with a character in play: see jinxBarred().)
-    const good = s.script.ids.filter(
+    // (Nor one jinxed with a character in play: see jinxBarred(). Nor the
+    // Alchemist's, with no Minion ability left to have.)
+    const useful = s.script.ids.filter(
       (id) =>
-        alignment(id) === "good" &&
-        !["philosopher", "lunatic"].includes(id) &&
-        !barred.has(id),
+        team(id) === "townsfolk" &&
+        id !== "philosopher" &&
+        !PHILOSOPHER_AVOID.includes(id) &&
+        !barred.has(id) &&
+        (id !== "alchemist" || alchemistOptions(s).length > 0),
     );
-    const fresh = good.filter(
-      (id) => ONGOING_INFO.includes(id) && !inPlay.has(id),
-    );
+    const high = useful.filter((id) => DEMON_KILL_PRIORITY[id] === "high");
+    const free = (ids) => ids.filter((id) => !inPlay.has(id));
+    const [ids, why] = [
+      [free(high), "one of the most valuable Townsfolk, not in play"],
+      [high, "one of the most valuable Townsfolk (in play: its holder is made drunk)"],
+      [free(useful), "a useful Townsfolk, not in play"],
+      [useful, "a useful Townsfolk (in play: its holder is made drunk)"],
+    ].find(([x]) => x.length) ?? [[], null];
 
-    return pick(fresh.length ? fresh : good, s.r);
+    p.philosopherWhy = why;
+
+    return pick(ids, s.r);
   }
 
   // An evil Philosopher bluffer "gains" a Townsfolk that is in play

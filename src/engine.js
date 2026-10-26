@@ -13,6 +13,7 @@ import {
   TRUST_EVIDENCE,
   EVIDENCE_TO_SUSPECT,
   HIDDEN_OUTSIDERS,
+  NEAR_FINAL_HUMAN_VOTE_CHANCE,
 } from "./data.js";
 import {
   nightInfo,
@@ -30,6 +31,8 @@ import {
   bluffing,
   jinxBarred,
   wishBarred,
+  nearFinal,
+  finalCount,
 } from "./storyteller.js";
 import {
   SimpleStrategy,
@@ -812,11 +815,6 @@ export class Engine {
       }
     }
 
-    // (Left with only their host and you, the Lleech kills you.)
-    if (d.role === "lleech" && this.lleechCornered(d, targets)) {
-      return;
-    }
-
     for (const t of targets) {
       if (!s.winner) {
         this.attack(d, t);
@@ -829,11 +827,12 @@ export class Engine {
   }
 
   // The Demon attacks t: `chosen` tonight (false for the Pukka's victim from
-  // last night, who dies now), described by `verb` in the log.
+  // last night, who dies now), described by `verb` in the log. (You, only
+  // when it has nobody else but its own team: see strategy demon().)
   attack(d, t, { chosen = true, verb = "chose" } = {}) {
     const s = this.s;
 
-    if (!t || t.human || !t.alive) {
+    if (!t || !t.alive) {
       this.audit(
         "demon",
         `${d.label} (${name(d.role)}) had no legal target.`,
@@ -2007,15 +2006,16 @@ export class Engine {
     return this.s.nominated.includes(id);
   }
 
-  // The NPC that can be nominated right now, or an error. (Dead players can
-  // be nominated too: executing one does nothing, unless it's a Zombuul
+  // The player that can be nominated right now, or an error: an NPC, or
+  // you (you can nominate yourself, or ask to be nominated). (Dead players
+  // can be nominated too: executing one does nothing, unless it's a Zombuul
   // that only registers as dead.)
   nominee(id) {
     const s = this.s;
     const n = this.player(id);
 
-    if (s.phase !== "day" || s.winner || !n || n.human) {
-      throw Error("Choose an NPC.");
+    if (s.phase !== "day" || s.winner || !n) {
+      throw Error("Choose a player.");
     }
 
     if (this.nominatedToday(id)) {
@@ -2029,7 +2029,7 @@ export class Engine {
     return n;
   }
 
-  // The human nominates a living NPC (once per day).
+  // The human nominates a player (once per day): an NPC, or themself.
   // `hand`: whether your hand is up for the vote, or null to wait for you
   // to decide (see castVotes()).
   nominate(id, hand = true) {
@@ -2050,12 +2050,17 @@ export class Engine {
       throw Error("Your wish's price: you can't nominate in the second round.");
     }
 
+    if (n === h) {
+      s.publicLog.push(`Day ${s.day} — You nominate yourself.`);
+      this.audit("nomination", "You nominated yourself.", { actorId: h.id, targetId: h.id });
+    }
+
     return this.runNomination(h, n, false, hand);
   }
 
-  // The human asks the town for a nomination; a living NPC who hasn't
-  // nominated today makes it. (A dead human can still do this.) `hand` as
-  // for nominate().
+  // The human asks the town for a nomination (of an NPC, or of themself); a
+  // living NPC who hasn't nominated today makes it. (A dead human can still
+  // do this.) `hand` as for nominate().
   requestNomination(id, hand = true) {
     const s = this.s;
     const n = this.nominee(id);
@@ -2177,6 +2182,16 @@ export class Engine {
         `${n.label} is dead: good players don't vote to execute them${
           s.script.ids.includes("zombuul") ? " (unless they suspect them: the Zombuul might only register as dead)" : ""
         }.`,
+      );
+    }
+
+    // (Your pick, one execution from the final 3: see strategy vote().)
+    if ((nominator.human || requested) && nearFinal(s) && s.mastermindDay !== s.day) {
+      this.audit(
+        "workings",
+        `${this.alive().length} alive, one execution from the final ${finalCount(s)}: good NPCs vote for your pick, ${n.label}, at ${Math.round(
+          NEAR_FINAL_HUMAN_VOTE_CHANCE * 100,
+        )}% at least, whatever they think of them.`,
       );
     }
 

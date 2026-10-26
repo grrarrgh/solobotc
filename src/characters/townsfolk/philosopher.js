@@ -1,6 +1,7 @@
 import { name } from "../../data.js";
-import { ability, works, who } from "../../storyteller.js";
+import { ability, works, who, alchemistOptions } from "../../storyteller.js";
 import { bluffState } from "../../bluff.js";
+import { pick } from "../../util.js";
 
 // The Philosopher, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -36,6 +37,12 @@ export const philosopher = {
     p.gained = role;
     p.gainedNight = s.night;
 
+    // (The Alchemist's ability is a Minion's, as a real Alchemist is given at
+    // setup: one on the script that isn't in play. See alchemist.js.)
+    if (role === "alchemist") {
+      p.alchemist = pick(alchemistOptions(s), s.r);
+    }
+
     // A drunk or poisoned Philosopher only thinks they gained it.
     if (!effective) {
       p.drunkFrom = "philosopher";
@@ -45,16 +52,25 @@ export const philosopher = {
       holder.drunkFromBy = who(p);
     }
 
+    const minion =
+      role !== "alchemist"
+        ? ""
+        : p.alchemist
+          ? ` (the ${name(p.alchemist)} ability)`
+          : " (but no Minion ability: every one they could have is in play)";
+
     this.audit(
       "philosopher",
-      `${p.label} (Philosopher) gained the ${name(role)} ability${
+      `${p.label} (Philosopher) gained the ${name(role)} ability${minion}${
+        p.philosopherWhy ? ` (why: ${p.philosopherWhy})` : ""
+      }${
         !effective
           ? ", but it doesn't work"
           : holder
             ? `; ${holder.label} is drunk from now on`
             : ""
       }.`,
-      { actorId: p.id, role, effective },
+      { actorId: p.id, role, effective, alchemist: p.alchemist ?? null },
     );
 
     this.remember(p, philosopherInfo(s, role));

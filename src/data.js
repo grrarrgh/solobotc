@@ -360,6 +360,26 @@ export const CERENOVUS_GOBLIN_CHANCE = 0.2;
 export const FEARMONGER_PUSH_CHANCE = 0.3;
 export const FEARMONGER_CAUTION = 0.5;
 
+// The Philosopher's "avoid picking these" list: Townsfolk an NPC
+// Philosopher never gains, as the ability would do the town no good (see
+// strategy philosopher(), which never picks an Outsider either). The Poppy
+// Grower's, Pixie's, Magician's and Amnesiac's only work from setup, the
+// Cannibal's only for a real Cannibal, the Huntsman's only with a Damsel in
+// play (which the Philosopher can't know), and the Gambler's mostly kills
+// them. Add any other wasted pick here.
+export const PHILOSOPHER_AVOID = [
+  "poppygrower",
+  "pixie",
+  "magician",
+  "amnesiac",
+  "cannibal",
+  "huntsman",
+  "gambler",
+  "damsel",
+  "general",
+  "steward",
+];
+
 // The Psychopath (characters/minion/psychopath.js): the chance an NPC
 // Psychopath kills in public, each day, until they've done it once (then
 // they're known, and kill every day).
@@ -490,6 +510,10 @@ export const GOOD_VOTE_EVIDENCE_STEP = 0.15;
 export const GOOD_VOTE_MIN = 0.1;
 export const GOOD_VOTE_MAX = 0.9;
 export const HUMAN_NOMINATION_BONUS = 0.1; // added when you nominated
+// In the final 4 (or 3, with a Zombuul), one execution from the final 3,
+// good NPCs vote for your pick (nominated, or asked for) at least this
+// often, whatever they think of the nominee (in the final 3, always).
+export const NEAR_FINAL_HUMAN_VOTE_CHANCE = 0.85;
 export const EVIL_VOTE_CHANCE = 0.85; // an evil NPC, for a good nominee
 export const EVIL_TEAMMATE_VOTE_CHANCE = 0.5; // ...for a teammate, only when it can't change the outcome
 

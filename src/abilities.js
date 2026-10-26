@@ -9,7 +9,7 @@ import {
   HIDDEN_OUTSIDERS,
   HIDE_NEVER_AS,
 } from "./data.js";
-import { ability, works, isDemon } from "./storyteller.js";
+import { ability, works, isDemon, teaLadyOf } from "./storyteller.js";
 import { backStory } from "./bluff.js";
 import { speak, heard } from "./strategy.js";
 import { pick, tick } from "./util.js";
@@ -424,21 +424,9 @@ export const abilities = {
       return { text: "protected by the Innkeeper", by: p.safeBy };
     }
 
-    for (const t of s.players.filter(
-      (x) => x.alive && x !== p && ability(x) === "tealady" && works(x),
-    )) {
-      const near = this.aliveNeighbours(t);
+    const t = teaLadyOf(s, p);
 
-      if (
-        near.length === 2 &&
-        near.includes(p) &&
-        near.every((x) => x.alignment === "good")
-      ) {
-        return { text: "protected by the Tea Lady", by: t.id };
-      }
-    }
-
-    return null;
+    return t ? { text: "protected by the Tea Lady", by: t.id } : null;
   },
 
   // Brings a dead player back to life (the Professor, the Shabaloth). They

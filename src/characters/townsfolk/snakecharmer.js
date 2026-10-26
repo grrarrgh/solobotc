@@ -43,10 +43,16 @@ export const snakecharmer = {
     const demon = d.role;
 
     // The charmer becomes the Demon (keeping their Snake Charmer claim as a
-    // bluff); the Demon becomes a poisoned, good Snake Charmer.
+    // bluff); the Demon becomes a poisoned, good Snake Charmer. (A
+    // Philosopher who gained the Snake Charmer's ability loses it: they act
+    // as the Demon now, see ability().)
+    const gained = c.gained;
+
     c.role = demon;
     c.shown = demon;
     c.alignment = "evil";
+    c.gained = null;
+    c.gainedNight = 0;
     c.bluffs = d.bluffs;
     c.suspicion = null;
 
@@ -62,7 +68,9 @@ export const snakecharmer = {
 
     this.audit(
       "succession",
-      `${c.label} became the ${name(demon)}; ${d.label} is now a poisoned Snake Charmer.`,
+      `${c.label} became the ${name(demon)}${
+        gained ? ` (and lost the ${name(gained)} ability they gained)` : ""
+      }; ${d.label} is now a poisoned Snake Charmer.`,
       { playerId: c.id, previousDemonId: d.id },
     );
   },
