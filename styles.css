@@ -53,6 +53,46 @@ section {
   min-width: 0;
 }
 
+/* Under the setup card: How to play (collapsed) and About. */
+.setup-info {
+  max-width: 640px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+.setup-info h2 {
+  margin: 0;
+  color: #f0cf83;
+}
+
+.setup-info details[open] > summary {
+  margin-bottom: 4px;
+}
+
+.setup-info h3 {
+  margin: 18px 0 4px;
+  color: #f0cf83;
+  font-size: 1rem;
+}
+
+.setup-info p,
+.setup-info ul {
+  margin: 6px 0;
+}
+
+.setup-info .about h2 {
+  margin-bottom: 8px;
+}
+
+.site-footer {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 8px 20px 24px;
+  color: #999;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
 .setup-page #start {
   display: block;
   width: 100%;
@@ -576,7 +616,8 @@ button:disabled {
   z-index: 5;
 }
 
-/* The menu to the left of the title (town square size). */
+/* The menu to the left of the title (town square size, and a link to report
+   a bug on GitHub). */
 .title-bar {
   display: flex;
   align-items: center;
@@ -636,6 +677,21 @@ button:disabled {
   font-size: 1.2rem;
   font-weight: 900;
   cursor: pointer;
+}
+
+.menu-link {
+  display: block;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #b69455;
+  color: #f0cf83;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.menu-link:hover,
+.menu-link:focus-visible {
+  text-decoration: underline;
 }
 
 .size-controls button:disabled {

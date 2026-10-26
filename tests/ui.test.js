@@ -178,6 +178,11 @@ test("a menu by the title opens the town square size popup with − / + buttons"
   assert.match(css, /var\(--scale, 1\)/);
 });
 
+test("the menu has a link, with a bug icon, to report a bug on GitHub in a new tab", () => {
+  assert.match(html, /id="size-popup"[\s\S]*?<a\s+id="report-bug"[^>]*href="https:\/\/github\.com\/grrarrgh\/solobotc\/issues\/new"[^>]*target="_blank"[^>]*rel="noopener"[^>]*>\s*<span aria-hidden="true">🐛<\/span> Report a bug<\/a/);
+  assert.match(css, /\.menu-link \{/);
+});
+
 test("seats are round, and the votes needed show under the clock tower", () => {
   assert.match(css, /\.seat \{[^}]*aspect-ratio: 1/);
   assert.match(app, /class="votes-needed">\$\{needed\} votes needed/);
@@ -303,6 +308,16 @@ test("the setup page is a card of its own, with an i by the script that opens it
   assert.match(html, /id="script-info"[\s\S]*?class="info-button"/);
   assert.match(app, /showScript\(false, parseScript\(scripts\[\+\$\("script"\)\.value\]\.raw\)\)/);
   assert.match(css, /\.setup-page \{/);
+});
+
+test("under the setup card: How to play (collapsed), About, hidden with it; a footer on every page", () => {
+  assert.match(html, /<section id="setup" class="setup-page">[\s\S]*?<\/section>\s*(<!--[\s\S]*?-->\s*)?<div id="setup-info" class="setup-info">/);
+  assert.match(html, /<details id="how-to-play" class="panel">\s*<summary><h2>How to play<\/h2><\/summary>/);
+  assert.match(html, /<b>Ask<\/b>[\s\S]*?<b>Start Nominations<\/b>[\s\S]*?<b>Raise hand<\/b>/);
+  assert.match(html, /<section class="about">[\s\S]*?fan-made project[\s\S]*?not for commercial use/);
+  assert.match(html, /<\/main>\s*<footer class="site-footer">\s*This project is not affiliated with The Pandemonium Institute\. All roles,\s+content are the property of Steven Medway and The Pandemonium Institute\./);
+  assert.match(app, /\$\("setup"\)\.hidden = true;\s*\$\("setup-info"\)\.hidden = true;/);
+  assert.match(app, /\$\("setup"\)\.hidden = false;\s*\$\("setup-info"\)\.hidden = false;/);
 });
 
 test("the script sheet lists each team's characters alphabetically, with any note on how the game simplifies them", () => {

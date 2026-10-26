@@ -2,6 +2,12 @@
 
 Newest first.
 
+## Superficial Changes: Report a Bug, How to Play, About & the Footer
+
+- The ☰ menu by the title has a "🐛 Report a bug" link, under the town square size. It opens a new GitHub issue (github.com/grrarrgh/solobotc/issues/new) in a new tab.
+- Setup page: under the New game card, a "How to play" guide, collapsed until opened: the goal, starting a game, night, talking to (asking) players, nominating, voting, and tips. Under it, "About": a fan-made project, built for fun, and not for commercial use. Both are hidden once a game starts.
+- Every page has a footer: "This project is not affiliated with The Pandemonium Institute. All roles, content are the property of Steven Medway and The Pandemonium Institute."
+
 ## Bug Fixes & Improvements: Varied Bluffs, the Gambler, the Mathematician, Self-Votes & the Setup Page
 
 From logs 19–21 (Extension Cord, Catfishing, Bad Moon Rising), and a check across every script of how often made-up information names the same player as the night before, against how often real information does.

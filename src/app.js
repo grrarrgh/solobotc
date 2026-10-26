@@ -219,6 +219,7 @@ function start() {
     alertStart.clear();
 
     $("setup").hidden = true;
+    $("setup-info").hidden = true;
     $("game").hidden = false;
 
     render();
@@ -1787,6 +1788,7 @@ function resetGame() {
 
   $("game").hidden = true;
   $("setup").hidden = false;
+  $("setup-info").hidden = false;
   $("reveal").hidden = true;
   $("actions").hidden = true;
 

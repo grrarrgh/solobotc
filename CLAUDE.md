@@ -95,7 +95,8 @@ To run, drive or screenshot the real page, use the `run-solobotc` skill
   game). Run `npm test` and `npm run check` before calling work done.
 - **CHANGES.md**: every round of changes gets an entry at the top (below
   `# Changes`), headed like `## New Features: …`, `## Bug Fixes: …`,
-  `## Improvements: …` (or combinations), then `- ` bullets. Wrap identifiers
+  `## Improvements: …`, `## Superficial Changes: …` (cosmetic/UI-only),
+  or combinations, then `- ` bullets. Wrap identifiers
   with `*` or `<…>` in backticks.
 
 ## Style

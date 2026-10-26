@@ -28,6 +28,14 @@
               <strong id="size-value"></strong>
               <button id="size-up" type="button" aria-label="Larger">+</button>
             </div>
+            <a
+              id="report-bug"
+              class="menu-link"
+              href="https://github.com/grrarrgh/solobotc/issues/new"
+              target="_blank"
+              rel="noopener"
+              ><span aria-hidden="true">🐛</span> Report a bug</a
+            >
           </div>
         </div>
         <h1>Solo Clocktower</h1>
@@ -62,6 +70,125 @@
         <button id="start">Start</button>
         <p id="error"></p>
       </section>
+
+      <!-- Under the setup card, and hidden with it: how to play (collapsed
+           until opened), and what this project is. -->
+      <div id="setup-info" class="setup-info">
+        <section>
+          <details id="how-to-play" class="panel">
+            <summary><h2>How to play</h2></summary>
+
+            <h3>The goal</h3>
+            <p>
+              You're on the good team, and every other player is played by the
+              computer. Somewhere among them is the Demon, who kills a player
+              each night, helped by its Minions. Good wins by executing the
+              Demon. Evil wins when just two players are left alive. Evil
+              players pretend to be good, so you'll have to work out who's
+              lying.
+            </p>
+
+            <h3>Starting a game</h3>
+            <p>
+              Choose a script (the set of characters that might be in play) and
+              the number of seats, then press <b>Random Seed</b> and
+              <b>Start</b>. The same seed always deals the same game. Press the
+              <b>i</b> next to the script to read its characters, and click any
+              character's name during the game to read what it does.
+            </p>
+
+            <h3>Night</h3>
+            <p>
+              Everyone sleeps. The Storyteller wakes you if your character does
+              something at night, and tells you what you learn in the
+              <b>Storyteller</b> panel. If you have a choice to make, click the
+              player(s) in the town square and press <b>Select</b>. At dawn
+              you'll hear who died.
+            </p>
+
+            <h3>Day: talking</h3>
+            <p>
+              Click a player, then <b>Ask</b> them in private. They'll tell you
+              what character they claim to be, what they've learned, and who
+              they trust or suspect. You can then <b>Share My Info</b> (your
+              character and what you've learned) or <b>Leave conversation</b>.
+              You can only talk to about half the living players each day, so
+              choose carefully.
+            </p>
+            <p>
+              Not everyone tells the truth. Evil players always lie about who
+              they are, and some good players hide a valuable character, or
+              claim one, to fool the Demon. They may come clean later.
+            </p>
+
+            <h3>Day: nominating</h3>
+            <p>
+              When you're done talking, press <b>Start Nominations</b> (you
+              can't talk any more that day). Then:
+            </p>
+            <ul>
+              <li><b>Nominate</b>: select a player and nominate them yourself.</li>
+              <li>
+                <b>Request nomination</b>: ask someone else to nominate the
+                player you've selected.
+              </li>
+              <li>
+                <b>NPC nominations</b>: let the next player who wants to
+                nominate someone do so. They'll say why.
+              </li>
+            </ul>
+            <p>Each player can only be nominated once a day.</p>
+
+            <h3>Day: voting</h3>
+            <p>
+              Each nomination goes to a vote. Your hand starts down: press
+              <b>Raise hand</b> to vote (or <b>Lower hand</b> to change your
+              mind) before the clock hand reaches you. If at least half the
+              living players vote, and it's more votes than anyone else got
+              today, that player is marked for execution (💀). Dead players get
+              one last vote for the rest of the game, so save it.
+            </p>
+            <p>
+              When you're ready, press <b>End day</b>: whoever is marked is
+              executed, and night falls.
+            </p>
+
+            <h3>Tips</h3>
+            <ul>
+              <li>
+                Click the clock tower in the middle of the town square to see
+                the whole script. Its <b>Night order</b> button shows who wakes,
+                and when.
+              </li>
+              <li>
+                The <b>Public log</b> keeps everything said in public, and the
+                Storyteller panel everything you've learned.
+              </li>
+              <li>
+                Some characters have their own buttons by day (the Slayer's
+                shot, the Gossip's statement...).
+              </li>
+              <li>
+                With 4 or fewer players alive, <b>Round Robin</b> (once a game)
+                has every player say their character and information in public.
+              </li>
+              <li>
+                When the game ends, the <b>Final reveal</b> shows everyone's
+                character and everything that happened.
+              </li>
+            </ul>
+          </details>
+        </section>
+
+        <section class="about">
+          <h2>About</h2>
+          <p>
+            Solo Clocktower is a fan-made project, built for fun, so you can
+            play Blood on the Clocktower on your own against computer players.
+            It's free, and not for commercial use.
+          </p>
+        </section>
+      </div>
 
       <section id="game" hidden>
         <h2 id="role"></h2>
@@ -230,6 +357,11 @@
         </section>
       </section>
     </main>
+
+    <footer class="site-footer">
+      This project is not affiliated with The Pandemonium Institute. All roles,
+      content are the property of Steven Medway and The Pandemonium Institute.
+    </footer>
 
     <!-- The popups close when pressed (the confirm popup: anywhere but its
          buttons is Keep talking). -->
