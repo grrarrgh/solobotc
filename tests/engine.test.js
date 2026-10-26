@@ -43,6 +43,7 @@ import {
   nightOrder,
 } from "../src/characters/nightorder.js";
 import { Engine, canPick } from "../src/engine.js";
+import { SelfPlay } from "../src/selfplay.js";
 import {
   SimpleStrategy,
   speak,
@@ -11507,4 +11508,42 @@ test("whole games play out with the General, Heretic and Politician", () => {
 
     assert.ok([null, "good", "evil"].includes(s.winner));
   }
+});
+
+// ── Self-play (testing only) ─────────────────────────────────────
+
+test("self-play plays whole games to the end on every script, logging its moves", () => {
+  const files = JSON.parse(
+    fs.readFileSync(new URL("../scripts/index.json", import.meta.url)),
+  );
+
+  for (const f of files) {
+    const raw = JSON.parse(
+      fs.readFileSync(new URL(`../scripts/${encodeURIComponent(f)}`, import.meta.url)),
+    );
+
+    for (let g = 0; g < 12; g++) {
+      const s = createState(raw, 8 + (g % 8), `selfplay-${g}`);
+      const e = new Engine(s);
+
+      e.start();
+      new SelfPlay(e).play();
+
+      assert.ok(["good", "evil"].includes(s.winner), `${f} game ${g} didn't end`);
+      assert.ok(s.audit.some((x) => x.type === "selfplay"));
+    }
+  }
+});
+
+test("self-play is deterministic: the same seed plays the same game", () => {
+  const run = () => {
+    const s = createState(script, 10, "selfplay-same");
+    const e = new Engine(s);
+
+    e.start();
+    new SelfPlay(e).play();
+    return e.debugLog();
+  };
+
+  assert.equal(run(), run());
 });

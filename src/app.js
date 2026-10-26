@@ -18,6 +18,7 @@ import {
   CLAIM_ALERT_FADE_MS,
   PERF_LOGGING,
   PERF_SLOW_MS,
+  SELF_PLAY_STEP_MS,
   TOWN_SQUARE_SIZE,
   TOWN_SQUARE_SIZE_STEP,
   TOWN_SQUARE_SIZE_MIN,
@@ -37,6 +38,7 @@ import {
 import { claimTo } from "./strategy.js";
 import { NIGHT_STEPS, nightOrder } from "./characters/nightorder.js";
 import { byId } from "./util.js";
+import { SelfPlay } from "./selfplay.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -209,6 +211,7 @@ function start() {
 
     e = new Engine(s);
     e.start();
+    bot = SELF_PLAY ? new SelfPlay(e) : null;
 
     stopBoomCountdown();
     selectedPlayerId = null;
@@ -223,6 +226,7 @@ function start() {
     $("game").hidden = false;
 
     render();
+    selfPlayLoop();
   } catch (err) {
     $("error").textContent = err.message;
   }
@@ -461,7 +465,7 @@ function handChoice(c) {
 // or lower yours until it reaches you, and then the votes are cast; then
 // the skull marks the nominee if they're now marked for execution, and the
 // clock tower returns.
-async function runVote(fn) {
+async function runVote(fn, yours = false) {
   if (voteAnim) {
     return;
   }
@@ -514,6 +518,11 @@ async function runVote(fn) {
   await sleep(400);
 
   const choice = e.canVote() ? handChoice(c) : null;
+
+  // (Self-play raises your hand for you: see selfplay.js.)
+  if (choice && selfPlaying() && bot.hand(result.nomineeId, yours) !== choice.up()) {
+    $("hand-toggle").click();
+  }
 
   await choice?.ready;
 
@@ -1492,6 +1501,8 @@ function draw() {
   const talk = e.talkStatus(t?.id);
 
   $("role").innerHTML = `You are ${roleLink(h.shown)}`;
+  $("self-play").hidden = !bot;
+  $("self-play").textContent = `Self-play: ${selfPlayOn ? "on" : "paused"}`;
 
   // The winner is only shown in the Final reveal.
   $("status").textContent = s.winner
@@ -1760,6 +1771,7 @@ document.addEventListener("keydown", (ev) => {
 
 function resetGame() {
   stopBoomCountdown();
+  bot = null;
   s = null;
   e = null;
   selectedPlayerId = null;
@@ -2175,6 +2187,103 @@ $("pass").onclick = () => {
   } catch (err) {
     $("answer").textContent = err.message;
   }
+};
+
+// ── Self-play (testing only) ─────────────────────────────────
+
+// With ?selfplay in the page's address, self-play makes your choices (see
+// selfplay.js), one move every SELF_PLAY_STEP_MS, through the same controls
+// and vote animation as your own; the Self-play button pauses and resumes it.
+const SELF_PLAY = new URLSearchParams(location.search).has("selfplay");
+
+let bot = null;
+let selfPlayOn = true;
+let selfPlayRunning = false;
+
+const selfPlaying = () => Boolean(bot && selfPlayOn && bot.e === e && !s?.winner);
+
+async function selfPlayLoop() {
+  if (selfPlayRunning) {
+    return;
+  }
+
+  selfPlayRunning = true;
+
+  try {
+    while (selfPlaying()) {
+      await sleep(SELF_PLAY_STEP_MS);
+
+      if (!selfPlaying() || voteAnim || nominating) {
+        continue;
+      }
+
+      // (Cards are closed as soon as they're shown.)
+      if ($("phase-dialog").open) {
+        $("phase-dialog").close();
+        continue;
+      }
+
+      await selfPlayStep();
+    }
+  } finally {
+    selfPlayRunning = false;
+  }
+}
+
+// One self-play move: whatever is waiting on you (a night choice, a throw,
+// a point), or the next thing to do by day (see SelfPlay next()).
+async function selfPlayStep() {
+  try {
+    if (s.boom) {
+      stopBoomCountdown();
+      e.boomPoint(bot.boomPoint());
+    } else if (s.roshambo) {
+      e.roshambo(bot.roshambo());
+    } else if (s.pending) {
+      const { ids, character } = bot.nightChoice();
+
+      e.choose(ids, character);
+      nightPicks = [];
+    } else {
+      const a = bot.next();
+
+      if (a?.kind === "ask") {
+        selectedPlayerId = a.id;
+        talkingTo = a.id;
+        $("answer").innerHTML = linkRoles(e.ask(a.id));
+      } else if (a?.kind === "ability") {
+        const said = a.run();
+
+        $("day-answer").innerHTML = typeof said === "string" ? linkRoles(said) : "";
+      } else if (a?.kind === "open") {
+        selectedPlayerId = null;
+        talkingTo = null;
+        $("answer").textContent = "";
+        e.openNominations();
+      } else if (a?.kind === "nominate") {
+        await runVote(
+          () => (e.human().alive ? e.nominate(a.id, null) : e.requestNomination(a.id, null)),
+          true,
+        );
+      } else if (a?.kind === "npc") {
+        await npcNominate();
+      } else if (a?.kind === "end") {
+        selectedPlayerId = null;
+        $("day-answer").textContent = "";
+        e.endDay();
+      }
+    }
+  } catch (err) {
+    bot.note(`couldn't: ${err.message}`);
+  }
+
+  render();
+}
+
+$("self-play").onclick = () => {
+  selfPlayOn = !selfPlayOn;
+  render();
+  selfPlayLoop();
 };
 
 $("seats").innerHTML = Object.keys(COUNTS)

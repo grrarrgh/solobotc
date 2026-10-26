@@ -2,6 +2,13 @@
 
 Newest first.
 
+## New Features: Self-Play (Testing Only)
+
+- Open the page with `?selfplay` in the address (e.g. `http://localhost:8000/?selfplay`) and the game plays your seat for you, one move every `SELF_PLAY_STEP_MS` (0.7 s), through the same controls and vote animation as your own. A Self-play button under the day counter pauses and resumes it, so you can take over at any point.
+- Its moves are simple (`src/selfplay.js`): random night picks (optional abilities half the time), it asks NPCs until it runs out of conversations, uses any day ability once a day, closes cards, and nominates and votes for whoever the most NPCs suspect (always voting for its own nomination).
+- Its decisions draw from their own seeded RNG, not the game's, so the same seed still deals the same game. Every move is logged as `selfplay` in log.txt.
+- `new SelfPlay(e).play()` plays a whole game headless, for tests and scripts.
+
 ## Bug Fixes: Choosing Dead Players, Votes on the Dead & the Mastermind's Extra Day
 
 From 10 auto-played games (random nominations by you, then every NPC nomination), and a check of every ability that chooses players.

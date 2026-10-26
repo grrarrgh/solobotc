@@ -710,3 +710,7 @@ export const PLAYER_COLOURS = [
 // to the end of log.txt, and soloPerf() in the console prints it any time.
 export const PERF_LOGGING = true;
 export const PERF_SLOW_MS = 50;
+
+// Self-play (testing only: open the page with ?selfplay, see selfplay.js):
+// the pause between its moves, so a game can be watched.
+export const SELF_PLAY_STEP_MS = 700;
