@@ -444,6 +444,7 @@ export const CHARACTERS = {
     team: "townsfolk",
     ability:
       "Once per game, during the day, visit the Storyteller for some advice to help your team win.",
+    note: "Kept simple here: the advice is one tip, and the later you visit, the more it narrows things down: early, which players are good; later, a Minion, or who isn't the Demon; late, which 3 (or 2) players the Demon is among.",
     kill: "med",
     oncePerGame: { AFTER_DAY: 1, START_CHANCE: 0.4, STEP_CHANCE: 0.3 }, // day
     vsLegion: true,

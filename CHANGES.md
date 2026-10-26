@@ -2,6 +2,18 @@
 
 Newest first.
 
+## Improvements: The Storyteller's Advice Leans, and Grows With the Game
+
+- The Fisherman's tip and the Savant's true statement are still true, but how much they give away now depends on the stage of the game and the Storyteller's lean (`adviceLevel()` in storyteller.js, `ADVICE_STAGES` in data.js), from 0 to 3:
+  - 0, early: general: a good player (the one the town suspects most) is good, or two are; the Outsider count.
+  - 1: a Minion is evil; the Demon isn't one of 3 players.
+  - 2: the Demon is one of 3 players (or next to one).
+  - 3: the Demon is one of 2 players (or a player's evil character).
+- Each third of the way to the final 3 is a level; a Storyteller helping good adds one, helping evil takes one away. Helping evil, its truths mislead where they can: a Recluse "is evil", a Spy "is good"; otherwise vouching goes to a good player nobody suspects.
+- The Artist: how a Recluse or Spy registers follows the lean too: as they really are when the Storyteller helps good, as they'd mislead otherwise.
+- The Fisherman's advice can now also say "X and Y are both good." or "The Demon is not one of X, Y and Z." (both vouch for them), and its role popup says it's better saved for later.
+- log.txt gives each piece of advice its level and why (`[advice level 1 of 3 (50% of the way to the final 3; no lean); a level 1 tip]`).
+
 ## New Features: Three New Wizard Wishes
 
 - **"I wish to hear the Demon's whispers."** (good only: an Alchemist with the Wizard's ability.) The Storyteller tells the town the 3 characters the Demon was told are not in play. Price: the Demon (and every teammate who knew them) learns 3 new ones. Clue: anyone claiming one of the old 3 in public is now strongly suspected (`exposedBluff` in `EVIDENCE_WEIGHT`). log.txt's header shows both sets.

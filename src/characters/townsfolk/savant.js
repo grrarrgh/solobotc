@@ -3,12 +3,17 @@ import {
   ability,
   infoMode,
   bluffing,
-  registersEvil,
   isDemon,
   nameable,
   neigh,
   scapegoat,
+  listLabels,
+  lean,
+  adviceLevel,
+  adviceWhy,
+  leanRegistersEvil,
 } from "../../storyteller.js";
+import { adviceAt } from "./fisherman.js";
 import { pick, sample, shuffle } from "../../util.js";
 import { dayBluff, bluffState } from "../../bluff.js";
 
@@ -67,15 +72,26 @@ export const savant = {
 };
 
 // Things a Savant can be told, each as a true and a false statement (and
-// the players it names). Never about the human, and about different players
+// the players it names), and how pointed the true one is (`level`: see
+// ADVICE_STAGES): a good player's alignment, the Outsider count, a good
+// player's character, or that the Demon isn't next to a player (0); an evil
+// player's alignment (1); a Minion's character, that the Demon is next to a
+// player, or one of 3 players (2); the Demon's character (3). Leaning evil,
+// the Storyteller would rather the true one misled (`evil: true`): a
+// Recluse "is evil", a Spy "is good". Registration goes by the lean (see
+// leanRegistersEvil()). Never about the human, and about different players
 // from the Savant's last visit where possible.
 function savantFacts(s, p) {
   const all = nameable(s, p).filter((x) => !x.human);
   const last = p.lastPicks?.savant ?? [];
   const fresh = all.filter((x) => !last.includes(x.id));
   const others = fresh.filter((x) => x.alive).length >= 2 ? fresh : all;
+  // (A Recluse or Spy registering as what they aren't is a misleading
+  // truth, kept for when the Storyteller helps evil: see below.)
   const t = pick(
-    others.filter((x) => x.alive),
+    others.filter(
+      (x) => x.alive && (lean(s) === "evil" || leanRegistersEvil(s, x) === (x.alignment === "evil")),
+    ),
     s.r,
   );
   const c = pick(others, s.r);
@@ -90,20 +106,41 @@ function savantFacts(s, p) {
   const thereAre = (n) =>
     `There ${n === 1 ? "is 1 Outsider" : `are ${n} Outsiders`} in play.`;
   const near = Boolean(d && x && neigh(s, x).includes(d));
+  const evilish = (y) => leanRegistersEvil(s, y);
+  const leaning = lean(s);
+  const living = others.filter((y) => y.alive);
+  const three = d && [d, ...sample(living.filter((y) => y !== d), 2, s.r)];
+  const notThree = sample(
+    living.filter((y) => y !== d),
+    3,
+    s.r,
+  );
+  // (A truth that misleads, leaning evil: see above.)
+  const misleads = leaning === "evil" && living.find((y) => y.role === "recluse" || y.role === "spy");
 
   return [
     t && {
       ids: [t.id],
-      yes: `${t.label} is ${registersEvil(t) ? "evil" : "good"}.`,
-      no: `${t.label} is ${registersEvil(t) ? "good" : "evil"}.`,
+      level: evilish(t) && t.alignment === "evil" ? 1 : 0,
+      yes: `${t.label} is ${evilish(t) ? "evil" : "good"}.`,
+      no: `${t.label} is ${evilish(t) ? "good" : "evil"}.`,
+    },
+    misleads && {
+      ids: [misleads.id],
+      level: 0,
+      evil: true,
+      yes: `${misleads.label} is ${evilish(misleads) ? "evil" : "good"}.`,
+      no: `${misleads.label} is ${evilish(misleads) ? "good" : "evil"}.`,
     },
     {
       ids: [],
+      level: 0,
       yes: thereAre(outsiders),
       no: thereAre(outsiders ? outsiders + (s.r() < 0.5 ? -1 : 1) : 1),
     },
     c && {
       ids: [c.id],
+      level: isDemon(c) ? 3 : c.alignment === "evil" ? 2 : 0,
       yes: `${c.label} is the ${name(c.role)}.`,
       no: `${c.label} is the ${name(
         pick(
@@ -115,16 +152,32 @@ function savantFacts(s, p) {
     d &&
       x && {
         ids: [x.id],
+        level: near ? 2 : 0,
         yes: `The Demon is ${near ? "" : "not "}a neighbour of ${x.label}.`,
         no: `The Demon is ${near ? "not " : ""}a neighbour of ${x.label}.`,
+      },
+    three?.length === 3 &&
+      notThree.length === 3 && {
+        ids: three.map((y) => y.id),
+        level: 2,
+        yes: `The Demon is one of ${listLabels(three)}.`,
+        no: `The Demon is one of ${listLabels(notThree)}.`,
       },
   ].filter(Boolean);
 }
 
 // The Savant's daily visit: two statements, one true and one false (both
-// false for a Drunk or under the Vortox; either way when poisoned).
+// false for a Drunk or under the Vortox; either way when poisoned). The
+// true one is as pointed as the game's stage and the Storyteller's lean
+// make it (see adviceLevel()); the false one is about anything else.
 export function savantInfo(s, p, mode) {
-  const [a, b] = sample(savantFacts(s, p), 2, s.r);
+  const level = adviceLevel(s);
+  const facts = savantFacts(s, p);
+  const a = pick(adviceAt(facts, level, lean(s)), s.r);
+  const b = pick(
+    facts.filter((f) => f !== a && !f.evil),
+    s.r,
+  );
 
   // Remembered so the next visit is about other players.
   p.lastPicks = { ...p.lastPicks, savant: [...a.ids, ...b.ids] };
@@ -144,6 +197,9 @@ export function savantInfo(s, p, mode) {
     targets: [],
     trigger: "day",
     functioning: mode === "truth",
+    logNote: `${adviceWhy(s, level)}; the true one is level ${a.level}${
+      a.evil ? ", and helps evil" : ""
+    }`,
   };
 }
 

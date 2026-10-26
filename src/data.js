@@ -375,6 +375,19 @@ export const ALCHEMIST_ABILITIES = ["poisoner", "fearmonger", "psychopath", "gob
 // Alchemist-Wizard), that an NPC makes theirs.
 export const WIZARD_WISH_CHANCE = 0.35;
 
+// How pointed the Storyteller's true day advice is (the Fisherman's tip,
+// the Savant's true statement; see storyteller.js adviceLevel()), from 0
+// to 3:
+//   0: general: vouches for good players ("X is good"), or the Outsider count;
+//   1: names a Minion ("X is evil"), or clears 3 players of being the Demon;
+//   2: the Demon is one of 3 players (or a neighbour of a player);
+//   3: the Demon is one of 2 players (or a player's evil character).
+// The stage of the game sets it: below ADVICE_STAGES[0] of the way to the
+// final 3 it's 0, below ADVICE_STAGES[1] it's 1, and 2 after that. A
+// Storyteller leaning good adds 1; leaning evil takes 1 away (and then the
+// truth is one that helps evil, where there is one: a Recluse "is evil").
+export const ADVICE_STAGES = [1 / 3, 2 / 3];
+
 // The Townsfolk abilities a Wizard's wish can give the Demon (the "gift"
 // wish): the ones that keep a Demon from being executed, and so are worth a
 // Minion's life. Only one not in play.

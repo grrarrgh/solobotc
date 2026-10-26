@@ -6,6 +6,8 @@ import {
   registersEvil,
   isDemon,
   listLabels,
+  lean,
+  leanRegistersEvil,
 } from "../../storyteller.js";
 import { dayBluff } from "../../bluff.js";
 
@@ -77,16 +79,26 @@ export const artist = {
 };
 
 // Whether "t is <evil / the Demon / a Minion / ...>" is true (as t
-// registers): an Artist's question, or a Gossip's statement.
-export const artistTruth = (t, q) =>
-  q === "evil" ? registersEvil(t) : q === "demon" ? isDemon(t) : team(t.role) === q;
+// registers): an Artist's question, or a Gossip's statement. With `s`, the
+// Artist's question: how a Recluse or Spy registers goes by the
+// Storyteller's lean (see leanRegistersEvil()).
+export const artistTruth = (t, q, s = null) =>
+  q === "evil"
+    ? s
+      ? leanRegistersEvil(s, t)
+      : registersEvil(t)
+    : q === "demon"
+      ? isDemon(t)
+      : team(t.role) === q;
 
 // The Storyteller's yes/no answer to an Artist asking about one or more
 // players ("is any of them ...?"). `mode` is "truth", "lie" (an evil bluffer,
 // or a Drunk or poisoned Artist) or "random".
 export function artistInfo(s, targets, q, mode) {
   const ts = [].concat(targets);
-  const truth = ts.some((t) => artistTruth(t, q));
+  const truth = ts.some((t) => artistTruth(t, q, s));
+  // (A Recluse or Spy the lean decided, for the log.)
+  const decided = q === "evil" && ts.filter((t) => artistTruth(t, q, s) !== registersEvil(t));
   const yes =
     mode === "truth" ? truth : mode === "lie" ? !truth : s.r() < 0.5;
   const who = ts.length > 1 ? `any of ${listLabels(ts)}` : ts[0].label;
@@ -101,6 +113,11 @@ export function artistInfo(s, targets, q, mode) {
     targets: ts.map((t) => t.id),
     trigger: "day",
     functioning: mode === "truth",
+    logNote: decided.length
+      ? `the Storyteller, leaning ${lean(s)}, has ${listLabels(decided)} register as ${
+          decided[0].alignment
+        }`
+      : null,
   };
 }
 

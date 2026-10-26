@@ -2,6 +2,7 @@ import {
   FIRST_NIGHT_INFO,
   ONGOING_INFO,
   FINAL_THREE_MARGIN,
+  ADVICE_STAGES,
   HIDDEN_OUTSIDERS,
   exclusiveWith,
   name,
@@ -221,6 +222,48 @@ export function leanState(s) {
 
   return { side, n, e, end, low, high };
 }
+
+// How far the game is along its path to the final 3 (or 2): 0 at the
+// start, 1 at the end.
+export function progress(s) {
+  const n0 = s.players.length;
+  const n = s.players.filter((x) => x.alive).length;
+  const end = finalCount(s);
+
+  return n0 <= end ? 1 : Math.min(1, Math.max(0, 1 - (n - end) / (n0 - end)));
+}
+
+// How pointed the Storyteller's true day advice is now, 0 to 3 (see
+// ADVICE_STAGES): by the stage of the game, one more when it leans good,
+// one less when it leans evil.
+export function adviceLevel(s) {
+  const stage = ADVICE_STAGES.filter((x) => progress(s) >= x).length;
+  const side = lean(s);
+  const shift = side === "good" ? 1 : side === "evil" ? -1 : 0;
+
+  return Math.max(0, Math.min(3, stage + shift));
+}
+
+// Why the advice is as pointed as it is, for the log: "advice level 1 of 3
+// (40% of the way to the final 3; leaning good)".
+export function adviceWhy(s, level = adviceLevel(s)) {
+  const side = lean(s);
+
+  return `advice level ${level} of 3 (${Math.round(progress(s) * 100)}% of the way to the final ${finalCount(
+    s,
+  )}; ${side ? `leaning ${side}` : "no lean"})`;
+}
+
+// How x registers to the Storyteller's day advice (the Fisherman, Savant
+// and Artist): a Recluse "might" register as evil and a Spy "might"
+// register as good, and the Storyteller decides: as they are when it leans
+// good, as they'd mislead otherwise (see registersEvil()).
+export const leanRegistersEvil = (s, x) =>
+  lean(s) === "good" ? x.alignment === "evil" : registersEvil(x);
+
+// How many living NPCs suspect x (their suspicion.targetId).
+export const suspectedBy = (s, x) =>
+  s.players.filter((y) => y.alive && !y.human && y.suspicion?.targetId === x.id).length;
 
 // The Storyteller's lean, as a line for the log.
 export function leanText(s) {

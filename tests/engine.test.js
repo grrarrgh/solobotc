@@ -63,7 +63,9 @@ import {
   lean,
   scapegoat,
   jinxBarred,
+  adviceLevel,
 } from "../src/storyteller.js";
+import { fishermanInfo } from "../src/characters/townsfolk/fisherman.js";
 import { ravenInfo } from "../src/characters/townsfolk/ravenkeeper.js";
 import { artistInfo } from "../src/characters/townsfolk/artist.js";
 import { savantInfo, savantBluff } from "../src/characters/townsfolk/savant.js";
@@ -8066,11 +8068,16 @@ test("the Fisherman's advice is true, and comes once", () => {
 
     const text = e.fisherman();
     const named = (re) => byId(s, `p${text.match(re)[1]}`);
+    const all = () => [...text.matchAll(/Player (\d+)/g)].map((m) => byId(s, `p${m[1]}`));
 
     if (/ is evil\.$/.test(text)) {
       assert.equal(named(/Player (\d+) is evil/).alignment, "evil");
     } else if (/is good: /.test(text)) {
       assert.equal(named(/Player (\d+) is good/).alignment, "good");
+    } else if (/are both good\.$/.test(text)) {
+      assert.ok(all().every((x) => x.alignment === "good"), text);
+    } else if (/The Demon is not one of /.test(text)) {
+      assert.ok(all().every((x) => !team(x.role).includes("demon")), text);
     } else {
       assert.match(text, /The Demon is one of .*Player 5/);
     }
@@ -8083,6 +8090,107 @@ test("the Fisherman's advice is true, and comes once", () => {
     speak("Fisherman: the Storyteller's advice: Player 4 is evil."),
     "The Storyteller's advice: Player 4 is evil.",
   );
+});
+
+// A 10-player Trouble Brewing game for the Storyteller's day advice: you
+// (the Washerwoman), 6 good NPCs (Player 6 the Recluse), then the Poisoner,
+// Spy and Imp. `dead`: the seats (0-based) already dead.
+function adviceGame(seed, dead = []) {
+  const s = createState(script, 10, seed);
+  const roles = ["washerwoman", "chef", "empath", "monk", "soldier", "recluse", "virgin", "poisoner", "spy", "imp"];
+
+  s.players.forEach((x, i) => role(x, roles[i], alignment(roles[i])));
+  dead.forEach((i) => (s.players[i].alive = false));
+  s.phase = "day";
+  s.day = 2;
+  s.night = 2;
+
+  return { s, p: s.players };
+}
+
+test("the Storyteller's advice grows more pointed as the game goes on, and with its lean", () => {
+  // Day 1-ish, no lean: general.
+  assert.equal(adviceLevel(adviceGame("adv-0").s), 0);
+
+  // Halfway, evil ahead (the Storyteller helps good): one stage, plus one.
+  const half = adviceGame("adv-1", [1, 2, 3, 4]).s;
+
+  assert.equal(lean(half), "good");
+  assert.equal(adviceLevel(half), 2);
+
+  // Late, evil well ahead: the most pointed.
+  const late = adviceGame("adv-2", [1, 2, 3, 4, 5, 6]).s;
+
+  assert.equal(lean(late), "good");
+  assert.equal(adviceLevel(late), 3);
+
+  // Good ahead (the Storyteller helps evil): one less.
+  const behind = adviceGame("adv-3", [1, 2, 7, 8]).s;
+
+  assert.equal(lean(behind), "evil");
+  assert.equal(adviceLevel(behind), 0);
+});
+
+test("the Fisherman's true advice: general early (good players), the Demon among 2 late when helping good, a misleading truth when helping evil", () => {
+  for (let k = 0; k < 20; k++) {
+    // Early: vouches for good players, never narrows down the Demon.
+    let { s, p } = adviceGame(`fish-early-${k}`);
+
+    s.r = rng(`fish-early-${k}`);
+
+    let info = fishermanInfo(s, p[0], "truth");
+
+    assert.match(info.text, /is good: don't execute them\.$|are both good\.$/);
+    assert.ok(info.targets.every((id) => byId(s, id).alignment === "good"));
+    assert.match(info.logNote, /^advice level 0 of 3/);
+
+    // Late, the Storyteller helping good: the Demon is one of 2.
+    ({ s, p } = adviceGame(`fish-late-${k}`, [1, 2, 3, 4, 5, 6]));
+    s.r = rng(`fish-late-${k}`);
+    info = fishermanInfo(s, p[0], "truth");
+    assert.match(info.text, /The Demon is one of Player \d+ and Player \d+\.$/);
+    assert.ok(info.targets.includes(p[9].id));
+
+    // The Storyteller helping evil: the Recluse "is evil", or the Spy "is good".
+    ({ s, p } = adviceGame(`fish-evil-${k}`, [1, 7, 8]));
+    s.r = rng(`fish-evil-${k}`);
+    assert.equal(lean(s), "evil");
+    info = fishermanInfo(s, p[0], "truth");
+    assert.match(info.text, new RegExp(`${p[5].label} is evil\\.$|${p[8].label} is good: `));
+    assert.match(info.logNote, /that helps evil/);
+  }
+});
+
+test("the Savant's true statement is as pointed as the advice level", () => {
+  for (let k = 0; k < 20; k++) {
+    let { s, p } = adviceGame(`savant-early-${k}`);
+
+    role(p[0], "savant", "good");
+    s.r = rng(`savant-early-${k}`);
+    assert.match(savantInfo(s, p[0], "truth").logNote, /^advice level 0 of 3.*the true one is level 0/);
+
+    ({ s, p } = adviceGame(`savant-late-${k}`, [1, 2, 3, 4]));
+    role(p[0], "savant", "good");
+    s.r = rng(`savant-late-${k}`);
+    assert.match(savantInfo(s, p[0], "truth").logNote, /^advice level 2 of 3.*the true one is level 2/);
+  }
+});
+
+test("the Artist: a Recluse registers as good when the Storyteller helps good, as evil otherwise", () => {
+  const even = adviceGame("artist-even");
+
+  assert.match(artistInfo(even.s, even.p[5], "evil", "truth").text, /: YES\.$/);
+
+  const helping = adviceGame("artist-good", [1, 2, 3, 4]);
+
+  assert.equal(lean(helping.s), "good");
+
+  const info = artistInfo(helping.s, helping.p[5], "evil", "truth");
+
+  assert.match(info.text, /: NO\.$/);
+  assert.match(info.logNote, /leaning good, has Player 6 register as good/);
+  // (The Spy, likewise, registers as evil.)
+  assert.match(artistInfo(helping.s, helping.p[8], "evil", "truth").text, /: YES\.$/);
 });
 
 // A 10-player Day 1 with a Boomdandy marked for execution.
