@@ -2,6 +2,11 @@
 
 Newest first.
 
+## Improvements: Trouble Brewing by Default, and the Seed Tucked Away
+
+- The setup page's Script menu starts on Trouble Brewing, the beginner script, rather than whichever comes first alphabetically.
+- The Seed box and Random Seed button are under a collapsed **Advanced Options** (`#advanced-options`), since every visit already starts on a random seed. How to play and the README say so.
+
 ## Improvements: Alphabetical Scripts and a Random Starting Seed
 
 - The setup page's Script menu lists scripts alphabetically by name, whatever order `scripts/index.json` gives them.

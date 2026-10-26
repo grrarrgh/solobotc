@@ -8,10 +8,12 @@ on the good team; every other seat is an NPC, and the game is the Storyteller.
 
 Go to <https://www.solobotc.com/>, then:
 
-1. Choose the number of seats.
-2. Choose a script.
-3. Click **Random Seed**.
-4. Press **Start**.
+1. Choose a script (Trouble Brewing to begin with).
+2. Choose the number of seats.
+3. Press **Start**.
+
+Each game gets a random seed; open **Advanced Options** to type one in, as
+the same seed always deals the same game.
 
 Click a character name anywhere to read its ability, or the clock tower in
 the middle of the town square for the whole script. The **Night order**

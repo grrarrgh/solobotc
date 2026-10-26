@@ -93,11 +93,16 @@
           <label for="seats">Seats</label>
           <select id="seats"></select>
         </div>
-        <div class="setup-row">
-          <label for="seed">Seed</label>
-          <input id="seed" value="42" />
-          <button id="random-seed" type="button">Random Seed</button>
-        </div>
+        <!-- The seed is rolled afresh on each visit, so it stays tucked away
+             until opened, for replaying a particular game. -->
+        <details id="advanced-options" class="advanced-options">
+          <summary>Advanced Options</summary>
+          <div class="setup-row">
+            <label for="seed">Seed</label>
+            <input id="seed" value="42" />
+            <button id="random-seed" type="button">Random Seed</button>
+          </div>
+        </details>
         <button id="start">Start</button>
         <p id="error"></p>
       </section>
@@ -122,8 +127,9 @@
             <h3>Starting a game</h3>
             <p>
               Choose a script (the set of characters that might be in play) and
-              the number of seats, then press <b>Random Seed</b> and
-              <b>Start</b>. The same seed always deals the same game. Press the
+              the number of seats, then press <b>Start</b>. Each game gets a
+              random seed; under <b>Advanced Options</b> you can type one in,
+              and the same seed always deals the same game. Press the
               <b>i</b> next to the script to read its characters, and click any
               character's name during the game to read what it does.
             </p>

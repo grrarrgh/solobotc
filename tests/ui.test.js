@@ -310,6 +310,12 @@ test("the setup page is a card of its own, with an i by the script that opens it
   assert.match(css, /\.setup-page \{/);
 });
 
+test("the setup page starts on Trouble Brewing, with the seed under a collapsed Advanced Options", () => {
+  assert.match(app, /scripts\.findIndex\(\(x\) => x\.file === "trouble-brewing\.json"\)/);
+  assert.match(html, /<details id="advanced-options" class="advanced-options">\s*<summary>Advanced Options<\/summary>[\s\S]*?id="seed"[\s\S]*?id="random-seed"[\s\S]*?<\/details>/);
+  assert.doesNotMatch(html, /<details id="advanced-options"[^>]*\bopen\b/);
+});
+
 test("under the setup card: How to play (collapsed), About, hidden with it; a footer on every page", () => {
   assert.match(html, /<section id="setup" class="setup-page">[\s\S]*?<\/section>\s*(<!--[\s\S]*?-->\s*)?<div id="setup-info" class="setup-info">/);
   assert.match(html, /<details id="how-to-play" class="panel">\s*<summary><h2>How to play<\/h2><\/summary>/);

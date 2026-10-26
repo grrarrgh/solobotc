@@ -199,6 +199,13 @@ async function load() {
     $("script").innerHTML = scripts
       .map((x, i) => `<option value="${i}">${esc(x.name)}</option>`)
       .join("");
+
+    // Trouble Brewing, the beginner script, is selected to begin with.
+    const tb = scripts.findIndex((x) => x.file === "trouble-brewing.json");
+
+    if (tb >= 0) {
+      $("script").value = String(tb);
+    }
   } catch (err) {
     $("error").textContent = err.message;
   }

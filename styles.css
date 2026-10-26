@@ -53,6 +53,17 @@ section {
   min-width: 0;
 }
 
+/* The seed, collapsed under Advanced Options until opened. */
+.advanced-options {
+  margin: 12px 0;
+}
+
+.advanced-options > summary {
+  color: #bbb;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
 /* Under the setup card: How to play (collapsed) and About. */
 .setup-info {
   max-width: 640px;
