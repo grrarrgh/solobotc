@@ -111,6 +111,13 @@ const KEY_MOMENT_TYPES = new Set([
   "game_over",
 ]);
 
+// Whether you can pick player x for night choice `c` (see wakeHuman()): by
+// its ability's wording, living players ("choose an alive player"), dead
+// ones (`dead`: "choose a dead player") or anyone (`any`: "choose a
+// player"). Never yourself, nor a player the choice excludes.
+export const canPick = (c, x) =>
+  !x.human && (c.any || x.alive !== Boolean(c.dead)) && !c.exclude?.includes(x.id);
+
 export class Engine {
   constructor(s, strat = new SimpleStrategy()) {
     this.s = s;
@@ -277,51 +284,59 @@ export class Engine {
     return Boolean(s.pending);
   }
 
-  // What the human must choose tonight, or null if they don't wake.
+  // What the human must choose tonight, or null if they don't wake. Who
+  // they can pick goes by the ability's wording (see canPick()): `any` for
+  // "choose a player", living players for "choose an alive (or living)
+  // player", `dead` for "choose a dead player".
   wakeHuman() {
     const s = this.s;
     const h = this.human();
     const role = ability(h);
-    const candidates = s.players.filter((x) => x.alive && !x.human);
-    const dead = s.players.filter((x) => !x.alive && !x.human);
 
     const wake = {
       monk:
         s.night > 1 && {
           count: 1,
+          any: true,
           prompt: "Choose a player to protect from the Demon tonight.",
         },
       fortuneteller: {
         count: 2,
+        any: true,
         prompt: "Choose 2 players: you learn if either is the Demon.",
       },
       // (The Alchemist's Minion ability: see alchemist.js.)
       alchemist:
         h.alchemist === "poisoner"
-          ? { count: 1, prompt: "Poisoner ability: choose a player to poison tonight and tomorrow." }
+          ? { count: 1, any: true, prompt: "Poisoner ability: choose a player to poison tonight and tomorrow." }
           : h.alchemist === "fearmonger"
             ? {
                 count: 1,
+                any: true,
                 prompt:
                   "Fearmonger ability: choose a player. If you nominate and execute them, their team loses.",
               }
             : false,
       butler: {
         count: 1,
+        any: true,
         prompt:
           "Choose your master: tomorrow, your vote only counts if they vote too.",
       },
       dreamer: {
         count: 1,
+        any: true,
         prompt:
           "Choose a player: you learn 1 good and 1 evil character, 1 of which is correct.",
       },
       villageidiot: {
         count: 1,
+        any: true,
         prompt: "Choose a player: you learn their alignment.",
       },
       seamstress: !h.seamUsed && {
         count: 2,
+        any: true,
         optional: true,
         prompt:
           "Once per game: choose 2 players to learn if they are the same alignment, or skip tonight.",
@@ -338,12 +353,14 @@ export class Engine {
       },
       exorcist: s.night > 1 && {
         count: 1,
+        any: true,
         exclude: h.lastPicks?.exorcist ?? [],
         prompt:
           "Choose a player (not last night's): if they are the Demon, it doesn't wake tonight.",
       },
       innkeeper: s.night > 1 && {
         count: 2,
+        any: true,
         prompt:
           "Choose 2 players: they can't die tonight, but 1 of them is drunk until dusk.",
       },
@@ -386,9 +403,7 @@ export class Engine {
         },
     }[role];
 
-    const pool = (wake?.dead ? dead : candidates).filter(
-      (x) => !wake?.exclude?.includes(x.id),
-    );
+    const pool = wake ? s.players.filter((x) => canPick(wake, x)) : [];
 
     if (!h.alive || !wake || pool.length < Math.max(1, wake.count)) {
       return null;
@@ -453,19 +468,16 @@ export class Engine {
       throw Error("Choose a character.");
     }
 
-    if (
-      picked.length !== p.count ||
-      picked.some((x) => !x || x.alive === Boolean(p.dead) || x.human)
-    ) {
+    if (picked.some((x) => p.exclude?.includes(x.id))) {
+      throw Error("You chose that player last night.");
+    }
+
+    if (picked.length !== p.count || picked.some((x) => !x || !canPick(p, x))) {
       throw Error(
-        `Select ${p.count} ${p.dead ? "dead" : "living"} player${
+        `Select ${p.count} ${p.any ? "" : p.dead ? "dead " : "living "}player${
           p.count > 1 ? "s" : ""
         }.`,
       );
-    }
-
-    if (picked.some((x) => p.exclude?.includes(x.id))) {
-      throw Error("You chose that player last night.");
     }
 
     s.pending = null;
@@ -2143,6 +2155,21 @@ export class Engine {
 
     this.openNominations();
     this.nominationReveals(n, intro);
+
+    // (Why good NPCs hold back: see strategy vote().)
+    if (s.mastermindDay === s.day) {
+      this.audit(
+        "workings",
+        `Mastermind's extra day: the evil team votes for ${n.label} unless they're a teammate; good players only if they suspect them.`,
+      );
+    } else if (!n.alive) {
+      this.audit(
+        "workings",
+        `${n.label} is dead: good players don't vote to execute them${
+          s.script.ids.includes("zombuul") ? " (unless they suspect them: the Zombuul might only register as dead)" : ""
+        }.`,
+      );
+    }
 
     s.pendingVote = { nominatorId: nominator.id, nomineeId: id, requested };
 

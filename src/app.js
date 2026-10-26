@@ -27,7 +27,7 @@ import {
 import { createState, parseScript } from "./setup.js";
 import { ability, minionAbility } from "./storyteller.js";
 import { WIZARD_WISHES } from "./characters/minion/wizard.js";
-import { Engine } from "./engine.js";
+import { Engine, canPick } from "./engine.js";
 import {
   AMNESIAC_GUESSES,
   AMNESIAC_QUESTIONS,
@@ -598,19 +598,14 @@ async function runVote(fn) {
   render();
 }
 
-// Toggles a player in or out of tonight's picks: living players, or dead
-// ones for the Professor, and not one the choice excludes (the Exorcist's
-// pick last night). Once the limit is reached, a new pick replaces the
-// oldest one.
+// Toggles a player in or out of tonight's picks: whoever the ability's
+// wording allows (living, dead or anyone: see engine canPick()), and not one
+// the choice excludes (the Exorcist's pick last night). Once the limit is
+// reached, a new pick replaces the oldest one.
 function pickAtNight(id) {
   const p = e.player(id);
 
-  if (
-    !p ||
-    !s.pending.count ||
-    p.alive === Boolean(s.pending.dead) ||
-    s.pending.exclude?.includes(id)
-  ) {
+  if (!p || !s.pending.count || !canPick(s.pending, p)) {
     return;
   }
 
@@ -1633,7 +1628,7 @@ function draw() {
     h.alive &&
     !s.nominationsOpen &&
     h.psychopathKilled !== s.day &&
-    t?.alive &&
+    t &&
     !t.human
   );
   $("wish-controls").hidden = !(minionAbility(h) === "wizard" && h.alive && !h.wished);

@@ -42,7 +42,7 @@ import {
   OTHER_NIGHTS,
   nightOrder,
 } from "../src/characters/nightorder.js";
-import { Engine } from "../src/engine.js";
+import { Engine, canPick } from "../src/engine.js";
 import {
   SimpleStrategy,
   speak,
@@ -1475,10 +1475,7 @@ function settle(e) {
 
     e.choose(
       e.s.players
-        .filter(
-          (p) =>
-            p.alive !== Boolean(c.dead) && !p.human && !c.exclude?.includes(p.id),
-        )
+        .filter((p) => canPick(c, p))
         .slice(0, c.count)
         .map((p) => p.id),
     );
@@ -1514,7 +1511,7 @@ test("a human Fortune Teller is woken to pick 2 players, and learns about them",
   assert.equal(s.phase, "night");
   assert.equal(s.pending.count, 2);
   assert.throws(() => e.ask(chef.id), /Talk during the day/);
-  assert.throws(() => e.choose([chef.id]), /Select 2 living players/);
+  assert.throws(() => e.choose([chef.id]), /Select 2 players/);
 
   e.choose([chef.id, imp.id]);
 
@@ -1550,7 +1547,7 @@ test("a human Monk is woken from Night 2, and their pick is safe from the Demon"
   e.night();
 
   assert.equal(s.pending.count, 1);
-  assert.throws(() => e.choose([human.id]), /Select 1 living player/);
+  assert.throws(() => e.choose([human.id]), /Select 1 player/);
 
   e.choose([chef.id]);
 
@@ -1559,6 +1556,86 @@ test("a human Monk is woken from Night 2, and their pick is safe from the Demon"
     human.memories[0].text,
     `Monk: protected ${chef.label} from the Demon.`,
   );
+});
+
+test("your night choices go by the ability's wording: \"a player\" takes the dead too, \"an alive player\" doesn't", () => {
+  // The Fortune Teller: "choose 2 players".
+  const ft = humanNight("pick-dead-ft", "fortuneteller");
+  const [, chef, butler] = ft.s.players;
+
+  butler.alive = false;
+  ft.e.start();
+
+  assert.equal(ft.s.pending.any, true);
+  assert.ok(canPick(ft.s.pending, butler));
+  ft.e.choose([chef.id, butler.id]);
+  assert.equal(ft.s.phase, "day");
+
+  // The Chambermaid: "choose 2 alive players". The Sailor: "an alive player".
+  for (const id of ["chambermaid", "sailor"]) {
+    const h = humanNight(`pick-dead-${id}`, id);
+    const [, c, b] = h.s.players;
+
+    b.alive = false;
+    h.e.start();
+
+    assert.ok(!h.s.pending.any);
+    assert.ok(!canPick(h.s.pending, b));
+    assert.throws(
+      () => h.e.choose(id === "sailor" ? [b.id] : [c.id, b.id]),
+      /living player/,
+    );
+  }
+});
+
+test("a Slayer can shoot a dead player, to no effect, even a dead Demon", () => {
+  const s = base("slay-dead");
+  const e = new Engine(s);
+  const [human, chef, , , imp] = s.players;
+
+  role(human, "slayer", "good");
+  chef.alive = false;
+  imp.alive = false;
+
+  assert.equal(e.slay(imp.id), false);
+  assert.equal(s.slayerUsed, true);
+  assert.equal(s.winner, null);
+  assert.match(s.audit.at(-1).text, /shot .*; no effect\./);
+  assert.ok(!s.audit.some((x) => x.type === "confirmed"));
+});
+
+test("good NPCs never vote to execute a dead player; the evil team may", () => {
+  const s = base("vote-dead");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron] = s.players;
+
+  butler.alive = false;
+
+  for (let i = 0; i < 20; i++) {
+    assert.equal(strat.vote(s, chef, butler), false);
+  }
+
+  assert.ok(Array.from({ length: 20 }, () => strat.vote(s, baron, butler)).some(Boolean));
+});
+
+test("on the Mastermind's extra day, evil nominates and votes for any good player, never a teammate", () => {
+  const s = base("mastermind-day");
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron, imp] = s.players;
+
+  s.mastermindDay = s.day;
+
+  assert.equal(strat.vote(s, baron, chef), true);
+  assert.equal(strat.vote(s, baron, imp), false);
+  assert.ok([chef, butler].includes(strat.mastermindPush(s, baron)));
+  assert.equal(strat.mastermindPush(s, chef), null);
+
+  // (Good players only for the player they suspect.)
+  chef.suspicion = null;
+  assert.equal(strat.vote(s, chef, butler), false);
+
+  s.mastermindDay = null;
+  assert.equal(strat.mastermindPush(s, baron), null);
 });
 
 test("a poisoned human Monk still picks, but the protection fails", () => {

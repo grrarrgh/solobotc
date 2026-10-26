@@ -77,6 +77,7 @@ import {
   ability,
   steer,
   scapegoat,
+  framed,
   isDrunk,
   isDemon,
   atFinal,
@@ -1533,7 +1534,7 @@ export class SimpleStrategy {
 
     // (A Fearmonger nominates their chosen player; the evil team, their
     // Goblin, once they've nearly the votes to execute them.)
-    const push = this.fearPush(s, p) ?? this.goblinPush(s, p);
+    const push = this.fearPush(s, p) ?? this.goblinPush(s, p) ?? this.mastermindPush(s, p);
 
     if (push) {
       const claim = claimTo(push, p);
@@ -1617,6 +1618,32 @@ export class SimpleStrategy {
 
     if (tally?.humanChoice && atFinal(s) && sideOf(v) !== "evil") {
       return true;
+    }
+
+    // On the Mastermind's extra day, the day's execution decides the game
+    // (see mastermind.js): the evil team votes for anyone but a teammate,
+    // and good players only for the player they suspect (with nobody
+    // executed, good wins).
+    if (s.mastermindDay === s.day) {
+      if (sideOf(v) === "evil") {
+        return !teammate(v, n);
+      }
+
+      return this.opinion(s, v).targetId === n.id &&
+        this.opinion(s, v).type === "suspicious" &&
+        s.r() < GOOD_VOTE_MAX;
+    }
+
+    // (Executing a dead player kills nobody, and uses up the day's
+    // execution: good players, living or dead, don't vote for it. Unless the
+    // Zombuul is on the script and it's their suspect: it might only
+    // register as dead.)
+    if (
+      !n.alive &&
+      sideOf(v) !== "evil" &&
+      !(s.script.ids.includes("zombuul") && this.suspicion(s, v)?.targetId === n.id)
+    ) {
+      return false;
     }
 
     if (!v.alive) {
@@ -1909,6 +1936,25 @@ export class SimpleStrategy {
     }
 
     return p.goblinPushDay.yes ? g : null;
+  }
+
+  // The player evil NPC p nominates on the Mastermind's extra day, or null:
+  // executing any good player wins it for evil (see mastermind.js). The
+  // evil team's scapegoat while nobody has nominated them today, else a
+  // living good NPC they know of nobody has. (Never you: NPCs never
+  // nominate you.)
+  mastermindPush(s, p) {
+    if (s.mastermindDay !== s.day || sideOf(p) !== "evil") {
+      return null;
+    }
+
+    const free = (x) =>
+      x?.alive && !x.human && !teammate(p, x) && !s.nominated.includes(x.id);
+    const goat = framed(s, p);
+
+    return free(goat)
+      ? goat
+      : pick(s.players.filter((x) => free(x) && goodTo(p, x)), s.r);
   }
 
   // The Fearmonger's choice tonight: last night's, while they're a living

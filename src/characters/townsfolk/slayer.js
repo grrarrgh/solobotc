@@ -4,6 +4,8 @@ import { ability, works, isDemon, bluffing } from "../../storyteller.js";
 // The Slayer, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
 export const slayer = {
+  // Your shot: "publicly choose a player", living or dead (a Zombuul that
+  // registers as dead still dies to it).
   slay(id) {
     const p = this.human();
     const t = this.player(id);
@@ -12,7 +14,7 @@ export const slayer = {
       this.s.slayerUsed ||
       ability(p) !== "slayer" ||
       !p.alive ||
-      !t?.alive
+      !t
     ) {
       throw Error("Slayer unavailable.");
     }
@@ -50,7 +52,12 @@ export const slayer = {
 
       const before = this.alive().length;
 
-      this.kill(t, "slayer");
+      // (Only a death counts: a player already dead, or one who can't die
+      // (a Lleech whose host lives), is shot to no effect.)
+      if (!this.kill(t, "slayer")) {
+        return false;
+      }
+
       this.confirm(p, "certain", `their Slayer shot killed ${t.label}`);
 
       if (isDemon(t)) {

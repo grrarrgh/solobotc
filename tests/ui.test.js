@@ -210,7 +210,7 @@ test("Bad Moon Rising controls: Courtier characters, Professor's dead picks, Gos
   assert.match(html, /id="gossip-controls"[\s\S]*?id="gossip-question"[\s\S]*?id="gossip-say"/);
   assert.match(app, /e\.gossip\(selectedPlayerId/);
   assert.match(app, /s\.pending\?\.characters \? \$\("night-character"\)\.value/);
-  assert.match(app, /p\.alive === Boolean\(s\.pending\.dead\)/);
+  assert.match(app, /!canPick\(s\.pending, p\)/);
 });
 
 test("dead players can be nominated from the town square", () => {

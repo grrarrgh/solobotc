@@ -34,8 +34,9 @@ export const psychopath = {
     }
   },
 
-  // You, an Alchemist with the Psychopath's ability, choose living player
-  // `id` in public: they die. Once a day, before nominations.
+  // You, an Alchemist with the Psychopath's ability, choose player `id` in
+  // public ("publicly choose a player", living or dead): they die. Once a
+  // day, before nominations.
   psychopathKill(id) {
     const s = this.s;
     const h = this.human();
@@ -52,8 +53,8 @@ export const psychopath = {
       throw Error("Psychopath unavailable.");
     }
 
-    if (!t?.alive || t.human) {
-      throw Error("Choose a living player.");
+    if (!t || t.human) {
+      throw Error("Choose another player.");
     }
 
     this.psychopathChooses(h, t);

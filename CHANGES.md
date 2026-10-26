@@ -2,6 +2,18 @@
 
 Newest first.
 
+## Bug Fixes: Choosing Dead Players, Votes on the Dead & the Mastermind's Extra Day
+
+From 10 auto-played games (random nominations by you, then every NPC nomination), and a check of every ability that chooses players.
+
+- Who you can choose goes by the ability's wording: "choose a player" takes living and dead players, "choose an alive (or living) player" only the living, "choose a dead player" only the dead (`canPick()` in src/engine.js, used by the night choice, the town square and the tests).
+  - Now any player: the Fortune Teller, Monk, Butler, Dreamer, Village Idiot, Seamstress, Exorcist and Innkeeper, an Alchemist's Poisoner and Fearmonger choice, the Slayer's shot and an Alchemist's Psychopath kill. (These used to take only the living.)
+  - Still only the living: the Sailor, Chambermaid and Huntsman (and, for NPCs, the Snake Charmer, Devil's Advocate, Moonchild, Klutz and the Lleech's host). Still only the dead: the Professor.
+  - NPCs still choose among the living for "choose a player" abilities: a dead player is rarely worth their pick.
+- Slayer: a shot that kills nobody (a dead player, even a dead Demon, or a Lleech whose host lives) has no effect. It used to be logged as a kill, confirm the Slayer as good, and pass the Demon on.
+- Votes: good NPCs, living or dead, never vote to execute a dead player. It kills nobody and uses up the day's execution. The exceptions: your pick in the final 3 (your call, as before), and their suspect when the Zombuul is on the script (it might only register as dead). In the logs, a Fortune Teller voted to execute a dead Librarian, so their own nomination of the Imp couldn't beat it; and 7 dead players spent their last vote on a dead Imp. The log says so ("[workings] … is dead: good players don't vote to execute them.").
+- Mastermind: on the extra day after the Demon's execution, the evil team nominates a good player (their scapegoat first) and votes for any good nominee, never a teammate. Good players vote only for the player they suspect, since with nobody executed, good wins. In the logs, the Mastermind sat out its extra day, so nobody was executed and good won. Logged as "[workings] Mastermind's extra day: …".
+
 ## Superficial Changes: Report a Bug, How to Play, About & the Footer
 
 - The ☰ menu by the title has a "🐛 Report a bug" link, under the town square size. It opens a new GitHub issue (github.com/grrarrgh/solobotc/issues/new) in a new tab.
