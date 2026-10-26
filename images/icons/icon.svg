@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Solo Clocktower's icon: the town square's clock tower (see app.js
+       CLOCKTOWER_SVG) on a dark tile, inside the town square's gold ring. -->
+  <rect width="64" height="64" rx="14" fill="#11141a" />
+  <circle cx="32" cy="32" r="27" fill="#181b21" stroke="#b69455" stroke-width="2.5" />
+  <g transform="translate(12.2 12.3) scale(0.62)">
+    <circle cx="32" cy="3" r="1.5" fill="#f0cf83" />
+    <path d="M32 4 21 19h22z" fill="#b69455" />
+    <rect x="22" y="19" width="20" height="21" fill="#5a4a3a" />
+    <circle cx="32" cy="29" r="7" fill="#f0cf83" stroke="#b69455" stroke-width="1.5" />
+    <path d="M32 29v-5M32 29l3.5 2" stroke="#1a1110" stroke-width="1.6" stroke-linecap="round" />
+    <rect x="19" y="39" width="26" height="3" fill="#b69455" />
+    <rect x="20" y="42" width="24" height="16" fill="#4a3c30" />
+    <path d="M28 58v-7a4 4 0 0 1 8 0v7z" fill="#1a1110" />
+    <rect x="14" y="58" width="36" height="4" rx="1" fill="#b69455" />
+  </g>
+</svg>

@@ -3,8 +3,9 @@
 Solo Clocktower: a dependency-free, single-player Blood on the Clocktower in
 the browser. The human is always seat 1 and always good; every other seat is
 an NPC, and the code is the Storyteller. Plain ES modules, no build step, no
-npm packages. Deployed as-is to GitHub Pages (grrarrgh.github.io/solobotc)
-from `main`. See README.md for how the game plays and the file table.
+npm packages. Deployed as-is to GitHub Pages from `main`, at
+www.solobotc.com (the `CNAME` file; grrarrgh.github.io/solobotc redirects).
+See README.md for how the game plays and the file table.
 
 ## Commands
 

@@ -2,6 +2,13 @@
 
 Newest first.
 
+## New Features: www.solobotc.com & a Clock Tower Icon
+
+- The game is ready to move to its own address, www.solobotc.com: a `CNAME` file for GitHub Pages, and `.nojekyll` so Pages serves the files as they are.
+- A clock tower icon (the town square's own, inside its gold ring) for browser tabs, bookmarks and phone home screens: `favicon.ico`, `images/icons/` (SVG, 192 and 512 px, maskable versions for Android, and an Apple touch icon), and `site.webmanifest`, so it can be added to a home screen as an app.
+- A shared link now shows a preview card (`images/social.png`) with the title and a line about the game, and the page has a description for search engines.
+- The README links to the new address; the local server (`npm start`) serves the new file types.
+
 ## Improvements: The Storyteller's Advice Leans, and Grows With the Game
 
 - The Fisherman's tip and the Savant's true statement are still true, but how much they give away now depends on the stage of the game and the Storyteller's lean (`adviceLevel()` in storyteller.js, `ADVICE_STAGES` in data.js), from 0 to 3:

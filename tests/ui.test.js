@@ -314,7 +314,7 @@ test("under the setup card: How to play (collapsed), About, hidden with it; a fo
   assert.match(html, /<section id="setup" class="setup-page">[\s\S]*?<\/section>\s*(<!--[\s\S]*?-->\s*)?<div id="setup-info" class="setup-info">/);
   assert.match(html, /<details id="how-to-play" class="panel">\s*<summary><h2>How to play<\/h2><\/summary>/);
   assert.match(html, /<b>Ask<\/b>[\s\S]*?<b>Start Nominations<\/b>[\s\S]*?<b>Raise hand<\/b>/);
-  assert.match(html, /<section class="about">[\s\S]*?fan-made project[\s\S]*?not for commercial use/);
+  assert.match(html, /<section class="about">[\s\S]*?fan-made[\s\S]*?not for commercial use/);
   assert.match(html, /<\/main>\s*<footer class="site-footer">\s*This project is not affiliated with The Pandemonium Institute\. All roles,\s+content are the property of Steven Medway and The Pandemonium Institute\./);
   assert.match(app, /\$\("setup"\)\.hidden = true;\s*\$\("setup-info"\)\.hidden = true;/);
   assert.match(app, /\$\("setup"\)\.hidden = false;\s*\$\("setup-info"\)\.hidden = false;/);
@@ -329,4 +329,25 @@ test("the script sheet lists each team's characters alphabetically, with any not
 test("the Final reveal's NPC talks are collapsed until opened, and Open all leaves them be", () => {
   assert.match(app, /<details class="npc-talks"><summary>Who talked to whom<\/summary>/);
   assert.match(app, /querySelectorAll\("details\.tl-section"\)/);
+});
+
+test("ready for GitHub Pages at www.solobotc.com: the domain, icons, manifest and link preview", () => {
+  const exists = (path) => fs.existsSync(new URL(`../${path}`, import.meta.url));
+  const manifest = JSON.parse(read("../site.webmanifest"));
+
+  assert.equal(read("../CNAME").trim(), "www.solobotc.com");
+  assert.ok(exists(".nojekyll"));
+  assert.match(html, /<link rel="canonical" href="https:\/\/www\.solobotc\.com\/" \/>/);
+  assert.match(html, /<meta property="og:image" content="https:\/\/www\.solobotc\.com\/images\/social\.png" \/>/);
+
+  // Every icon, image and manifest the page names is there.
+  for (const [, path] of html.matchAll(/(?:href|content)="(?:https:\/\/www\.solobotc\.com\/)?((?:images\/|favicon|site\.)[^"]+)"/g)) {
+    assert.ok(exists(path), path);
+  }
+
+  for (const icon of manifest.icons) {
+    assert.ok(exists(icon.src), icon.src);
+  }
+
+  assert.ok(manifest.icons.some((x) => x.purpose === "maskable"));
 });

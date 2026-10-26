@@ -6,7 +6,7 @@ on the good team; every other seat is an NPC, and the game is the Storyteller.
 
 ## Playing
 
-Go to <https://grrarrgh.github.io/solobotc/>, then:
+Go to <https://www.solobotc.com/>, then:
 
 1. Choose the number of seats.
 2. Choose a script.
@@ -117,6 +117,10 @@ in its record in `CHARACTERS`. These include:
 | `src/log.js` | Formats the downloadable log |
 | `src/app.js` | The page: town square, panels, vote animation, reveal |
 | `src/util.js` | The seeded random number generator and small helpers |
+| `src/selfplay.js` | Self-play, for testing: plays your seat for you (open the page with `?selfplay`) |
+| `images/icons/`, `favicon.ico`, `site.webmanifest` | The clock tower icon: browser tabs, bookmarks, home screens |
+| `images/social.png` | The picture a shared link shows |
+| `CNAME`, `.nojekyll` | GitHub Pages: the custom domain (www.solobotc.com), and serving the files as they are |
 
 ## Tests
 
