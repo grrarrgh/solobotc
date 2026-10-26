@@ -67,6 +67,11 @@ export const ability = (p) =>
     ? p.shown
     : (p.gained ?? p.role);
 
+// Whether p is the Wizard who can't nominate or vote in the second round of
+// nominations they wished for: their wish's price (see wizard.js).
+export const wishBarred = (s, p) =>
+  Boolean(s.secondRound?.open && s.secondRound.day === s.day && s.secondRound.wizardId === p.id);
+
 // The Minion ability p acts with: an Alchemist's (see
 // characters/townsfolk/alchemist.js; also a Drunk shown the Alchemist, to
 // no effect), or their own character's.

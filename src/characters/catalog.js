@@ -725,6 +725,7 @@ export const CHARACTERS = {
     team: "minion",
     ability:
       "Once per game, choose to make a wish. If granted, it might have a price & leave a clue as to its nature.",
+    note: "Kept simple here: a set list of wishes. A death (never the Demon's); the Grimoire (evil only); who the Demon is (good only: the Demon learns who wished); the Demon's whispers (good only: the town hears its bluffs, and it learns new ones); a second execution today (5+ alive: the Wizard can't nominate or vote in it); or, on Day 1 only, a Townsfolk ability for the Demon (evil only: the Fool or the Virgin, not in play; the Wizard dies that night).",
     kill: "avoid",
   },
   boomdandy: {

@@ -35,7 +35,7 @@ import {
   AMNESIAC_SHAPES,
   amnesiacShape,
 } from "../src/characters/townsfolk/amnesiac.js";
-import { logNames } from "../src/log.js";
+import { logNames, formatLog } from "../src/log.js";
 import {
   NIGHT_STEPS,
   FIRST_NIGHT,
@@ -10508,6 +10508,8 @@ test("the Fearmonger's new choice is announced at dawn; nominating and executing
   s.day = 2;
   e.fearmongerDawn();
   assert.equal(s.publicLog.at(-1), "Day 2 — The Storyteller: the Fearmonger has chosen a new player.");
+  // (Announced: it's on the dawn card, the Storyteller's popup.)
+  assert.ok(s.announced.includes(s.publicLog.length - 1));
   assert.equal(s.fearmongerChose, 2);
 
   // The same choice again: no announcement.
@@ -11285,6 +11287,128 @@ test("an NPC Wizard wishes in time; a good one learns the Demon, whom the Demon 
   s.phase = "night";
   s.night = 3;
   assert.equal(new SimpleStrategy().demon(s, p[4]), a);
+});
+
+test("the Wizard's whispers wish (good only): the town hears the Demon's bluffs, and the Demon learns new ones", () => {
+  // An evil Wizard knows them already.
+  const evil = minionDay("wizard-whispers-evil", "wizard");
+
+  assert.match(evil.e.wishFor(evil.p[3], "whispers"), /isn't granted/);
+
+  const { s, e, p } = alchemistDay("wizard-whispers", "wizard", true);
+  const old = [...s.demonBluffs];
+
+  // (The Demon claims one of them, in public.)
+  Object.assign(p[4], { claim: old[0], publicClaim: old[0], claimKnown: true, bluffs: old });
+  assert.match(e.wish("whispers"), /granted/);
+  assert.deepEqual(s.exposedBluffs, old);
+  assert.equal(s.demonBluffs.length, old.length);
+  assert.ok(s.demonBluffs.every((x) => !old.includes(x) && !s.players.some((y) => y.role === x)));
+  assert.deepEqual(p[4].bluffs, s.demonBluffs);
+  assert.ok(s.announced.includes(s.publicLog.length - 1));
+  assert.match(s.publicLog.at(-1), /The Demon was told these characters are not in play: /);
+  assert.ok(s.audit.some((x) => /Clue: exposed: .* claims the /.test(x.text)));
+
+  // Claiming one of them is now evidence of being evil.
+  assert.ok(
+    e.strat.evidence(s, p[1], p[4]).reasons.some((x) => /one of the Demon's bluffs/.test(x)),
+  );
+  assert.match(formatLog(s), /made public by a Wizard's wish/);
+});
+
+test("the Wizard's second-execution wish: nominations open again after the execution, without the Wizard", () => {
+  const { s, e, p } = minionDay("wizard-second", "wizard");
+  const w = p[3];
+
+  assert.match(e.wishFor(w, "second"), /granted/);
+  assert.match(s.publicLog.at(-1), /there will be a second execution today/);
+  assert.match(e.wishFor(p[3], "second"), /isn't granted|Not today/);
+
+  e.openNominations();
+  s.block = { nomineeId: p[1].id, count: 3 };
+  e.endDay();
+  assert.equal(p[1].alive, false);
+  assert.equal(s.phase, "day");
+  assert.equal(s.nominationsOpen, true);
+  assert.deepEqual(s.dayNominators, []);
+  assert.ok(s.phaseCards.some((c) => c.kind === "nominations" && c.lines.some((x) => /open again/.test(x))));
+
+  // The price: the Wizard can't nominate or vote in it.
+  assert.ok(!e.npcNominators().some((o) => o.p === w));
+  assert.equal(e.intents(p[2])[w.id], false);
+  assert.equal(e.strat.nominator(s, p[2]) === w, false);
+
+  // Then the day ends.
+  e.endDay();
+  assert.notEqual(s.day, 1);
+});
+
+test("the Wizard's second execution is only granted with 5 or more alive", () => {
+  const { s, e, p } = minionDay("wizard-second-few", "wizard");
+
+  p[1].alive = false;
+  assert.match(e.wishFor(p[3], "second"), /Not today/);
+});
+
+test("the Wizard's gift wish (evil, Day 1 only): the Demon gains a Virgin or Fool ability not in play, and the Wizard dies that night", () => {
+  // A good Wizard, or too late: not granted.
+  const y = alchemistDay("wizard-gift-good", "wizard", true);
+
+  assert.match(y.e.wish("gift"), /too much/);
+
+  const late = minionDay("wizard-gift-late", "wizard");
+
+  late.s.day = 2;
+  assert.match(late.e.wishFor(late.p[3], "gift"), /too late/);
+
+  // The Virgin: the Demon claims it, so it gets it.
+  let { s, e, p } = minionDay("wizard-gift-virgin", "wizard");
+  const w = p[3];
+
+  p[4].claim = "virgin";
+  assert.match(e.wishFor(w, "gift"), /granted/);
+  assert.equal(p[4].wishGift, "virgin");
+
+  // You (the Mayor, a Townsfolk) nominate the Demon: you're executed.
+  e.openNominations();
+  e.nominate(p[4].id, true);
+  assert.equal(p[0].alive, false);
+  assert.ok(s.audit.some((x) => /with the Virgin ability from a Wizard's wish/.test(x.text)));
+
+  // The price: the Wizard dies that night, and the town hears of it.
+  s.phase = "night";
+  s.night = 2;
+  e.wizardNight();
+  assert.equal(w.alive, false);
+  s.day = 2;
+  e.wizardDawn();
+  assert.equal(
+    s.publicLog.at(-1),
+    `Day 2 — The Storyteller: a wish was granted, and ${w.label} paid for it with their life.`,
+  );
+
+  // The Fool: the Demon survives its first execution.
+  ({ s, e, p } = minionDay("wizard-gift-fool", "wizard"));
+  p[4].claim = "fool";
+  e.wishFor(p[3], "gift");
+  assert.equal(p[4].wishGift, "fool");
+  e.execute(p[4]);
+  assert.equal(p[4].alive, true);
+  assert.equal(s.winner, null);
+});
+
+test("an evil NPC Wizard wishes for the Demon's gift on Day 1; a good one picks among the good wishes", () => {
+  const { s, p } = minionDay("wizard-gift-npc", "wizard");
+  const strat = new SimpleStrategy();
+
+  s.r = () => 0;
+  assert.deepEqual(strat.wish(s, p[3]), { kind: "gift" });
+
+  const g = alchemistDay("wizard-good-npc", "wizard");
+
+  g.s.day = 2;
+  g.s.r = () => 0.99;
+  assert.equal(strat.wish(g.s, g.a).kind, "second");
 });
 
 test("whole games play out on Outed Evil, with every character doing its thing", () => {

@@ -8,7 +8,7 @@
 // ("selfplay" in log.txt).
 import { name, ARTIST_QUESTIONS } from "./data.js";
 import { canPick } from "./engine.js";
-import { ability } from "./storyteller.js";
+import { ability, wishBarred } from "./storyteller.js";
 import { AMNESIAC_GUESSES } from "./characters/townsfolk/amnesiac.js";
 import { rng, pick, sample, claimTo } from "./util.js";
 
@@ -213,9 +213,13 @@ export class SelfPlay {
     const t =
       this.suspect((x) => !e.nominatedToday(x.id) && !this.saint(x)) ??
       this.suspect((x) => !e.nominatedToday(x.id));
-    const canNominate = h.alive ? !s.dayNominators.includes(h.id) : true;
+    const canNominate = h.alive
+      ? !s.dayNominators.includes(h.id) && !wishBarred(s, h)
+      : true;
+    // (A Wizard's wish can open a second round of nominations today.)
+    const round = s.secondRound?.open && s.secondRound.day === s.day ? 2 : 1;
 
-    if (t && canNominate && this.once("nominate")) {
+    if (t && canNominate && this.once(`nominate:${round}`)) {
       this.note(`${h.alive ? "nominated" : "asked for a nomination of"} ${t.label}.`, {
         targetId: t.id,
       });

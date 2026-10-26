@@ -375,6 +375,18 @@ export const ALCHEMIST_ABILITIES = ["poisoner", "fearmonger", "psychopath", "gob
 // Alchemist-Wizard), that an NPC makes theirs.
 export const WIZARD_WISH_CHANCE = 0.35;
 
+// The Townsfolk abilities a Wizard's wish can give the Demon (the "gift"
+// wish): the ones that keep a Demon from being executed, and so are worth a
+// Minion's life. Only one not in play.
+export const WIZARD_GIFTS = ["fool", "virgin"];
+
+// The chance an evil NPC Wizard wishes for the Demon's gift on Day 1 (the
+// only day it's granted), if one can be given.
+export const WIZARD_GIFT_CHANCE = 0.5;
+
+// A second execution is only granted with at least this many alive.
+export const WIZARD_SECOND_MIN_ALIVE = 5;
+
 // Roshambo: what beats what.
 export const ROSHAMBO = { rock: "scissors", paper: "rock", scissors: "paper" };
 
@@ -428,6 +440,7 @@ export const EVIDENCE_WEIGHT = {
   damselGuess: 6, // guessed the Damsel in public: only a Minion's guess counts
   failedExecution: 6, // voted for an execution that failed (Legion): only evil voted
   outedEvil: 8, // showed they're evil in public: a Psychopath's kill, a Goblin claim (s.outed)
+  exposedBluff: 6, // claims one of the Demon's bluffs, which a Wizard's wish made public (s.exposedBluffs)
 };
 
 // With a Pixie on the script, a double claim of a Townsfolk might be a mad

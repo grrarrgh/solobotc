@@ -2,6 +2,14 @@
 
 Newest first.
 
+## New Features: Three New Wizard Wishes
+
+- **"I wish to hear the Demon's whispers."** (good only: an Alchemist with the Wizard's ability.) The Storyteller tells the town the 3 characters the Demon was told are not in play. Price: the Demon (and every teammate who knew them) learns 3 new ones. Clue: anyone claiming one of the old 3 in public is now strongly suspected (`exposedBluff` in `EVIDENCE_WEIGHT`). log.txt's header shows both sets.
+- **"I wish for a second execution today."** (5 or more alive; never on the Mastermind's extra day.) After the day's execution, nominations open again once, with a Nominations card: everyone can nominate and be nominated again. Price: the Wizard can't nominate or vote in the second round. The Vortox and the Mayor go by the whole day: an execution in either round counts.
+- **"I wish that the Demon has the ability of a Townsfolk not in play."** (evil only, Day 1 only.) The Demon gains the Fool or the Virgin ability (`WIZARD_GIFTS`, whichever isn't in play, preferring the one it claims) on top of its own: it survives its first death, or the first Townsfolk to nominate it is executed (and the town takes it for the real Virgin). Price: the Wizard dies that night. Clue: at dawn, the Storyteller says a wish cost them their life.
+- NPC Wizards use them: a good one picks among its wishes; an evil one wishes for the gift on Day 1 half the time (`WIZARD_GIFT_CHANCE`), and for a second execution while the town suspects a good player most.
+- A declined wish now says why in log.txt, and the Wizard's role popup (`note`) lists every wish.
+
 ## Bug Fixes & Improvements: The Dead Juggler, the Klutz's Reasons & Self-Play's Saint
 
 From 30 self-played games, one on each script in turn, 8–15 seats.

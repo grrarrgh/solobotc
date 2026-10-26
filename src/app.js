@@ -26,7 +26,7 @@ import {
   JINXES,
 } from "./data.js";
 import { createState, parseScript } from "./setup.js";
-import { ability, minionAbility } from "./storyteller.js";
+import { ability, minionAbility, wishBarred } from "./storyteller.js";
 import { WIZARD_WISHES } from "./characters/minion/wizard.js";
 import { Engine, canPick } from "./engine.js";
 import {
@@ -1597,7 +1597,8 @@ function draw() {
     !s.npcWanting || !!voteAnim || nominating || !!s.winner;
   $("pass").hidden = !open;
   $("nominate").hidden = !h.alive;
-  $("nominate").disabled = blocked || s.dayNominators.includes(h.id);
+  $("nominate").disabled =
+    blocked || s.dayNominators.includes(h.id) || wishBarred(s, h);
   $("request-nomination").hidden = false;
   $("request-nomination").disabled = blocked;
   $("pass").disabled = !!voteAnim || nominating;

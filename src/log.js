@@ -172,7 +172,11 @@ export function formatLog(s) {
     `Seats:   ${s.seats}`,
     `Seed:    ${s.seed}`,
     `Version: ${s.version}`,
-    `Bluffs:  ${(s.demonBluffs ?? []).map(name).join(", ") || "none"}`,
+    `Bluffs:  ${(s.demonBluffs ?? []).map(name).join(", ") || "none"}${
+      s.exposedBluffs
+        ? ` (at first ${s.exposedBluffs.map(name).join(", ")}, made public by a Wizard's wish)`
+        : ""
+    }`,
     `Result:  ${
       s.winner ? `${s.winner.toUpperCase()} wins — ${s.reason}` : "in progress"
     }`,

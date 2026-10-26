@@ -16,7 +16,9 @@ export const virgin = {
 
     this.audit(
       "virgin",
-      `${by.label} nominated ${n.label} (${name(n.role)}) and was executed.`,
+      `${by.label} nominated ${n.label} (${name(n.role)}${
+        n.role === "virgin" ? "" : `, with the ${name(n.wishGift)} ability from a Wizard's wish`
+      }) and was executed.`,
       { actorId: by.id, targetId: n.id },
     );
 

@@ -29,6 +29,7 @@ import {
   leanText,
   bluffing,
   jinxBarred,
+  wishBarred,
 } from "./storyteller.js";
 import {
   SimpleStrategy,
@@ -1333,7 +1334,9 @@ export class Engine {
     const seen = new Set();
 
     return s.players
-      .filter((x) => x.alive && !x.human && !s.dayNominators.includes(x.id))
+      .filter(
+        (x) => x.alive && !x.human && !s.dayNominators.includes(x.id) && !wishBarred(s, x),
+      )
       .map((p) => ({ p, n: this.strat.nomination(s, p) }))
       .filter((o) => o.n && !this.nominatedToday(o.n.target.id))
       .sort((a, b) => b.n.score - a.n.score)
@@ -1920,7 +1923,8 @@ export class Engine {
     ];
 
     for (const v of order) {
-      const eligible = v.alive || v.ghost;
+      // (Nor the Wizard in the second round they wished for: see wizard.js.)
+      const eligible = (v.alive || v.ghost) && !wishBarred(s, v);
       const attempted = Boolean(
         eligible && (v.human ? hand : this.strat.vote(s, v, n, { ...tally })),
       );
@@ -2042,6 +2046,10 @@ export class Engine {
       throw Error("You have already nominated today.");
     }
 
+    if (wishBarred(s, h)) {
+      throw Error("Your wish's price: you can't nominate in the second round.");
+    }
+
     return this.runNomination(h, n, false, hand);
   }
 
@@ -2076,7 +2084,7 @@ export class Engine {
   canVote() {
     const h = this.human();
 
-    return Boolean(h.alive || h.ghost);
+    return Boolean((h.alive || h.ghost) && !wishBarred(this.s, h));
   }
 
   // A nomination and its vote. Nobody is executed yet: if at least half the
@@ -2124,8 +2132,9 @@ export class Engine {
     }
 
     // A working Virgin's first nomination executes a Townsfolk nominator:
-    // the town now knows they're the real Virgin (good).
-    if (n.role === "virgin" && !n.virginUsed) {
+    // the town now knows they're the real Virgin (good). (Or so it thinks:
+    // a Demon a Wizard's wish gave the Virgin ability does it too.)
+    if ((n.role === "virgin" || n.wishGift === "virgin") && !n.virginUsed) {
       n.virginUsed = true;
 
       if (works(n) && team(nominator.role) === "townsfolk") {
@@ -2469,10 +2478,20 @@ export class Engine {
         this.phaseCard("dusk", from);
         return;
       }
+    }
+
+    // A Wizard's wish for a second execution: nominations open again (see
+    // wizard.js secondRound()), and the day ends after that round.
+    if (this.secondRound(from)) {
+      return;
+    }
+
+    if (p) {
+      // (Executed: the checks below are for a day without one.)
     } else if (this.vortoxDay()) {
       this.phaseCard("dusk", from);
       return;
-    } else if (this.alive().length === 3) {
+    } else if (this.alive().length === 3 && !s.executedToday) {
       // ("Your team wins": a Mayor the Mezepheles turned evil wins for evil.)
       const mayor = s.players.find((x) => x.alive && ability(x) === "mayor" && works(x));
 

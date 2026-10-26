@@ -2,6 +2,8 @@ import {
   ROLES,
   name,
   team,
+  WIZARD_GIFT_CHANCE,
+  WIZARD_SECOND_MIN_ALIVE,
   alignment,
   ARTIST_QUESTIONS,
   FIRST_NIGHT_INFO,
@@ -80,6 +82,7 @@ import {
   framed,
   isDrunk,
   isDemon,
+  wishBarred,
   atFinal,
   jinxBarred,
   minionAbility,
@@ -94,6 +97,7 @@ import {
   AMNESIAC_GUESSES,
 } from "./characters/townsfolk/amnesiac.js";
 import { evilTwinInfo } from "./characters/minion/eviltwin.js";
+import { wishGifts } from "./characters/minion/wizard.js";
 import { infoOf } from "./characters/info.js";
 import { PAIR_TEAM } from "./characters/pairinfo.js";
 import { bluffTonight, backStory, bluffState, gainedRole } from "./bluff.js";
@@ -148,6 +152,25 @@ export const fooledBy = (p, x) =>
 const blind = (p, x) => Boolean(p?.poppyBlind) && x.alignment === "evil" && x.id !== p.id;
 
 const goodTo = (p, x) => (x.alignment === "good" || blind(p, x)) && !fooledBy(p, x);
+
+// The living player the most good NPCs suspect (the first in seat order on
+// a tie), or null if they suspect nobody.
+function townSuspect(s) {
+  const counts = new Map();
+
+  for (const x of s.players) {
+    const id = x.alive && !x.human && x.alignment === "good" ? x.suspicion?.targetId : null;
+
+    if (id && byId(s, id)?.alive) {
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+  }
+
+  const top = Math.max(0, ...counts.values());
+  const id = [...counts].find(([, n]) => n === top)?.[0];
+
+  return id ? byId(s, id) : null;
+}
 
 // Whether evil player p keeps x alive: x is the host of a living Lleech
 // that p is, or knows is their Demon (not while the Poppy Grower keeps the
@@ -706,6 +729,12 @@ export class SimpleStrategy {
       add(W.failedExecution, "they voted for an execution that failed, so they're evil");
     }
 
+    // They claim one of the Demon's bluffs, which a Wizard's wish made public
+    // (see wizard.js exposeBluffs()).
+    if (claim && (s.exposedBluffs ?? []).includes(claim)) {
+      add(W.exposedBluff, `they claim the ${name(claim)}, one of the Demon's bluffs`);
+    }
+
     // They showed they're evil in public (see engine outed()).
     const outed = (s.outed ?? []).find((x) => x.id === t.id);
 
@@ -1195,6 +1224,7 @@ export class SimpleStrategy {
     const used = new Set([
       ...s.players.flatMap((x) => [x.role, x.shown, x.claim, x.cover?.as]),
       ...(s.demonBluffs ?? []),
+      ...(s.exposedBluffs ?? []),
     ]);
     const fits = (id) => {
       const level = DEMON_KILL_PRIORITY[id] ?? "low";
@@ -2024,12 +2054,31 @@ export class SimpleStrategy {
   // Widow's or a wish's look), else that a player dies: whoever the Demon
   // would kill (never you, nor their Lleech's host).
   wish(s, p) {
+    const alive = s.players.filter((x) => x.alive).length;
+    const second = alive >= WIZARD_SECOND_MIN_ALIVE && s.mastermindDay !== s.day;
+
     if (sideOf(p) === "good") {
-      return { kind: "demon" };
+      const kinds = [
+        "demon",
+        ...(s.demonBluffs?.length && !s.exposedBluffs ? ["whispers"] : []),
+        ...(second ? ["second"] : []),
+      ];
+
+      return { kind: pick(kinds, s.r) };
+    }
+
+    if (s.day === 1 && wishGifts(s).length && s.r() < WIZARD_GIFT_CHANCE) {
+      return { kind: "gift" };
     }
 
     if (!this.spyWorks(s, p) && !s.widowGrimoire && !s.wizardGrimoire && s.r() < 0.5) {
       return { kind: "grimoire" };
+    }
+
+    // (While the good NPCs suspect a good player most, another execution
+    // today is likely another good one.)
+    if (second && townSuspect(s)?.alignment === "good") {
+      return { kind: "second" };
     }
 
     const t = this.demon(s, p);
@@ -2786,7 +2835,8 @@ export class SimpleStrategy {
         x.alive &&
         !x.human &&
         x.id !== n.id &&
-        !s.dayNominators.includes(x.id),
+        !s.dayNominators.includes(x.id) &&
+        !wishBarred(s, x),
     );
 
     if (n.claim !== "virgin") {
