@@ -2,6 +2,11 @@
 
 Newest first. Each release is headed with its version, the one log.txt's `Version:` line shows (from `version` in `src/setup.js` and `package.json`): a release with new features or improvements raises the middle number (2.5.0), one with only bug fixes or superficial changes the last (2.5.1). An entry without one shipped as the version below it; versions before 2.4.0 weren't recorded here.
 
+## v2.8.1 — Bug Fix & Superficial Change: Who Chooses Lil' Monsta's Kills, and the Version in the Menu
+
+- Bug fix: log.txt said Lil' Monsta's babysitter chose who died at night, but the Storyteller chooses (`lilMonstaKill()`). It now says: "The Storyteller chose P9.Fearmonger(Noble) to die to Lil' Monsta (babysat by P2.Godfather(Bounty Hunter)) (why: Storyteller is helping good: ...); P9.Fearmonger(Noble) was killed.", "Storyteller (good): who dies to Lil' Monsta: one of ...", and "The Storyteller chose nobody to die to Lil' Monsta tonight (why: ...).".
+- Superficial change: while a game is on, the ☰ menu shows its version under its seed ("Version: 2.8.1", `#menu-version`), for bug reports.
+
 ## v2.8.0 — New Feature, Improvements & Bug Fixes: Choosing Yourself at Night, Voting on a Vortox Script, Nobody Claims the Poppy Grower, an Alchemist-Fearmonger Who Chooses, the Alchemist's Ability in log.txt, and Information You Share That Counts
 
 - New feature: you can choose yourself with your own ability at night, as the rules allow, unless it says "not yourself": the Fortune Teller, Village Idiot, Sailor, Exorcist, Innkeeper and Huntsman (and an Alchemist's Poisoner or Fearmonger ability) can; the Monk, Butler, Dreamer, Seamstress and Chambermaid can't. Your seat can be selected while you choose (`self` in engine `wakeHuman()`, see `canPick()`). log.txt: "You chose You and Player 5.".

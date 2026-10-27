@@ -983,9 +983,15 @@ export class Engine {
       delete d.killWhy[original.id];
     }
 
+    // (Lil' Monsta's victims are the Storyteller's choice, not its
+    // babysitter's: see lilMonstaKill().)
     this.audit(
       "demon",
-      `${this.demonName(d)} ${verb} ${original.label}${
+      `${
+        d.babysitting && chosen
+          ? `The Storyteller chose ${original.label} to die to ${this.demonName(d)}`
+          : `${this.demonName(d)} ${verb} ${original.label}`
+      }${
         why ? ` (why: ${why})` : ""
       }; ${result}.`,
       {

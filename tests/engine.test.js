@@ -12335,7 +12335,7 @@ test("Lil' Monsta's night kill: the Storyteller's choice, never its babysitter, 
   const kill = s.audit.find((x) => x.type === "demon");
 
   assert.ok(p[3].alive);
-  assert.match(kill.text, /^Lil' Monsta \(babysat by Player 4, the Poisoner\) chose .*why: the Storyteller's choice.*was killed\./);
+  assert.match(kill.text, /^The Storyteller chose .* to die to Lil' Monsta \(babysat by Player 4, the Poisoner\) \(why: .*was killed\./);
   assert.equal(s.players.filter((x) => !x.alive).length, 1);
 
   // With no NPC it can kill (each protected by the Monk), it kills you, as
@@ -12352,12 +12352,12 @@ test("Lil' Monsta's night kill: the Storyteller's choice, never its babysitter, 
 
   t.e.demon();
   assert.equal(t.p[0].alive, false);
-  assert.ok(t.s.audit.some((x) => /chose You \(why: the Storyteller's choice: nobody but its own team is left to kill, besides you\)/.test(x.text)));
+  assert.ok(t.s.audit.some((x) => /^The Storyteller chose You to die to Lil' Monsta .*\(why: nobody but its own team is left to kill, besides you\)/.test(x.text)));
 
   t.s.night = 3;
   t.e.demon();
   assert.ok([t.p[1], t.p[2], t.p[3], t.p[4]].every((x) => x.alive));
-  assert.ok(t.s.audit.some((x) => /Lil' Monsta: nobody dies tonight/.test(x.text)));
+  assert.ok(t.s.audit.some((x) => /The Storyteller chose nobody to die to Lil' Monsta tonight/.test(x.text)));
 });
 
 test("if Lil' Monsta's babysitter dies, good wins; by their jinx, with 5 or more alive the Scarlet Woman babysits it for good", () => {
@@ -12562,7 +12562,7 @@ test("whole games play out on No Roles Barred, with the new characters doing the
 
     assert.ok([null, "good", "evil"].includes(s.winner));
     note("babysitter moves", /Lil' Monsta moves to/.test(text));
-    note("Lil' Monsta kills", /^Lil' Monsta \(babysat by .*was killed/m.test(text));
+    note("Lil' Monsta kills", /to die to Lil' Monsta \(babysat by .*was killed/.test(text));
     note("babysitter dies", s.reason === "Lil' Monsta's babysitter died.");
     note("Bounty Hunter info", /received: Bounty Hunter: .* is evil\./.test(text));
     note("Bounty Hunter bluff", /bluffed: Bounty Hunter: /.test(text));

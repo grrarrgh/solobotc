@@ -268,7 +268,7 @@ test("every popup closes when you press anywhere", () => {
   // The confirm popup: anywhere but its buttons is Keep talking.
   assert.match(app, /d\.onclick = \(ev\) => \{\s*if \(!ev\.target\.closest\("button"\)\) \{\s*d\.close\(\);\s*done\(false\);/);
   // The menu (but its − and +) and the role counts.
-  assert.match(app, /!ev\.target\.closest\("#size-popup button, #size-settings, #menu-seed"\)/);
+  assert.match(app, /!ev\.target\.closest\("#size-popup button, #size-settings, #menu-seed, #menu-version"\)/);
   assert.match(app, /if \(!\$\("count-popup"\)\.hidden && !ev\.target\.closest\("#count-info"\)\) \{\s*closeCountInfo\(\);/);
 });
 
@@ -316,9 +316,9 @@ test("the setup page starts on Trouble Brewing, with the seed under a collapsed 
   assert.doesNotMatch(html, /<details id="advanced-options"[^>]*\bopen\b/);
 });
 
-test("the menu shows the game's seed under Report a bug, and its log.txt mid-game", () => {
-  assert.match(html, /id="report-bug"[\s\S]*?<small id="menu-seed" class="menu-seed" hidden><\/small>\s*<a id="menu-log" class="menu-link" download="log.txt" hidden/);
-  assert.match(app, /\$\("menu-seed"\)\.textContent = `Seed: \$\{s\.seed\}`;\s*updateLogLink\(\);/);
+test("the menu shows the game's seed and version under Report a bug, and its log.txt mid-game", () => {
+  assert.match(html, /id="report-bug"[\s\S]*?<small id="menu-seed" class="menu-seed" hidden><\/small>\s*<small id="menu-version" class="menu-seed menu-version" hidden><\/small>\s*<a id="menu-log" class="menu-link" download="log.txt" hidden/);
+  assert.match(app, /\$\("menu-seed"\)\.textContent = `Seed: \$\{s\.seed\}`;\s*\$\("menu-version"\)\.textContent = `Version: \$\{s\.version\}`;\s*updateLogLink\(\);/);
   assert.match(app, /\$\("menu-log"\)\.href = link\.href;/);
 });
 

@@ -713,6 +713,11 @@ button:disabled {
   user-select: all;
 }
 
+/* The game's version, just under its seed. */
+.menu-version {
+  margin-top: 0;
+}
+
 .size-controls button:disabled {
   opacity: 0.4;
   cursor: default;

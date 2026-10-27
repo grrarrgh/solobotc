@@ -174,7 +174,7 @@ export const lilmonsta = {
     );
     const side = lean(s);
     const helping = side ? pool.filter((x) => killHelps(x) === side) : pool;
-    const t = side === "good" && !helping.length ? null : pick(steer(s, pool, killHelps, "who Lil' Monsta kills"), s.r);
+    const t = side === "good" && !helping.length ? null : pick(steer(s, pool, killHelps, "who dies to Lil' Monsta"), s.r);
     const why = !t
       ? pool.length
         ? "the Storyteller is helping good, and no evil player but the babysitter can die"
@@ -187,17 +187,17 @@ export const lilmonsta = {
     const you = s.players.find((x) => x.human && x.alive);
 
     if (!pool.length && you && !s.revived.includes(you.id)) {
-      (d.killWhy ??= {})[you.id] = "the Storyteller's choice: nobody but its own team is left to kill, besides you";
+      (d.killWhy ??= {})[you.id] = "nobody but its own team is left to kill, besides you";
       this.attack(d, you);
       return;
     }
 
     if (!t) {
-      this.audit("lilmonsta", `Lil' Monsta: nobody dies tonight (why: ${why}).`);
+      this.audit("lilmonsta", `The Storyteller chose nobody to die to Lil' Monsta tonight (why: ${why}).`);
       return;
     }
 
-    (d.killWhy ??= {})[t.id] = `the Storyteller's choice: ${why}`;
+    (d.killWhy ??= {})[t.id] = why;
     this.attack(d, t);
   },
 

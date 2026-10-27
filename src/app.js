@@ -1799,15 +1799,17 @@ function toggleSizeSettings(open = $("size-popup").hidden) {
   $("size-popup").hidden = !open;
   $("size-settings").setAttribute("aria-expanded", String(open));
 
-  // While a game is on (even mid-game), the menu shows its seed and a
-  // log.txt of everything so far.
+  // While a game is on (even mid-game), the menu shows its seed, its
+  // version and a log.txt of everything so far.
   const game = Boolean(e) && $("setup").hidden;
 
   $("menu-seed").hidden = !game;
+  $("menu-version").hidden = !game;
   $("menu-log").hidden = !game;
 
   if (open && game) {
     $("menu-seed").textContent = `Seed: ${s.seed}`;
+    $("menu-version").textContent = `Version: ${s.version}`;
     updateLogLink();
   }
 }
@@ -1823,7 +1825,7 @@ function closeCountInfo() {
 document.addEventListener("click", (ev) => {
   if (
     !$("size-popup").hidden &&
-    !ev.target.closest("#size-popup button, #size-settings, #menu-seed")
+    !ev.target.closest("#size-popup button, #size-settings, #menu-seed, #menu-version")
   ) {
     toggleSizeSettings(false);
   }
