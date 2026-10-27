@@ -77,11 +77,11 @@ export const lunatic = {
     }
 
     // (A Demon they "thought" they were: one on the script that isn't in
-    // play. Their "Minions": good NPCs, as many as there are Minions, at
+    // play, nor Lil' Monsta, which nobody is. Their "Minions": good NPCs, as many as there are Minions, at
     // least 2; never a teammate, who'd be suspected.)
     const shown = pick(
       s.script.ids.filter(
-        (id) => team(id) === "demon" && !s.players.some((x) => x.role === id),
+        (id) => team(id) === "demon" && id !== "lilmonsta" && !s.players.some((x) => x.role === id),
       ),
       s.r,
     );

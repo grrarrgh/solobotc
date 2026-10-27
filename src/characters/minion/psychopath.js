@@ -128,6 +128,17 @@ export const psychopath = {
       return null;
     }
 
+    // (Their jinx: babysitting Lil' Monsta, they die when executed.)
+    if (p.babysitting) {
+      this.audit(
+        "psychopath",
+        `${p.label} (${minionLabel(p)}) is babysitting Lil' Monsta, so they die when executed: no roshambo.`,
+        { playerId: p.id },
+      );
+
+      return null;
+    }
+
     const vote = (s.voteHistory ?? []).findLast((x) => x.day === s.day && x.nomineeId === p.id);
     const nominator = vote && this.player(vote.nominatorId);
 

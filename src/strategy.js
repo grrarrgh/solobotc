@@ -75,6 +75,7 @@ import {
   CERENOVUS_GOBLIN_CHANCE,
   FEARMONGER_PUSH_CHANCE,
   FEARMONGER_CAUTION,
+  EVIL_TOWNSFOLK_HUNCH_VOTE_CHANCE,
   exclusiveWith,
 } from "./data.js";
 import {
@@ -96,8 +97,10 @@ import {
   works,
   bluffing,
   shownBefore,
+  unknownMate,
 } from "./storyteller.js";
 import { byId, pick, sample, claimTo, claimHeard, tick } from "./util.js";
+import { logNames } from "./log.js";
 import {
   AMNESIAC_ABILITIES,
   AMNESIAC_GUESSES,
@@ -154,8 +157,24 @@ export const fooledBy = (p, x) =>
 // who picks good players to kill, poison or curse: not the Magician they
 // think is one of their own; any teammate they don't know (see blind()).
 // Whether evil player p doesn't know evil player x is a teammate: the
-// Poppy Grower kept the team apart (see setup.js, poppygrower.js).
-const blind = (p, x) => Boolean(p?.poppyBlind) && x.alignment === "evil" && x.id !== p.id;
+// Poppy Grower kept the team apart (see setup.js, poppygrower.js), or
+// either is the Bounty Hunter's evil Townsfolk (see bountyhunter.js).
+const blind = (p, x) => unknownMate(p, x);
+
+// A line in log.txt about an NPC's choice (as bluff.js madeUp() adds them).
+const note = (s, type, text, data = {}) =>
+  s.audit.push({
+    id: s.auditId++,
+    group: s.phase === "night" ? `Night ${s.night}` : `Day ${s.day}`,
+    type,
+    text,
+    data,
+    names: logNames(s),
+  });
+
+// Whether evil player p holds back from x: the Bounty Hunter's evil
+// Townsfolk, who suspects x of being on their team (see hunches()).
+const hunch = (p, x) => Boolean(p.evilTownsfolk) && (p.hunches ?? []).includes(x.id);
 
 const goodTo = (p, x) => (x.alignment === "good" || blind(p, x)) && !fooledBy(p, x);
 
@@ -473,11 +492,16 @@ export class SimpleStrategy {
     }
 
     // (Never either twin: the twins must look alike to the town. Nor anyone
-    // confirmed good, if there's anyone else: it wouldn't stick.)
+    // confirmed good, if there's anyone else: it wouldn't stick.) (The
+    // Bounty Hunter's evil Townsfolk, not knowing their team, points at
+    // nobody they suspect of being on it, if they can help it: see
+    // hunches().)
     const unconfirmed = pool.filter((x) => !sure(s).includes(x.id));
-    const outside = (unconfirmed.length ? unconfirmed : pool).filter(
+    const others = (unconfirmed.length ? unconfirmed : pool).filter(
       (x) => !teammate(p, x),
     );
+    const unsuspected = others.filter((x) => !hunch(p, x));
+    const outside = unsuspected.length ? unsuspected : others;
     const untwinnedOutside = untwinned(s, outside);
     const good = untwinnedOutside.length ? untwinnedOutside : outside;
     const rival = good.find(
@@ -488,7 +512,8 @@ export class SimpleStrategy {
       return rival;
     }
 
-    if (thinksEvil(p)) {
+    // (Nor do they know the team's scapegoat.)
+    if (thinksEvil(p) || p.evilTownsfolk) {
       return pick(good, s.r);
     }
 
@@ -556,12 +581,14 @@ export class SimpleStrategy {
   suspicion(s, p) {
     let target;
 
+    this.hunches(s, p);
+
     if (sideOf(p) === "good") {
       target = this.suspect(s, p, this.others(s, p));
     } else {
       const current = byId(s, p.suspicion?.targetId);
       const newDay = p.suspicion?.day !== s.day;
-      const stale = !current?.alive || current.human || teammate(p, current);
+      const stale = !current?.alive || current.human || teammate(p, current) || hunch(p, current);
       const move = stale || (newDay && s.r() < 0.35);
 
       target = move ? this.suspect(s, p, this.others(s, p)) : current;
@@ -588,6 +615,65 @@ export class SimpleStrategy {
           ? `I'm suspicious of ${target.label}: ${why.reasons.join("; ")}.`
           : `I'm suspicious of ${target.label}.`,
     };
+  }
+
+  // The players the Bounty Hunter's evil Townsfolk p suspects of being on
+  // their team, the evil team they don't know: the living NPCs their own
+  // information points at (kept to themself: p.ownInfo), and those the
+  // evidence points at, read as a good player would (at
+  // EVIDENCE_TO_SUSPECT; not counting what they've made up). Kept in
+  // p.hunches, and logged when they change. They don't vote for them (see
+  // vote()), point at them (see suspect()), or make up information against
+  // them (storyteller.js covered(), framed(); bluff.js knows()). Empty for
+  // anyone else.
+  hunches(s, p) {
+    if (!p.evilTownsfolk || !p.alive) {
+      return p.hunches ?? [];
+    }
+
+    const others = s.players.filter((x) => x.alive && x !== p && !x.human);
+    const told = p.ownInfo ?? [];
+    const own = others.filter((x) =>
+      told.some((m) => m.targets?.includes(x.id) && stanceOn(s, m, x, p) === "suspicious"),
+    );
+    // (Their memories hold what they've made up: the evidence is read
+    // without it, and without their own information, counted above.)
+    const memories = p.memories;
+    let seen;
+
+    p.memories = [];
+
+    try {
+      seen = others.filter((x) => this.evidence(s, p, x).score >= EVIDENCE_TO_SUSPECT);
+    } finally {
+      p.memories = memories;
+    }
+
+    const ids = others.filter((x) => own.includes(x) || seen.includes(x)).map((x) => x.id);
+    const before = p.hunches ?? [];
+
+    p.hunches = ids;
+
+    if (ids.join() !== before.join()) {
+      const why = (x) =>
+        [own.includes(x) && "their own information", seen.includes(x) && "the evidence"]
+          .filter(Boolean)
+          .join(" and ");
+
+      note(
+        s,
+        "bountyhunter",
+        ids.length
+          ? `${p.label} (${name(p.role)}), the evil Townsfolk, suspects ${others
+              .filter((x) => ids.includes(x.id))
+              .map((x) => `${x.label} (${why(x)})`)
+              .join(", ")} of being on their team: they won't vote for them, point at them, or make up information against them.`
+          : `${p.label} (${name(p.role)}), the evil Townsfolk, no longer suspects anyone of being on their team.`,
+        { playerId: p.id, targetIds: ids },
+      );
+    }
+
+    return ids;
   }
 
   // ── Public reasoning ───────────────────────────────────────
@@ -1654,8 +1740,10 @@ export class SimpleStrategy {
       return s.r() < GOBLIN_GOOD_VOTE_CHANCE;
     }
 
+    // (The Bounty Hunter's evil Townsfolk knows a Goblin claim means a
+    // Minion: they vote too.)
     if (goblin && sideOf(v) === "evil") {
-      return teammate(v, n) || Boolean(v.poppyBlind);
+      return teammate(v, n) || Boolean(v.poppyBlind) || Boolean(v.evilTownsfolk);
     }
 
     // (Never to execute their Lleech's host: see spares().)
@@ -1685,7 +1773,7 @@ export class SimpleStrategy {
     // executed, good wins).
     if (s.mastermindDay === s.day) {
       if (sideOf(v) === "evil") {
-        return !teammate(v, n);
+        return !teammate(v, n) && !hunch(v, n);
       }
 
       return this.opinion(s, v).targetId === n.id &&
@@ -1723,6 +1811,23 @@ export class SimpleStrategy {
             ? BOOMDANDY_VOTE_CHANCE
             : BOOMDANDY_HOT_VOTE_CHANCE)
         );
+      }
+
+      // (The Bounty Hunter's evil Townsfolk mostly holds back from a nominee
+      // they suspect of being on their team: see hunches().)
+      if (hunch(v, n)) {
+        const yes = s.r() < EVIL_TOWNSFOLK_HUNCH_VOTE_CHANCE;
+
+        note(
+          s,
+          "bountyhunter",
+          `${v.label} (${name(v.role)}), the evil Townsfolk, ${
+            yes ? "votes for" : "holds back from voting for"
+          } ${n.label}${yes ? ", though they suspect them" : ": they suspect them"} of being on their team.`,
+          { playerId: v.id, targetId: n.id, vote: yes },
+        );
+
+        return yes;
       }
 
       if (!teammate(v, n)) {
@@ -3407,6 +3512,8 @@ export class SimpleStrategy {
             (id) =>
               team(id) === team(t.role) &&
               id !== "eviltwin" &&
+              // (Nobody can be Lil' Monsta: it isn't a player.)
+              id !== "lilmonsta" &&
               !tokens.has(id),
           ),
         }))

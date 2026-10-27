@@ -157,6 +157,16 @@ export function createState(
   let mins = sample(pool("minion"), m, r);
   let demons = sample(pool("demon"), 1, r);
 
+  // Lil' Monsta isn't a player: an extra Minion is dealt in its place, and
+  // the Minions choose which of them babysits it (see
+  // characters/demon/lilmonsta.js).
+  const lilMonsta = demons[0] === "lilmonsta";
+
+  if (lilMonsta) {
+    demons = [];
+    mins = [...mins, ...sample(pool("minion").filter((x) => !mins.includes(x)), 1, r)];
+  }
+
   // Legion: most players are Legion (see LEGION_MAJORITY), with no Minions.
   // The rest are good: any mix of Townsfolk and Outsiders, as the
   // Storyteller likes. Here, a random number of Outsiders from 0 to the
@@ -275,11 +285,24 @@ export function createState(
     return k < 0 ? "chef" : unusedTF.splice(k, 1)[0];
   };
 
+  // Lil' Monsta's first babysitter: a Minion at random (not the Marionette,
+  // who thinks they're good). On later nights the Minions choose (see
+  // lilmonsta.js).
+  const sitter = lilMonsta
+    ? (pick(
+        roles
+          .map((x, i) => (team(x) === "minion" && x !== "marionette" ? i : -1))
+          .filter((i) => i >= 0),
+        r,
+      ) ?? -1)
+    : -1;
+
   // The Marionette sits next to the Demon (never in your seat); everyone
   // else stays where they were dealt. Next to the No Dashii, the side that
-  // pushes its poison furthest away (see marionetteSeat()).
+  // pushes its poison furthest away (see marionetteSeat()). (By their jinx,
+  // next to Lil' Monsta's first babysitter.)
   const mi = roles.indexOf("marionette");
-  const di = roles.findIndex((x) => team(x) === "demon");
+  const di = lilMonsta ? sitter : roles.findIndex((x) => team(x) === "demon");
 
   if (mi > 0 && di >= 0) {
     const n = roles.length;
@@ -297,10 +320,11 @@ export function createState(
   }
 
   // The Lunatic is shown a Demon, but not the one in play.
-  // (Never Legion: they'd think most players were on their team.)
+  // (Never Legion: they'd think most players were on their team. Nor Lil'
+  // Monsta, which nobody is.)
   const demonToken =
     pick(
-      pool("demon").filter((x) => x !== demons[0] && x !== "legion"),
+      pool("demon").filter((x) => x !== demons[0] && !["legion", "lilmonsta"].includes(x)),
       r,
     ) ??
     demons[0] ??
@@ -363,6 +387,8 @@ export function createState(
       gossipDay: 0,
       undead: false, // a Zombuul that died once: registers as dead
       zombuulUsed: false,
+      babysitting: i === sitter, // babysits Lil' Monsta: "is the Demon"
+      babysat: i === sitter, // has babysat it (the Final reveal says so)
     };
   });
 
@@ -535,7 +561,8 @@ export function createState(
   // (good characters, which may be in play) and claim one, and their own
   // "Minions": the real Demon and good NPCs, as many as there are Minions
   // (at least 2).
-  const realDemon = evil.find((x) => team(x.role) === "demon");
+  // (With Lil' Monsta, its babysitter.)
+  const realDemon = evil.find((x) => team(x.role) === "demon" || x.babysitting);
 
   // (In a Legion game, never one of the Legion's bluffs.)
   for (const p of players.filter((x) => x.role === "lunatic" && !x.human)) {
@@ -602,6 +629,23 @@ export function createState(
       ) ?? p.claim;
   }
 
+  // The Bounty Hunter makes a Townsfolk evil: an NPC (never the Bounty
+  // Hunter themself, nor you). They learn they're evil, but not who the
+  // rest of the team is, and the team doesn't learn them (see
+  // characters/townsfolk/bountyhunter.js). They keep their character and its
+  // ability, and claim it.
+  const evilTownsfolk = players.some((x) => x.role === "bountyhunter")
+    ? pick(
+        players.filter((x) => !x.human && team(x.role) === "townsfolk" && x.role !== "bountyhunter"),
+        r,
+      )
+    : null;
+
+  if (evilTownsfolk) {
+    evilTownsfolk.alignment = "evil";
+    evilTownsfolk.evilTownsfolk = true;
+  }
+
   // The Evil Twin is paired with a good player; they know each other. The
   // Evil Twin claims their good twin's character.
   const evilTwin = players.find((x) => x.role === "eviltwin");
@@ -636,7 +680,7 @@ export function createState(
     : null;
 
   const s = {
-    version: "2.5.0",
+    version: "2.6.0",
     script,
     seats,
     seed: String(seed),
@@ -667,6 +711,7 @@ export function createState(
     scapegoat: null,
     twins: goodTwin ? { evilId: evilTwin.id, goodId: goodTwin.id } : null,
     mezepheles,
+    lilMonsta: lilMonsta ? { fixed: null } : null, // fixed: the Scarlet Woman babysits for good (their jinx)
     fangGuJumped: false,
     lastingPoison: [], // { id, by } poisoned while `by` lives (Vigormortis)
     witched: null, // { targetId, day, effective }
@@ -726,6 +771,25 @@ export function createState(
   }
 
   const demon = evil.find((x) => team(x.role) === "demon");
+  const babysitter = players.find((x) => x.babysitting);
+
+  if (lilMonsta) {
+    setupLog(
+      "lilmonsta",
+      `Lil' Monsta is in play: no Demon is dealt, but ${mins.length} Minions. ${
+        babysitter
+          ? `${babysitter.label} (${name(babysitter.role)}) babysits it first, and "is the Demon".`
+          : "No Minion can babysit it."
+      }`,
+    );
+  }
+
+  if (evilTownsfolk) {
+    setupLog(
+      "bountyhunter",
+      `The Bounty Hunter is in play: ${evilTownsfolk.label} (${name(evilTownsfolk.role)}) is evil. They know they're evil, but not who the rest of the evil team is, and the team doesn't know them.`,
+    );
+  }
 
   for (const id of new Set(barred)) {
     setupLog(
@@ -746,7 +810,7 @@ export function createState(
 
   setupLog(
     "bluffs",
-    `Demon bluffs (${poppy ? "not told: the Poppy Grower" : `told to ${legions ? "every Legion" : (demon?.label ?? "the Demon")}`}): ${
+    `Demon bluffs (${poppy ? "not told: the Poppy Grower" : `told to ${legions ? "every Legion" : lilMonsta ? "the Minions, for Lil' Monsta" : (demon?.label ?? "the Demon")}`}): ${
       demonBluffs.map(name).join(", ") || "none"
     }. ${demon ? `${demon.label} bluffs as ${name(demon.claim)}.` : ""}`.trim(),
   );

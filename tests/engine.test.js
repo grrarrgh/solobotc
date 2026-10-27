@@ -68,6 +68,8 @@ import {
   adviceLevel,
   minionAbility,
   ability,
+  isDemon,
+  covered,
 } from "../src/storyteller.js";
 import { fishermanInfo } from "../src/characters/townsfolk/fisherman.js";
 import { ravenInfo } from "../src/characters/townsfolk/ravenkeeper.js";
@@ -82,6 +84,7 @@ import {
   hiddenStory,
   bluffMode,
   bluffState,
+  knows,
 } from "../src/bluff.js";
 import { NEVER_BLUFFED, NOTES } from "../src/data.js";
 import { infoOf } from "../src/characters/info.js";
@@ -12123,4 +12126,434 @@ test("self-play is deterministic: the same seed plays the same game", () => {
   };
 
   assert.equal(run(), run());
+});
+
+// ── No Roles Barred: the Bounty Hunter and Lil' Monsta ───────────
+
+const nrb = JSON.parse(
+  fs.readFileSync(new URL("../scripts/No Roles Barred_1_0_1.json", import.meta.url)),
+);
+
+// A 5-player Day 1 (see base()) with Lil' Monsta: you (Mayor), a Chef, a
+// Butler, and two Minions, `a` (p[3]) babysitting it, and `b` (p[4]).
+function lilDay(seed, a = "poisoner", b = "godfather") {
+  const s = base(seed);
+  const e = new Engine(s);
+  const p = s.players;
+
+  role(p[3], a, "evil");
+  role(p[4], b, "evil");
+
+  for (const x of p) {
+    x.babysitting = x === p[3];
+  }
+
+  s.lilMonsta = { fixed: null };
+
+  return { s, e, p };
+}
+
+// A 5-player Day 1 (see base()) with a Bounty Hunter (p[1]) and their evil
+// Townsfolk, a Chef (p[2]); the Baron (p[3]) and Imp (p[4]) as usual.
+function bountyDay(seed) {
+  const s = base(seed);
+  const e = new Engine(s);
+  const p = s.players;
+
+  role(p[1], "bountyhunter", "good");
+  role(p[2], "chef", "evil");
+  p[2].evilTownsfolk = true;
+
+  return { s, e, p };
+}
+
+test("No Roles Barred loads from the script list: 25 characters, with the Bounty Hunter's and Lil' Monsta's jinxes", () => {
+  const files = JSON.parse(fs.readFileSync(new URL("../scripts/index.json", import.meta.url)));
+
+  assert.ok(files.includes("No Roles Barred_1_0_1.json"));
+
+  const s = createState(nrb, 12, "nrb");
+
+  assert.equal(s.script.meta.name, "No Roles Barred");
+  assert.equal(s.script.ids.length, 25);
+
+  for (const pair of [
+    ["bountyhunter", "philosopher"],
+    ["marionette", "lilmonsta"],
+    ["lilmonsta", "poppygrower"],
+    ["lilmonsta", "psychopath"],
+    ["lilmonsta", "magician"],
+    ["lilmonsta", "scarletwoman"],
+  ]) {
+    assert.ok(
+      JINXES.some((j) => pair.every((id) => j.ids.includes(id))),
+      pair.join(" / "),
+    );
+  }
+
+  // Both have night order steps, and a note on how the game runs them.
+  assert.ok(FIRST_NIGHT.some(([id]) => id === "lilmonsta"));
+  assert.ok(OTHER_NIGHTS.some(([id]) => id === "lilmonsta"));
+  assert.ok(FIRST_NIGHT.some(([id]) => id === "bountyhunter"));
+  assert.ok(OTHER_NIGHTS.some(([id]) => id === "bountyhunter"));
+  assert.ok(NOTES.lilmonsta && NOTES.bountyhunter);
+});
+
+test("Lil' Monsta is never dealt: an extra Minion is, and one Minion babysits it and registers as the Demon", () => {
+  let games = 0;
+
+  for (let g = 0; g < 300 && games < 20; g++) {
+    const seats = 8 + (g % 8);
+    const s = createState(nrb, seats, `lil-deal-${g}`);
+
+    if (!s.lilMonsta) {
+      continue;
+    }
+
+    games++;
+
+    const sitters = s.players.filter((x) => x.babysitting);
+    const minions = s.players.filter((x) => team(x.role) === "minion");
+
+    assert.ok(!s.players.some((x) => team(x.role) === "demon"), `game ${g}`);
+    assert.equal(minions.length, COUNTS[seats][2] + 1);
+    assert.equal(sitters.length, 1);
+    assert.equal(team(sitters[0].role), "minion");
+    assert.ok(isDemon(sitters[0]));
+    assert.ok(!s.players.some((x) => x.role === "lilmonsta" || x.shown === "lilmonsta"));
+    assert.ok(s.audit.some((x) => x.type === "lilmonsta" && /babysits it first/.test(x.text)));
+
+    // The Minions know each other (unless the Poppy Grower keeps them apart).
+    for (const m of minions.filter((x) => !x.poppyBlind)) {
+      assert.ok(minions.every((x) => teammate(m, x)), `game ${g}`);
+    }
+  }
+
+  assert.ok(games >= 10, `${games} Lil' Monsta games`);
+});
+
+test("by their jinx, a Marionette starts next to Lil' Monsta's first babysitter", () => {
+  const raw = [
+    { id: "_meta", name: "Marionette test" },
+    ..."lilmonsta marionette poisoner chef empath monk soldier mayor slayer librarian investigator butler recluse".split(" "),
+  ];
+  let checked = 0;
+
+  for (let g = 0; g < 60; g++) {
+    const s = createState(raw, 8, `lil-marionette-${g}`);
+    const m = s.players.findIndex((x) => x.role === "marionette");
+    const d = s.players.findIndex((x) => x.babysitting);
+    const n = s.players.length;
+
+    assert.ok(d >= 0 && s.players[d].role === "poisoner", `game ${g}`);
+
+    if (m > 0) {
+      checked++;
+      assert.ok([(d + 1) % n, (d + n - 1) % n].includes(m), `game ${g}: Marionette ${m}, babysitter ${d}`);
+    }
+  }
+
+  assert.ok(checked > 0);
+});
+
+test("each night the Minions move Lil' Monsta to the Minion the town suspects least, logged with why", () => {
+  const { s, e, p } = lilDay("lil-choose");
+
+  s.phase = "night";
+  s.night = 2;
+  p[1].suspicion = { targetId: p[3].id };
+  p[2].suspicion = { targetId: p[3].id };
+  e.lilMonsta();
+
+  assert.ok(p[4].babysitting && !p[3].babysitting);
+  assert.ok(isDemon(p[4]) && !isDemon(p[3]));
+  assert.ok(
+    s.audit.some((x) =>
+      /Lil' Monsta moves to Player 5 \(Godfather\), from Player 4: .*why: the Minion the town suspects least: Player 4 2, Player 5 0/.test(x.text),
+    ),
+  );
+
+  // On a tie it stays where it is.
+  p[1].suspicion = null;
+  p[2].suspicion = null;
+  e.lilMonsta();
+  assert.ok(p[4].babysitting);
+  assert.ok(s.audit.some((x) => /Lil' Monsta stays with Player 5/.test(x.text)));
+});
+
+test("with the Poppy Grower alive, Lil' Monsta's babysitter keeps it; with the Magician alive, the Storyteller chooses (their jinxes)", () => {
+  const poppy = lilDay("lil-poppy");
+
+  role(poppy.p[2], "poppygrower", "good");
+  poppy.s.phase = "night";
+  poppy.s.night = 2;
+  poppy.p[1].suspicion = { targetId: poppy.p[3].id };
+  poppy.e.lilMonsta();
+  assert.ok(poppy.p[3].babysitting);
+  assert.ok(poppy.s.audit.some((x) => /Poppy Grower is alive, so the Minions wake one by one/.test(x.text)));
+
+  const magician = lilDay("lil-magician");
+
+  role(magician.p[2], "magician", "good");
+  magician.s.phase = "night";
+  magician.s.night = 2;
+  magician.s.r = () => 0.99;
+  magician.e.lilMonsta();
+  assert.ok(magician.p[4].babysitting);
+  assert.ok(magician.s.audit.some((x) => /Magician is alive, so the Storyteller chooses/.test(x.text)));
+});
+
+test("Lil' Monsta's night kill: the Storyteller's choice, never its babysitter, and drunkenness or poison can't stop it", () => {
+  const { s, e, p } = lilDay("lil-kill");
+
+  s.phase = "night";
+  s.night = 2;
+  p[3].poisoned = true;
+  e.demon();
+
+  const kill = s.audit.find((x) => x.type === "demon");
+
+  assert.ok(p[3].alive);
+  assert.match(kill.text, /^Lil' Monsta \(babysat by Player 4, the Poisoner\) chose .*why: the Storyteller's choice.*was killed\./);
+  assert.equal(s.players.filter((x) => !x.alive).length, 1);
+
+  // With nobody it can kill (each protected by the Monk), nobody dies.
+  const t = lilDay("lil-kill-none");
+
+  t.s.phase = "night";
+  t.s.night = 2;
+
+  for (const x of [t.p[1], t.p[2], t.p[4]]) {
+    x.protected = true;
+  }
+
+  t.e.demon();
+  assert.ok(t.s.players.every((x) => x.alive));
+  assert.ok(t.s.audit.some((x) => /Lil' Monsta: nobody dies tonight/.test(x.text)));
+});
+
+test("if Lil' Monsta's babysitter dies, good wins; by their jinx, with 5 or more alive the Scarlet Woman babysits it for good", () => {
+  const plain = lilDay("lil-dies");
+
+  plain.e.execute(plain.p[3]);
+  assert.equal(plain.s.winner, "good");
+  assert.equal(plain.s.reason, "Lil' Monsta's babysitter died.");
+
+  const { s, e, p } = lilDay("lil-scarlet", "poisoner", "scarletwoman");
+
+  e.execute(p[3]);
+  assert.equal(s.winner, null);
+  assert.ok(p[4].babysitting && isDemon(p[4]));
+  assert.equal(p[4].role, "scarletwoman");
+  assert.equal(s.lilMonsta.fixed, p[4].id);
+  assert.ok(s.audit.some((x) => /Scarlet Woman\) babysits it for the rest of the game/.test(x.text)));
+
+  // (And keeps it, whatever the town thinks.)
+  role(p[2], "poisoner", "evil");
+  s.phase = "night";
+  s.night = 2;
+  p[1].suspicion = { targetId: p[4].id };
+  e.lilMonsta();
+  assert.ok(p[4].babysitting && !p[2].babysitting);
+});
+
+test("a Psychopath babysitting Lil' Monsta dies when executed, with no roshambo (their jinx)", () => {
+  const { s, e, p } = lilDay("lil-psychopath", "psychopath");
+
+  s.voteHistory = [{ day: 1, nominatorId: p[1].id, nomineeId: p[3].id, voterIds: [] }];
+  assert.equal(e.psychopathExecuted(p[3]), null);
+  assert.ok(s.audit.some((x) => /is babysitting Lil' Monsta, so they die when executed: no roshambo/.test(x.text)));
+
+  e.execute(p[3]);
+  assert.equal(p[3].alive, false);
+  assert.equal(s.winner, "good");
+});
+
+test("a Snake Charmer who swaps with Lil' Monsta's babysitter takes their Minion character, and Lil' Monsta with it", () => {
+  const { s, e, p } = lilDay("lil-snake");
+
+  role(p[1], "snakecharmer", "good");
+  e.snakeSwap(p[1], p[3]);
+
+  assert.equal(p[1].role, "poisoner");
+  assert.equal(p[1].alignment, "evil");
+  assert.ok(p[1].babysitting && !p[3].babysitting);
+  assert.equal(p[3].role, "snakecharmer");
+  assert.ok(s.audit.some((x) => /became the Poisoner, babysitting Lil' Monsta/.test(x.text)));
+});
+
+test("the Bounty Hunter makes one Townsfolk NPC evil at setup, who doesn't know the evil team, nor it them", () => {
+  let games = 0;
+
+  for (let g = 0; g < 300 && games < 20; g++) {
+    const s = createState(nrb, 8 + (g % 8), `bounty-deal-${g}`);
+    const bh = s.players.find((x) => x.role === "bountyhunter");
+
+    if (!bh) {
+      assert.ok(!s.players.some((x) => x.evilTownsfolk), `game ${g}`);
+      continue;
+    }
+
+    games++;
+
+    const t = s.players.filter((x) => x.evilTownsfolk);
+
+    assert.equal(t.length, 1, `game ${g}`);
+    assert.ok(!t[0].human && t[0] !== bh);
+    assert.equal(team(t[0].role), "townsfolk");
+    assert.equal(t[0].alignment, "evil");
+    assert.equal(t[0].claim, t[0].role);
+    assert.deepEqual(t[0].bluffs, []);
+    assert.ok(s.audit.some((x) => x.type === "bountyhunter" && /is evil\. They know they're evil/.test(x.text)));
+
+    for (const x of s.players.filter((y) => y.alignment === "evil" && y !== t[0])) {
+      assert.ok(!teammate(x, t[0]) && !teammate(t[0], x), `game ${g}`);
+    }
+  }
+
+  assert.ok(games >= 10, `${games} Bounty Hunter games`);
+});
+
+test("the Bounty Hunter learns an evil player, and another each night after the one they know dies", () => {
+  const { s, e, p } = bountyDay("bounty-info");
+  const strat = new SimpleStrategy();
+
+  s.phase = "night";
+  s.night = 1;
+
+  const first = nightInfo(s, p[1], strat);
+
+  assert.equal(first.targets.length, 1);
+
+  const known = byId(s, first.targets[0]);
+
+  assert.equal(known.alignment, "evil");
+  assert.equal(first.text, `Bounty Hunter: ${known.label} is evil.`);
+  e.remember(p[1], first);
+
+  // Not while that player lives.
+  s.night = 2;
+  assert.equal(nightInfo(s, p[1], strat), null);
+
+  // Once they're dead, another evil player, never the same one twice.
+  known.alive = false;
+
+  const next = nightInfo(s, p[1], strat);
+
+  assert.equal(next.targets.length, 1);
+  assert.notEqual(next.targets[0], known.id);
+  assert.equal(byId(s, next.targets[0]).alignment, "evil");
+});
+
+test("an evil NPC bluffing the Bounty Hunter names a good player, never a teammate, nor you", () => {
+  for (let g = 0; g < 30; g++) {
+    const s = base(`bounty-bluff-${g}`);
+    const p = s.players;
+
+    p[3].claim = "bountyhunter";
+    s.phase = "night";
+
+    const m = bluffTonight(s, p[3], new SimpleStrategy());
+
+    assert.equal(m.targets.length, 1, `game ${g}`);
+
+    const t = byId(s, m.targets[0]);
+
+    assert.equal(t.alignment, "good");
+    assert.ok(!t.human);
+  }
+});
+
+test("the evil Townsfolk keeps their own information to themself, and holds back from the players they suspect, saying so in log.txt", () => {
+  const { s, p } = bountyDay("bounty-blind");
+  const strat = new SimpleStrategy();
+
+  // Their own information points at the Baron and Imp.
+  p[2].ownInfo = [
+    {
+      night: 1,
+      role: "noble",
+      text: "Noble: one of Player 4, Player 5 and You is evil.",
+      targets: [p[0].id, p[3].id, p[4].id],
+    },
+  ];
+
+  assert.deepEqual(strat.hunches(s, p[2]), [p[3].id, p[4].id]);
+  assert.ok(
+    s.audit.some((x) =>
+      /Player 3 \(Chef\), the evil Townsfolk, suspects Player 4 \(their own information\), Player 5 \(their own information\) of being on their team/.test(x.text),
+    ),
+  );
+
+  // They don't point at them...
+  assert.equal(strat.suspicion(s, p[2]).targetId, p[1].id);
+
+  // ...nor make up information against them, while the rest of the team
+  // doesn't cover for them.
+  assert.ok(covered(p[2], p[3]) && covered(p[2], p[4]) && !covered(p[2], p[1]));
+  assert.ok(!covered(p[3], p[2]) && covered(p[3], p[4]));
+  assert.ok(knows(s, p[2], strat).evil.has(p[3].id));
+
+  // ...and mostly don't vote for them.
+  s.r = () => 0.5;
+  assert.equal(strat.vote(s, p[2], p[3]), false);
+  assert.ok(s.audit.some((x) => /Player 3 \(Chef\), the evil Townsfolk, holds back from voting for Player 4: they suspect them of being on their team/.test(x.text)));
+  assert.equal(strat.vote(s, p[2], p[1]), true);
+
+  s.r = () => 0;
+  assert.equal(strat.vote(s, p[2], p[4]), true);
+  assert.ok(s.audit.some((x) => /votes for Player 5, though they suspect them of being on their team/.test(x.text)));
+});
+
+test("by their jinx, a Philosopher who gains the Bounty Hunter's ability turns a Townsfolk evil", () => {
+  const s = base("bounty-philosopher");
+  const e = new Engine(s);
+  const p = s.players;
+
+  role(p[1], "philosopher", "good");
+  role(p[2], "chef", "good");
+  s.phase = "night";
+  s.night = 2;
+  e.philosopherGain(p[1], "bountyhunter");
+
+  assert.equal(p[2].alignment, "evil");
+  assert.ok(p[2].evilTownsfolk);
+  assert.ok(s.audit.some((x) => /Player 3 \(Chef\) becomes evil \(the Philosopher gained the Bounty Hunter ability\)/.test(x.text)));
+
+  // An NPC Philosopher never picks it.
+  assert.ok(PHILOSOPHER_AVOID.includes("bountyhunter"));
+});
+
+test("whole games play out on No Roles Barred, with the new characters doing their thing", () => {
+  const seen = {};
+  const note = (k, yes) => (seen[k] = (seen[k] ?? 0) + (yes ? 1 : 0));
+
+  for (let g = 0; g < 160; g++) {
+    const { s } = playOut(nrb, 8 + (g % 8), `nrb-${g}`);
+    const text = s.audit.map((x) => x.text).join("\n");
+
+    assert.ok([null, "good", "evil"].includes(s.winner));
+    note("babysitter moves", /Lil' Monsta moves to/.test(text));
+    note("Lil' Monsta kills", /^Lil' Monsta \(babysat by .*was killed/m.test(text));
+    note("babysitter dies", s.reason === "Lil' Monsta's babysitter died.");
+    note("Bounty Hunter info", /received: Bounty Hunter: .* is evil\./.test(text));
+    note("Bounty Hunter bluff", /bluffed: Bounty Hunter: /.test(text));
+    note("hunches", /the evil Townsfolk, suspects/.test(text));
+    note("holds back", /the evil Townsfolk, holds back from voting/.test(text));
+
+    // Nobody is, claims or is shown Lil' Monsta; the evil Townsfolk claims
+    // a good character (their own, unless it's one that hides, like the
+    // Poppy Grower).
+    for (const p of s.players) {
+      assert.ok(![p.role, p.claim, p.shown].includes("lilmonsta"), `game ${g}`);
+    }
+
+    for (const p of s.players.filter((x) => x.evilTownsfolk)) {
+      assert.equal(alignment(p.claim), "good", `game ${g}`);
+    }
+  }
+
+  for (const [k, n] of Object.entries(seen)) {
+    assert.ok(n > 0, `${k}: ${JSON.stringify(seen)}`);
+  }
 });

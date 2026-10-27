@@ -138,7 +138,9 @@ export const bluffMode = (s, p, role, deadOk = false) =>
 //   public (see strategy sure()), and for a good player, anyone their own
 //   information vouches for (see strategy trusted());
 // - evil: the players they know are evil: for an evil player, their team
-//   (as they believe it: see strategy teammate()); for a good player,
+//   (as they believe it: see strategy teammate(); for the Bounty Hunter's
+//   evil Townsfolk, who doesn't know it, the players they suspect of being
+//   on it: see strategy hunches()); for a good player,
 //   anyone caught lying in public, or whom their own information suspects
 //   (see strategy liars() and ownStance()).
 // The claims they've heard count too: each piece of information is read
@@ -151,7 +153,10 @@ export function knows(s, p, strat) {
     return {
       side,
       good: new Set(sure(s)),
-      evil: new Set(others.filter((x) => teammate(p, x)).map((x) => x.id)),
+      evil: new Set([
+        ...others.filter((x) => teammate(p, x)).map((x) => x.id),
+        ...(p.evilTownsfolk ? (p.hunches ?? []) : []),
+      ]),
     };
   }
 
@@ -266,6 +271,29 @@ export function madeUp(s, p, strat, make) {
   let safe = null;
   // (One that fits, but names who last time's did: if nothing else fits.)
   let again = null;
+  // (For the Bounty Hunter's evil Townsfolk: one that would have fitted, but
+  // for the players they suspect of being on their team. Logged.)
+  const blind = p.evilTownsfolk ? { ...know, evil: new Set() } : null;
+  let spared = null;
+  const log = (text) =>
+    s.audit.push({
+      id: s.auditId++,
+      group: s.phase === "night" ? `Night ${s.night}` : `Day ${s.day}`,
+      type: "bluff",
+      text,
+      data: { playerId: p.id },
+      names: logNames(s),
+    });
+  const sparedNote = () => {
+    if (spared) {
+      log(
+        `${p.label} (${name(p.role)}), the evil Townsfolk, won't say "${spared.text}": it points at ${(spared.targets ?? [])
+          .filter((id) => know.evil.has(id))
+          .map((id) => byId(s, id).label)
+          .join(" and ")}, whom they suspect of being on their team.`,
+      );
+    }
+  };
 
   for (let i = 0; i < BLUFF_TRIES; i++) {
     if (i) {
@@ -280,7 +308,12 @@ export function madeUp(s, p, strat, make) {
 
     const fit = fits(s, p, m, know);
 
+    if (!fit && blind && !spared && fits(s, p, m, blind)) {
+      spared = m;
+    }
+
     if (fit && !repeats(p, m)) {
+      sparedNote();
       return m;
     }
 
@@ -294,6 +327,7 @@ export function madeUp(s, p, strat, make) {
   }
 
   p.avoidTargets = null;
+  sparedNote();
 
   if (again) {
     undo(p, again.state);
@@ -379,7 +413,7 @@ export function bluffTonight(s, p, strat) {
     return madeUp(s, p, strat, () => madeUpChoice(s, p, role, strat, mode));
   }
 
-  if (!actsTonight(role, s.night) && !gainedTonight) {
+  if (!actsTonight(role, s.night, s, p) && !gainedTonight) {
     return null;
   }
 

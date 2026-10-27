@@ -6,6 +6,7 @@ import {
   works,
   vortoxActive,
   shownBefore,
+  unknownMate,
 } from "../../storyteller.js";
 
 const priestessText = (t) => `High Priestess: talk to ${t.label}.`;
@@ -41,8 +42,9 @@ function priestessPick(s, p, truth = true) {
 
   if (!truth) {
     // (An evil bluffer sends you to a teammate, as one worth avoiding: never
-    // one they don't know, while the Poppy Grower keeps them apart.)
-    const mates = p.poppyBlind ? [] : pool.filter((x) => x.alignment === "evil");
+    // one they don't know, while the Poppy Grower keeps them apart, nor the
+    // Bounty Hunter's evil Townsfolk.)
+    const mates = pool.filter((x) => x.alignment === "evil" && !unknownMate(p, x));
     const dull = pool.filter((x) => helps(x) === "evil");
 
     return pick(p.alignment === "evil" && mates.length ? mates : dull.length ? dull : pool, s.r);

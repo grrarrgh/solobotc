@@ -35,18 +35,30 @@ export const isDrunk = (p) =>
   Boolean(p.drunkFrom) ||
   Boolean(p.drunkTonight);
 
-export const isDemon = (p) => team(p.role) === "demon";
+// (Lil' Monsta's babysitter "is the Demon": see characters/demon/lilmonsta.js.)
+export const isDemon = (p) => team(p.role) === "demon" || Boolean(p.babysitting);
 
 // Whether p registers as a Minion: a Minion, or Legion ("You register as a
 // Minion too").
 export const isMinion = (p) => team(p.role) === "minion" || p.role === "legion";
 
+// Whether evil player p doesn't know that evil player x is on their team:
+// the Poppy Grower kept the team apart (see poppygrower.js), or either is
+// the Bounty Hunter's evil Townsfolk, who learns only that they're evil
+// (see bountyhunter.js).
+export const unknownMate = (p, x) =>
+  p?.alignment === "evil" &&
+  x.alignment === "evil" &&
+  x.id !== p.id &&
+  Boolean(p.poppyBlind || p.evilTownsfolk || x.evilTownsfolk);
+
 // The player evil player p believes is the Demon: the Demon, except that a
 // Minion shown the Magician too (see strategy fooledBy()) doesn't know
 // which of the two it is, so goes by one of them, decided once.
 export function demonTo(s, p) {
-  // (Kept apart by the Poppy Grower, a Minion doesn't know.)
-  if (p.poppyBlind && team(p.role) === "minion") {
+  // (Kept apart by the Poppy Grower, a Minion doesn't know, nor does the
+  // Bounty Hunter's evil Townsfolk.)
+  if ((p.poppyBlind && team(p.role) === "minion") || p.evilTownsfolk) {
     return null;
   }
 
@@ -356,9 +368,14 @@ const evil = registersEvil;
 
 const FIRST_NIGHT = FIRST_NIGHT_INFO;
 
-// Whether an information role wakes tonight (see each character's `nights`).
-export function actsTonight(role, night) {
+// Whether an information role wakes tonight (see each character's `nights`;
+// or, given player p, their own `wakes`: the Bounty Hunter's).
+export function actsTonight(role, night, s = null, p = null) {
   const nights = infoOf(role)?.nights;
+
+  if (p && infoOf(role)?.wakes) {
+    return infoOf(role).wakes(s, p);
+  }
 
   return nights === "first" ? night === 1 : nights === "each" || (nights === "later" && night > 1);
 }
@@ -565,12 +582,13 @@ export function scapegoat(s) {
   // (Never either twin, who must look alike to the town.)
   const twins = s.twins ? [s.twins.evilId, s.twins.goodId] : [];
   // (Not anyone confirmed good: it wouldn't stick. Nor the Magician, whom
-  // the team thinks is one of its own, until they claim it in public.)
+  // the team thinks is one of its own, until they claim it in public.) (The
+  // Bounty Hunter's evil Townsfolk can be: the team doesn't know them.)
   const good = s.players.filter(
     (x) =>
       x.alive &&
       !x.human &&
-      x.alignment === "good" &&
+      (x.alignment === "good" || x.evilTownsfolk) &&
       !(x.magicianTrick && claimTo(x) !== "magician") &&
       !twins.includes(x.id) &&
       !["certain", "likely"].includes(s.confirmed?.[x.id]?.level) &&
@@ -599,7 +617,7 @@ export function scapegoat(s) {
 
   if (
     current?.alive &&
-    current.alignment === "good" &&
+    (current.alignment === "good" || current.evilTownsfolk) &&
     !s.players.some((d) => d.alive && d.role === "lleech" && d.lleechHost === current.id) &&
     !twins.includes(current.id) &&
     !["certain", "likely"].includes(s.confirmed?.[current.id]?.level)
@@ -619,8 +637,16 @@ export function scapegoat(s) {
 }
 
 // The good player false information frames: the evil team's scapegoat
-// (never p themselves).
+// (never p themselves). (The Bounty Hunter's evil Townsfolk doesn't know the
+// team's: their own suspect, chosen from the players they don't suspect of
+// being on their team; see strategy hunches().)
 export function framed(s, p) {
+  if (p.evilTownsfolk) {
+    const t = byId(s, p.suspicion?.targetId);
+
+    return t?.alive && t !== p && !(p.hunches ?? []).includes(t.id) ? t : null;
+  }
+
   const goat = scapegoat(s);
 
   return goat && goat !== p ? goat : null;
@@ -629,9 +655,15 @@ export function framed(s, p) {
 // Whether x is someone p's false information covers for: an evil
 // bluffer's teammates (by alignment: they know the Spy is one of them), or
 // for a misinformed good player, anyone registering as evil.
-// (Kept apart by the Poppy Grower, only themself: see poppygrower.js.)
+// (Kept apart by the Poppy Grower, only themself: see poppygrower.js. The
+// Bounty Hunter's evil Townsfolk, not knowing the team, covers for the
+// players they suspect of being on it: see strategy hunches().)
 export const covered = (p, x) =>
-  p.alignment === "evil" ? x.alignment === "evil" && (!p.poppyBlind || x === p) : evil(x);
+  p.evilTownsfolk
+    ? x === p || (p.hunches ?? []).includes(x.id)
+    : p.alignment === "evil"
+      ? x.alignment === "evil" && !unknownMate(p, x)
+      : evil(x);
 
 // p's living evil neighbours, whom false information covers for.
 export const evilNear = (s, p) => neigh(s, p).filter((x) => covered(p, x));
@@ -644,7 +676,7 @@ export function nightInfo(s, p, strat) {
     p.gainedNight === s.night &&
     (FIRST_NIGHT.includes(role) || role === "pixie");
 
-  if (!p.alive || !(actsTonight(role, s.night) || gainedTonight)) {
+  if (!p.alive || !(actsTonight(role, s.night, s, p) || gainedTonight)) {
     return null;
   }
 

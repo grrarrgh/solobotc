@@ -538,6 +538,7 @@ export class Engine {
       this.gamblers();
       this.resolveMoonCurse();
       this.exorcists();
+      this.lilMonsta();
 
       if (!s.winner) {
         this.demon();
@@ -576,6 +577,20 @@ export class Engine {
       // but says what helps the evil team: see bluffs().)
       if (info && p.turnedEvil && !p.human) {
         this.woke(p);
+        continue;
+      }
+
+      // (So does the Bounty Hunter's evil Townsfolk, who keeps it to
+      // themself: it tells them whom to suspect of being on their team, see
+      // strategy hunches().)
+      if (info && p.evilTownsfolk) {
+        this.woke(p);
+        (p.ownInfo ??= []).push(info);
+        this.audit(
+          "information",
+          `${p.label} (${name(p.role)}), the evil Townsfolk, received, and keeps to themself: ${info.text}`,
+          { playerId: p.id, ...info, secret: true },
+        );
         continue;
       }
 
@@ -777,6 +792,12 @@ export class Engine {
 
     this.lunatics();
 
+    // (Lil' Monsta: the Storyteller chooses who might die.)
+    if (d.babysitting) {
+      this.lilMonstaKill(d);
+      return;
+    }
+
     // (Legion: the Storyteller chooses who might die.)
     if (d.role === "legion") {
       this.legionNight();
@@ -838,7 +859,7 @@ export class Engine {
     if (!t || !t.alive) {
       this.audit(
         "demon",
-        `${d.label} (${name(d.role)}) had no legal target.`,
+        `${this.demonName(d)} had no legal target.`,
         {
           actorId: d.id,
           targetId: null,
@@ -867,7 +888,8 @@ export class Engine {
     let foiled = false;
     let protector = null;
 
-    if (!works(d)) {
+    // (Lil' Monsta's kill can't fail that way: it isn't its babysitter's.)
+    if (!works(d) && !d.babysitting) {
       outcome = "blocked";
       detail = "failed (the Demon is drunk or poisoned)";
     } else if (t.role === "soldier" && works(t)) {
@@ -949,7 +971,7 @@ export class Engine {
 
     this.audit(
       "demon",
-      `${d.label} (${name(d.role)}) ${verb} ${original.label}${
+      `${this.demonName(d)} ${verb} ${original.label}${
         why ? ` (why: ${why})` : ""
       }; ${result}.`,
       {
@@ -2544,6 +2566,18 @@ export class Engine {
       return;
     }
 
+    // (Lil' Monsta died with its babysitter: only the Scarlet Woman's jinx
+    // saves it, see lilmonsta.js. Nobody becomes a copy of their Minion.)
+    if (dead.babysitting) {
+      if (this.lilMonstaSuccessor(dead, before)) {
+        this.check();
+      } else if (!(executed && this.mastermindContinues())) {
+        this.finish("good", "Lil' Monsta's babysitter died.");
+      }
+
+      return;
+    }
+
     let next =
       before >= 5
         ? this.s.players.find((x) => x.role === "scarletwoman" && works(x))
@@ -2578,7 +2612,7 @@ export class Engine {
     }
 
     if (!alive.some(isDemon)) {
-      this.finish("good", "No Demon remains.");
+      this.finish("good", this.s.lilMonsta ? "Lil' Monsta's babysitter died." : "No Demon remains.");
     } else if (alive.length <= 2) {
       this.finish("evil", "Two alive remain.");
     }
@@ -2652,6 +2686,7 @@ export class Engine {
         poisoned: p.poisoned,
         // (A Lleech's host is poisoned by it: the table says "Lleech's host".)
         host: Boolean(this.lleechOf(p)),
+        babysitting: Boolean(p.babysitting),
         protected: p.protected,
         suspects: p.human ? null : (this.player(p.suspicion?.targetId)?.label ?? null),
         why: p.human ? [] : (p.suspicion?.reasons ?? []),

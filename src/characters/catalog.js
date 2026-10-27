@@ -375,6 +375,16 @@ export const CHARACTERS = {
     neverBluffed: true,
     notForHuman: true,
   },
+  bountyhunter: {
+    name: "Bounty Hunter",
+    team: "townsfolk",
+    ability:
+      "You start knowing 1 evil player. If the player you know dies, you learn another evil player tonight. [1 Townsfolk is evil]",
+    note: "The evil Townsfolk learns they're evil, but not who the rest of the evil team is, and the team doesn't learn them: they play for evil blind, steering clear of the players they suspect (see strategy hunches()).",
+    info: "first",
+    kill: "high",
+    publicInfo: 0.5,
+  },
   highpriestess: {
     name: "High Priestess",
     team: "townsfolk",
@@ -817,6 +827,13 @@ export const CHARACTERS = {
     team: "demon",
     ability:
       "Each night*, a player might die. Executions fail if only evil voted. You register as a Minion too. [Most players are Legion]",
+  },
+  lilmonsta: {
+    name: "Lil' Monsta",
+    team: "demon",
+    ability:
+      "Each night, Minions choose who babysits Lil' Monsta & \"is the Demon\". Each night*, a player might die. [+1 Minion]",
+    note: "Lil' Monsta isn't a player: an extra Minion is dealt instead. Each night the Minions choose which of them babysits it (the babysitter registers as the Demon, and keeps their own Minion ability); if the babysitter dies, so does Lil' Monsta. Each night* the Storyteller chooses who might die (never the babysitter, steering for a close finish): drunkenness and poison can't stop it, though protection like the Monk's still can.",
   },
   sentinel: {
     name: "Sentinel",

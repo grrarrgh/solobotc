@@ -18,6 +18,7 @@ import { info as alchemist } from "./townsfolk/alchemist.js";
 import { info as amnesiac } from "./townsfolk/amnesiac.js";
 import { info as artist } from "./townsfolk/artist.js";
 import { info as balloonist } from "./townsfolk/balloonist.js";
+import { info as bountyhunter } from "./townsfolk/bountyhunter.js";
 import { info as chambermaid } from "./townsfolk/chambermaid.js";
 import { info as chef } from "./townsfolk/chef.js";
 import { info as clockmaker } from "./townsfolk/clockmaker.js";
@@ -68,6 +69,7 @@ export const infoOf = (role) =>
     amnesiac,
     artist,
     balloonist,
+    bountyhunter,
     butler,
     chambermaid,
     chef,

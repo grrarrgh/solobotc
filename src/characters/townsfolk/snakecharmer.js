@@ -41,6 +41,13 @@ export const snakecharmer = {
 
   snakeSwap(c, d) {
     const demon = d.role;
+    // (Lil' Monsta's babysitter: the charmer takes their Minion character,
+    // and Lil' Monsta with it.)
+    const sitter = d.babysitting;
+
+    if (sitter) {
+      this.babysit(c);
+    }
 
     // The charmer becomes the Demon (keeping their Snake Charmer claim as a
     // bluff); the Demon becomes a poisoned, good Snake Charmer. (A
@@ -68,7 +75,7 @@ export const snakecharmer = {
 
     this.audit(
       "succession",
-      `${c.label} became the ${name(demon)}${
+      `${c.label} became the ${name(demon)}${sitter ? ", babysitting Lil' Monsta" : ""}${
         gained ? ` (and lost the ${name(gained)} ability they gained)` : ""
       }; ${d.label} is now a poisoned Snake Charmer.`,
       { playerId: c.id, previousDemonId: d.id },

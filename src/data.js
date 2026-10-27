@@ -233,6 +233,36 @@ export const JINXES = [
   },
   // at LEGION_POLITICIAN_CHANCE (characters/demon/legion.js legionVeto())
   { ids: ["legion", "politician"], text: "The Politician might register as evil to Legion." },
+  // characters/townsfolk/bountyhunter.js bountyEvil(), from philosopherGain()
+  {
+    ids: ["bountyhunter", "philosopher"],
+    text: "If the Philosopher gains the Bounty Hunter ability, a Townsfolk might turn evil.",
+  },
+  // setup.js seats them beside the first babysitter
+  {
+    ids: ["marionette", "lilmonsta"],
+    text: "If there would be a Marionette in play, they enter play after the Demon & must start as their neighbor.",
+  },
+  // characters/demon/lilmonsta.js lilMonsta(): the babysitter keeps it
+  {
+    ids: ["lilmonsta", "poppygrower"],
+    text: "If Lil' Monsta & the Poppy Grower are alive, Minions wake one by one, until one of them chooses to take the Lil' Monsta token.",
+  },
+  // characters/minion/psychopath.js psychopathExecuted()
+  {
+    ids: ["lilmonsta", "psychopath"],
+    text: "If the Psychopath is babysitting Lil' Monsta, they die when executed.",
+  },
+  // characters/demon/lilmonsta.js lilMonsta()
+  {
+    ids: ["lilmonsta", "magician"],
+    text: "If the Magician is alive, the Storyteller chooses which Minion babysits Lil' Monsta.",
+  },
+  // characters/demon/lilmonsta.js lilMonstaSuccessor()
+  {
+    ids: ["lilmonsta", "scarletwoman"],
+    text: "If Lil' Monsta dies with 5 or more players alive, the Scarlet Woman babysits Lil' Monsta for the rest of the game.",
+  },
 ];
 
 // Characters never in play with `id`, by their jinx (`exclusive`).
@@ -366,7 +396,8 @@ export const FEARMONGER_CAUTION = 0.5;
 // Grower's, Pixie's, Magician's and Amnesiac's only work from setup, the
 // Cannibal's only for a real Cannibal, the Huntsman's only with a Damsel in
 // play (which the Philosopher can't know), and the Gambler's mostly kills
-// them. Add any other wasted pick here.
+// them. The Bounty Hunter's might turn a Townsfolk evil (their jinx). Add
+// any other wasted pick here.
 export const PHILOSOPHER_AVOID = [
   "poppygrower",
   "pixie",
@@ -375,6 +406,7 @@ export const PHILOSOPHER_AVOID = [
   "cannibal",
   "huntsman",
   "gambler",
+  "bountyhunter",
   "damsel",
   "general",
   "steward",
@@ -516,6 +548,10 @@ export const HUMAN_NOMINATION_BONUS = 0.1; // added when you nominated
 export const NEAR_FINAL_HUMAN_VOTE_CHANCE = 0.85;
 export const EVIL_VOTE_CHANCE = 0.85; // an evil NPC, for a good nominee
 export const EVIL_TEAMMATE_VOTE_CHANCE = 0.5; // ...for a teammate, only when it can't change the outcome
+// The Bounty Hunter's evil Townsfolk doesn't know their team: for a nominee
+// they suspect of being evil (one of their own, as far as they can tell;
+// see strategy hunches()), they vote this often.
+export const EVIL_TOWNSFOLK_HUNCH_VOTE_CHANCE = 0.1;
 
 // Round Robin (once per game, with nominations open and this few alive):
 // every player from Seat 1 says their character and information in public,

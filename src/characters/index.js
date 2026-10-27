@@ -10,6 +10,7 @@
 import { alchemist } from "./townsfolk/alchemist.js";
 import { amnesiac } from "./townsfolk/amnesiac.js";
 import { artist } from "./townsfolk/artist.js";
+import { bountyhunter } from "./townsfolk/bountyhunter.js";
 import { cannibal } from "./townsfolk/cannibal.js";
 import { chambermaid } from "./townsfolk/chambermaid.js";
 import { courtier } from "./townsfolk/courtier.js";
@@ -71,6 +72,7 @@ import { wizard } from "./minion/wizard.js";
 
 import { fanggu } from "./demon/fanggu.js";
 import { legion } from "./demon/legion.js";
+import { lilmonsta } from "./demon/lilmonsta.js";
 import { lleech } from "./demon/lleech.js";
 import { nodashii } from "./demon/nodashii.js";
 import { pukka } from "./demon/pukka.js";
@@ -83,6 +85,7 @@ export const characters = {
   alchemist,
   amnesiac,
   artist,
+  bountyhunter,
   cannibal,
   chambermaid,
   courtier,
@@ -141,6 +144,7 @@ export const characters = {
   wizard,
   fanggu,
   legion,
+  lilmonsta,
   lleech,
   nodashii,
   pukka,

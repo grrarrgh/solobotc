@@ -1057,6 +1057,14 @@ function playerNotes(p, r) {
     notes.push("kept their ability after death (Vigormortis)");
   }
 
+  if (p.evilTownsfolk) {
+    notes.push("the evil Townsfolk (Bounty Hunter)");
+  }
+
+  if (p.babysat) {
+    notes.push(`babysat ${roleLink("lilmonsta")}${p.babysitting ? ", to the end" : ""}`);
+  }
+
   if (r.twins?.evilId === p.id) {
     notes.push(`Evil Twin of ${label(r.twins.goodId)}`);
   } else if (r.twins?.goodId === p.id) {

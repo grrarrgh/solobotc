@@ -74,6 +74,11 @@ export const philosopher = {
     );
 
     this.remember(p, philosopherInfo(s, role));
+
+    // (Their jinx: a Townsfolk might turn evil. See bountyhunter.js.)
+    if (effective && role === "bountyhunter") {
+      this.bountyEvil(p);
+    }
   },
 
   // A Philosopher bluffer "gains" an in-play Townsfolk on their first night

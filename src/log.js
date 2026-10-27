@@ -154,6 +154,7 @@ function stateLines(players, rename) {
       // (Poisoned by the Lleech, as its host; poisoned by anyone else too
       // shows only as its host.)
       p.poisoned && (p.host ? "Lleech's host" : "poisoned"),
+      p.babysitting && "babysits Lil' Monsta",
       p.protected && "protected",
     ]
       .filter(Boolean)
