@@ -325,7 +325,9 @@ test("the menu shows the game's seed under Report a bug, and its log.txt mid-gam
 test("you can nominate yourself, or ask to be nominated, by selecting your own seat once nominations are open", () => {
   assert.doesNotMatch(html, /id="nominate-self"|id="request-self"/);
   assert.doesNotMatch(app, /nominate-self|request-self/);
-  assert.match(app, /\$\{p\.human && !selfSelectable\(\) \? "disabled" : ""\}/);
+  // (At night, too, when your ability lets you pick yourself: see engine
+  // canPick().)
+  assert.match(app, /\$\{p\.human && !selfSelectable\(\) && !\(s\.pending && canPick\(s\.pending, p\)\) \? "disabled" : ""\}/);
   assert.match(app, /function selfSelectable\(\) \{\s*return s\.phase === "day" && s\.nominationsOpen && !s\.pending && !s\.winner;/);
   assert.match(app, /\(selectedPlayerId === h\.id && !selfSelectable\(\)\)\s*\) \{\s*selectedPlayerId = null;/);
   assert.match(app, /\$\("nominate"\)\.onclick = \(\) => yourNomination\(\(id\) => e\.nominate\(id, null\)\);/);

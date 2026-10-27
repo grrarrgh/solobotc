@@ -14,6 +14,7 @@ import {
   EVIDENCE_TO_SUSPECT,
   HIDDEN_OUTSIDERS,
   NEAR_FINAL_HUMAN_VOTE_CHANCE,
+  VORTOX_VOTE_CHANCE,
 } from "./data.js";
 import {
   nightInfo,
@@ -48,6 +49,7 @@ import {
   claimTo,
   lied,
   spoken,
+  vortoxRisk,
 } from "./strategy.js";
 import { byId, bySeat, pick, shuffle } from "./util.js";
 import { formatLog, logNames } from "./log.js";
@@ -120,8 +122,10 @@ const KEY_MOMENT_TYPES = new Set([
 // its ability's wording, living players ("choose an alive player"), dead
 // ones (`dead`: "choose a dead player") or anyone (`any`: "choose a
 // player"). Never yourself, nor a player the choice excludes.
+// (`self`: you can pick yourself, where the ability doesn't say "not
+// yourself": see wakeHuman().)
 export const canPick = (c, x) =>
-  !x.human && (c.any || x.alive !== Boolean(c.dead)) && !c.exclude?.includes(x.id);
+  (!x.human || Boolean(c.self)) && (c.any || x.alive !== Boolean(c.dead)) && !c.exclude?.includes(x.id);
 
 export class Engine {
   constructor(s, strat = new SimpleStrategy()) {
@@ -292,7 +296,9 @@ export class Engine {
   // What the human must choose tonight, or null if they don't wake. Who
   // they can pick goes by the ability's wording (see canPick()): `any` for
   // "choose a player", living players for "choose an alive (or living)
-  // player", `dead` for "choose a dead player".
+  // player", `dead` for "choose a dead player"; and `self`, yourself too,
+  // unless it says "not yourself" (the Monk, Butler, Dreamer, Seamstress,
+  // Chambermaid).
   wakeHuman() {
     const s = this.s;
     const h = this.human();
@@ -308,16 +314,18 @@ export class Engine {
       fortuneteller: {
         count: 2,
         any: true,
+        self: true,
         prompt: "Choose 2 players: you learn if either is the Demon.",
       },
       // (The Alchemist's Minion ability: see alchemist.js.)
       alchemist:
         h.alchemist === "poisoner"
-          ? { count: 1, any: true, prompt: "Poisoner ability: choose a player to poison tonight and tomorrow." }
+          ? { count: 1, any: true, self: true, prompt: "Poisoner ability: choose a player to poison tonight and tomorrow." }
           : h.alchemist === "fearmonger"
             ? {
                 count: 1,
                 any: true,
+                self: true,
                 prompt:
                   "Fearmonger ability: choose a player. If you nominate and execute them, their team loses.",
               }
@@ -337,6 +345,7 @@ export class Engine {
       villageidiot: {
         count: 1,
         any: true,
+        self: true,
         prompt: "Choose a player: you learn their alignment.",
       },
       seamstress: !h.seamUsed && {
@@ -348,6 +357,7 @@ export class Engine {
       },
       sailor: {
         count: 1,
+        self: true,
         prompt:
           "Choose a player: either you or they are drunk until dusk. You can't die.",
       },
@@ -359,6 +369,7 @@ export class Engine {
       exorcist: s.night > 1 && {
         count: 1,
         any: true,
+        self: true,
         exclude: h.lastPicks?.exorcist ?? [],
         prompt:
           "Choose a player (not last night's): if they are the Demon, it doesn't wake tonight.",
@@ -366,6 +377,7 @@ export class Engine {
       innkeeper: s.night > 1 && {
         count: 2,
         any: true,
+        self: true,
         prompt:
           "Choose 2 players: they can't die tonight, but 1 of them is drunk until dusk.",
       },
@@ -394,6 +406,7 @@ export class Engine {
       },
       huntsman: !h.huntsmanUsed && {
         count: 1,
+        self: true,
         optional: true,
         prompt:
           "Once per game: choose a living player: if they are the Damsel, they become a Townsfolk not in play. Or skip tonight.",
@@ -2195,11 +2208,16 @@ export class Engine {
     this.openNominations();
     this.nominationReveals(n, intro);
 
-    // (Why good NPCs hold back: see strategy vote().)
+    // (Why good NPCs hold back, or don't: see strategy vote().)
     if (s.mastermindDay === s.day) {
       this.audit(
         "workings",
         `Mastermind's extra day: the evil team votes for ${n.label} unless they're a teammate; good players only if they suspect them.`,
+      );
+    } else if (n.alive && vortoxRisk(s)) {
+      this.audit(
+        "workings",
+        `The Vortox is on the script and nobody is marked for execution yet (a day with nobody executed may lose): good players vote for ${n.label} unless they trust them, at ${Math.round(VORTOX_VOTE_CHANCE * 100)}% at least.`,
       );
     } else if (!n.alive) {
       this.audit(

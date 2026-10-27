@@ -407,6 +407,7 @@ export const CHARACTERS = {
     ability:
       "Minions & Demons do not know each other. If you die, they learn who each other are that night.",
     kill: "high", // once they die, the evil team knows each other
+    neverHiddenAs: true, // a real one always hides, so nobody claims it openly
   },
   general: {
     name: "General",

@@ -76,6 +76,7 @@ import {
   FEARMONGER_PUSH_CHANCE,
   FEARMONGER_CAUTION,
   EVIL_TOWNSFOLK_HUNCH_VOTE_CHANCE,
+  VORTOX_VOTE_CHANCE,
   exclusiveWith,
 } from "./data.js";
 import {
@@ -185,6 +186,10 @@ const onlyTeam = (s, p) =>
   !thinksEvil(p) &&
   s.players.some((x) => x.alive && teammate(p, x) && !isDemon(x)) &&
   s.players.every((x) => x === p || !(x.alive || x.undead) || teammate(p, x) || spares(s, p, x));
+
+// Whether a day with nobody executed may lose the game for good: the Vortox
+// is on the script, and nobody is marked for execution yet today.
+export const vortoxRisk = (s) => s.script.ids.includes("vortox") && !s.block?.nomineeId;
 
 // Whether evil player p holds back from x: the Bounty Hunter's evil
 // Townsfolk, who suspects x of being on their team (see hunches()).
@@ -1352,7 +1357,7 @@ export class SimpleStrategy {
 
       return kind === "hide"
         ? ["low", "avoid"].includes(level) && !HIDE_NEVER_AS.includes(id)
-        : level === "high" && !HIDE_NEVER.includes(id);
+        : level === "high" && !HIDE_NEVER.includes(id) && !HIDE_NEVER_AS.includes(id);
     };
     const as = pick(
       s.script.ids.filter(
@@ -1904,6 +1909,19 @@ export class SimpleStrategy {
     // (The Heretic wants their team to lose, quietly: they hold back from
     // their suspect and vote for players they trust.)
     const heretic = v.role === "heretic";
+
+    // (With the Vortox on the script, a day without an execution may lose:
+    // while nobody is marked, they vote for anyone they don't trust. See
+    // VORTOX_VOTE_CHANCE; engine runNomination() says so in log.txt.)
+    if (
+      vortoxRisk(s) &&
+      !heretic &&
+      about !== "trust" &&
+      !this.trusted(s, v).has(n.id) &&
+      s.r() < VORTOX_VOTE_CHANCE
+    ) {
+      return true;
+    }
     // (Once the Fearmonger has chosen, any execution an NPC they don't trust
     // nominated might be the one that loses: they hold back, even on their
     // suspect. See FEARMONGER_CAUTION.)
@@ -2169,10 +2187,27 @@ export class SimpleStrategy {
   // good NPC; else the good NPC the most good NPCs suspect (the town's next
   // execution), or any good NPC. (Never you: NPCs never nominate you.)
   fearmonger(s, p) {
-    // (A good Alchemist with the ability chooses the player they suspect, as
-    // they'd have the town execute them anyway: see alchemistSuspect().)
+    // (A good Alchemist with the ability chooses the player they suspect
+    // enough to nominate, as they'd have the town execute them anyway: see
+    // alchemistSuspect(). Failing that, as they must choose every night,
+    // last night's choice while alive, else their suspect: they only
+    // nominate with evidence enough, so it does no harm. Never you. The
+    // reason goes in log.txt: see fearmonger.js.)
     if (sideOf(p) === "good") {
-      return this.alchemistSuspect(s, p) ?? byId(s, p.fearTarget) ?? null;
+      const sure = this.alchemistSuspect(s, p);
+      const last = byId(s, p.fearTarget);
+      const kept = !sure && last?.alive && !last.human ? last : null;
+      const hunch = !sure && !kept ? this.suspect(s, p, this.others(s, p).filter((x) => !x.human)) : null;
+
+      p.fearWhy = sure
+        ? "they suspect them enough to nominate them"
+        : kept
+          ? "nobody they suspect enough to nominate: last night's choice"
+          : hunch
+            ? "nobody they suspect enough to nominate, and they must choose: their suspect"
+            : null;
+
+      return sure ?? kept ?? hunch ?? null;
     }
 
     const last = byId(s, p.fearTarget);

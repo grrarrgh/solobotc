@@ -23,7 +23,9 @@ night and the others.
 ### Night
 
 The Storyteller tells you what you learn. If your character makes a choice,
-pick player(s) in the town square and press **Select**.
+pick player(s) in the town square and press **Select**. You can pick
+yourself too, unless your ability says "not yourself" (the Monk, Butler,
+Dreamer, Seamstress, Chambermaid).
 
 ### Day
 

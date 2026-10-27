@@ -30,9 +30,13 @@ export const fearmonger = {
         s.fearAnnounce = s.night;
       }
 
+      // (Why a good Alchemist chose them: see strategy fearmonger().)
+      const why = !f.human && f.fearWhy ? ` (why: ${f.fearWhy})` : "";
+
+      f.fearWhy = null;
       this.audit(
         "fearmonger",
-        `${f.label} (${minionLabel(f)}) chose ${t.label}${fresh ? "" : " again"}; ${
+        `${f.label} (${minionLabel(f)}) chose ${t.label}${fresh ? "" : " again"}${why}; ${
           effective
             ? `if they nominate and execute them, ${t.alignment} loses`
             : "it fails (drunk or poisoned)"

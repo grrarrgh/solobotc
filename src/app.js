@@ -311,7 +311,7 @@ function circle() {
           }"
           style="--a:${i / s.players.length * 360}deg"
           data-id="${p.id}"
-          ${p.human && !selfSelectable() ? "disabled" : ""}
+          ${p.human && !selfSelectable() && !(s.pending && canPick(s.pending, p)) ? "disabled" : ""}
         >
           ${claimAlert(p)}
           ${voters.has(p.id) ? '<span class="vote-hand">✋</span>' : ""}
@@ -394,6 +394,8 @@ function circle() {
 // nominate yourself or ask to be nominated (say, as the Tea Lady, so your
 // neighbours can die). Not at night, nor before then: there's nothing else
 // to do with yourself.
+// (At night, your seat can be picked when your ability allows it: see
+// engine canPick().)
 function selfSelectable() {
   return s.phase === "day" && s.nominationsOpen && !s.pending && !s.winner;
 }

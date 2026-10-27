@@ -552,6 +552,10 @@ export const EVIL_TEAMMATE_VOTE_CHANCE = 0.5; // ...for a teammate, only when it
 // they suspect of being evil (one of their own, as far as they can tell;
 // see strategy hunches()), they vote this often.
 export const EVIL_TOWNSFOLK_HUNCH_VOTE_CHANCE = 0.1;
+// With the Vortox on the script, a day without an execution may lose the
+// game: while nobody is marked for execution, a good NPC votes for a
+// nominee they don't trust at least this often (see strategy vote()).
+export const VORTOX_VOTE_CHANCE = 0.8;
 
 // Round Robin (once per game, with nominations open and this few alive):
 // every player from Seat 1 says their character and information in public,

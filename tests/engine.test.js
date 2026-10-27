@@ -1485,9 +1485,10 @@ function settle(e) {
       continue;
     }
 
+    // (Never yourself, where an ability allows it: other players first.)
     e.choose(
       e.s.players
-        .filter((p) => canPick(c, p))
+        .filter((p) => canPick(c, p) && !p.human)
         .slice(0, c.count)
         .map((p) => p.id),
     );
@@ -12766,4 +12767,49 @@ test("a good player pretending to be a character acts it out in public as a real
   const shot = new SimpleStrategy().slay(u, d);
 
   assert.ok(shot && !shot.human && shot !== d);
+});
+
+test("you can target yourself with your own ability, unless it says \"not yourself\"", () => {
+  const s = base("self-target");
+  const e = new Engine(s);
+  const you = s.players[0];
+
+  s.phase = "night";
+  s.night = 2;
+
+  // "Choose 2 players": the Fortune Teller, the Innkeeper, the Village Idiot,
+  // the Sailor, the Exorcist, the Huntsman...
+  for (const id of ["fortuneteller", "innkeeper", "villageidiot", "sailor", "exorcist", "huntsman"]) {
+    role(you, id, "good");
+    assert.ok(canPick(e.wakeHuman(), you), id);
+  }
+
+  // ..."(not yourself)": the Monk, Butler, Dreamer, Seamstress, Chambermaid.
+  for (const id of ["monk", "butler", "dreamer", "seamstress", "chambermaid"]) {
+    role(you, id, "good");
+    assert.ok(!canPick(e.wakeHuman(), you), id);
+  }
+
+  // A Fortune Teller who picks themself and another player learns about both.
+  role(you, "fortuneteller", "good");
+  s.pending = e.wakeHuman();
+  e.choose([you.id, s.players[4].id]);
+  assert.ok(s.audit.some((x) => x.type === "choice" && /^You chose You and Player 5\.$/.test(x.text)));
+  assert.match(you.memories.at(-1).text, /^Fortune Teller: YES/);
+});
+
+test("a good NPC Alchemist with the Fearmonger's ability chooses a player every night, from Night 1, and the Storyteller announces it at dawn", () => {
+  const raw = JSON.parse(fs.readFileSync(new URL("../scripts/No Roles Barred_1_0_1.json", import.meta.url)));
+  const s = createState(raw, 10, "30858951");
+  const e = new Engine(s);
+  const a = s.players.find((x) => x.alchemist === "fearmonger");
+
+  assert.ok(a && a.alignment === "good" && !a.human);
+  e.start();
+
+  const t = byId(s, a.fearTarget);
+
+  assert.ok(t && !t.human && t !== a);
+  assert.ok(s.audit.some((x) => x.type === "fearmonger" && /\(why: nobody they suspect enough to nominate, and they must choose: their suspect\)/.test(x.text)));
+  assert.ok(s.publicLog.includes("Day 1 — The Storyteller: the Fearmonger has chosen a new player."));
 });
