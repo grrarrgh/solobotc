@@ -385,6 +385,16 @@ export const CHARACTERS = {
     kill: "high",
     publicInfo: 0.5,
   },
+  shugenja: {
+    name: "Shugenja",
+    team: "townsfolk",
+    ability:
+      "You start knowing if your closest evil player is clockwise or anti-clockwise. If equidistant, this info is arbitrary.",
+    note: "Clockwise is round the town square towards higher seat numbers. Steps are counted over living players. NPCs don't weigh the direction as evidence against anyone.",
+    info: "first",
+    kill: "med",
+    publicInfo: 0.6,
+  },
   highpriestess: {
     name: "High Priestess",
     team: "townsfolk",
@@ -835,6 +845,13 @@ export const CHARACTERS = {
     ability:
       "Each night, Minions choose who babysits Lil' Monsta & \"is the Demon\". Each night*, a player might die. [+1 Minion]",
     note: "Lil' Monsta isn't a player: an extra Minion is dealt instead. Each night the Minions choose which of them babysits it (the babysitter registers as the Demon, and keeps their own Minion ability); if the babysitter dies, so does Lil' Monsta. Each night* the Storyteller chooses who might die (never the babysitter, steering for a close finish): drunkenness and poison can't stop it, though protection like the Monk's still can.",
+  },
+  leviathan: {
+    name: "Leviathan",
+    team: "demon",
+    ability:
+      "If more than 1 good player is executed, evil wins. All players know you are in play. After day 5, evil wins.",
+    note: "The Leviathan doesn't kill at night. Each morning the Storyteller announces that it's in play, and the day. A good player's execution counts even if they don't die, or were already dead.",
   },
   sentinel: {
     name: "Sentinel",

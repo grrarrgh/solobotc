@@ -322,14 +322,20 @@ export function createState(
 
   // The Lunatic is shown a Demon, but not the one in play.
   // (Never Legion: they'd think most players were on their team. Nor Lil'
-  // Monsta, which nobody is.)
+  // Monsta, which nobody is. Nor the Leviathan, which everyone would know
+  // isn't in play; but with the Leviathan in play, the Leviathan: everyone
+  // knows it is, so it's the Demon they must think they are.)
   const demonToken =
-    pick(
-      pool("demon").filter((x) => x !== demons[0] && !["legion", "lilmonsta"].includes(x)),
-      r,
-    ) ??
-    demons[0] ??
-    "imp";
+    demons[0] === "leviathan"
+      ? "leviathan"
+      : (pick(
+          pool("demon").filter(
+            (x) => x !== demons[0] && !["legion", "lilmonsta", "leviathan"].includes(x),
+          ),
+          r,
+        ) ??
+        demons[0] ??
+        "imp");
 
   const players = roles.map((role, i) => {
     // The Marionette, like the Drunk, is shown a Townsfolk not in play.
@@ -695,7 +701,7 @@ export function createState(
     : null;
 
   const s = {
-    version: "2.8.1",
+    version: "2.9.0",
     script,
     seats,
     seed: String(seed),
@@ -800,6 +806,15 @@ export function createState(
           ? `${babysitter.label} (${name(babysitter.role)}) babysits it first, and "is the Demon".`
           : "No Minion can babysit it."
       }`,
+    );
+  }
+
+  // (Everyone knows the Leviathan is in play: the Storyteller says so each
+  // morning, see characters/demon/leviathan.js.)
+  if (demon?.role === "leviathan") {
+    setupLog(
+      "leviathan",
+      `The Leviathan is in play (${demon.label}), and everyone knows it: it doesn't kill at night; if a 2nd good player is executed, or it lives through Day 5, evil wins.`,
     );
   }
 

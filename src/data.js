@@ -263,6 +263,39 @@ export const JINXES = [
     ids: ["lilmonsta", "scarletwoman"],
     text: "If Lil' Monsta dies with 5 or more players alive, the Scarlet Woman babysits Lil' Monsta for the rest of the game.",
   },
+  // characters/demon/leviathan.js leviathanExecuted() (an NPC Leviathan
+  // never nominates a player claiming the Soldier: strategy nomination())
+  ...[
+    ["exorcist", "the Exorcist-chosen player"],
+    ["innkeeper", "an Innkeeper-protected player"],
+    ["monk", "the Monk-protected player"],
+    ["soldier", "the Soldier"],
+  ].map(([id, who]) => ({
+    ids: ["leviathan", id],
+    text: `If the Leviathan nominates and executes ${who}, good wins.`,
+  })),
+  // characters/demon/leviathan.js leviathanExecuted()
+  {
+    ids: ["leviathan", "grandmother"],
+    text: "If the Leviathan is in play and the Grandchild dies by execution, evil wins.",
+  },
+  // characters/demon/leviathan.js leviathanDusk()
+  {
+    ids: ["leviathan", "mayor"],
+    text: "If the Leviathan and the Mayor are alive on day 5 & no execution occurs, good wins.",
+  },
+  // strategy pithag()
+  { ids: ["leviathan", "pithag"], text: "The Leviathan cannot enter play after day 5." },
+  // characters/demon/leviathan.js leviathanNight() (never you: strategy
+  // leviathan())
+  {
+    ids: ["leviathan", "ravenkeeper"],
+    text: "Each night*, the Leviathan chooses an alive player (different to previous nights): a chosen Ravenkeeper uses their ability but does not die.",
+  },
+  {
+    ids: ["leviathan", "sage"],
+    text: "Each night*, the Leviathan chooses an alive good player (different to previous nights): a chosen Sage uses their ability but does not die.",
+  },
 ];
 
 // Characters never in play with `id`, by their jinx (`exclusive`).
@@ -557,6 +590,17 @@ export const EVIL_TOWNSFOLK_HUNCH_VOTE_CHANCE = 0.1;
 // game: while nobody is marked for execution, a good NPC votes for a
 // nominee they don't trust at least this often (see strategy vote()).
 export const VORTOX_VOTE_CHANCE = 0.8;
+// With the Leviathan in play (everyone knows: see
+// characters/demon/leviathan.js), a 2nd good execution loses, and so does
+// the end of Day 5 (see strategy leviathanRisk() and vote()). On Days 1 and
+// 2, before any execution, a good NPC votes this much less often (their
+// usual chance, times this), waiting for more information; after an
+// execution (which might have been good's one miss), less often still. On
+// Day 5, while nobody is marked, they vote for a nominee they don't trust
+// at least this often, as with the Vortox.
+export const LEVIATHAN_EARLY_CAUTION = 0.8;
+export const LEVIATHAN_CAUTION = 0.6;
+export const LEVIATHAN_LAST_DAY_VOTE_CHANCE = 0.8;
 
 // Round Robin (once per game, with nominations open and this few alive):
 // every player from Seat 1 says their character and information in public,

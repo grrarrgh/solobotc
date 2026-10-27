@@ -15,6 +15,16 @@ export const lunatic = {
     for (const p of s.players.filter(
       (x) => x.alive && !x.human && x.role === "lunatic" && !x.lunaticRevealed,
     )) {
+      // (Shown the Leviathan, they don't "kill": it doesn't.)
+      if (p.shown === "leviathan") {
+        this.audit(
+          "lunatic",
+          `${p.label} (Lunatic) thinks they're the Leviathan, which doesn't kill: they choose nobody.`,
+          { actorId: p.id },
+        );
+        continue;
+      }
+
       const t = this.strat.lunatic(s, p);
 
       if (!t) {
@@ -77,14 +87,22 @@ export const lunatic = {
     }
 
     // (A Demon they "thought" they were: one on the script that isn't in
-    // play, nor Lil' Monsta, which nobody is. Their "Minions": good NPCs, as many as there are Minions, at
-    // least 2; never a teammate, who'd be suspected.)
-    const shown = pick(
-      s.script.ids.filter(
-        (id) => team(id) === "demon" && id !== "lilmonsta" && !s.players.some((x) => x.role === id),
-      ),
-      s.r,
-    );
+    // play, nor Lil' Monsta, which nobody is, nor the Leviathan, which
+    // everyone would know of. With the Leviathan in play, the Leviathan: a
+    // real Lunatic would have been shown it. Their "Minions": good NPCs, as
+    // many as there are Minions, at least 2; never a teammate, who'd be
+    // suspected.)
+    const shown = this.leviathanInPlay()
+      ? "leviathan"
+      : pick(
+          s.script.ids.filter(
+            (id) =>
+              team(id) === "demon" &&
+              !["lilmonsta", "leviathan"].includes(id) &&
+              !s.players.some((x) => x.role === id),
+          ),
+          s.r,
+        );
     const minions = s.players.filter((x) => team(x.role) === "minion").length;
     const fakeTeam = sample(
       s.players.filter((x) => !x.human && x !== faker && x.alignment === "good"),

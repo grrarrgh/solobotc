@@ -133,7 +133,11 @@ export const cannibal = {
     const shown =
       pick(
         s.script.ids.filter(
-          (id) => team(id) === "demon" && id !== "lilmonsta" && !s.players.some((x) => x.role === id),
+          (id) =>
+            team(id) === "demon" &&
+            // (Nor the Leviathan, which everyone would know isn't in play.)
+            !["lilmonsta", "leviathan"].includes(id) &&
+            !s.players.some((x) => x.role === id),
         ),
         s.r,
       ) ?? demon?.role;

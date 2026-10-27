@@ -48,6 +48,7 @@ import { info as ravenkeeper } from "./townsfolk/ravenkeeper.js";
 import { info as sage } from "./townsfolk/sage.js";
 import { info as sailor } from "./townsfolk/sailor.js";
 import { info as seamstress } from "./townsfolk/seamstress.js";
+import { info as shugenja } from "./townsfolk/shugenja.js";
 import { info as snakecharmer } from "./townsfolk/snakecharmer.js";
 import { info as towncrier } from "./townsfolk/towncrier.js";
 import { info as undertaker } from "./townsfolk/undertaker.js";
@@ -103,6 +104,7 @@ export const infoOf = (role) =>
     sage,
     sailor,
     seamstress,
+    shugenja,
     snakecharmer,
     towncrier,
     undertaker,

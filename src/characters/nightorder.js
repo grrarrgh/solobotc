@@ -78,6 +78,7 @@ export const FIRST_NIGHT = [
   ["seamstress", "Once per game, may choose 2 players: learns if they're the same alignment."],
   ["noble", "Learns 3 players, 1 and only 1 of which is evil."],
   ["bountyhunter", "Learns an evil player."],
+  ["shugenja", "Learns if their closest evil player is clockwise or anti-clockwise."],
   ["balloonist", "Learns a player (of a different character type each night)."],
   ["villageidiot", "Chooses a player: learns their alignment."],
   ["spy", "Sees the Grimoire."],
@@ -136,6 +137,10 @@ export const OTHER_NIGHTS = [
   ],
   ["nodashii", "Chooses a player: they die."],
   ["vortox", "Chooses a player: they die."],
+  [
+    "leviathan",
+    "Doesn't kill. (With the Ravenkeeper or Sage on the script, chooses an alive player not chosen before: a Ravenkeeper or Sage uses their ability, but doesn't die.)",
+  ],
   [
     "vigormortis",
     "Chooses a player: they die. A Minion killed keeps their ability, and poisons a Townsfolk neighbour.",

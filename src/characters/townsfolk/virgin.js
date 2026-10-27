@@ -30,15 +30,16 @@ export const virgin = {
 
     // (As any execution: the good twin's loses the game for good, and on
     // the Mastermind's extra day it decides the game. See engine execute().)
-    if (!this.advocated(by)) {
-      this.kill(by, "execution");
+    // (It counts for the Leviathan too: see leviathan.js.)
+    const saved = this.advocated(by);
+    const died = !saved && this.kill(by, "execution");
 
-      if (!this.goodTwinExecuted(by)) {
-        this.check();
-      }
+    if (!this.leviathanExecuted(by, null, died) && !saved && !this.goodTwinExecuted(by)) {
+      this.check();
     }
 
     this.mastermindEnd(by);
+    this.leviathanDusk();
 
     // (The day is over: any Gossip yet to speak today does so now.)
     if (!s.winner) {

@@ -77,6 +77,9 @@ import {
   FEARMONGER_CAUTION,
   EVIL_TOWNSFOLK_HUNCH_VOTE_CHANCE,
   VORTOX_VOTE_CHANCE,
+  LEVIATHAN_EARLY_CAUTION,
+  LEVIATHAN_CAUTION,
+  LEVIATHAN_LAST_DAY_VOTE_CHANCE,
   exclusiveWith,
 } from "./data.js";
 import {
@@ -190,6 +193,23 @@ const onlyTeam = (s, p) =>
 // Whether a day with nobody executed may lose the game for good: the Vortox
 // is on the script, and nobody is marked for execution yet today.
 export const vortoxRisk = (s) => s.script.ids.includes("vortox") && !s.block?.nomineeId;
+
+// How the Leviathan, which everyone knows is in play, makes good NPCs vote
+// (see vote(); characters/demon/leviathan.js): "last" on Day 5 (or later),
+// while nobody is marked, as it wins at dusk unless it's executed; "wary"
+// once anyone has been executed, as that might have been good's one miss;
+// "early" on Days 1 and 2 before then; or null (no Leviathan).
+export function leviathanRisk(s) {
+  if (!s.players.some((x) => (x.alive || x.undead) && x.role === "leviathan")) {
+    return null;
+  }
+
+  if (s.day >= 5) {
+    return s.block?.nomineeId ? null : "last";
+  }
+
+  return (s.leviathan?.executions ?? 0) > 0 ? "wary" : s.day <= 2 ? "early" : null;
+}
 
 // Whether evil player p holds back from x: the Bounty Hunter's evil
 // Townsfolk, who suspects x of being on their team (see hunches()).
@@ -1731,6 +1751,27 @@ export class SimpleStrategy {
     const sus = this.suspicion(s, p);
     const t = sus && byId(s, sus.targetId);
 
+    // (The Leviathan never nominates a player claiming the Soldier: if it
+    // executed the Soldier, good would win. Their jinx: see leviathan.js.)
+    if (p.role === "leviathan" && t && claimTo(t, p) === "soldier") {
+      // (Said once a day: nominations are weighed many times.)
+      const key = `${s.day}:${t.id}`;
+
+      if ((s.leviathanSpared ??= []).includes(key)) {
+        return null;
+      }
+
+      s.leviathanSpared.push(key);
+      note(
+        s,
+        "leviathan",
+        `${p.label} (Leviathan) won't nominate ${t.label}, who claims the Soldier: if it's true, executing them would win for good.`,
+        { playerId: p.id, targetId: t.id },
+      );
+
+      return null;
+    }
+
     // (The Heretic never nominates their suspect: see vote(). Nobody good
     // nominates a player who claimed the Goblin: they'd claim it again.)
     return t?.alive &&
@@ -1926,14 +1967,31 @@ export class SimpleStrategy {
     ) {
       return true;
     }
+    // (On the Leviathan's last day, the same: see leviathanRisk(), and
+    // LEVIATHAN_LAST_DAY_VOTE_CHANCE.)
+    const leviathan = leviathanRisk(s);
+
+    if (
+      leviathan === "last" &&
+      !heretic &&
+      about !== "trust" &&
+      !this.trusted(s, v).has(n.id) &&
+      s.r() < LEVIATHAN_LAST_DAY_VOTE_CHANCE
+    ) {
+      return true;
+    }
+
     // (Once the Fearmonger has chosen, any execution an NPC they don't trust
     // nominated might be the one that loses: they hold back, even on their
-    // suspect. See FEARMONGER_CAUTION.)
+    // suspect. See FEARMONGER_CAUTION. With the Leviathan in play, they hold
+    // back from any nomination, yours too, early on or once anyone has been
+    // executed: a miss loses whoever nominated. See LEVIATHAN_CAUTION.)
     const yours = tally?.nominator?.human;
     const wary =
-      s.fearmongerChose && !yours && !(tally?.nominator && this.trusted(s, v).has(tally.nominator.id))
+      (s.fearmongerChose && !yours && !(tally?.nominator && this.trusted(s, v).has(tally.nominator.id))
         ? FEARMONGER_CAUTION
-        : 1;
+        : 1) *
+      (leviathan === "wary" ? LEVIATHAN_CAUTION : leviathan === "early" ? LEVIATHAN_EARLY_CAUTION : 1);
 
     if (about === "suspicious") {
       return s.r() < (heretic ? GOOD_VOTE_MIN : GOOD_VOTE_MAX) * wary;
@@ -2985,6 +3043,20 @@ export class SimpleStrategy {
     return pick(good.length ? good : pool, s.r);
   }
 
+  // The Leviathan's choice each night*, with the Ravenkeeper or Sage on the
+  // script (their jinx: see leviathan.js): an alive player it hasn't chosen
+  // before, never you nor a teammate, and not one claiming the Ravenkeeper
+  // or Sage if it can help it (they'd use their ability).
+  leviathan(s, p) {
+    const chosen = s.leviathan?.chosen ?? [];
+    const pool = this.pickable(s, p).filter(
+      (x) => !x.human && !teammate(p, x) && !chosen.includes(x.id),
+    );
+    const safe = pool.filter((x) => !["ravenkeeper", "sage"].includes(claimTo(x, p)));
+
+    return pick(safe.length ? safe : pool, s.r) ?? null;
+  }
+
   // Two players, avoiding last night's pair where possible.
   ft(s, p) {
     const pool = this.pickable(s, p);
@@ -3608,6 +3680,8 @@ export class SimpleStrategy {
               id !== "eviltwin" &&
               // (Nobody can be Lil' Monsta: it isn't a player.)
               id !== "lilmonsta" &&
+              // (The Leviathan can't enter play after Day 5: their jinx.)
+              !(id === "leviathan" && s.night > 5) &&
               !tokens.has(id),
           ),
         }))

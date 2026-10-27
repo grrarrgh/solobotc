@@ -72,6 +72,7 @@ import { wizard } from "./minion/wizard.js";
 
 import { fanggu } from "./demon/fanggu.js";
 import { legion } from "./demon/legion.js";
+import { leviathan } from "./demon/leviathan.js";
 import { lilmonsta } from "./demon/lilmonsta.js";
 import { lleech } from "./demon/lleech.js";
 import { nodashii } from "./demon/nodashii.js";
@@ -144,6 +145,7 @@ export const characters = {
   wizard,
   fanggu,
   legion,
+  leviathan,
   lilmonsta,
   lleech,
   nodashii,

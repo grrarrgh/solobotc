@@ -15,6 +15,9 @@ import {
   HIDDEN_OUTSIDERS,
   NEAR_FINAL_HUMAN_VOTE_CHANCE,
   VORTOX_VOTE_CHANCE,
+  LEVIATHAN_EARLY_CAUTION,
+  LEVIATHAN_CAUTION,
+  LEVIATHAN_LAST_DAY_VOTE_CHANCE,
 } from "./data.js";
 import {
   nightInfo,
@@ -50,6 +53,7 @@ import {
   lied,
   spoken,
   vortoxRisk,
+  leviathanRisk,
 } from "./strategy.js";
 import { byId, bySeat, pick, shuffle } from "./util.js";
 import { formatLog, logNames, claimChain } from "./log.js";
@@ -651,6 +655,7 @@ export class Engine {
     this.audit("day", `Day ${s.day} began.`);
 
     this.dawnDeaths();
+    this.leviathanDawn();
 
     if (!s.winner) {
       this.coverStories();
@@ -805,6 +810,12 @@ export class Engine {
     }
 
     this.lunatics();
+
+    // (The Leviathan doesn't kill: see leviathan.js.)
+    if (d.role === "leviathan") {
+      this.leviathanNight(d);
+      return;
+    }
 
     // (Lil' Monsta: the Storyteller chooses who might die.)
     if (d.babysitting) {
@@ -2243,6 +2254,17 @@ export class Engine {
         "workings",
         `The Vortox is on the script and nobody is marked for execution yet (a day with nobody executed may lose): good players vote for ${n.label} unless they trust them, at ${Math.round(VORTOX_VOTE_CHANCE * 100)}% at least.`,
       );
+    } else if (n.alive && leviathanRisk(s)) {
+      const risk = leviathanRisk(s);
+
+      this.audit(
+        "workings",
+        risk === "last"
+          ? `The Leviathan is in play and it's Day ${s.day} (it wins at dusk unless it's executed), with nobody marked for execution yet: good players vote for ${n.label} unless they trust them, at ${Math.round(LEVIATHAN_LAST_DAY_VOTE_CHANCE * 100)}% at least.`
+          : risk === "wary"
+            ? `The Leviathan is in play, and ${s.leviathan.executions} execution${s.leviathan.executions === 1 ? " has" : "s have"} happened (a 2nd good one loses): good NPCs vote at ${Math.round(LEVIATHAN_CAUTION * 100)}% of their usual chance, unless you nominated.`
+            : `The Leviathan is in play, and it's Day ${s.day} with nobody executed yet: good NPCs wait for more information, voting at ${Math.round(LEVIATHAN_EARLY_CAUTION * 100)}% of their usual chance, unless you nominated.`,
+      );
     } else if (!n.alive) {
       this.audit(
         "workings",
@@ -2476,6 +2498,13 @@ export class Engine {
       return;
     }
 
+    // (With the Leviathan in play, a second good execution wins for evil:
+    // see leviathan.js.)
+    if (this.leviathanExecuted(p, nominatorId, died)) {
+      s.executing = null;
+      return;
+    }
+
     if (died && p.role === "saint") {
       this.finish("evil", "Saint executed.");
     } else if (died && isDemon(p)) {
@@ -2567,6 +2596,12 @@ export class Engine {
     // A Wizard's wish for a second execution: nominations open again (see
     // wizard.js secondRound()), and the day ends after that round.
     if (this.secondRound(from)) {
+      return;
+    }
+
+    // (After Day 5, the Leviathan wins: see leviathan.js.)
+    if (this.leviathanDusk()) {
+      this.phaseCard("dusk", from);
       return;
     }
 

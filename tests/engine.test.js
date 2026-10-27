@@ -12838,3 +12838,255 @@ test("Share My Info: an NPC counts your information for more than another player
   assert.ok(s.audit.some((x) => x.type === "workings" && /^What Player 2 thinks of the players your information names/.test(x.text)));
   assert.match(e.debugLog(), /^▶ \[tell\] You told/m);
 });
+
+// ── Harold Holt's Revenge: the Shugenja and the Leviathan ──
+
+const hhr = JSON.parse(
+  fs.readFileSync(new URL("../scripts/Harold Holt's Revenge_1_1_0.json", import.meta.url)),
+);
+
+// base() with the Imp as the Leviathan: you (Mayor), Chef, Butler, Baron,
+// Leviathan.
+function leviathanGame(seed = "leviathan") {
+  const s = base(seed);
+  const e = new Engine(s);
+
+  role(s.players[4], "leviathan", "evil");
+
+  return { s, e, p: s.players };
+}
+
+test("Harold Holt's Revenge loads from the script list: 23 characters, with the Leviathan's jinxes", () => {
+  const files = JSON.parse(fs.readFileSync(new URL("../scripts/index.json", import.meta.url)));
+
+  assert.ok(files.includes("Harold Holt's Revenge_1_1_0.json"));
+
+  const s = createState(hhr, 12, "hhr");
+
+  assert.equal(s.script.meta.name, "Harold Holt's Revenge");
+  assert.equal(s.script.ids.length, 23);
+  assert.equal(team("shugenja"), "townsfolk");
+  assert.equal(team("leviathan"), "demon");
+
+  for (const id of ["exorcist", "innkeeper", "monk", "soldier", "grandmother", "mayor", "pithag", "ravenkeeper", "sage"]) {
+    assert.ok(
+      JINXES.some((j) => j.ids.includes("leviathan") && j.ids.includes(id)),
+      id,
+    );
+  }
+
+  assert.ok(FIRST_NIGHT.some(([id]) => id === "shugenja"));
+  assert.ok(OTHER_NIGHTS.some(([id]) => id === "leviathan"));
+  assert.ok(NOTES.shugenja && NOTES.leviathan);
+});
+
+test("the Shugenja learns which way their closest evil player is; drunk or poisoned, the other way", () => {
+  const s = base("shugenja");
+  const sh = s.players[1];
+
+  // You (Mayor), Shugenja, Baron, Butler, Imp: the Baron is 1 step
+  // clockwise, the Imp 2 anti-clockwise.
+  role(sh, "shugenja", "good");
+  role(s.players[2], "baron", "evil");
+  role(s.players[3], "butler", "good");
+
+  assert.equal(
+    infoOf("shugenja").truth(s, sh).text,
+    "Shugenja: the closest evil player is clockwise (towards Player 3).",
+  );
+  assert.equal(
+    infoOf("shugenja").lie(s, sh).text,
+    "Shugenja: the closest evil player is anti-clockwise (towards You).",
+  );
+
+  // (Steps count living players only: with you dead, the Imp is 1 step
+  // anti-clockwise, the Baron 2 clockwise.)
+  s.players[0].alive = false;
+  role(s.players[2], "butler", "good");
+  role(s.players[3], "baron", "evil");
+
+  assert.equal(
+    infoOf("shugenja").truth(s, sh).text,
+    "Shugenja: the closest evil player is anti-clockwise (towards Player 5).",
+  );
+});
+
+test("an evil Shugenja bluffer points away from their closest teammate", () => {
+  const s = base("shugenja-bluff");
+  const baron = s.players[3];
+
+  // The Baron's closest teammate (the Imp) is 1 step clockwise.
+  baron.claim = "shugenja";
+
+  assert.match(infoOf("shugenja").lie(s, baron).text, / anti-clockwise /);
+});
+
+test("the Leviathan: a 2nd good execution wins for evil; an evil one doesn't count", () => {
+  const { s, e, p } = leviathanGame();
+  const [, chef, butler, baron] = p;
+
+  e.execute(baron);
+  assert.equal(s.winner, null);
+  assert.deepEqual(s.leviathan.good, []);
+
+  e.execute(chef);
+  assert.equal(s.winner, null);
+  assert.deepEqual(s.leviathan.good, [chef.id]);
+  assert.equal(s.leviathan.executions, 2);
+
+  // (A good player who doesn't die counts too: here, one already dead.)
+  butler.alive = false;
+  e.execute(butler);
+  assert.equal(s.winner, "evil");
+  assert.equal(s.reason, "A second good player was executed while the Leviathan is in play.");
+  assert.ok(
+    s.audit.some(
+      (x) => x.type === "leviathan" && /the 2nd good execution while the Leviathan is in play: evil wins/.test(x.text),
+    ),
+  );
+});
+
+test("the Leviathan doesn't kill at night, and each morning the Storyteller says it's in play", () => {
+  const { s, e } = leviathanGame("leviathan-night");
+
+  e.endDay();
+  settle(e);
+
+  assert.equal(s.day, 2);
+  assert.ok(s.players.every((x) => x.alive));
+  assert.ok(s.audit.some((x) => x.type === "leviathan" && /doesn't kill at night/.test(x.text)));
+  assert.ok(s.publicLog.includes("Day 2 — The Storyteller: the Leviathan is in play. It is Day 2."));
+});
+
+test("the Leviathan wins once Day 5 is over; with the Mayor alive and no execution, good does (their jinx)", () => {
+  {
+    const { s, e } = leviathanGame("leviathan-day5");
+
+    s.day = 5;
+    e.endDay();
+    assert.equal(s.winner, "good");
+    assert.equal(s.reason, "The Mayor and the Leviathan lived through Day 5 with no execution.");
+  }
+
+  {
+    const { s, e, p } = leviathanGame("leviathan-day5b");
+
+    role(p[0], "empath", "good");
+    s.night = 4;
+    s.day = 4;
+    e.endDay();
+    settle(e);
+    assert.equal(s.winner, null);
+    assert.equal(s.day, 5);
+    assert.ok(
+      s.publicLog.includes(
+        "Day 5 — The Storyteller: the Leviathan is in play. It is Day 5. If it lives through today, evil wins.",
+      ),
+    );
+
+    e.endDay();
+    assert.equal(s.winner, "evil");
+    assert.equal(s.reason, "The Leviathan lived through Day 5.");
+  }
+});
+
+test("if the Leviathan nominates and executes the Soldier (or a protected player), good wins; the Grandmother's grandchild executed wins for evil", () => {
+  {
+    const { s, e, p } = leviathanGame("leviathan-soldier");
+
+    role(p[1], "soldier", "good");
+    assert.equal(e.leviathanExecuted(p[1], p[4].id, true), true);
+    assert.equal(s.winner, "good");
+    assert.equal(s.reason, "The Leviathan nominated and executed the Soldier.");
+  }
+
+  {
+    const { s, e, p } = leviathanGame("leviathan-monk");
+
+    p[2].protected = true;
+    assert.equal(e.leviathanExecuted(p[2], p[4].id, true), true);
+    assert.equal(s.winner, "good");
+  }
+
+  {
+    const { s, e, p } = leviathanGame("leviathan-grandmother");
+
+    role(p[1], "grandmother", "good");
+    p[1].grandchild = p[2].id;
+    e.execute(p[2]);
+    assert.equal(s.winner, "evil");
+    assert.equal(s.reason, "The Grandmother's grandchild was executed while the Leviathan is in play.");
+  }
+});
+
+test("an NPC Leviathan never nominates a player claiming the Soldier (and says so once a day)", () => {
+  const { s, p } = leviathanGame("leviathan-nominate");
+  const strat = new SimpleStrategy();
+
+  p[1].claim = "soldier";
+  p[1].claimKnown = true;
+  p[1].publicClaim = "soldier";
+  strat.suspicion = () => ({ targetId: p[1].id, score: 99 });
+
+  assert.equal(strat.nomination(s, p[4]), null);
+  strat.nomination(s, p[4]);
+  assert.equal(s.audit.filter((x) => x.type === "leviathan").length, 1);
+});
+
+test("with the Ravenkeeper on the script, the Leviathan chooses a player each night: a chosen Ravenkeeper uses their ability, and lives", () => {
+  const { s, e, p } = leviathanGame("leviathan-raven");
+  const [, chef, butler] = p;
+
+  role(butler, "ravenkeeper", "good");
+  butler.claim = "chef";
+  s.leviathan = { good: [], chosen: [chef.id], executions: 0 };
+
+  e.endDay();
+  settle(e);
+
+  assert.ok(butler.alive);
+  assert.deepEqual(s.leviathan.chosen, [chef.id, butler.id]);
+  assert.ok(butler.memories.some((m) => m.role === "ravenkeeper"));
+  assert.ok(
+    s.audit.some(
+      (x) => x.type === "leviathan" && /as the Ravenkeeper, they use their ability, but don't die/.test(x.text),
+    ),
+  );
+});
+
+test("in a Leviathan game, the Lunatic thinks they're the Leviathan; in any other, nobody is shown it", () => {
+  let found = 0;
+
+  for (let g = 0; g < 400 && found < 3; g++) {
+    const s = createState(hhr, 8 + (g % 8), `hhr-lunatic-${g}`);
+    const lunatic = s.players.find((x) => x.role === "lunatic");
+
+    if (!lunatic) {
+      continue;
+    }
+
+    if (s.players.some((x) => x.role === "leviathan")) {
+      found++;
+      assert.equal(lunatic.shown, "leviathan");
+    } else {
+      assert.notEqual(lunatic.shown, "leviathan");
+    }
+  }
+
+  assert.ok(found > 0);
+});
+
+test("whole games of Harold Holt's Revenge play out without errors, and a Leviathan game ends by Day 5", () => {
+  for (const seats of [8, 10, 12, 13, 15]) {
+    for (let seed = 0; seed < 8; seed++) {
+      const { s, e } = playOut(hhr, seats, `hhr-${seats}-${seed}`);
+
+      assert.ok([null, "good", "evil"].includes(s.winner));
+      assert.ok(e.debugLog().length > 0);
+
+      if (s.players.some((x) => x.role === "leviathan")) {
+        assert.ok(s.winner && s.day <= 5, `hhr-${seats}-${seed}: ${s.reason} on Day ${s.day}`);
+      }
+    }
+  }
+});
