@@ -278,6 +278,8 @@
             </button>
             <span id="phase-day" class="phase-day"></span>
             <span id="phase-alive" class="phase-alive"></span>
+            <!-- Once a day, with something to use: see sunTip(). -->
+            <span id="sun-tip" class="sun-tip" role="status" hidden>Click here to interact with the Storyteller</span>
           </div>
           <div id="circle" class="circle"></div>
         </div>
@@ -306,27 +308,48 @@
           <div id="round-robin-controls" class="nomination-controls" hidden>
             <button id="round-robin" type="button" title="Once per game: from Seat 1, every player says their character and information in public">Round Robin</button>
           </div>
-          <!-- The Artist's question, once you've pressed the Sun: pick
-               players on the town square, dead or alive. -->
-          <div id="artist-panel" class="artist-panel" hidden>
-            <p>
-              Is there
-              <select id="artist-question" aria-label="Artist question"></select>
-              among <span id="artist-picks"></span>?
-            </p>
-            <button id="artist-ask" type="button">Ask question</button>
-            <button id="artist-cancel" type="button">Cancel</button>
-          </div>
-          <p id="artist-answer"></p>
-          <button id="savant" type="button" hidden>Visit the Storyteller</button>
-          <button id="fisherman" type="button" hidden>Ask the Storyteller for advice</button>
-          <!-- The Amnesiac's day: ask the Storyteller a yes/no question
-               about your secret ability, or guess it (once a day). Guesses
-               are grouped by what their information looks like. -->
-          <div id="amnesiac-controls" class="amnesiac-controls" hidden>
-            <h4>🌀 Your secret ability: ask one question, or make one guess, today</h4>
-            <div id="amnesiac-questions" class="amnesiac-questions"></div>
-            <div id="amnesiac-guesses" class="amnesiac-guesses"></div>
+          <!-- The Storyteller, by day: press the Sun (top left of the
+               town square) for the day abilities that are a word with them
+               in private (see sunAbilities() in app.js). Players are picked
+               on the town square. -->
+          <div id="sun-panel" class="sun-panel" hidden>
+            <h4>☀️ The Storyteller</h4>
+            <!-- The Artist: once per game, about any players, dead or
+                 alive. -->
+            <div id="artist-panel" class="artist-panel" hidden>
+              <p>
+                Is there
+                <select id="artist-question" aria-label="Artist question"></select>
+                among <span id="artist-picks"></span>?
+              </p>
+              <button id="artist-ask" type="button">Ask question</button>
+            </div>
+            <button id="savant" type="button" hidden>Visit the Storyteller</button>
+            <button id="fisherman" type="button" hidden>Ask the Storyteller for advice</button>
+            <!-- The Amnesiac's day: ask the Storyteller a yes/no question
+                 about your secret ability, or guess it (once a day). Guesses
+                 are grouped by what their information looks like. -->
+            <div id="amnesiac-controls" class="amnesiac-controls" hidden>
+              <h4>🌀 Your secret ability: ask one question, or make one guess, today</h4>
+              <div id="amnesiac-questions" class="amnesiac-questions"></div>
+              <div id="amnesiac-guesses" class="amnesiac-guesses"></div>
+            </div>
+            <!-- The Puzzlemaster: once per game, guess who the puzzle made
+                 drunk. -->
+            <div id="puzzle-panel" class="artist-panel" hidden>
+              <p>Guess the puzzle's drunk: <span id="puzzle-picks"></span></p>
+              <button id="puzzle" type="button">Make your guess</button>
+            </div>
+            <!-- An Alchemist with the Wizard's ability: once per game, a wish
+                 (a death wish names a living player). -->
+            <div id="wish-controls" class="artist-panel" hidden>
+              <p>
+                <select id="wish-kind" aria-label="Wish"></select>
+                <span id="wish-target">: <span id="wish-picks"></span></span>
+              </p>
+              <button id="wish-make" type="button">Make your wish</button>
+            </div>
+            <button id="sun-close" type="button">Close</button>
           </div>
           <p id="day-answer"></p>
         </div>
@@ -369,13 +392,6 @@
           <!-- An Alchemist with the Psychopath's ability: once a day, before
                nominations, the selected player dies. -->
           <button id="psychopath-kill" type="button" hidden>Choose them to die (Psychopath)</button>
-          <!-- An Alchemist with the Wizard's ability: once per game, a wish
-               (a death wish names the selected player). -->
-          <span id="wish-controls" hidden>
-            <select id="wish-kind" aria-label="Wish"></select>
-            <button id="wish-make" type="button">Make your wish</button>
-          </span>
-          <button id="puzzle" hidden>Guess they're the puzzle's drunk</button>
           <span id="gossip-controls" hidden>
             <select id="gossip-question"></select>
             <button id="gossip-say">Say in public</button>

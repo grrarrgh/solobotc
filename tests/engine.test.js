@@ -25,6 +25,7 @@ import {
   LEGION_STRONG_SHARE,
   ALCHEMIST_ABILITIES,
   PHILOSOPHER_AVOID,
+  LEVIATHAN_STRONG_EVIDENCE,
   FACE_DOWN_OUTSIDERS,
   name,
   team,
@@ -59,6 +60,7 @@ import {
   teammate,
   spares,
   twinSafe,
+  leviathanRisk,
 } from "../src/strategy.js";
 import {
   nightInfo,
@@ -13240,4 +13242,41 @@ test("the human Artist can ask about several players, dead or alive, including w
     `Artist: asked if any of ${t.players[1].label} and ${t.players[2].label} is an Outsider: YES.`,
   );
   assert.throws(() => new Engine(base("artist-self")).artist([s.players[0].id], "good"), /Artist unavailable/);
+});
+
+test("with the Leviathan in play, good NPCs only vote with strong suspicion on Days 1 to 3, and more readily on Days 4 and 5", () => {
+  const { s, p } = leviathanGame("leviathan-votes");
+  const strat = new SimpleStrategy();
+  const [, chef, butler] = p;
+  let score = 0;
+
+  strat.evidence = () => ({ score, reasons: [] });
+  strat.opinion = () => ({ type: "nothing" });
+  s.r = () => 0.5;
+
+  for (const day of [1, 2, 3]) {
+    s.day = day;
+    assert.equal(leviathanRisk(s), "early");
+    score = LEVIATHAN_STRONG_EVIDENCE - 0.5;
+    assert.equal(strat.vote(s, chef, butler), false, `Day ${day}, weak`);
+    score = LEVIATHAN_STRONG_EVIDENCE;
+    assert.equal(strat.vote(s, chef, butler), true, `Day ${day}, strong`);
+  }
+
+  // (Days 4 and 5: their usual chance, raised. With no evidence, 50% plus
+  // the bonus beats a 0.6 roll; without the Leviathan, it wouldn't.)
+  score = 0;
+  s.r = () => 0.6;
+  s.day = 4;
+  assert.equal(leviathanRisk(s), "late");
+  assert.equal(strat.vote(s, chef, butler), true);
+
+  // (Day 5 with nobody marked: the last day's rule, as with the Vortox.)
+  s.day = 5;
+  assert.equal(leviathanRisk(s), "last");
+
+  role(p[4], "imp", "evil");
+  s.day = 4;
+  assert.equal(leviathanRisk(s), null);
+  assert.equal(strat.vote(s, chef, butler), false);
 });

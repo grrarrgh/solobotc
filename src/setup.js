@@ -745,7 +745,7 @@ export function createState(
     : null;
 
   const s = {
-    version: "2.10.0",
+    version: "2.11.0",
     script,
     seats,
     seed: String(seed),

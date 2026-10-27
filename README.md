@@ -57,10 +57,11 @@ execution (💀) and go to night.
 
 **Extras:**
 
-- Some characters add their own buttons: Slayer, Savant, Gossip,
-  Amnesiac, Fisherman, Puzzlemaster. As the Artist, press the Sun (top left
-  of the town square) to ask your question about any players, dead or
-  alive.
+- Some characters add their own buttons: the Slayer and the Gossip.
+  Abilities that are a word with the Storyteller by day (the Artist,
+  Savant, Fisherman, Amnesiac, Puzzlemaster, a Wizard's wish) start from the
+  Sun at the top left of the town square: it has a gold ring while you have
+  one to use.
 - If a Boomdandy is executed, you have 10 seconds to select the player you
   point at before night falls.
 - **Round Robin** (once per game, with 4 or fewer players alive and

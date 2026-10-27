@@ -77,8 +77,8 @@ import {
   FEARMONGER_CAUTION,
   EVIL_TOWNSFOLK_HUNCH_VOTE_CHANCE,
   VORTOX_VOTE_CHANCE,
-  LEVIATHAN_EARLY_CAUTION,
-  LEVIATHAN_CAUTION,
+  LEVIATHAN_STRONG_EVIDENCE,
+  LEVIATHAN_LATE_VOTE_BONUS,
   LEVIATHAN_LAST_DAY_VOTE_CHANCE,
   exclusiveWith,
 } from "./data.js";
@@ -195,20 +195,21 @@ const onlyTeam = (s, p) =>
 export const vortoxRisk = (s) => s.script.ids.includes("vortox") && !s.block?.nomineeId;
 
 // How the Leviathan, which everyone knows is in play, makes good NPCs vote
-// (see vote(); characters/demon/leviathan.js): "last" on Day 5 (or later),
-// while nobody is marked, as it wins at dusk unless it's executed; "wary"
-// once anyone has been executed, as that might have been good's one miss;
-// "early" on Days 1 and 2 before then; or null (no Leviathan).
+// (see vote(); characters/demon/leviathan.js): "early" on Days 1 to 3, when
+// they only vote with strong suspicion (a 2nd good execution loses, and
+// there's time to learn more); "late" on Days 4 and 5, when they vote more
+// readily; "last" on Day 5 (or later) while nobody is marked, as it wins at
+// dusk unless it's executed; or null (no Leviathan).
 export function leviathanRisk(s) {
   if (!s.players.some((x) => (x.alive || x.undead) && x.role === "leviathan")) {
     return null;
   }
 
-  if (s.day >= 5) {
-    return s.block?.nomineeId ? null : "last";
+  if (s.day >= 5 && !s.block?.nomineeId) {
+    return "last";
   }
 
-  return (s.leviathan?.executions ?? 0) > 0 ? "wary" : s.day <= 2 ? "early" : null;
+  return s.day <= 3 ? "early" : "late";
 }
 
 // Whether evil player p holds back from x: the Bounty Hunter's evil
@@ -1981,17 +1982,24 @@ export class SimpleStrategy {
       return true;
     }
 
+    const yours = tally?.nominator?.human;
+
+    // (On the Leviathan's Days 1 to 3, only with strong suspicion, whoever
+    // nominated, you too: see LEVIATHAN_STRONG_EVIDENCE.)
+    if (leviathan === "early" && !heretic) {
+      const score =
+        this.evidence(s, v, n).score + (yours ? EVIDENCE_WEIGHT.humanTrusted : 0);
+
+      return score >= LEVIATHAN_STRONG_EVIDENCE && s.r() < GOOD_VOTE_MAX;
+    }
+
     // (Once the Fearmonger has chosen, any execution an NPC they don't trust
     // nominated might be the one that loses: they hold back, even on their
-    // suspect. See FEARMONGER_CAUTION. With the Leviathan in play, they hold
-    // back from any nomination, yours too, early on or once anyone has been
-    // executed: a miss loses whoever nominated. See LEVIATHAN_CAUTION.)
-    const yours = tally?.nominator?.human;
+    // suspect. See FEARMONGER_CAUTION.)
     const wary =
-      (s.fearmongerChose && !yours && !(tally?.nominator && this.trusted(s, v).has(tally.nominator.id))
+      s.fearmongerChose && !yours && !(tally?.nominator && this.trusted(s, v).has(tally.nominator.id))
         ? FEARMONGER_CAUTION
-        : 1) *
-      (leviathan === "wary" ? LEVIATHAN_CAUTION : leviathan === "early" ? LEVIATHAN_EARLY_CAUTION : 1);
+        : 1;
 
     if (about === "suspicious") {
       return s.r() < (heretic ? GOOD_VOTE_MIN : GOOD_VOTE_MAX) * wary;
@@ -2016,7 +2024,9 @@ export class SimpleStrategy {
       GOOD_VOTE_EVIDENCE_STEP *
         (this.evidence(s, v, n).score +
           (yours ? EVIDENCE_WEIGHT.humanTrusted : 0)) +
-      (yours ? HUMAN_NOMINATION_BONUS : 0);
+      (yours ? HUMAN_NOMINATION_BONUS : 0) +
+      // (The Leviathan's Days 4 and 5: see LEVIATHAN_LATE_VOTE_BONUS.)
+      (leviathan === "late" ? LEVIATHAN_LATE_VOTE_BONUS : 0);
 
     return s.r() < Math.min(GOOD_VOTE_MAX, Math.max(GOOD_VOTE_MIN, chance)) * wary;
   }

@@ -164,6 +164,9 @@ const markFor = (id) => marks[id] ?? "";
 let nightPicks = [];
 // How many of the engine's dawn / dusk cards (s.phaseCards) have been shown.
 let cardsShown = 0;
+// How many of your private log's night lines have been shown in a popup
+// (see showPhaseCard()).
+let nightInfoShown = 0;
 // Each NPC's latest ⚠ (claimAlert) seen, and when its clock started.
 const alertSeen = new Map();
 const alertStart = new Map();
@@ -231,6 +234,11 @@ function start() {
     talkingTo = null;
     marks = {};
     cardsShown = 0;
+    nightInfoShown = 0;
+    dialShown = null;
+    sunTipDay = null;
+    sunOpen = false;
+    sunPicks = [];
     alertSeen.clear();
     alertStart.clear();
 
@@ -307,8 +315,8 @@ function circle() {
           } ${
             (s.pending
               ? nightPicks.includes(p.id)
-              : artistMode
-                ? artistPicks.includes(p.id)
+              : sunOpen && sunPickLimit()
+                ? sunPicks.includes(p.id)
                 : p.id === selectedPlayerId)
               ? "selected"
               : ""
@@ -379,15 +387,9 @@ function circle() {
 
         if (s.pending) {
           pickAtNight(b.dataset.id);
-        } else if (artistMode) {
-          // (Your Artist question: any other player, dead or alive.)
-          const id = b.dataset.id;
-
-          if (!e.player(id).human) {
-            artistPicks = artistPicks.includes(id)
-              ? artistPicks.filter((x) => x !== id)
-              : [...artistPicks, id];
-          }
+        } else if (sunOpen && sunPickLimit()) {
+          // (For the Storyteller panel: see pickForSun().)
+          pickForSun(b.dataset.id);
         } else {
           // (Choosing someone else ends any conversation.)
           if (b.dataset.id !== talkingTo) {
@@ -765,17 +767,28 @@ const PHASE_WHEEL_SVG = `<svg viewBox="0 0 200 200" aria-hidden="true">
 // the Moon), and the day or night it last showed ("d3", "n4").
 let dialAngle = 0;
 let dialShown = null;
+// When the wheel's turn ends (ms, performance.now()), and the day the Sun's
+// tooltip was last shown (see sunTip()).
+let dialTurnEnds = 0;
+let sunTipDay = null;
+let sunTipTimer = null;
+
+// How long the Sun's tooltip ("Click here to interact with the
+// Storyteller") stays before it fades, in ms (the fade is in styles.css).
+const SUN_TIP_MS = 1000;
 
 // The Sun/Moon clock: the Moon at night (it waits there while you choose:
 // the engine stops on s.pending), the Sun by day, turning between them; a
 // night you sleep through, a whole turn, from Sun to Moon to Sun. The day
-// (or night) under it. As the Artist, by day, press the Sun to ask your
-// question (see artistCan()).
+// (or night) under it. By day, press the Sun to use an ability that's a
+// word with the Storyteller (see sunAbilities()).
 function renderDial() {
   const wheel = $("phase-wheel");
-  const night = s.phase === "night" && !s.winner;
-  const key = night ? `n${s.night}` : `d${s.day}`;
-  const label = night ? `Night ${s.night}` : `Day ${s.day}`;
+  // (Over, but still to be read: the night that has just ended.)
+  const held = s.phase === "day" && nightHeld();
+  const night = (s.phase === "night" || held) && !s.winner;
+  const key = held ? `n${s.day}` : night ? `n${s.night}` : `d${s.day}`;
+  const label = held ? `Night ${s.day}` : night ? `Night ${s.night}` : `Day ${s.day}`;
 
   if (!wheel.firstChild) {
     wheel.innerHTML = PHASE_WHEEL_SVG;
@@ -788,55 +801,152 @@ function renderDial() {
 
     dialAngle = dialShown === null ? (night ? 180 : 0) : dialAngle + 180 * turns;
     dialShown = key;
+    dialTurnEnds = performance.now() + DIAL_TURN_MS * turns;
     wheel.style.transitionDuration = `${DIAL_TURN_MS * turns}ms`;
     wheel.style.transform = `rotate(${dialAngle}deg)`;
   }
 
   $("phase-day").textContent = label;
   $("phase-alive").textContent = `${e.alive().length} alive`;
-  $("phase-dial").setAttribute(
-    "aria-label",
-    `${label}${artistCan() ? ": ask your Artist question" : ""}`,
-  );
-  $("phase-dial").classList.toggle("ask", artistCan() && !artistMode);
-  $("phase-dial").title = artistCan() ? "Artist: ask the Storyteller your question" : label;
+
+  // (By day, with something to ask the Storyteller: press the Sun.)
+  const can = sunAbilities();
+  const what = can.map((k) => SUN_TITLES[k]).join("; ");
+
+  $("phase-dial").setAttribute("aria-label", `${label}${can.length ? `: ${what}` : ""}`);
+  $("phase-dial").classList.toggle("ask", can.length > 0 && !sunOpen);
+  $("phase-dial").title = can.length ? `Talk to the Storyteller: ${what}` : label;
+
+  // (Once a day, with something to use, once no card is in the way.)
+  if (can.length && !sunOpen && sunTipDay !== s.day && !$("phase-dialog").open) {
+    sunTipDay = s.day;
+    sunTip(Math.max(0, dialTurnEnds - performance.now()));
+  }
 }
 
-// ── The Artist's question ────────────────────────────────────
+// The tooltip pointing at the Sun, "Click here to interact with the
+// Storyteller": shown once the Sun is up (`wait` ms), for SUN_TIP_MS, then
+// it fades.
+function sunTip(wait) {
+  const tip = $("sun-tip");
 
-// While you're making your Artist question (after pressing the Sun): the
-// players you've picked on the town square, dead or alive.
-let artistMode = false;
-let artistPicks = [];
+  clearTimeout(sunTipTimer);
+  tip.hidden = true;
+  tip.classList.remove("fading");
 
-// Whether you can ask your Artist question now: once per game, by day,
-// alive.
-function artistCan() {
+  sunTipTimer = setTimeout(() => {
+    tip.hidden = false;
+
+    sunTipTimer = setTimeout(() => {
+      tip.classList.add("fading");
+      sunTipTimer = setTimeout(() => {
+        tip.hidden = true;
+        tip.classList.remove("fading");
+      }, 500);
+    }, SUN_TIP_MS);
+  }, wait);
+}
+
+// ── The Storyteller, by day (press the Sun) ──────────────────
+
+// Day abilities that are a word with the Storyteller, in private: you press
+// the Sun to use them (see sunAbilities()). Public ones (the Slayer, the
+// Gossip, nominations) keep their own buttons.
+const SUN_TITLES = {
+  artist: "ask your Artist question",
+  savant: "visit the Storyteller (Savant)",
+  fisherman: "ask the Storyteller for advice (Fisherman)",
+  amnesiac: "ask about or guess your ability (Amnesiac)",
+  puzzle: "guess the puzzle's drunk (Puzzlemaster)",
+  wish: "make your wish (Wizard)",
+};
+
+// How many players you pick on the town square for each: any number, dead
+// or alive (the Artist), or 1 (the Puzzlemaster's guess, a death wish).
+const SUN_PICKS = { artist: Infinity, puzzle: 1, wish: 1 };
+
+// Whether the Storyteller panel is open (you pressed the Sun), and the
+// players you've picked on the town square for it.
+let sunOpen = false;
+let sunPicks = [];
+
+// The day abilities you can use with the Storyteller now (keys of
+// SUN_TITLES): by day, alive, with nothing else waiting.
+function sunAbilities() {
   const h = e.human();
 
-  return (
-    s.phase === "day" &&
-    !s.winner &&
-    !s.pending &&
-    ability(h) === "artist" &&
-    !h.artistUsed &&
-    h.alive
-  );
-}
-
-// The question being made: "Is there [a Good player] among [Player 3 and
-// Player 5]?", with Ask question once a player is picked.
-function renderArtist() {
-  if (artistMode && !artistCan()) {
-    artistMode = false;
-    artistPicks = [];
+  if (s.phase !== "day" || s.winner || s.pending || s.boom || s.roshambo || !h.alive) {
+    return [];
   }
 
-  $("artist-panel").hidden = !artistMode;
-  $("artist-picks").innerHTML = artistPicks.length
-    ? colourPlayers(esc(listLabels(artistPicks.map((id) => e.player(id)))))
-    : "<em>(select players on the town square)</em>";
-  $("artist-ask").disabled = !artistPicks.length;
+  return [
+    ability(h) === "artist" && !h.artistUsed && "artist",
+    ability(h) === "savant" && h.savantDay !== s.day && "savant",
+    ability(h) === "fisherman" && !h.fishermanUsed && "fisherman",
+    e.amnesiacOpen() && "amnesiac",
+    ability(h) === "puzzlemaster" && !h.puzzleUsed && "puzzle",
+    minionAbility(h) === "wizard" && !h.wished && "wish",
+  ].filter(Boolean);
+}
+
+// The most players you can pick now (0: none to pick).
+function sunPickLimit() {
+  return Math.max(0, ...sunAbilities().map((k) => SUN_PICKS[k] ?? 0));
+}
+
+// "Player 3 and Player 6", or a prompt to pick.
+const sunPicked = () =>
+  sunPicks.length
+    ? colourPlayers(esc(listLabels(sunPicks.map((id) => e.player(id)))))
+    : "<em>(select on the town square)</em>";
+
+// The Storyteller panel, once you've pressed the Sun: each ability you can
+// use now. (It closes when none is left.)
+function renderSun() {
+  const h = e.human();
+  const can = sunAbilities();
+
+  if (sunOpen && !can.length) {
+    sunOpen = false;
+    sunPicks = [];
+  }
+
+  $("sun-panel").hidden = !sunOpen;
+  $("artist-panel").hidden = !can.includes("artist");
+  $("artist-picks").innerHTML = sunPicked();
+  $("artist-ask").disabled = !sunPicks.length;
+  $("savant").hidden = !can.includes("savant");
+  $("fisherman").hidden = !can.includes("fisherman");
+  $("amnesiac-controls").hidden = !can.includes("amnesiac");
+
+  if (can.includes("amnesiac")) {
+    renderAmnesiac(h);
+  }
+
+  $("puzzle-panel").hidden = !can.includes("puzzle");
+  $("puzzle-picks").innerHTML = sunPicked();
+  $("puzzle").disabled = sunPicks.length !== 1;
+
+  // (A death wish names a living player.)
+  const target = Boolean(WIZARD_WISHES[$("wish-kind").value]?.target);
+
+  $("wish-controls").hidden = !can.includes("wish");
+  $("wish-target").hidden = !target;
+  $("wish-picks").innerHTML = sunPicked();
+  $("wish-make").disabled = target && sunPicks.length !== 1;
+}
+
+// Picks player `id` for the Storyteller panel (or drops them): never you.
+function pickForSun(id) {
+  const limit = sunPickLimit();
+
+  if (!limit || e.player(id).human) {
+    return;
+  }
+
+  sunPicks = sunPicks.includes(id)
+    ? sunPicks.filter((x) => x !== id)
+    : [...sunPicks, id].slice(-limit);
 }
 
 const CLOCKTOWER_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true">
@@ -998,16 +1108,65 @@ function cardsClosed() {
   });
 }
 
+// What the Storyteller told you in the night (your private log's "Night
+// 2: ..." lines) that you haven't been shown in a popup yet.
+const nightInfo = () =>
+  (s?.privateLog ?? []).filter((x) => /^Night \d+: /.test(x)).slice(nightInfoShown);
+
+// Whether the Sun/Moon clock waits on the Moon though the night is over: a
+// dusk card, or what the Storyteller told you in the night, is still to be
+// read (see renderDial()).
+function nightHeld() {
+  const d = $("phase-dialog");
+
+  return (
+    !s.winner &&
+    !s.pending &&
+    (["dusk", "night"].includes(d.open ? d.dataset.kind : null) ||
+      s.phaseCards?.[cardsShown]?.kind === "dusk" ||
+      nightInfo().length > 0)
+  );
+}
+
 // The next dawn / dusk card the engine made (s.phaseCards), if none is
 // showing: the public log lines from that change of phase, as the Public Log
 // shows them. Pressing anywhere closes it (and shows the next, if any).
+// Before the dawn (after any dusk), what the Storyteller told you in the
+// night, on a card of its own, while the clock waits on the Moon.
 function showPhaseCard() {
   const d = $("phase-dialog");
   const card = s?.phaseCards?.[cardsShown];
 
-  if (d.open || !card) {
+  if (d.open) {
     return;
   }
+
+  const told = nightInfo();
+
+  // (Not while you're choosing at night: it comes once the night is over.)
+  if (told.length && card?.kind !== "dusk" && !s.pending) {
+    const night = told[0].match(/^Night (\d+)/)[1];
+
+    nightInfoShown += told.length;
+    d.className = "script-dialog phase-dialog phase-dusk";
+    d.dataset.kind = "night";
+    $("phase-sheet").innerHTML = `
+      <h2>🌙 Night ${night}: the Storyteller</h2>
+      <ul class="phase-lines">
+        ${told
+          .map((x) => `<li class="log-entry">${linkRoles(x.replace(/^Night \d+: /, ""))}</li>`)
+          .join("")}
+      </ul>
+      <p class="phase-hint">Click anywhere to continue.</p>`;
+    d.showModal();
+    return;
+  }
+
+  if (!card) {
+    return;
+  }
+
+  d.dataset.kind = card.kind;
 
   cardsShown++;
   d.className = `script-dialog phase-dialog phase-${card.kind}`;
@@ -1709,7 +1868,7 @@ function draw() {
   renderMark(t);
   renderNightChoice();
   renderDial();
-  renderArtist();
+  renderSun();
 
   $("actions").hidden = !!s.winner || !t || !!s.pending || !!s.boom || !!s.roshambo;
   $("day-controls").hidden =
@@ -1730,21 +1889,6 @@ function draw() {
       ? `Pointing at: ${t.label}`
       : "Select a living player to point at.",
   );
-  $("fisherman").hidden = !(
-    ability(h) === "fisherman" &&
-    h.alive &&
-    !h.fishermanUsed
-  );
-  $("savant").hidden = !(
-    ability(h) === "savant" &&
-    h.alive &&
-    h.savantDay !== s.day
-  );
-  $("amnesiac-controls").hidden = !e.amnesiacOpen();
-
-  if (e.amnesiacOpen()) {
-    renderAmnesiac(h);
-  }
 
   // (Gone once you've asked them today, or nominations have started.)
   $("ask").hidden = !t || talk.already || s.nominationsOpen;
@@ -1806,11 +1950,6 @@ function draw() {
           ? `Tied at ${block.count} votes: nobody is marked for execution.`
           : "",
   );
-  $("puzzle").hidden = !(
-    ability(h) === "puzzlemaster" &&
-    !h.puzzleUsed &&
-    h.alive
-  );
   $("slay").hidden = !(
     ability(h) === "slayer" &&
     !s.slayerUsed &&
@@ -1825,7 +1964,6 @@ function draw() {
     t &&
     !t.human
   );
-  $("wish-controls").hidden = !(minionAbility(h) === "wizard" && h.alive && !h.wished);
   $("goblin-self").hidden = !(
     minionAbility(h) === "goblin" &&
     h.alive &&
@@ -1841,7 +1979,7 @@ function draw() {
   // With yourself selected (to nominate: see selfSelectable()), only the
   // nomination buttons apply.
   if (t?.human) {
-    for (const id of ["mark", "puzzle", "slay", "psychopath-kill", "wish-controls", "gossip-controls"]) {
+    for (const id of ["mark", "slay", "psychopath-kill", "gossip-controls"]) {
       $(id).hidden = true;
     }
   }
@@ -1977,11 +2115,13 @@ function resetGame() {
   selectedPlayerId = null;
   marks = {};
   nightPicks = [];
-  artistMode = false;
-  artistPicks = [];
+  sunOpen = false;
+  sunPicks = [];
   dialShown = null;
   shownGameOver = false;
   cardsShown = 0;
+  nightInfoShown = 0;
+  sunTipDay = null;
   alertSeen.clear();
   alertStart.clear();
 
@@ -1995,7 +2135,6 @@ function resetGame() {
   $("night-choice").hidden = true;
   $("day-controls").hidden = true;
   $("day-answer").textContent = "";
-  $("artist-answer").textContent = "";
 
   $("game").hidden = true;
   $("setup").hidden = false;
@@ -2219,14 +2358,6 @@ $("wish-kind").innerHTML = Object.entries(WIZARD_WISHES)
   .map(([kind, w]) => `<option value="${kind}">${esc(w.text)}</option>`)
   .join("");
 
-$("wish-make").onclick = () => {
-  try {
-    $("answer").textContent = e.wish($("wish-kind").value, selectedPlayerId);
-    render();
-  } catch (err) {
-    $("answer").textContent = err.message;
-  }
-};
 
 $("goblin-self").onclick = () => yourNomination(() => e.goblinSelfNomination(null));
 
@@ -2239,38 +2370,42 @@ $("slay").onclick = () => {
   }
 };
 
-// The Sun, as the Artist: start your question.
+// The Sun, by day: open (or close) the Storyteller panel.
 $("phase-dial").onclick = () => {
-  if (!e || !artistCan()) {
+  if (!e || !sunAbilities().length) {
     return;
   }
 
-  artistMode = true;
-  artistPicks = [];
+  sunOpen = !sunOpen;
+  sunPicks = [];
   selectedPlayerId = null;
   talkingTo = null;
-  $("artist-answer").textContent = "";
+  $("day-answer").textContent = "";
   render();
 };
 
-$("artist-ask").onclick = () => {
-  try {
-    const answer = e.artist(artistPicks, $("artist-question").value);
+$("sun-close").onclick = () => {
+  sunOpen = false;
+  sunPicks = [];
+  render();
+};
 
-    artistMode = false;
-    artistPicks = [];
-    $("artist-answer").innerHTML = linkRoles(answer);
+// What the Storyteller says (or why not) under the panel.
+function sunAnswer(ask) {
+  try {
+    $("day-answer").innerHTML = linkRoles(ask());
+    sunPicks = [];
     render();
   } catch (err) {
-    $("artist-answer").textContent = err.message;
+    $("day-answer").textContent = err.message;
   }
-};
+}
 
-$("artist-cancel").onclick = () => {
-  artistMode = false;
-  artistPicks = [];
-  render();
-};
+$("artist-ask").onclick = () => sunAnswer(() => e.artist(sunPicks, $("artist-question").value));
+$("puzzle").onclick = () => sunAnswer(() => e.puzzlemaster(sunPicks[0]));
+$("wish-make").onclick = () =>
+  sunAnswer(() => e.wish($("wish-kind").value, sunPicks[0] ?? null));
+$("wish-kind").onchange = () => render();
 
 $("gossip-say").onclick = () => {
   try {
@@ -2310,14 +2445,7 @@ $("night-skip").onclick = () => {
   }
 };
 
-$("savant").onclick = () => {
-  try {
-    $("day-answer").innerHTML = linkRoles(e.savant());
-    render();
-  } catch (err) {
-    $("day-answer").textContent = err.message;
-  }
-};
+$("savant").onclick = () => sunAnswer(() => e.savant());
 
 $("amnesiac-controls").onclick = (ev) => {
   const b = ev.target.closest("button");
@@ -2326,35 +2454,14 @@ $("amnesiac-controls").onclick = (ev) => {
     return;
   }
 
-  try {
-    $("day-answer").innerHTML = linkRoles(
-      b.dataset.question
-        ? e.amnesiacQuestion(b.dataset.question)
-        : e.amnesiac(b.dataset.guess),
-    );
-    render();
-  } catch (err) {
-    $("day-answer").textContent = err.message;
-  }
+  sunAnswer(() =>
+    b.dataset.question
+      ? e.amnesiacQuestion(b.dataset.question)
+      : e.amnesiac(b.dataset.guess),
+  );
 };
 
-$("fisherman").onclick = () => {
-  try {
-    $("day-answer").innerHTML = linkRoles(e.fisherman());
-    render();
-  } catch (err) {
-    $("day-answer").textContent = err.message;
-  }
-};
-
-$("puzzle").onclick = () => {
-  try {
-    $("answer").innerHTML = linkRoles(e.puzzlemaster(selectedPlayerId));
-    render();
-  } catch (err) {
-    $("answer").textContent = err.message;
-  }
-};
+$("fisherman").onclick = () => sunAnswer(() => e.fisherman());
 
 // The Boomdandy's countdown: whether you can point at player t (living, and
 // not you).

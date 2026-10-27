@@ -15,8 +15,8 @@ import {
   HIDDEN_OUTSIDERS,
   NEAR_FINAL_HUMAN_VOTE_CHANCE,
   VORTOX_VOTE_CHANCE,
-  LEVIATHAN_EARLY_CAUTION,
-  LEVIATHAN_CAUTION,
+  LEVIATHAN_STRONG_EVIDENCE,
+  LEVIATHAN_LATE_VOTE_BONUS,
   LEVIATHAN_LAST_DAY_VOTE_CHANCE,
 } from "./data.js";
 import {
@@ -2261,9 +2261,9 @@ export class Engine {
         "workings",
         risk === "last"
           ? `The Leviathan is in play and it's Day ${s.day} (it wins at dusk unless it's executed), with nobody marked for execution yet: good players vote for ${n.label} unless they trust them, at ${Math.round(LEVIATHAN_LAST_DAY_VOTE_CHANCE * 100)}% at least.`
-          : risk === "wary"
-            ? `The Leviathan is in play, and ${s.leviathan.executions} execution${s.leviathan.executions === 1 ? " has" : "s have"} happened (a 2nd good one loses): good NPCs vote at ${Math.round(LEVIATHAN_CAUTION * 100)}% of their usual chance, unless you nominated.`
-            : `The Leviathan is in play, and it's Day ${s.day} with nobody executed yet: good NPCs wait for more information, voting at ${Math.round(LEVIATHAN_EARLY_CAUTION * 100)}% of their usual chance, unless you nominated.`,
+          : risk === "early"
+            ? `The Leviathan is in play and it's Day ${s.day} (a 2nd good execution loses): good NPCs only vote for ${n.label} with strong suspicion (evidence of ${LEVIATHAN_STRONG_EVIDENCE} or more against them).`
+            : `The Leviathan is in play and it's Day ${s.day} (it wins after Day 5): good NPCs vote more readily, their usual chance raised by ${Math.round(LEVIATHAN_LATE_VOTE_BONUS * 100)}%.`,
       );
     } else if (!n.alive) {
       this.audit(

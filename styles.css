@@ -1483,3 +1483,61 @@ button:disabled {
     font-size: 0.75rem;
   }
 }
+
+/* The Storyteller panel the Sun opens, under the town square. */
+.sun-panel {
+  margin: 8px auto;
+  padding: 8px 12px;
+  max-width: 560px;
+  border: 1px solid #b69455;
+  border-radius: 10px;
+}
+
+.sun-panel > h4 {
+  margin: 0 0 8px;
+  color: #f0cf83;
+}
+
+.sun-panel > * + * {
+  margin-top: 8px;
+}
+
+/* The tooltip pointing at the Sun (see app.js sunTip()): to its right, with
+   an arrow, for SUN_TIP_MS, then it fades. */
+.sun-tip {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 46px;
+  transform: translateY(-50%);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #f0cf83;
+  color: #181b21;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.5s;
+}
+
+.sun-tip::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 6px solid transparent;
+  border-right-color: #f0cf83;
+}
+
+.sun-tip.fading {
+  opacity: 0;
+}
+
+@media (max-width: 650px) {
+  .sun-tip {
+    top: 28px;
+    font-size: 0.7rem;
+  }
+}

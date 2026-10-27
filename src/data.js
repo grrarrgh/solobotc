@@ -610,14 +610,16 @@ export const EVIL_TOWNSFOLK_HUNCH_VOTE_CHANCE = 0.1;
 export const VORTOX_VOTE_CHANCE = 0.8;
 // With the Leviathan in play (everyone knows: see
 // characters/demon/leviathan.js), a 2nd good execution loses, and so does
-// the end of Day 5 (see strategy leviathanRisk() and vote()). On Days 1 and
-// 2, before any execution, a good NPC votes this much less often (their
-// usual chance, times this), waiting for more information; after an
-// execution (which might have been good's one miss), less often still. On
-// Day 5, while nobody is marked, they vote for a nominee they don't trust
-// at least this often, as with the Vortox.
-export const LEVIATHAN_EARLY_CAUTION = 0.8;
-export const LEVIATHAN_CAUTION = 0.6;
+// the end of Day 5 (see strategy leviathanRisk() and vote()). On Days 1 to
+// 3, a good NPC only votes with strong suspicion: evidence against the
+// nominee this strong (your nomination counts, as humanTrusted), and then
+// at GOOD_VOTE_MAX. (Above NPC_NOMINATE_EVIDENCE, so not everyone an NPC
+// nominates: at 3, self-play games were no closer; at 5, good won less.) On Days 4 and 5, time running out, their usual chance
+// to vote goes up by LEVIATHAN_LATE_VOTE_BONUS. On Day 5, while nobody is
+// marked, they vote for a nominee they don't trust at least
+// LEVIATHAN_LAST_DAY_VOTE_CHANCE, as with the Vortox.
+export const LEVIATHAN_STRONG_EVIDENCE = 4;
+export const LEVIATHAN_LATE_VOTE_BONUS = 0.2;
 export const LEVIATHAN_LAST_DAY_VOTE_CHANCE = 0.8;
 
 // Round Robin (once per game, with nominations open and this few alive):

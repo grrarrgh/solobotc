@@ -286,12 +286,13 @@ test("roshambo against the Psychopath you nominated: rock, paper or scissors, in
 
 test("an Alchemist's Minion ability: a Psychopath kill, a wish, a Goblin self-nomination", () => {
   assert.match(html, /id="psychopath-kill" type="button" hidden/);
-  assert.match(html, /id="wish-controls" hidden/);
+  assert.match(html, /id="wish-controls" class="artist-panel" hidden/);
   assert.match(html, /id="wish-kind"/);
   assert.match(html, /id="wish-make"/);
   assert.match(html, /id="goblin-self" type="button" hidden/);
   assert.match(app, /e\.psychopathKill\(selectedPlayerId\)/);
-  assert.match(app, /e\.wish\(\$\("wish-kind"\)\.value, selectedPlayerId\)/);
+  // (A death wish names the player picked in the Storyteller panel.)
+  assert.match(app, /e\.wish\(\$\("wish-kind"\)\.value, sunPicks\[0\] \?\? null\)/);
   assert.match(app, /e\.goblinSelfNomination\(null\)/);
   assert.match(app, /minionAbility\(h\) === "psychopath"/);
   assert.match(app, /minionAbility\(h\) === "wizard"/);
@@ -392,7 +393,8 @@ test("the Sun/Moon clock: top left of the town square, as big as a seat, turning
   assert.match(html, /class="town-square-wrap">[\s\S]*?<div class="phase-dial-wrap">\s*<button id="phase-dial"[\s\S]*?id="phase-wheel"[\s\S]*?<span id="phase-day"/);
   assert.match(app, /const DIAL_TURN_MS = 1500;/);
   assert.match(app, /wheel\.style\.transitionDuration = `\$\{DIAL_TURN_MS \* turns\}ms`/);
-  assert.match(app, /const label = night \? `Night \$\{s\.night\}` : `Day \$\{s\.day\}`;/);
+  // (Held on the Moon, the night that has just ended: see nightHeld().)
+  assert.match(app, /const label = held \? `Night \$\{s\.day\}` : night \? `Night \$\{s\.night\}` : `Day \$\{s\.day\}`;/);
   assert.match(css, /\.phase-dial \{[^}]*width: 92px;/);
   assert.match(css, /\.seat \{[^}]*width: 92px;/);
   assert.match(css, /\.phase-wheel \{[^}]*transition-property: transform;/);
@@ -405,9 +407,47 @@ test("the Sun/Moon clock: top left of the town square, as big as a seat, turning
 
 test("the Artist presses the Sun to ask: a question from the dropdown, about players picked on the town square, then Ask question", () => {
   assert.match(html, /id="artist-panel"[^>]*hidden[\s\S]*?Is there\s*<select id="artist-question"[\s\S]*?among <span id="artist-picks"><\/span>\?[\s\S]*?<button id="artist-ask"[^>]*>Ask question<\/button>/);
-  assert.match(app, /\$\("phase-dial"\)\.onclick = \(\) => \{[\s\S]*?artistMode = true;/);
+  assert.match(app, /\$\("phase-dial"\)\.onclick = \(\) => \{[\s\S]*?sunOpen = !sunOpen;/);
   assert.match(app, /\["good", "a Good player"\],\s*\["evil", "an Evil player"\],\s*\["outsider", "an Outsider"\],\s*\["demon", "a Demon"\],\s*\["minion", "a Minion"\],/);
-  assert.match(app, /e\.artist\(artistPicks, \$\("artist-question"\)\.value\)/);
-  assert.match(app, /\$\("artist-ask"\)\.disabled = !artistPicks\.length;/);
+  assert.match(app, /e\.artist\(sunPicks, \$\("artist-question"\)\.value\)/);
+  assert.match(app, /\$\("artist-ask"\)\.disabled = !sunPicks\.length;/);
   assert.doesNotMatch(html, /id="artist-controls"/);
+});
+
+test("day abilities that are a word with the Storyteller wait for the Sun: the Savant, Fisherman, Amnesiac, Puzzlemaster and Wizard's wish", () => {
+  // (All in the panel the Sun opens; nowhere else.)
+  const panel = /<div id="sun-panel"[\s\S]*?<button id="sun-close"/.exec(html)[0];
+
+  for (const id of ["artist-panel", "savant", "fisherman", "amnesiac-controls", "puzzle-panel", "puzzle", "wish-controls", "wish-make"]) {
+    assert.match(panel, new RegExp(`id="${id}"`), id);
+  }
+
+  const actions = /<section id="actions"[\s\S]*?<\/section>/.exec(html)[0];
+
+  assert.doesNotMatch(actions, /id="puzzle"|id="wish-controls"/);
+  assert.match(app, /\$\("sun-panel"\)\.hidden = !sunOpen;/);
+  assert.match(app, /ability\(h\) === "savant" && h\.savantDay !== s\.day && "savant",/);
+  assert.match(app, /e\.amnesiacOpen\(\) && "amnesiac",/);
+  assert.match(app, /minionAbility\(h\) === "wizard" && !h\.wished && "wish",/);
+  // (Public ones keep their own buttons.)
+  assert.match(html, /<button id="slay" hidden>Slay<\/button>/);
+  assert.match(html, /id="gossip-say"/);
+});
+
+test("what the Storyteller tells you in the night pops up before the dawn, while the clock waits on the Moon", () => {
+  assert.match(app, /const nightInfo = \(\) =>\s*\(s\?\.privateLog \?\? \[\]\)\.filter\(\(x\) => \/\^Night \\d\+: \/\.test\(x\)\)\.slice\(nightInfoShown\);/);
+  // (After any dusk card, and not while you're choosing.)
+  assert.match(app, /if \(told\.length && card\?\.kind !== "dusk" && !s\.pending\) \{[\s\S]*?d\.dataset\.kind = "night";[\s\S]*?<h2>🌙 Night \$\{night\}: the Storyteller<\/h2>[\s\S]*?Click anywhere to continue\./);
+  assert.match(app, /const held = s\.phase === "day" && nightHeld\(\);/);
+  assert.match(app, /\["dusk", "night"\]\.includes\(d\.open \? d\.dataset\.kind : null\)/);
+  assert.match(app, /nightInfoShown = 0;[\s\S]*?nightInfoShown = 0;/);
+});
+
+test("a tooltip points at the Sun once a day, when it has something for you: shown for SUN_TIP_MS (1 s), then it fades", () => {
+  assert.match(html, /<div class="phase-dial-wrap">[\s\S]*?<span id="sun-tip" class="sun-tip" role="status" hidden>Click here to interact with the Storyteller<\/span>/);
+  assert.match(app, /const SUN_TIP_MS = 1000;/);
+  assert.match(app, /if \(can\.length && !sunOpen && sunTipDay !== s\.day && !\$\("phase-dialog"\)\.open\) \{\s*sunTipDay = s\.day;\s*sunTip\(Math\.max\(0, dialTurnEnds - performance\.now\(\)\)\);/);
+  assert.match(css, /\.sun-tip::before \{[^}]*border-right-color: #f0cf83;/);
+  assert.match(css, /\.sun-tip \{[^}]*transition: opacity 0\.5s;/);
+  assert.match(css, /\.sun-tip\.fading \{\s*opacity: 0;/);
 });
