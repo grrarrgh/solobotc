@@ -81,6 +81,7 @@ import {
   gainedRole,
   hiddenStory,
   bluffMode,
+  bluffState,
 } from "../src/bluff.js";
 import { NEVER_BLUFFED, NOTES } from "../src/data.js";
 import { infoOf } from "../src/characters/info.js";
@@ -3703,6 +3704,37 @@ test("NPCs say when they haven't used a once-per-game ability (bluffers too)", (
 
   assert.ok(!strat.ask(s, slayer).includes("haven't used"));
   assert.ok(!strat.ask(s, baron).includes("haven't used"));
+});
+
+test("NPCs don't say they haven't used an ability they tell you they've used: a pretend Philosopher", () => {
+  const s = base("unused-philosopher");
+  const strat = new SimpleStrategy();
+  const baron = s.players[3];
+
+  baron.claim = "philosopher";
+  assert.ok(strat.ask(s, baron).includes("I haven't used my Philosopher ability yet."));
+
+  baron.memories.push({
+    night: 1,
+    role: "philosopher",
+    text: "Philosopher: gained the Alchemist ability.",
+    targets: [],
+    trigger: "normal",
+    functioning: false,
+  });
+
+  const said = strat.ask(s, baron);
+
+  assert.ok(said.includes("Night 1: I gained the Alchemist ability."), said);
+  assert.ok(!said.includes("haven't used"), said);
+});
+
+test("NPCs tell second-person information in the first person: the Alchemist's, a Lunatic-eating Cannibal's", () => {
+  assert.equal(speak("Alchemist: you have the Poisoner ability."), "I have the Poisoner ability.");
+  assert.equal(
+    speak("Lunatic: you are the Imp. Your Minions are Player 2 and Player 3. Your bluffs are Chef, Monk, Mayor."),
+    "I was told I am the Imp. My Minions are Player 2 and Player 3. My bluffs are Chef, Monk, Mayor.",
+  );
 });
 
 test("an evil Philosopher bluffer gains an in-play Townsfolk and bluffs as it", () => {
@@ -7476,17 +7508,46 @@ test("a Courtier counts down how long their choice is drunk", () => {
   assert.equal(strat.courtierLine(s, chose), "My choice, the Imp, is no longer drunk.");
 });
 
-test("log.txt names players by character, with their claim in brackets", () => {
+test("log.txt names players by seat, character and claim: P4.Baron(Butler)", () => {
   const s = base("log-names");
   const e = new Engine(s);
   const [human, chef, , baron] = s.players;
 
   role(chef, "chef", "good");
   role(baron, "baron", "evil");
+  s.logRoles = null;
   baron.claim = "butler";
   e.audit("test", `${baron.label} (Baron) chose ${chef.label}; ${human.label} saw.`);
 
-  assert.ok(e.debugLog().includes(`[test] Baron (Butler) chose Chef; You saw.`));
+  assert.ok(e.debugLog().includes(`[test] P4.Baron(Butler) chose P2.Chef(Chef); You saw.`));
+  assert.match(e.debugLog(), /^You: +P1\.[A-Za-z ]+\([A-Za-z ]+\)$/m);
+
+  // A character change shows the one before: the Pit-Hag turns the Chef
+  // into the Imp.
+  chef.role = "imp";
+  e.audit("test", `${chef.label} woke.`);
+  assert.ok(e.debugLog().includes(`[test] P2.Chef->Imp(Chef) woke.`));
+});
+
+test("log.txt names a claim's gained abilities after it: a pretend Philosopher-Alchemist-Poisoner, a real Philosopher", () => {
+  const s = base("log-names-chain");
+  const e = new Engine(s);
+  const [, philosopher, damsel] = s.players;
+
+  role(philosopher, "philosopher", "good");
+  role(damsel, "damsel", "good");
+  s.logRoles = null;
+  philosopher.gained = "snakecharmer";
+  damsel.claim = "philosopher";
+  bluffState(damsel).philosopher = "alchemist";
+  bluffState(damsel).said.alchemist = "poisoner";
+  e.audit("test", `${damsel.label} and ${philosopher.label}.`);
+
+  assert.ok(
+    e.debugLog().includes(
+      "[test] P3.Damsel(Philosopher->Alchemist->Poisoner) and P2.Philosopher(Philosopher->Snake Charmer).",
+    ),
+  );
 });
 
 // ── Catfishing ───────────────────────────────────────────────
@@ -10970,6 +11031,22 @@ function lleechGame(seed) {
   return { s, e, p: s.players, d: s.players[4], host: s.players[1] };
 }
 
+test("log.txt's player table shows the Lleech's host as its host, and a failed Philosopher as only thinking they gained it", () => {
+  const { s, e, p, host } = lleechGame("lleech-host-log");
+
+  host.poisoned = true;
+  role(p[2], "philosopher", "good");
+  p[2].poisoned = true;
+  e.philosopherGain(p[2], "snakecharmer");
+  e.snapshot();
+
+  const row = (x) => formatLog(s).split("\n").find((l) => l.startsWith(`  ${x.label} `));
+
+  assert.match(row(host), /\| alive, Lleech's host +\|/);
+  assert.match(row(p[2]), /Philosopher \(thinks they have Snake Charmer\)/);
+  assert.match(row(p[2]), /\| alive, poisoned +\|/);
+});
+
 test("the Lleech chooses a host on Night 1 (a good NPC, never you): poisoned for as long as the Lleech lives", () => {
   for (let seed = 0; seed < 40; seed++) {
     const s = base(`lleech-host-${seed}`);
@@ -11469,6 +11546,38 @@ test("an Alchemist-Poisoner poisons the player they suspect; you choose", () => 
   y.s.humanChoice = { night: 2, players: [y.p[3]] };
   y.e.alchemists();
   assert.ok(y.p[3].poisoned);
+  void a;
+});
+
+test("an Alchemist-Poisoner NPC tells you who they chose each night, after which ability they have", () => {
+  const { s, e, p, a } = alchemistDay("alchemist-poisoner-tells", "poisoner");
+
+  s.phase = "night";
+  s.night = 2;
+  e.strat.suspicion = (_, x) => (x.suspicion = { targetId: p[4].id, score: 5, reasons: [] });
+  a.memories.push({ night: 1, role: "alchemist", text: "Alchemist: you have the Poisoner ability.", targets: [] });
+  e.alchemists();
+  e.alchemistTells();
+  assert.equal(a.memories.at(-1).text, `Alchemist: chose ${p[4].label} to poison.`);
+  assert.deepEqual(a.memories.at(-1).targets, []);
+
+  s.phase = "day";
+  s.day = 2;
+
+  const said = e.strat.ask(s, a);
+
+  assert.ok(said.includes("Night 1: I have the Poisoner ability."), said);
+  assert.ok(said.includes(`Night 2: I chose ${p[4].label} to poison.`), said);
+
+  // A pretend Alchemist-Poisoner (an evil bluffer) says so too.
+  const b = p[3];
+
+  b.claim = "alchemist";
+  bluffState(b).said.alchemist = "poisoner";
+  s.phase = "night";
+  e.alchemistBluff(b);
+  assert.match(b.memories.at(-1).text, /^Alchemist: chose .* to poison\.$/);
+  assert.equal(b.memories.at(-1).functioning, false);
   void a;
 });
 

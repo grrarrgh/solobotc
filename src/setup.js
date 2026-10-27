@@ -636,7 +636,7 @@ export function createState(
     : null;
 
   const s = {
-    version: "2.4.0",
+    version: "2.5.0",
     script,
     seats,
     seed: String(seed),
@@ -812,6 +812,10 @@ export function createState(
       } the Demon's bluffs.`,
     );
   }
+
+  // (log.txt's character histories start from the deal as it ends up: see
+  // log.js rolesSoFar().)
+  s.logRoles = null;
 
   return s;
 }

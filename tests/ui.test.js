@@ -322,10 +322,13 @@ test("the menu shows the game's seed under Report a bug, and its log.txt mid-gam
   assert.match(app, /\$\("menu-log"\)\.href = link\.href;/);
 });
 
-test("you can nominate yourself, or ask to be nominated", () => {
-  assert.match(html, /<button id="nominate-self" type="button">Nominate yourself<\/button>\s*<button id="request-self" type="button">Ask to be nominated<\/button>/);
-  assert.match(app, /\$\("nominate-self"\)\.onclick = \(\) => yourNomination\(\(\) => e\.nominate\(s\.humanId, null\)\);/);
-  assert.match(app, /yourNomination\(\(\) => e\.requestNomination\(s\.humanId, null\)\)/);
+test("you can nominate yourself, or ask to be nominated, by selecting your own seat once nominations are open", () => {
+  assert.doesNotMatch(html, /id="nominate-self"|id="request-self"/);
+  assert.doesNotMatch(app, /nominate-self|request-self/);
+  assert.match(app, /\$\{p\.human && !selfSelectable\(\) \? "disabled" : ""\}/);
+  assert.match(app, /function selfSelectable\(\) \{\s*return s\.phase === "day" && s\.nominationsOpen && !s\.pending && !s\.winner;/);
+  assert.match(app, /\(selectedPlayerId === h\.id && !selfSelectable\(\)\)\s*\) \{\s*selectedPlayerId = null;/);
+  assert.match(app, /\$\("nominate"\)\.onclick = \(\) => yourNomination\(\(id\) => e\.nominate\(id, null\)\);/);
 });
 
 test("under the setup card: How to play (collapsed), About, hidden with it; a footer on every page", () => {
@@ -368,4 +371,17 @@ test("ready for GitHub Pages at www.solobotc.com: the domain, icons, manifest an
   }
 
   assert.ok(manifest.icons.some((x) => x.purpose === "maskable"));
+});
+
+test("the version agrees: src/setup.js, package.json and the newest numbered release in CHANGES.md", () => {
+  const setup = /version: "(\d+\.\d+\.\d+)"/.exec(read("../src/setup.js"))[1];
+  const pkg = JSON.parse(read("../package.json")).version;
+  const changes = /^## v(\d+\.\d+\.\d+) — /m.exec(read("../CHANGES.md"))[1];
+
+  assert.equal(pkg, setup);
+  assert.equal(changes, setup);
+});
+
+test("night starts with nobody selected", () => {
+  assert.match(app, /\(s\.phase === "night" && drawnPhase !== "night"\) \|\|[\s\S]*?selectedPlayerId = null;\s*\}\s*drawnPhase = s\.phase;/);
 });

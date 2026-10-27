@@ -1,8 +1,9 @@
 import { name, team } from "../../data.js";
-import { ability, works, who } from "../../storyteller.js";
+import { ability, works, who, nameable } from "../../storyteller.js";
 import { acts } from "../../abilities.js";
 import { pick } from "../../util.js";
-import { bluffState } from "../../bluff.js";
+import { bluffState, gainedRole } from "../../bluff.js";
+import { teammate } from "../../strategy.js";
 
 const alchemistText = (id) => `Alchemist: you have the ${name(id)} ability.`;
 
@@ -33,6 +34,32 @@ function pretended(s, p) {
     "poisoner";
 
   return said.alchemist;
+}
+
+// The Minion ability Alchemist p has, or (without it) says they have.
+export const alchemistAbility = (s, p) => p.alchemist ?? pretended(s, p);
+
+// An Alchemist-Poisoner's choice tonight, as they tell it ("I chose Player 4
+// to poison."). It's no information about anyone, so it names no targets
+// (see engine clues()).
+export const alchemistPoisonInfo = (s, t, functioning = true) => ({
+  night: s.night,
+  role: "alchemist",
+  text: `Alchemist: chose ${t.label} to poison.`,
+  targets: [],
+  trigger: "normal",
+  functioning,
+});
+
+// Who a pretend Alchemist-Poisoner says they chose (see bluff.js
+// storyNights() and alchemistBluff() below): another living player, at
+// random; for an evil bluffer, never a teammate (nor you).
+export function pretendPoison(s, p) {
+  const pool = nameable(s, p).filter(
+    (x) => x.alive && !(p.alignment === "evil" && teammate(p, x)),
+  );
+
+  return pick(pool, s.r);
 }
 
 // The Alchemist: a Minion ability (one on the script, not in play: see
@@ -95,6 +122,44 @@ export const alchemist = {
         `${p.label} (Alchemist-Poisoner) chose ${t.label}; ${effective ? "poisoned" : "it fails (drunk or poisoned)"}.`,
         { actorId: p.id, targetId: t.id, effective },
       );
+
+      // (An NPC tells you who they chose: see alchemistTells(). You know.)
+      if (!p.human) {
+        p.alchemistChose = { night: s.night, id: t.id, effective };
+      }
+    }
+  },
+
+  // Each Alchemist-Poisoner NPC remembers who they chose tonight (see
+  // alchemists()), to tell you, after tonight's information: on Night 1,
+  // after which ability they have.
+  alchemistTells() {
+    const s = this.s;
+
+    for (const p of s.players.filter((x) => x.alchemistChose?.night === s.night)) {
+      const { id, effective } = p.alchemistChose;
+
+      this.remember(p, alchemistPoisonInfo(s, this.player(id), effective));
+      p.alchemistChose = null;
+    }
+  },
+
+  // An evil bluffer claiming the Alchemist (or a Philosopher who "gained"
+  // it) with the Poisoner's ability says who they chose each night, as a
+  // real one does (see alchemists()). After their Night 1 "you have the
+  // Poisoner ability" (see engine bluffs()).
+  alchemistBluff(p) {
+    const s = this.s;
+    const role = ["philosopher", "cannibal"].includes(p.claim) ? gainedRole(p) : p.claim;
+
+    if (role !== "alchemist" || alchemistAbility(s, p) !== "poisoner") {
+      return;
+    }
+
+    const t = pretendPoison(s, p);
+
+    if (t) {
+      this.rememberBluff(p, { ...alchemistPoisonInfo(s, t), functioning: false });
     }
   },
 };

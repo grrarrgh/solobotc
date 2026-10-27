@@ -191,7 +191,7 @@ export class Engine {
 
     this.audit(
       "information",
-      `${name(p.role)} received: ${info.text}${
+      `${p.label} received: ${info.text}${
         info.misinfo ? ` (misinformation: ${info.misinfo})` : ""
       }${info.logNote ? ` [${info.logNote}]` : ""}`,
       {
@@ -590,6 +590,7 @@ export class Engine {
     this.butlers();
     // (Last: she learns about everyone who woke tonight.)
     this.chambermaids();
+    this.alchemistTells();
     this.bluffs();
     this.refreshSuspicions();
     this.snapshot();
@@ -730,6 +731,8 @@ export class Engine {
       if (info) {
         this.rememberBluff(p, info);
       }
+
+      this.alchemistBluff(p);
     }
   }
 
@@ -2626,31 +2629,41 @@ export class Engine {
       s.snapshotNight = s.night;
     }
 
-    const players = s.players.map((p) => ({
-      seat: p.seat,
-      label: p.label,
-      role: p.role,
-      shown: p.shown,
-      gained: p.gained,
-      // (While mad: the claim they had, and go back to.)
-      claim: p.mad?.previous ?? p.claim,
-      cover: p.cover ? { kind: p.cover.kind, as: p.cover.as } : null,
-      mad: p.mad?.role ?? null,
-      alignment: p.alignment,
-      alive: p.alive,
-      drunk: isDrunk(p),
-      poisoned: p.poisoned,
-      protected: p.protected,
-      suspects: p.human ? null : (this.player(p.suspicion?.targetId)?.label ?? null),
-      why: p.human ? [] : (p.suspicion?.reasons ?? []),
-      score: p.human ? null : (p.suspicion?.score ?? null),
-      used: abilityUsed(p, ability(p)),
-      info: p.memories
-        .filter((m) => !listed && !m.day && m.night === s.night)
-        .map(
-          (m) => `${m.text}${m.misinfo ? ` (misinformation: ${m.misinfo})` : ""}`,
-        ),
-    }));
+    const players = s.players.map((p) => {
+      // (A Philosopher whose choice failed only thinks they gained it: see
+      // philosopherGain(). They're "drunk" for it, but the table says so in
+      // their character.)
+      const failed = p.drunkFrom === "philosopher" && p.gained && p.role === "philosopher";
+
+      return {
+        seat: p.seat,
+        label: p.label,
+        role: p.role,
+        shown: p.shown,
+        gained: p.gained,
+        gainFailed: Boolean(failed),
+        // (While mad: the claim they had, and go back to.)
+        claim: p.mad?.previous ?? p.claim,
+        cover: p.cover ? { kind: p.cover.kind, as: p.cover.as } : null,
+        mad: p.mad?.role ?? null,
+        alignment: p.alignment,
+        alive: p.alive,
+        drunk: failed ? Boolean(p.drunkTonight) : isDrunk(p),
+        poisoned: p.poisoned,
+        // (A Lleech's host is poisoned by it: the table says "Lleech's host".)
+        host: Boolean(this.lleechOf(p)),
+        protected: p.protected,
+        suspects: p.human ? null : (this.player(p.suspicion?.targetId)?.label ?? null),
+        why: p.human ? [] : (p.suspicion?.reasons ?? []),
+        score: p.human ? null : (p.suspicion?.score ?? null),
+        used: abilityUsed(p, ability(p)),
+        info: p.memories
+          .filter((m) => !listed && !m.day && m.night === s.night)
+          .map(
+            (m) => `${m.text}${m.misinfo ? ` (misinformation: ${m.misinfo})` : ""}`,
+          ),
+      };
+    });
 
     this.audit(
       "state",

@@ -21,7 +21,9 @@ In Windows PowerShell use `npm.cmd`. Node 22+ (developed on v24).
 To run, drive or screenshot the real page, use the `run-solobotc` skill
 (`.claude/skills/run-solobotc/`): a headless-Chrome driver with `start`,
 `playout`, `shot`, `eval`... commands. Screenshots go in
-`Desktop\Solo Clocktower\<YYYYMMDDHHMM>`, one folder per conversation.
+`C:\Users\josep\OneDrive\Desktop\Solo Clocktower\<YYYYMMDDHHMM>` (OneDrive's
+Desktop, not `C:\Users\josep\Desktop`), one folder per conversation, with
+game logs in its `logs` subfolder.
 
 ## Architecture
 
@@ -98,7 +100,12 @@ To run, drive or screenshot the real page, use the `run-solobotc` skill
   `# Changes`), headed like `## New Features: …`, `## Bug Fixes: …`,
   `## Improvements: …`, `## Superficial Changes: …` (cosmetic/UI-only),
   or combinations, then `- ` bullets. Wrap identifiers
-  with `*` or `<…>` in backticks.
+  with `*` or `<…>` in backticks. A release is headed with its version
+  (`## v2.5.0 — Bug Fixes: …`): bump `version` in `src/setup.js` and
+  `package.json` with it (new features or improvements: 2.5.0 → 2.6.0;
+  only bug fixes or superficial changes: 2.5.0 → 2.5.1). Further rounds
+  before it's pushed join that entry (and version); a test checks the three
+  agree.
 
 ## Style
 

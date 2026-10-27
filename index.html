@@ -170,14 +170,14 @@
               can't talk any more that day). Then:
             </p>
             <ul>
-              <li><b>Nominate</b>: select a player and nominate them yourself.</li>
+              <li>
+                <b>Nominate</b>: select a player and nominate them yourself.
+                Once nominations are open you can select your own seat, to
+                put yourself up for execution.
+              </li>
               <li>
                 <b>Request nomination</b>: ask someone else to nominate the
                 player you've selected.
-              </li>
-              <li>
-                <b>Nominate yourself</b> or <b>Ask to be nominated</b>: put
-                yourself up for execution.
               </li>
               <li>
                 <b>NPC nominations</b>: let the next player who wants to
@@ -276,14 +276,11 @@
           <button id="pass" type="button" hidden>End day</button>
           <!-- Below End day once nominations have started, with or without a
                selection: Nominate and Request nomination wait for a player
-               to be selected. -->
+               to be selected, yourself included (to be executed, say, as
+               the Tea Lady, so her neighbours can die). -->
           <div id="nomination-controls" class="nomination-controls" hidden>
             <button id="nominate">Nominate</button>
             <button id="request-nomination">Request nomination</button>
-            <!-- You can nominate yourself, or ask an NPC to nominate you (say,
-                 to be executed as the Tea Lady, so her neighbours can die). -->
-            <button id="nominate-self" type="button">Nominate yourself</button>
-            <button id="request-self" type="button">Ask to be nominated</button>
             <!-- An Alchemist with the Goblin's ability: nominate yourself and
                  claim it (executed today, good wins). -->
             <button id="goblin-self" type="button" hidden>Nominate yourself (claim the Goblin)</button>

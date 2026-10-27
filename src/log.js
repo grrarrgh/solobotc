@@ -3,40 +3,82 @@ import { byId } from "./util.js";
 
 const CHARACTER_NAMES = new Set(Object.keys(ROLES).map(name));
 
-// How log.txt names each player (by seat number), as things stand: their
-// character, then what they claim in brackets when that's different
-// ("Assassin (Gossip)", "Chambermaid (Gambler)" while hiding). You stay
-// "You". Two players with the same name get their seat added. Each log entry
-// keeps the names as they were when it was written (see engine audit()), so
-// one shared object is kept until a character or claim changes.
+// What player p claims, and what that claim says they have since (each
+// shown "->" after it): a Philosopher's or Cannibal's gained ability (a
+// Pixie's too), then an Alchemist's Minion ability ("Philosopher",
+// "Alchemist", "Poisoner"). Their real ones when they're telling the truth;
+// otherwise the ones they've made up (see bluff.js gainedRole(), its
+// `philosopher` story, and alchemist.js pretended()).
+function claimChain(p) {
+  const claim = p.cover?.as ?? p.claim;
+
+  if (!claim) {
+    return [];
+  }
+
+  const honest = claim === p.role;
+  const chain = [claim];
+  const state = p.bluffState;
+
+  if (["philosopher", "cannibal", "pixie"].includes(claim)) {
+    const gained = honest
+      ? p.gained
+      : (state?.gained?.role ?? (claim === "philosopher" ? state?.philosopher : null));
+
+    if (gained) {
+      chain.push(gained);
+    }
+  }
+
+  if (chain.at(-1) === "alchemist") {
+    const minion = honest || p.gained === "alchemist" ? p.alchemist : state?.said?.alchemist;
+
+    if (minion) {
+      chain.push(minion);
+    }
+  }
+
+  return chain;
+}
+
+// Player p as log.txt names them: "P2.Damsel(Philosopher->Alchemist->Poisoner)".
+// Their seat; their character, with each one they had before it when it
+// changed (the Pit-Hag, Barber, Snake Charmer, Fang Gu, a Demon's
+// successor...: "P6.Snake Charmer->Imp"); then, in brackets, what they claim
+// (see claimChain()). (`roles`: their characters so far, kept by logNames().)
+function logName(p, roles = [p.role]) {
+  const chain = claimChain(p);
+
+  return `P${p.seat}.${roles.map(name).join("->")}${
+    chain.length ? `(${chain.map(name).join("->")})` : ""
+  }`;
+}
+
+// Each player's characters so far, oldest first, from the first log entry
+// (kept in `s.logRoles` by seat).
+function rolesSoFar(s, p) {
+  const roles = ((s.logRoles ??= {})[p.seat] ??= [p.role]);
+
+  if (roles.at(-1) !== p.role) {
+    roles.push(p.role);
+  }
+
+  return roles;
+}
+
+// How log.txt names each player (by seat number), as things stand (see
+// logName()). You stay "You" (log.txt's header names you in full: see
+// formatLog()). Each log entry keeps the names as they were when it was
+// written (see engine audit()), so one shared object is kept until a
+// character or claim changes.
 export function logNames(s) {
-  const key = s.players
-    .map((p) => `${p.role}/${p.cover?.as ?? p.claim}`)
-    .join(",");
+  const named = s.players.map((p) => [p, p.human ? p.label : logName(p, rolesSoFar(s, p))]);
+  const key = named.map(([, x]) => x).join(",");
 
   if (s.logNames?.key !== key) {
-    const named = s.players.map((p) => {
-      const claim = p.cover?.as ?? p.claim;
-
-      return [
-        p,
-        p.human
-          ? p.label
-          : !claim || claim === p.role
-            ? name(p.role)
-            : `${name(p.role)} (${name(claim)})`,
-      ];
-    });
-    const count = (x) => named.filter(([, y]) => y === x).length;
-
     s.logNames = {
       key,
-      names: Object.fromEntries(
-        named.map(([p, x]) => [
-          p.seat,
-          count(x) > 1 && !p.human ? `${x} [${p.label}]` : x,
-        ]),
-      ),
+      names: Object.fromEntries(named.map(([p, x]) => [p.seat, x])),
     };
   }
 
@@ -97,7 +139,7 @@ function stateLines(players, rename) {
     p.label,
     `${
       p.role === p.shown ? name(p.role) : `${name(p.role)} (as ${name(p.shown)})`
-    }${p.gained ? ` (has ${name(p.gained)})` : ""}`,
+    }${p.gained ? ` (${p.gainFailed ? "thinks they have" : "has"} ${name(p.gained)})` : ""}`,
     `${name(p.claim)}${
       p.cover
         ? ` (${
@@ -109,7 +151,9 @@ function stateLines(players, rename) {
     [
       p.alive ? "alive" : "DEAD",
       p.drunk && "drunk",
-      p.poisoned && "poisoned",
+      // (Poisoned by the Lleech, as its host; poisoned by anyone else too
+      // shows only as its host.)
+      p.poisoned && (p.host ? "Lleech's host" : "poisoned"),
       p.protected && "protected",
     ]
       .filter(Boolean)
@@ -161,9 +205,16 @@ function voteLine(s, records, names) {
     .join(", ")}`;
 }
 
+// You as log.txt names the other players (see logName()), as things stand.
+function humanName(s) {
+  const p = s.players.find((x) => x.human);
+
+  return p ? logName(p, s.logRoles?.[p.seat] ?? [p.role]) : "nobody";
+}
+
 // A human-readable record of the whole game, grouped by night and day in
-// the order things happened. Players are named by character and claim (see
-// logNames()), except in the Player States tables and the Setup's list of
+// the order things happened. Players are named by seat, character and claim
+// (see logNames()), except in the Player States tables and the Setup's list of
 // who sits where, which name their seats.
 export function formatLog(s) {
   const lines = [
@@ -172,6 +223,8 @@ export function formatLog(s) {
     `Seats:   ${s.seats}`,
     `Seed:    ${s.seed}`,
     `Version: ${s.version}`,
+    // (Elsewhere you're "You".)
+    `You:     ${humanName(s)}`,
     `Bluffs:  ${(s.demonBluffs ?? []).map(name).join(", ") || "none"}${
       s.exposedBluffs
         ? ` (at first ${s.exposedBluffs.map(name).join(", ")}, made public by a Wizard's wish)`

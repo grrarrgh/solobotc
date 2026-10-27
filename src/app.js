@@ -150,6 +150,9 @@ let scripts = [];
 let s;
 let e;
 let selectedPlayerId = null;
+// The phase the town square was last drawn in: when night falls, nobody
+// stays selected (see draw()).
+let drawnPhase = null;
 
 // Your mark on each player, by id: "good" or "evil" (unmarked players
 // aren't listed). Cleared with Reset.
@@ -308,7 +311,7 @@ function circle() {
           }"
           style="--a:${i / s.players.length * 360}deg"
           data-id="${p.id}"
-          ${p.human ? "disabled" : ""}
+          ${p.human && !selfSelectable() ? "disabled" : ""}
         >
           ${claimAlert(p)}
           ${voters.has(p.id) ? '<span class="vote-hand">✋</span>' : ""}
@@ -385,6 +388,14 @@ function circle() {
         render();
       };
     });
+}
+
+// Whether you can select your own seat: once nominations are open, to
+// nominate yourself or ask to be nominated (say, as the Tea Lady, so your
+// neighbours can die). Not at night, nor before then: there's nothing else
+// to do with yourself.
+function selfSelectable() {
+  return s.phase === "day" && s.nominationsOpen && !s.pending && !s.winner;
 }
 
 // ── Vote animation ─────────────────────────────────────────
@@ -1509,6 +1520,18 @@ function render() {
 
 function draw() {
   const h = e.human();
+
+  // Night starts with nobody selected; and your own seat stays selected
+  // only while you can nominate (see selfSelectable()).
+  if (
+    (s.phase === "night" && drawnPhase !== "night") ||
+    (selectedPlayerId === h.id && !selfSelectable())
+  ) {
+    selectedPlayerId = null;
+  }
+
+  drawnPhase = s.phase;
+
   const t = selectedPlayerId ? e.player(selectedPlayerId) : null;
   const talk = e.talkStatus(t?.id);
 
@@ -1609,18 +1632,15 @@ function draw() {
     !s.npcWanting || !!voteAnim || nominating || !!s.winner;
   $("pass").hidden = !open;
   $("nominate").hidden = !h.alive;
+  // (You can select yourself: see selfSelectable() and engine nominee(). An
+  // Alchemist-Goblin nominates themself with their own button, claiming it.)
   $("nominate").disabled =
-    blocked || s.dayNominators.includes(h.id) || wishBarred(s, h);
+    blocked ||
+    s.dayNominators.includes(h.id) ||
+    wishBarred(s, h) ||
+    (t?.human && minionAbility(h) === "goblin");
   $("request-nomination").hidden = false;
   $("request-nomination").disabled = blocked;
-  // Yourself, whoever is selected (your seat can't be): see engine
-  // nominee(). (Not beside the Alchemist-Goblin's own button.)
-  const selfBlocked = e.nominatedToday(h.id) || !!voteAnim || nominating;
-
-  $("nominate-self").hidden = !h.alive || minionAbility(h) === "goblin";
-  $("nominate-self").disabled =
-    selfBlocked || s.dayNominators.includes(h.id) || wishBarred(s, h);
-  $("request-self").disabled = selfBlocked;
   $("pass").disabled = !!voteAnim || nominating;
   // Round Robin: under the nomination buttons once ROUND_ROBIN_ALIVE or
   // fewer are alive; once used, it stays, disabled, for the rest of the game.
@@ -1680,6 +1700,14 @@ function draw() {
     h.alive &&
     h.gossipDay !== s.day
   );
+
+  // With yourself selected (to nominate: see selfSelectable()), only the
+  // nomination buttons apply.
+  if (t?.human) {
+    for (const id of ["mark", "puzzle", "slay", "psychopath-kill", "wish-controls", "artist-controls", "gossip-controls"]) {
+      $(id).hidden = true;
+    }
+  }
 
   reveal();
 }
@@ -2032,9 +2060,6 @@ $("nominate").onclick = () => yourNomination((id) => e.nominate(id, null));
 
 $("request-nomination").onclick = () =>
   yourNomination((id) => e.requestNomination(id, null));
-$("nominate-self").onclick = () => yourNomination(() => e.nominate(s.humanId, null));
-$("request-self").onclick = () =>
-  yourNomination(() => e.requestNomination(s.humanId, null));
 
 // An Alchemist's Minion ability: the Psychopath's kill, the Wizard's wish,
 // the Goblin's self-nomination (see alchemist.js).

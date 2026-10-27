@@ -271,6 +271,11 @@ export function speak(text) {
     .replace(/^(chose|protected|guessed|asked|gained|said) /, "I $1 ")
     .replace(/^shown /, "I was shown ")
     .replace(/^your /, "my ")
+    .replace(/^you have /, "I have ")
+    // (A Cannibal who ate the Lunatic: "You are the Fang Gu. Your Minions
+    // are...": see cannibalLunatic().)
+    .replace(/^you are /, "I was told I am ")
+    .replace(/\. Your /g, ". My ")
     .replace(/ (is|are) your /, " $1 my ");
 
   return said.charAt(0).toUpperCase() + said.slice(1);
@@ -996,8 +1001,12 @@ export class SimpleStrategy {
 
   // "I haven't used my X ability yet." for a living NPC whose claimed
   // character has a once-per-game ability they (say they) haven't used.
-  unusedAbility(p) {
-    return p.alive && abilityUsed(p, p.claim) === false
+  // (Not when what they tell you says they have: a pretend Philosopher's
+  // "I gained the Alchemist ability", a made-up Seamstress's answer...)
+  unusedAbility(p, memories = []) {
+    return p.alive &&
+      abilityUsed(p, p.claim) === false &&
+      !memories.some((m) => m.role === p.claim)
       ? `I haven't used my ${name(p.claim)} ability yet.`
       : null;
   }
@@ -1435,7 +1444,7 @@ export class SimpleStrategy {
       this.cannibalLine(s, p, a.claim),
       details,
       this.courtierLine(s, memories),
-      !mad && !hidden && this.unusedAbility(copy ? copy.twin : p),
+      !mad && !hidden && this.unusedAbility(copy ? copy.twin : p, memories),
       // (A hider gives no reasons: they could give them away.)
       one,
     ]

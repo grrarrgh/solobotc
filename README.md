@@ -38,7 +38,8 @@ what they learned, and who they trust or suspect. Then **Share My Info**
 
 - **Nominate** a player (dead players can be nominated too);
 - **Request nomination**: ask someone else to nominate them;
-- **Nominate yourself**, or **Ask to be nominated**;
+- select your own seat to do either to yourself (say, as the Tea Lady, so
+  your neighbours can die);
 - **NPC nominations X**: the next of the X NPCs who want to nominate does
   so, saying why.
 

@@ -1,6 +1,17 @@
 # Changes
 
-Newest first.
+Newest first. Each release is headed with its version, the one log.txt's `Version:` line shows (from `version` in `src/setup.js` and `package.json`): a release with new features or improvements raises the middle number (2.5.0), one with only bug fixes or superficial changes the last (2.5.1). An entry without one shipped as the version below it; versions before 2.4.0 weren't recorded here.
+
+## v2.5.0 — Bug Fixes & Improvements: Versions, the Lleech's Host in log.txt, NPCs Who Say What They've Used, Seat Numbers in log.txt, and Selecting Yourself to Nominate
+
+- Improvement: the **Nominate yourself** and **Ask to be nominated** buttons are gone. Once nominations are open you can select your own seat instead, then use **Nominate** or **Request nomination** as for anyone else (`selfSelectable()` in app.js). Your seat can't be selected before then, nor at night. With yourself selected, only the nomination buttons show: no Good/Evil mark, Slay, wish and so on. An Alchemist-Goblin still nominates themself with their own button, which claims the Goblin. How to play and the README say so.
+- Improvement: night starts with nobody selected, so the day's selection doesn't carry into the night or the next day.
+- Improvement: log.txt names every player by seat, character and claim: `P7.Damsel(Philosopher->Alchemist->Poisoner)` (seat 7, the Damsel, claiming the Philosopher, who "gained" the Alchemist's ability, the Poisoner's). In brackets, after the claim: a Philosopher's or Cannibal's gained ability, then an Alchemist's Minion ability, real or made up (log.js `claimChain()`). A character that changed (the Pit-Hag, Barber, Snake Charmer, Fang Gu, a Demon's successor, the Scarlet Woman...) shows the ones before it: `P8.Scarlet Woman->Imp(Butler)`. You stay "You", and a new `You:` line in the header names you in full. "[information] Fortune Teller received:" names the player the same way. The Player States tables and the Setup list still go by "Player N". Two players with the same character no longer need "[Player N]" added.
+- Improvement: CHANGES.md now numbers each release (above), starting with this one, 2.5.0; everything since Bad Moon Rising shipped as 2.4.0. A test checks that `src/setup.js`, `package.json` and the newest entry here agree.
+- Bug fix: log.txt's player table showed the Lleech's host as "poisoned" (and, for a Philosopher host, "drunk, poisoned"), as if anyone could have done it. It says "Lleech's host" now. A Philosopher whose choice failed (drunk or poisoned when they chose: they only think they gained it) showed as "Philosopher (has Snake Charmer)" and "drunk" for ever; now it's "Philosopher (thinks they have Snake Charmer)", with no "drunk", since nobody made them drunk.
+- Bug fix: an NPC pretending to be the Philosopher (a Damsel hiding as one, say) told you "Night 1: I gained the Alchemist ability." and then "I haven't used my Philosopher ability yet." An NPC no longer says they haven't used a once-per-game ability when what they've told you says they have (strategy `unusedAbility()`): a gain, a Seamstress's answer, a Courtier's choice... (Their made-up gain is kept in the bluff state, not where `abilityUsed()` looked.)
+- Bug fix: NPCs repeated second-person information word for word: "Night 1: You have the Poisoner ability." (an Alchemist's), "You are the Fang Gu. Your Minions are..." (a Cannibal who ate the Lunatic). Now: "I have the Poisoner ability.", "I was told I am the Fang Gu. My Minions are..." (`speak()`).
+- Improvement: an Alchemist with the Poisoner's ability (or a Philosopher who gained the Alchemist's) said which ability they had but never who they'd poisoned. An NPC one tells you each night's choice now: "Night 2: I chose Player 4 to poison.", after tonight's information (`alchemistTells()`; on Night 1, after "I have the Poisoner ability."). Someone only claiming it (an evil bluffer, or a good player pretending) makes one up: another living player, never a teammate (`alchemistBluff()`, bluff.js `storyNights()`). It names nobody as a suspect or as trusted. log.txt: "Alchemist received: Alchemist: chose Player 4 to poison.". This changes most Outed Evil games from Night 1 on; no other script changes.
 
 ## Bug Fixes & New Features: The Demon Kills You When It Must, Nominating Yourself, a Useful Philosopher, a Sharper Psychopath, and the Seed in the Menu
 
@@ -725,7 +736,7 @@ A rework of how information and bluffs are made, in three phases. Every good cha
   - Who the Gossip, the Pit-Hag's random death and the Mayor's bounce kill.
   - Pacifist saves, Tinker deaths, Shabaloth regurgitation, who the Sweetheart makes drunk, and the Sailor's drunk when no kill is at stake.
 
-## New Script: Bad Moon Rising
+## v2.4.0 — New Script: Bad Moon Rising
 
 - New script: Bad Moon Rising (scripts/Bad Moon Rising_1_0_0.json), with 19 new characters. The Grandmother, Gambler, Fool, Moonchild, Devil's Advocate and Assassin work as before.
 - Townsfolk:

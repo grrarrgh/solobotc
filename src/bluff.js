@@ -47,6 +47,11 @@ import { infoOf } from "./characters/info.js";
 import { PAIR_TEAM } from "./characters/pairinfo.js";
 import { grandchildText } from "./characters/townsfolk/grandmother.js";
 import { philosopherInfo } from "./characters/townsfolk/philosopher.js";
+import {
+  alchemistAbility,
+  alchemistPoisonInfo,
+  pretendPoison,
+} from "./characters/townsfolk/alchemist.js";
 import { savantInfo, savantBluff } from "./characters/townsfolk/savant.js";
 
 const FIRST_NIGHT = FIRST_NIGHT_INFO;
@@ -523,19 +528,26 @@ function storyNights(s, p, role, strat, out, evilSide) {
       continue;
     }
 
-    if (!actsTonight(used, night) && !(fresh && FIRST_NIGHT.includes(used))) {
-      continue;
+    if (actsTonight(used, night) || (fresh && FIRST_NIGHT.includes(used))) {
+      const { targets } = trueInfo(view, p, used, strat);
+      const info = madeUp(view, p, strat, () => ({
+        role: used,
+        ...(evilSide
+          ? evilBluff(view, p, used, strat)
+          : goodStory(view, p, used, strat, targets)),
+      }));
+
+      out.push({ night, ...info, trigger: "normal", functioning: false });
     }
 
-    const { targets } = trueInfo(view, p, used, strat);
-    const info = madeUp(view, p, strat, () => ({
-      role: used,
-      ...(evilSide
-        ? evilBluff(view, p, used, strat)
-        : goodStory(view, p, used, strat, targets)),
-    }));
+    // An Alchemist-Poisoner says who they chose each night (see
+    // characters/townsfolk/alchemist.js).
+    const poisoned =
+      used === "alchemist" && alchemistAbility(view, p) === "poisoner" && pretendPoison(view, p);
 
-    out.push({ night, ...info, trigger: "normal", functioning: false });
+    if (poisoned) {
+      out.push({ ...alchemistPoisonInfo(view, poisoned), functioning: false });
+    }
   }
 
   // (Today's visit is the day's one: see characters/townsfolk/savant.js.)
