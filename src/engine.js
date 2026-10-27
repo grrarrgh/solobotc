@@ -2909,6 +2909,13 @@ export class Engine {
       seed: this.s.seed,
       twins: this.s.twins,
       bluffs: this.s.demonBluffs ?? [],
+      // (The Fortune Teller's red herring, if anyone had their ability: see
+      // app.js playerNotes().)
+      red: this.s.players.some((p) =>
+        [p.role, p.startRole, p.shown, p.gained].includes("fortuneteller"),
+      )
+        ? (this.s.red ?? null)
+        : null,
       players: this.s.players,
       events,
       keyMoments: events.filter((e) => KEY_MOMENT_TYPES.has(e.type)),

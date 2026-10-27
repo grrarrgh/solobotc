@@ -745,7 +745,7 @@ export function createState(
     : null;
 
   const s = {
-    version: "2.11.0",
+    version: "2.11.1",
     script,
     seats,
     seed: String(seed),
@@ -841,6 +841,15 @@ export function createState(
 
   const demon = evil.find((x) => team(x.role) === "demon");
   const babysitter = players.find((x) => x.babysitting);
+  const herring = players.find((x) => x.id === red);
+
+  // (The red herring, with a Fortune Teller dealt, or shown to the Drunk.)
+  if (herring && players.some((x) => [x.role, x.shown].includes("fortuneteller"))) {
+    setupLog(
+      "fortuneteller",
+      `The Fortune Teller's red herring: ${herring.label} (${name(herring.role)}), a good player who registers as the Demon to them.`,
+    );
+  }
 
   if (lilMonsta) {
     setupLog(
@@ -904,7 +913,9 @@ export function createState(
       legions
         ? ""
         : faceDown
-          ? ` (an Outsider: the ${name(faceDown)}, a face-down Outsider, is in play)`
+          ? demonBluffs.some((x) => team(x) === "outsider")
+            ? ` (an Outsider: the ${name(faceDown)}, a face-down Outsider, is in play)`
+            : ` (no Outsider left to give, though the ${name(faceDown)}, a face-down Outsider, is in play)`
           : " (no Outsider: no face-down Outsider is in play)"
     }. ${demon ? `${demon.label} bluffs as ${name(demon.claim)}.` : ""}`.trim(),
   );

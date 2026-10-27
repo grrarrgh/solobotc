@@ -58,6 +58,7 @@ import { info as washerwoman } from "./townsfolk/washerwoman.js";
 import { info as butler } from "./outsider/butler.js";
 import { info as lunatic } from "./outsider/lunatic.js";
 import { info as moonchild } from "./outsider/moonchild.js";
+import { info as ogre } from "./outsider/ogre.js";
 
 import { info as eviltwin } from "./minion/eviltwin.js";
 
@@ -96,6 +97,7 @@ export const infoOf = (role) =>
     monk,
     moonchild,
     noble,
+    ogre,
     oracle,
     pixie,
     professor,

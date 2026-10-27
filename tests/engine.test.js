@@ -13280,3 +13280,42 @@ test("with the Leviathan in play, good NPCs only vote with strong suspicion on D
   assert.equal(leviathanRisk(s), null);
   assert.equal(strat.vote(s, chef, butler), false);
 });
+
+test("the Ogre remembers whom they chose, and says so; someone claiming it without the ability makes up a Night 1 choice", () => {
+  const s = base("ogre-says");
+  const [, chef] = s.players;
+  const e = new Engine(s);
+
+  role(chef, "ogre", "good");
+  s.phase = "night";
+  e.ogres();
+
+  assert.equal(chef.memories.length, 1);
+  assert.match(chef.memories[0].text, /^Ogre: chose Player \d\.$/);
+  assert.equal(speak(chef.memories[0].text), chef.memories[0].text.replace(/^Ogre: chose/, "I chose"));
+
+  const strat = new SimpleStrategy();
+
+  assert.match(infoOf("ogre").choice(s, s.players[3], strat).text, /^Ogre: chose (You|Player \d)\.$/);
+  assert.equal(infoOf("ogre").choice({ ...s, night: 2 }, s.players[3], strat), null);
+});
+
+test("the Fortune Teller's red herring is in log.txt's setup and the Final reveal, when anyone had the Fortune Teller's ability", () => {
+  const raw = JSON.parse(fs.readFileSync(new URL("../scripts/Onion Pies_1_0_0.json", import.meta.url)));
+  const s = createState(raw, 12, "3707613405");
+  const e = new Engine(s);
+  const red = s.players.find((x) => x.id === s.red);
+
+  assert.ok(s.players.some((x) => x.role === "fortuneteller"));
+  assert.ok(formatLog(s).includes(`[fortuneteller] The Fortune Teller's red herring: P${red.seat} `));
+
+  s.winner = "good";
+  assert.equal(e.reveal().red, red.id);
+
+  // (No Fortune Teller: no red herring shown.)
+  const t = base("no-ft");
+
+  t.winner = "good";
+  assert.ok(!t.players.some((x) => [x.role, x.shown].includes("fortuneteller")));
+  assert.equal(new Engine(t).reveal().red, null);
+});

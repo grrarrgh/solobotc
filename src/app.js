@@ -768,7 +768,7 @@ const PHASE_WHEEL_SVG = `<svg viewBox="0 0 200 200" aria-hidden="true">
 let dialAngle = 0;
 let dialShown = null;
 // When the wheel's turn ends (ms, performance.now()), and the day the Sun's
-// tooltip was last shown (see sunTip()).
+// tooltip was shown (see sunTip(): only once a game).
 let dialTurnEnds = 0;
 let sunTipDay = null;
 let sunTipTimer = null;
@@ -817,8 +817,8 @@ function renderDial() {
   $("phase-dial").classList.toggle("ask", can.length > 0 && !sunOpen);
   $("phase-dial").title = can.length ? `Talk to the Storyteller: ${what}` : label;
 
-  // (Once a day, with something to use, once no card is in the way.)
-  if (can.length && !sunOpen && sunTipDay !== s.day && !$("phase-dialog").open) {
+  // (Once a game, on the first day, once no card is in the way.)
+  if (sunTipDay === null && s.phase === "day" && !s.winner && !$("phase-dialog").open) {
     sunTipDay = s.day;
     sunTip(Math.max(0, dialTurnEnds - performance.now()));
   }
@@ -1347,6 +1347,10 @@ function playerNotes(p, r) {
     notes.push("the evil team was shown them as one of its own (Magician)");
   }
 
+  if (r.red === p.id) {
+    notes.push(`the ${roleLink("fortuneteller")}'s red herring (registered as the Demon to them)`);
+  }
+
   if (p.vigor) {
     notes.push("kept their ability after death (Vigormortis)");
   }
@@ -1411,10 +1415,18 @@ function grimoire(r) {
     ${bluffLine(r)}`;
 }
 
-// "Demon bluffs: X, Y, Z (known by Player 2, Player 6)" under the Grimoire.
+// "Demon bluffs: X, Y, Z (known by Player 2, Player 6)" under the Grimoire,
+// and the Fortune Teller's red herring, if anyone had their ability.
 function bluffLine(r) {
+  const red = byId(r, r.red);
+  const herring = red
+    ? `<p class="grimoire-bluffs">
+    <strong>${roleLink("fortuneteller")}'s red herring:</strong> ${colourPlayers(esc(red.label))}
+  </p>`
+    : "";
+
   if (!r.bluffs.length) {
-    return "";
+    return herring;
   }
 
   const knew = r.players
@@ -1425,7 +1437,7 @@ function bluffLine(r) {
     <strong>Demon bluffs:</strong> ${r.bluffs.map(roleLink).join(", ")}${
       knew.length ? ` <small>(known by ${knew.join(", ")})</small>` : ""
     }
-  </p>`;
+  </p>${herring}`;
 }
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;

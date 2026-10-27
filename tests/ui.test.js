@@ -443,11 +443,16 @@ test("what the Storyteller tells you in the night pops up before the dawn, while
   assert.match(app, /nightInfoShown = 0;[\s\S]*?nightInfoShown = 0;/);
 });
 
-test("a tooltip points at the Sun once a day, when it has something for you: shown for SUN_TIP_MS (1 s), then it fades", () => {
+test("a tooltip points at the Sun once a game, on the first day: shown for SUN_TIP_MS (1 s), then it fades", () => {
   assert.match(html, /<div class="phase-dial-wrap">[\s\S]*?<span id="sun-tip" class="sun-tip" role="status" hidden>Click here to interact with the Storyteller<\/span>/);
   assert.match(app, /const SUN_TIP_MS = 1000;/);
-  assert.match(app, /if \(can\.length && !sunOpen && sunTipDay !== s\.day && !\$\("phase-dialog"\)\.open\) \{\s*sunTipDay = s\.day;\s*sunTip\(Math\.max\(0, dialTurnEnds - performance\.now\(\)\)\);/);
+  assert.match(app, /if \(sunTipDay === null && s\.phase === "day" && !s\.winner && !\$\("phase-dialog"\)\.open\) \{\s*sunTipDay = s\.day;\s*sunTip\(Math\.max\(0, dialTurnEnds - performance\.now\(\)\)\);/);
   assert.match(css, /\.sun-tip::before \{[^}]*border-right-color: #f0cf83;/);
   assert.match(css, /\.sun-tip \{[^}]*transition: opacity 0\.5s;/);
   assert.match(css, /\.sun-tip\.fading \{\s*opacity: 0;/);
+});
+
+test("the Final reveal names the Fortune Teller's red herring: on their row, and under the Demon bluffs", () => {
+  assert.match(app, /if \(r\.red === p\.id\) \{\s*notes\.push\(`the \$\{roleLink\("fortuneteller"\)\}'s red herring \(registered as the Demon to them\)`\);/);
+  assert.match(app, /<strong>\$\{roleLink\("fortuneteller"\)\}'s red herring:<\/strong>/);
 });
