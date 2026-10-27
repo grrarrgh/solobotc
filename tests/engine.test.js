@@ -12813,3 +12813,28 @@ test("a good NPC Alchemist with the Fearmonger's ability chooses a player every 
   assert.ok(s.audit.some((x) => x.type === "fearmonger" && /\(why: nobody they suspect enough to nominate, and they must choose: their suspect\)/.test(x.text)));
   assert.ok(s.publicLog.includes("Day 1 — The Storyteller: the Fearmonger has chosen a new player."));
 });
+
+test("Share My Info: an NPC counts your information for more than another player's (they trust you), and log.txt shows how it moved their scores", () => {
+  const s = base("share-my-info");
+  const e = new Engine(s);
+  const [you, chef, butler, baron] = s.players;
+  const strat = new SimpleStrategy();
+
+  role(you, "empath", "good");
+  you.memories = [{ night: 1, role: "empath", text: "Empath number: 1.", targets: [butler.id, baron.id] }];
+
+  const before = strat.evidence(s, chef, baron).score;
+
+  e.ask(chef.id);
+  e.tell(chef.id, "empath", true);
+
+  // (An Empath's 1 points at both neighbours: 0.2 for another player's, plus
+  // the trust good NPCs have in you.)
+  assert.equal(
+    Math.round((strat.evidence(s, chef, baron).score - before) * 10) / 10,
+    EVIDENCE_WEIGHT.namedByInfo + EVIDENCE_WEIGHT.humanTrusted,
+  );
+  assert.ok(strat.evidence(s, chef, baron).reasons.includes("your information points at them"));
+  assert.ok(s.audit.some((x) => x.type === "workings" && /^What Player 2 thinks of the players your information names/.test(x.text)));
+  assert.match(e.debugLog(), /^▶ \[tell\] You told/m);
+});

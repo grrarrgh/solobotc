@@ -484,7 +484,8 @@ export const EVIDENCE_WEIGHT = {
   myInfo: 2, // my own information points at them
   markedEvil: 1, // you've marked them Evil (in your notes)
   markedGood: -1, // you've marked them Good
-  // How much good NPCs trust you: added to your marks
+  // How much good NPCs trust you: added to your marks, and to your
+  // information when you share it (Share My Info)
   // Other values:
   //   0: turns it off.
   //   Above 1: your marks outweigh most public evidence.

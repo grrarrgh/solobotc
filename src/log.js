@@ -9,7 +9,7 @@ const CHARACTER_NAMES = new Set(Object.keys(ROLES).map(name));
 // "Alchemist", "Poisoner"). Their real ones when they're telling the truth;
 // otherwise the ones they've made up (see bluff.js gainedRole(), its
 // `philosopher` story, and alchemist.js pretended()).
-function claimChain(p) {
+export function claimChain(p) {
   const claim = p.cover?.as ?? p.claim;
 
   if (!claim) {
@@ -140,12 +140,24 @@ function table(headers, rows) {
 // evidence score) and why), then the
 // information each received that night.
 function stateLines(players, rename) {
+  // (An Alchemist's Minion ability after the character, or the ability a
+  // Philosopher gained: "Alchemist (has Fearmonger)", "Philosopher (has
+  // Alchemist->Poisoner)". A Drunk shown the Alchemist only thinks they have
+  // it.)
+  const minion = (p) => (p.alchemist ? `->${name(p.alchemist)}` : "");
   const rows = players.map((p) => [
     p.label,
     `${
       p.role === p.shown ? name(p.role) : `${name(p.role)} (as ${name(p.shown)})`
-    }${p.gained ? ` (${p.gainFailed ? "thinks they have" : "has"} ${name(p.gained)})` : ""}`,
-    `${name(p.claim)}${
+    }${
+      p.gained
+        ? ` (${p.gainFailed ? "thinks they have" : "has"} ${name(p.gained)}${p.gained === "alchemist" ? minion(p) : ""})`
+        : p.alchemist
+          ? ` (${p.role === "alchemist" ? "has" : "thinks they have"} ${name(p.alchemist)})`
+          : ""
+    }`,
+    // (Their claim, with what it says they have since: see claimChain().)
+    `${(p.claims?.length ? p.claims : [p.claim]).map(name).join("->")}${
       p.cover
         ? ` (${
             { hide: "hiding as", bait: "baiting as", decoy: "a decoy as" }[p.cover.kind]
@@ -218,10 +230,11 @@ const PUBLIC = new Set([
   "juggler",
   "pacifist",
   "conversation",
+  "tell",
 ]);
 
 // Whether you saw or heard log entry e (marked ▶ in log.txt): said or
-// announced in public, said to you (your conversations), or your own
+// announced in public, said to you or by you (your conversations), or your own
 // information, wake-ups and choices. Deaths are announced, but not what
 // saved anyone; a Devil's Advocate's save shows at the execution, not their
 // choice.

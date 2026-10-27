@@ -955,8 +955,12 @@ export class SimpleStrategy {
           } lied about their character`,
         );
       } else if (st.source === "info") {
+        // (Yours, shared with them (Share My Info), counts for more: good
+        // NPCs trust you, as with your marks. See EVIDENCE_WEIGHT.humanTrusted.)
+        const yours = by.human ? W.humanTrusted : 0;
+
         add(
-          trust ? W.vouchedByInfo : W.namedByInfo,
+          trust ? W.vouchedByInfo - yours : W.namedByInfo + yours,
           `${whose(by)} information ${
             trust ? "vouches for" : "points at"
           } them`,

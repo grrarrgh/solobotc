@@ -52,7 +52,7 @@ import {
   vortoxRisk,
 } from "./strategy.js";
 import { byId, bySeat, pick, shuffle } from "./util.js";
-import { formatLog, logNames } from "./log.js";
+import { formatLog, logNames, claimChain } from "./log.js";
 import { abilities, living } from "./abilities.js";
 import { characters } from "./characters/index.js";
 import {
@@ -1315,6 +1315,11 @@ export class Engine {
     };
 
     const memories = info ? h.memories : [];
+    // (How it changes what they think of the players it names, for log.txt.)
+    const named = [...new Set(memories.flatMap((m) => m.targets ?? []))]
+      .map((x) => this.player(x))
+      .filter((x) => x && !x.human && x !== p);
+    const was = new Map(named.map((x) => [x, this.strat.evidence(s, p, x).score]));
 
     heard(s, h, memories, null, p);
 
@@ -1327,6 +1332,19 @@ export class Engine {
 
     s.publicLog.push(`Day ${s.day} — You told ${p.label}:\n${said}`);
     this.audit("tell", `You told ${p.label}:\n${said}`, { target: id, claim, info });
+
+    if (named.length) {
+      const round = (n) => Math.round(n * 10) / 10;
+
+      this.audit(
+        "workings",
+        `What ${p.label} thinks of the players your information names (evidence score, before → after; suspect at 1 or more):\n${bySeat(
+          named,
+        )
+          .map((x) => `${x.label}: ${round(was.get(x))} → ${round(this.strat.evidence(s, p, x).score)}`)
+          .join("\n")}`,
+      );
+    }
 
     return said;
   }
@@ -2704,6 +2722,10 @@ export class Engine {
         gainFailed: Boolean(failed),
         // (While mad: the claim they had, and go back to.)
         claim: p.mad?.previous ?? p.claim,
+        // (That claim, with what it says they have since: "Alchemist",
+        // "Fearmonger". See log.js claimChain().)
+        claims: claimChain({ ...p, cover: null, claim: p.mad?.previous ?? p.claim }),
+        alchemist: p.alchemist ?? null,
         cover: p.cover ? { kind: p.cover.kind, as: p.cover.as } : null,
         mad: p.mad?.role ?? null,
         alignment: p.alignment,
