@@ -37,6 +37,7 @@ import {
 import {
   SimpleStrategy,
   isTwin,
+  twinSafe,
   heard,
   speak,
   abilityUsed,
@@ -918,7 +919,7 @@ export class Engine {
           !x.human &&
           x.id !== t.id &&
           x.id !== d.id &&
-          !isTwin(s, x),
+          !twinSafe(s, x),
       );
       const same = anyone.filter((x) => (x.role === "legion") === (t.role === "legion"));
       const bounce = d.role === "legion" && same.length ? same : anyone;
@@ -1403,7 +1404,9 @@ export class Engine {
 
     s.npcNominations = (s.npcNominations ?? 0) + 1;
     s.publicLog.push(line);
-    this.audit("npc_nomination", line.replace(/^Day \d+ — /, ""), {
+    // (\`why\`: what the nominee doesn't hear, for log.txt: see strategy
+    // nomination().)
+    this.audit("npc_nomination", `${line.replace(/^Day \d+ — /, "")}${n.why ? ` (why: ${n.why})` : ""}`, {
       actorId: p.id,
       targetId: n.target.id,
     });
@@ -1453,12 +1456,9 @@ export class Engine {
         last[t.id] = s.day;
       }
 
-      // (A list for each player, in the order they talked.)
+      // (A line for each player: whom they talked to, in seat order.)
       if (picks.length) {
-        lines.push(
-          `${p.label} talked to:`,
-          ...picks.map((x) => `  - ${x.label}`),
-        );
+        lines.push(`${p.label} → ${bySeat(picks).map((x) => x.label).join(", ")}`);
       }
     }
 
@@ -2438,7 +2438,9 @@ export class Engine {
       this.finish("evil", "Saint executed.");
     } else if (died && isDemon(p)) {
       this.successor(p, before, false, true);
-    } else if (died && boom) {
+    } else if (died && boom && s.mastermindDay !== s.day) {
+      // (On the Mastermind's extra day, the execution decides the game
+      // instead: see mastermindEnd().)
       this.boom(p);
     } else if (died && !this.goodTwinExecuted(p)) {
       this.check();
@@ -2571,7 +2573,13 @@ export class Engine {
     if (dead.babysitting) {
       if (this.lilMonstaSuccessor(dead, before)) {
         this.check();
-      } else if (!(executed && this.mastermindContinues())) {
+        return;
+      }
+
+      // (Dead with them: nobody babysits it again, see lilMonsta().)
+      this.s.lilMonsta.dead = true;
+
+      if (!(executed && this.mastermindContinues())) {
         this.finish("good", "Lil' Monsta's babysitter died.");
       }
 

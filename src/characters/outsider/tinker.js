@@ -1,6 +1,6 @@
 import { TINKER_DEATH_CHANCE } from "../../data.js";
 import { works, lean, leanNote, leanText } from "../../storyteller.js";
-import { isTwin } from "../../strategy.js";
+import { twinSafe } from "../../strategy.js";
 
 // The Tinker, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
@@ -11,7 +11,7 @@ export const tinker = {
 
     for (const p of s.players.filter(
       (x) =>
-        x.alive && !x.human && x.role === "tinker" && works(x) && !isTwin(s, x),
+        x.alive && !x.human && x.role === "tinker" && works(x) && !twinSafe(s, x),
     )) {
       // (Never while the Storyteller is helping good.)
       if (!s.winner && lean(s) === "good") {

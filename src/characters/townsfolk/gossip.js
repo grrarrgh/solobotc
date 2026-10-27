@@ -110,9 +110,12 @@ export const gossip = {
       s.publicLog.push(`Day ${s.day} — ${p.label} claims Gossip and says: ${quote}`);
     }
 
+    // (Made up, by anyone acting out the Gossip without their ability.)
     this.audit(
       "gossip",
-      `${p.label} (${name(p.role)}) said ${quote} (${truth ? "true" : "false"}).`,
+      `${p.label} (${name(p.role)}) said ${quote} (${truth ? "true" : "false"}${
+        ability(p) === "gossip" ? "" : "; made up: they aren't the Gossip"
+      }).`,
       { actorId: p.id, targetId: t.id, truth },
     );
   },

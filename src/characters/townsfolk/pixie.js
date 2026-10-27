@@ -126,12 +126,37 @@ const pixieOptions = (s, p, notInPlay = false) => {
   );
 };
 
+// The Pixie is a face-down character: "mad" that they're a Townsfolk in
+// play, they claim it, never the Pixie, while alive. So the Storyteller
+// shows each NPC Pixie their Townsfolk at setup (p.pixieRole), and they
+// claim it from the start (see setup.js): a real Pixie, one in play; a
+// Drunk or Marionette shown the Pixie, one that isn't (if they can); and an
+// evil player or the Lunatic bluffing the Pixie, one that isn't either
+// (never a teammate's claim), as their own bluffed information says on
+// Night 1. Returns the Townsfolk, or null. (`s`: the state, or as much of
+// it as setup has: `players`, `script`, `r`.)
+export function pixieStart(s, p) {
+  const real = p.role === "pixie";
+
+  p.pixieRole = real
+    ? pick(pixieOptions(s, p), s.r)
+    : (pick(pixieOptions(s, p, true), s.r) ?? pick(pixieOptions(s, p), s.r));
+
+  if (p.pixieRole) {
+    p.claim = p.pixieRole;
+    p.pixieMad = true;
+  }
+
+  return p.pixieRole;
+}
+
 // The Pixie: a Townsfolk in play, to be "mad" about. (They remember which,
-// as p.pixieRole.)
+// as p.pixieRole: shown at setup, see pixieStart(), so tonight's information
+// names the same one.)
 export const info = {
   nights: "first",
   truth(s, p) {
-    const id = pick(pixieOptions(s, p), s.r);
+    const id = p.pixieRole ?? pick(pixieOptions(s, p), s.r);
 
     p.pixieRole = id;
 
@@ -144,7 +169,7 @@ export const info = {
   // about it, to no effect).
   lie(s, p) {
     const id =
-      pick(pixieOptions(s, p, true), s.r) ?? pick(pixieOptions(s, p), s.r);
+      p.pixieRole ?? pick(pixieOptions(s, p, true), s.r) ?? pick(pixieOptions(s, p), s.r);
 
     p.pixieRole = id;
 
@@ -156,10 +181,12 @@ export const info = {
   // (A Pixie bluffer goes mad about it, as a real one would: see
   // pixieMadness() above.)
   random(s, p) {
-    const id = pick(
-      s.script.ids.filter((x) => team(x) === "townsfolk" && x !== "pixie"),
-      s.r,
-    );
+    const id =
+      p.pixieRole ??
+      pick(
+        s.script.ids.filter((x) => team(x) === "townsfolk" && x !== "pixie"),
+        s.r,
+      );
 
     p.pixieRole = id;
 

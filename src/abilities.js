@@ -9,9 +9,9 @@ import {
   HIDDEN_OUTSIDERS,
   HIDE_NEVER_AS,
 } from "./data.js";
-import { ability, works, isDemon, teaLadyOf } from "./storyteller.js";
-import { backStory } from "./bluff.js";
-import { speak, heard } from "./strategy.js";
+import { ability, works, isDemon, teaLadyOf, bluffing } from "./storyteller.js";
+import { backStory, madeUpMemories } from "./bluff.js";
+import { speak, heard, sideOf } from "./strategy.js";
 import { pick, tick } from "./util.js";
 
 // Minions keep acting after death if the Vigormortis killed them.
@@ -185,7 +185,10 @@ export const abilities = {
   // In bigger games (PUBLIC_INFO_MIN_SEATS+), an NPC with first-night (or
   // spent) information may share it in public the morning they get it, at
   // PUBLIC_INFO_CHANCE for their character. Evil bluffers share their bluffed
-  // information the same way. Sharing it reveals their claim.
+  // information the same way, and so does a good player acting out a
+  // character without its ability (a face-down Damsel or Mutant, a cover
+  // story), with what they've made up for it (see bluff.js
+  // madeUpMemories()): a real one would. Sharing it reveals their claim.
   shareInfo() {
     const s = this.s;
 
@@ -194,16 +197,20 @@ export const abilities = {
     }
 
     for (const p of s.players) {
-      const news = p.memories.filter(
+      const claim = p.cover?.as ?? p.claim;
+      const pretend = !p.human && sideOf(p) === "good" && bluffing(p, claim);
+      const news = (pretend ? (madeUpMemories(p, claim) ?? []) : p.memories).filter(
         (m) =>
           m.night === s.night &&
           !m.day &&
           !m.shared &&
+          (!pretend || m.role === claim) &&
           PUBLIC_INFO_CHANCE[m.role] !== undefined,
       );
 
-      // (A cover story stays a secret.)
-      if (p.human || p.mad?.day === s.day || p.cover || !news.length) {
+      // (Never a good player's real information while they claim something
+      // else.)
+      if (p.human || p.mad?.day === s.day || (p.cover && !pretend) || !news.length) {
         continue;
       }
 
@@ -213,14 +220,18 @@ export const abilities = {
         continue;
       }
 
-      const said = ` says: "I am the ${name(p.claim)}. Night ${m.night}: ${speak(
+      const said = ` says: "I am the ${name(claim)}. Night ${m.night}: ${speak(
         m.text,
       )}"`;
 
       this.claimPublicly(p);
       heard(s, p, [m]);
       s.publicLog.push(`Day ${s.day} — ${p.label}${said}`);
-      this.audit("share", `${p.label}${said}`, { playerId: p.id });
+      this.audit(
+        "share",
+        `${p.label}${said}${pretend ? ` (made up: they aren't the ${name(claim)})` : ""}`,
+        { playerId: p.id },
+      );
     }
   },
 
@@ -284,7 +295,9 @@ export const abilities = {
   claimFor(p) {
     const s = this.s;
 
-    if (!HIDDEN_OUTSIDERS.includes(p.role)) {
+    // (The Pixie is face-down too: they keep a Townsfolk claim, and claim
+    // the one they're shown once they learn it; see pixie.js.)
+    if (!HIDDEN_OUTSIDERS.includes(p.role) && p.role !== "pixie") {
       return p.role;
     }
 
@@ -445,9 +458,19 @@ export const abilities = {
     s.dawnLearn = s.dawnLearn.filter((id) => id !== p.id);
     s.revived.push(p.id);
 
-    this.audit(by, `${p.label} (${name(p.role)}) came back to life.`, {
-      playerId: p.id,
-    });
+    // (A Pixie who said so once dead is face-down again: they go back to
+    // claiming their Townsfolk. See pixie.js.)
+    const pixie = p.claim === "pixie" && p.pixieRole && !p.human;
+
+    if (pixie) {
+      p.claim = p.pixieRole;
+    }
+
+    this.audit(
+      by,
+      `${p.label} (${name(p.role)}) came back to life${pixie ? `, and claims the ${name(p.pixieRole)} again` : ""}.`,
+      { playerId: p.id },
+    );
   },
 
   // Whether an attack on `victim` (by `demon`, or by anyone else without

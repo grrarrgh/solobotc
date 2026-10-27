@@ -5,7 +5,10 @@ import { pick } from "../../util.js";
 import { bluffState, gainedRole } from "../../bluff.js";
 import { teammate } from "../../strategy.js";
 
-const alchemistText = (id) => `Alchemist: you have the ${name(id)} ability.`;
+// (None, for a Philosopher who gains the Alchemist's ability with every
+// one they could have in play: see philosopher.js.)
+const alchemistText = (id) =>
+  id ? `Alchemist: you have the ${name(id)} ability.` : "Alchemist: you have no Minion ability (every one you could have is in play).";
 
 // The Minion abilities a pretender (see bluff.js) says they have: a quiet
 // one, whose use nobody sees, on the script; failing that, one whose use is

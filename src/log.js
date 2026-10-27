@@ -41,16 +41,21 @@ function claimChain(p) {
   return chain;
 }
 
-// Player p as log.txt names them: "P2.Damsel(Philosopher->Alchemist->Poisoner)".
+// Player p as log.txt names them: 'P2 Damsel "Philosopher->Alchemist->Poisoner"'.
 // Their seat; their character, with each one they had before it when it
 // changed (the Pit-Hag, Barber, Snake Charmer, Fang Gu, a Demon's
-// successor...: "P6.Snake Charmer->Imp"); then, in brackets, what they claim
-// (see claimChain()). (`roles`: their characters so far, kept by logNames().)
+// successor...: "P6 SNAKE CHARMER->IMP"), in capitals while they're evil;
+// then, in quotes, what they claim (see claimChain()), unless it's just the
+// character they are ("P3 Chef"), so the evil team, and whoever claims
+// something else, stand out. (`roles`: their characters so far, kept by
+// logNames().)
 function logName(p, roles = [p.role]) {
   const chain = claimChain(p);
+  const honest = chain.length === 1 && chain[0] === p.role;
+  const character = roles.map(name).join("->");
 
-  return `P${p.seat}.${roles.map(name).join("->")}${
-    chain.length ? `(${chain.map(name).join("->")})` : ""
+  return `P${p.seat} ${p.alignment === "evil" ? character.toUpperCase() : character}${
+    chain.length && !honest ? ` "${chain.map(name).join("->")}"` : ""
   }`;
 }
 
@@ -193,6 +198,52 @@ function stateLines(players, rename) {
   ];
 }
 
+// Kinds of log entry the town sees or hears in public (see seen()).
+const PUBLIC = new Set([
+  "share",
+  "come_clean",
+  "damsel",
+  "mutant",
+  "lunatic",
+  "goblin",
+  "gossip",
+  "execution",
+  "nominations",
+  "npc_nomination",
+  "vote_result",
+  "request",
+  "virgin",
+  "slayer",
+  "psychopath",
+  "juggler",
+  "pacifist",
+  "conversation",
+]);
+
+// Whether you saw or heard log entry e (marked ▶ in log.txt): said or
+// announced in public, said to you (your conversations), or your own
+// information, wake-ups and choices. Deaths are announced, but not what
+// saved anyone; a Devil's Advocate's save shows at the execution, not their
+// choice.
+function seen(e) {
+  const you = /^You\b/.test(e.text);
+
+  switch (e.type) {
+    case "death":
+      return / died: /.test(e.text);
+    case "advocate":
+      return /was executed but survived/.test(e.text);
+    case "boomdandy":
+      return /was executed/.test(e.text) || /^The countdown/.test(e.text);
+    case "information":
+    case "wake":
+    case "choice":
+      return you;
+    default:
+      return PUBLIC.has(e.type);
+  }
+}
+
 function voteLine(s, records, names) {
   const label = (id) => renamed(byId(s, id)?.label ?? id, names);
   const voted = records.filter((r) => r.attempted);
@@ -226,6 +277,8 @@ export function formatLog(s) {
     `Version: ${s.version}`,
     // (Elsewhere you're "You".)
     `You:     ${humanName(s)}`,
+    'Names:   P5 FEARMONGER "Gossip" is seat 5: the Fearmonger (in capitals: evil), claiming the Gossip. P7 Damsel->Gossip: the Damsel, then the Gossip, claiming what they are (no quotes).',
+    "Seen:    ▶ marks what you saw or heard: said or announced in public, said to you, or your own information.",
     `Bluffs:  ${(s.demonBluffs ?? []).map(name).join(", ") || "none"}${
       s.exposedBluffs
         ? ` (at first ${s.exposedBluffs.map(name).join(", ")}, made public by a Wizard's wish)`
@@ -274,7 +327,7 @@ export function formatLog(s) {
 
     // (The Setup's roles are the key to who sits where.)
     lines.push(
-      indent(e.type === "role" ? e.text : rename(e.text), `  [${e.type}] `),
+      indent(e.type === "role" ? e.text : rename(e.text), `${seen(e) ? "▶" : " "} [${e.type}] `),
     );
 
     if (e.type === "vote_result") {

@@ -172,6 +172,20 @@ const note = (s, type, text, data = {}) =>
     names: logNames(s),
   });
 
+// Whether living evil NPC p knows everyone else alive is on their team (or
+// is their Lleech's host, whom they keep alive: see spares()): the game is
+// theirs, but for a Demon that can't kill (drunk for good, say), it could
+// go on for ever. They execute a teammate who isn't the Demon, to reach the
+// final 2 (see nomination(), vote()). (Not the Lunatic, whose team is
+// imagined.)
+const onlyTeam = (s, p) =>
+  p.alive &&
+  !p.human &&
+  sideOf(p) === "evil" &&
+  !thinksEvil(p) &&
+  s.players.some((x) => x.alive && teammate(p, x) && !isDemon(x)) &&
+  s.players.every((x) => x === p || !(x.alive || x.undead) || teammate(p, x) || spares(s, p, x));
+
 // Whether evil player p holds back from x: the Bounty Hunter's evil
 // Townsfolk, who suspects x of being on their team (see hunches()).
 const hunch = (p, x) => Boolean(p.evilTownsfolk) && (p.hunches ?? []).includes(x.id);
@@ -247,9 +261,15 @@ const pretends = (p, role) => sideOf(p) === "good" && bluffing(p, role);
 export const isTwin = (s, x) =>
   Boolean(s.twins) && [s.twins.evilId, s.twins.goodId].includes(x.id);
 
-// `pool` without either twin. Nothing harmful ever targets a twin: no kill,
-// poison, drunkenness, curse, madness or change of character.
-export const untwinned = (s, pool) => pool.filter((x) => !isTwin(s, x));
+// Whether x is a twin nothing harmful targets: no kill, poison, drunkenness,
+// curse, madness or change of character. Only while both twins live: once
+// one has died, the other is a player like any other (else a final 3 of
+// the good twin, a Lleech and its host could never end).
+export const twinSafe = (s, x) =>
+  isTwin(s, x) && [s.twins.evilId, s.twins.goodId].every((id) => byId(s, id)?.alive);
+
+// `pool` without either twin, while both live (see twinSafe()).
+export const untwinned = (s, pool) => pool.filter((x) => !twinSafe(s, x));
 
 // How an NPC says a piece of their information out loud: in their own
 // words, without repeating their character's name ("Snake Charmer: chose
@@ -1681,6 +1701,24 @@ export class SimpleStrategy {
       };
     }
 
+    // (Only their team is left alive: a teammate who isn't the Demon, to
+    // reach the final 2. See onlyTeam().)
+    const mate =
+      onlyTeam(s, p) &&
+      s.players.find((x) => x.alive && teammate(p, x) && !isDemon(x) && !s.nominated.includes(x.id));
+
+    if (mate) {
+      const claim = claimTo(mate, p);
+
+      // (`why`: for log.txt, see engine npcNomination().)
+      return {
+        target: mate,
+        score: NPC_NOMINATE_EVIDENCE + 1,
+        reasons: [claim ? `they claim the ${name(claim)}, and I don't believe it` : "they won't say what they are"],
+        why: `only the evil team is left alive: their teammate ${mate === p ? "themself" : `${mate.label} (${name(mate.role)})`}, to reach the final 2`,
+      };
+    }
+
     const sus = this.suspicion(s, p);
     const t = sus && byId(s, sus.targetId);
 
@@ -1729,6 +1767,12 @@ export class SimpleStrategy {
     // 3: except a Goblin (or Alchemist-Goblin) who claimed it today, as that's
     // the win, and a Boomdandy, whose team wants it executed (see below).)
     if (v === n && goblin && minionAbility(v) === "goblin") {
+      return true;
+    }
+
+    // (Only their team is left alive: they execute a teammate who isn't the
+    // Demon, themself too. See onlyTeam().)
+    if (onlyTeam(s, v) && teammate(v, n) && !isDemon(n)) {
       return true;
     }
 
@@ -2580,16 +2624,14 @@ export class SimpleStrategy {
               : this.priorityLevel(s, x, p)
         : undefined;
 
-    // Neither twin is ever the Demon's kill, nor anyone who came back to
-    // life tonight (they can't die again), nor their Lleech's host (it
-    // would die too: see spares()).
-    const pool = this.others(s, p).filter(
-      (x) =>
-        !isTwin(s, x) &&
-        !exclude.includes(x) &&
-        !s.revived?.includes(x.id) &&
-        !spares(s, p, x),
+    // Nobody who came back to life tonight (they can't die again), nor
+    // their Lleech's host (it would die too: see spares()); and neither twin
+    // (while both live: see twinSafe()), unless there's nobody else good to
+    // kill, not even you (below).
+    const open = this.others(s, p).filter(
+      (x) => !exclude.includes(x) && !s.revived?.includes(x.id) && !spares(s, p, x),
     );
+    let pool = open.filter((x) => !twinSafe(s, x));
     // Left with nobody it can kill but its own team (and a Lleech's host),
     // the Demon kills you, as in a real game, rather than a teammate or
     // nobody; having chosen you already tonight (the Shabaloth, the Po),
@@ -2598,13 +2640,20 @@ export class SimpleStrategy {
     // Tea Lady, both of yours). (A Sailor can die: late on, the Storyteller
     // makes them drunk; see sailor.js.) (Only now does it ever attack you:
     // see engine attack().)
-    const you = s.players.find((x) => x.human && x.alive);
+    // (Not if you came back to life tonight: you can't die again tonight.)
+    const you = s.players.find((x) => x.human && x.alive && !s.revived?.includes(x.id));
     const safe = (x) => Boolean(teaLadyOf(s, x)) || (x.role === "soldier" && works(x));
 
     if (isDemon(p) && you && !pool.some((x) => goodTo(p, x) && !safe(x))) {
       return exclude.includes(you)
         ? null
         : because(you, "nobody but its own team is left to kill, besides you");
+    }
+
+    // (Else the game could never end: say, a final 3 of the Demon, the Evil
+    // Twin and the good twin.)
+    if (!pool.some((x) => goodTo(p, x)) && open.some((x) => goodTo(p, x) && twinSafe(s, x))) {
+      pool = open;
     }
 
     const decoys = pool.filter(
@@ -2664,7 +2713,7 @@ export class SimpleStrategy {
     let why = null;
     const t = this.byPriority(s, p, options, level, (text) => (why = text));
 
-    return because(t, why);
+    return because(t, t && twinSafe(s, t) ? `a twin, as nobody else good is left to kill: ${why}` : why);
   }
 
   // Why player x has the kill priority they have to evil player p (see
@@ -2917,14 +2966,20 @@ export class SimpleStrategy {
   }
 
   // An NPC Slayer who hasn't fired yet may shoot a living NPC they suspect.
+  // (A good player pretending to be the Slayer, a face-down Damsel or
+  // Mutant or a cover story, shoots someone they strongly suspect if they
+  // can, else their suspect, as a real Slayer does: one who never shoots
+  // gives themself away.)
   slay(s, p) {
     if (!this.onceReady(s, "slayer", s.day)) {
       return null;
     }
 
+    const pool = this.others(s, p);
+
     return pretends(p, "slayer")
-      ? this.strongSuspect(s, p, this.others(s, p))
-      : this.suspect(s, p, this.others(s, p));
+      ? (this.strongSuspect(s, p, pool) ?? this.suspect(s, p, pool))
+      : this.suspect(s, p, pool);
   }
 
   // A Butler picks any other living player as master.
@@ -3334,7 +3389,7 @@ export class SimpleStrategy {
         x.role !== "lunatic" &&
         !isDrunk(x) &&
         !isDemon(x) &&
-        !isTwin(s, x),
+        !twinSafe(s, x),
     );
     const claim = (x) => claimHeard(x, d);
     // What a claimed character's ability is worth to good, for player x
@@ -3414,7 +3469,7 @@ export class SimpleStrategy {
     if (
       human &&
       !humanLast &&
-      !isTwin(s, human) &&
+      !twinSafe(s, human) &&
       s.night > 1 &&
       s.r() < WITCH_HUMAN_CHANCE
     ) {
@@ -3504,7 +3559,7 @@ export class SimpleStrategy {
       const choices = s.players
         .filter(
           (x) =>
-            x.alive && !x.human && x.alignment === "evil" && !blind(p, x) && !isTwin(s, x),
+            x.alive && !x.human && x.alignment === "evil" && !blind(p, x) && !twinSafe(s, x),
         )
         .map((t) => ({
           target: t,
@@ -3709,8 +3764,14 @@ export class SimpleStrategy {
     // (Someone they haven't talked about before, while they suspect anyone
     // else (see fresh()); never just what they said yesterday: a statement
     // the night showed false, or that's done its work, says nothing new.)
+    // (A good player pretending to be the Gossip, a face-down Damsel or
+    // Mutant or a cover story, speaks about someone they strongly suspect;
+    // with nobody, still at the end of the day, about their suspect, as a
+    // real Gossip always makes a statement: a silent one gives them away.)
     const choose = (pool) =>
-      pretends(p, "gossip") ? this.strongSuspect(s, p, pool) : this.suspect(s, p, pool);
+      pretends(p, "gossip")
+        ? (this.strongSuspect(s, p, pool) ?? (late ? this.suspect(s, p, pool) : null))
+        : this.suspect(s, p, pool);
     const all = this.others(s, p);
     const fresh = this.fresh(p, "gossip", all);
     // (An evil bluffer may as well slander any good player they haven't yet:

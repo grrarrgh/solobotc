@@ -28,10 +28,17 @@ export const virgin = {
         : `Day ${s.day} — ${by.label} nominated ${n.label} and was executed immediately.`,
     );
 
+    // (As any execution: the good twin's loses the game for good, and on
+    // the Mastermind's extra day it decides the game. See engine execute().)
     if (!this.advocated(by)) {
       this.kill(by, "execution");
-      this.check();
+
+      if (!this.goodTwinExecuted(by)) {
+        this.check();
+      }
     }
+
+    this.mastermindEnd(by);
 
     // (The day is over: any Gossip yet to speak today does so now.)
     if (!s.winner) {

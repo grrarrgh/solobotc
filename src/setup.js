@@ -26,6 +26,7 @@ import {
 } from "./data.js";
 import { rng, pick, sample, shuffle } from "./util.js";
 import { logNames } from "./log.js";
+import { pixieStart } from "./characters/townsfolk/pixie.js";
 
 // The number of each kind of information Townsfolk to deal among n
 // Townsfolk (see FIRST_NIGHT_INFO_SHARE and ONGOING_INFO_SHARE).
@@ -646,6 +647,20 @@ export function createState(
     evilTownsfolk.evilTownsfolk = true;
   }
 
+  // The Pixie is face-down: each NPC Pixie is shown their Townsfolk now, and
+  // claims it from the start, never the Pixie (see pixie.js pixieStart()):
+  // a real one (or a Drunk or Marionette shown the Pixie), and an evil
+  // player or the Lunatic bluffing it.
+  for (const p of players.filter(
+    (x) =>
+      !x.human &&
+      (x.role === "pixie" ||
+        x.shown === "pixie" ||
+        ((x.alignment === "evil" || x.role === "lunatic") && x.bluff === "pixie")),
+  )) {
+    pixieStart({ players, script, r }, p);
+  }
+
   // The Evil Twin is paired with a good player; they know each other. The
   // Evil Twin claims their good twin's character.
   const evilTwin = players.find((x) => x.role === "eviltwin");
@@ -680,7 +695,7 @@ export function createState(
     : null;
 
   const s = {
-    version: "2.6.0",
+    version: "2.7.0",
     script,
     seats,
     seed: String(seed),
@@ -744,10 +759,14 @@ export function createState(
   const setupLog = (type, text) =>
     s.audit.push({ id: s.auditId++, group: "Setup", type, text, names: logNames(s) });
 
+  // (What they were shown, and what they claim, only where it isn't their
+  // character.)
   players.forEach((p) =>
     setupLog(
       "role",
-      `${p.label}: ${name(p.role)}; shown ${name(p.shown)}; claim ${name(p.claim)}.`,
+      `${p.label}: ${name(p.role)}${p.shown === p.role ? "" : `, shown the ${name(p.shown)}`}${
+        p.claim === p.role ? "" : `; claims ${name(p.claim)}`
+      }.`,
     ),
   );
 
@@ -814,6 +833,19 @@ export function createState(
       demonBluffs.map(name).join(", ") || "none"
     }. ${demon ? `${demon.label} bluffs as ${name(demon.claim)}.` : ""}`.trim(),
   );
+
+  for (const p of players.filter((x) => x.pixieMad)) {
+    setupLog(
+      "pixie",
+      `${p.label} (${
+        p.role === "pixie"
+          ? "Pixie"
+          : p.shown === "pixie"
+            ? `${name(p.role)}, who thinks they're the Pixie`
+            : `${name(p.role)}, bluffing the Pixie`
+      }) is face-down: shown the ${name(p.pixieRole)}, they're mad that they are it, and claim it.`,
+    );
+  }
 
   if (goodTwin) {
     setupLog(

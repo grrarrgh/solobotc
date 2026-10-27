@@ -387,12 +387,13 @@ export function dayBluff(s, p, role, strat, make, deadOk = false) {
 export function bluffTonight(s, p, strat) {
   // A Philosopher or Cannibal bluffer reports for the character they
   // "gained" (nothing until they have one); a first-night one the night
-  // after they gain it, as a real Cannibal would.
-  // (A Pixie bluffer who "gained" theirs claims the Pixie again.)
-  const gains =
-    ["philosopher", "cannibal"].includes(p.claim) ||
-    (p.claim === "pixie" && gainedRole(p));
-  const role = gains ? gainedRole(p) : p.claim;
+  // after they gain it, as a real Cannibal would. A Pixie bluffer, who
+  // claims their Townsfolk from the start (see pixie.js pixieStart()),
+  // makes up the Pixie's own information on Night 1, which they keep to
+  // themself while alive (see strategy spoken()).
+  const gains = ["philosopher", "cannibal"].includes(p.claim);
+  const pixie = p.bluff === "pixie" && p.pixieMad && p.claim === p.pixieRole && s.night === 1;
+  const role = gains ? gainedRole(p) : pixie ? "pixie" : p.claim;
   const mode = bluffMode(s, p, role);
   const gainedTonight =
     p.claim === "cannibal" &&
@@ -547,6 +548,20 @@ function storyNights(s, p, role, strat, out, evilSide) {
     }
 
     if (gain === null) {
+      continue;
+    }
+
+    // A once-per-game night choice (the Seamstress's, the Courtier's):
+    // decided each night, as a real one decides (see strategy onceReady()),
+    // and kept from then on, as a story keeps each night's (see keepStory()).
+    // (Not for earlier nights: they hadn't used it yet.)
+    if (infoOf(used)?.once) {
+      const m = night === s.night && infoOf(used).once(view, p, strat, evilSide ? "lie" : "random");
+
+      if (m) {
+        out.push({ ...m, functioning: false });
+      }
+
       continue;
     }
 

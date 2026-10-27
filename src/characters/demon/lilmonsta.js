@@ -74,7 +74,13 @@ export const lilmonsta = {
     const current = this.babysitter();
     const options = this.sitters();
 
-    if (!s.lilMonsta || !options.length) {
+    // (Not once it's dead: its babysitter died, on the Mastermind's extra
+    // day, or with the twins keeping the game going.)
+    if (s.lilMonsta && current && !current.alive) {
+      s.lilMonsta.dead = true;
+    }
+
+    if (!s.lilMonsta || s.lilMonsta.dead || !options.length) {
       return;
     }
 
@@ -174,6 +180,17 @@ export const lilmonsta = {
         ? "the Storyteller is helping good, and no evil player but the babysitter can die"
         : "nobody it can kill"
       : steerWhy(s, pool, killHelps);
+
+    // (With no NPC it can kill, it kills you, as any Demon does: see
+    // strategy demon(). Else the game could never end: say, with you the
+    // Tea Lady between two good neighbours.)
+    const you = s.players.find((x) => x.human && x.alive);
+
+    if (!pool.length && you && !s.revived.includes(you.id)) {
+      (d.killWhy ??= {})[you.id] = "the Storyteller's choice: nobody but its own team is left to kill, besides you";
+      this.attack(d, you);
+      return;
+    }
 
     if (!t) {
       this.audit("lilmonsta", `Lil' Monsta: nobody dies tonight (why: ${why}).`);

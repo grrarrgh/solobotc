@@ -12,7 +12,7 @@ export const mastermind = {
       (x) => (x.alive || x.vigor) && x.role === "mastermind" && works(x),
     );
 
-    if (!m || s.mastermindDay) {
+    if (!m || s.mastermindDay || s.mastermindDone) {
       return false;
     }
 
@@ -42,6 +42,14 @@ export const mastermind = {
       this.finish("evil", "A good player was executed on the Mastermind's extra day.");
     } else {
       this.finish("good", "An evil player was executed on the Mastermind's extra day.");
+    }
+
+    // (Good's win can be held off, while both twins live: the game goes on
+    // as usual, without a Demon. Else check() would never end it.)
+    if (!s.winner) {
+      s.mastermindDay = null;
+      s.mastermindDone = true;
+      this.audit("mastermind", "The Mastermind's extra day is over, but the game goes on.");
     }
   },
 };

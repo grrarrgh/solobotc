@@ -12,7 +12,7 @@ import {
   who,
   choiceInfo,
 } from "../../storyteller.js";
-import { untwinned } from "../../strategy.js";
+import { twinSafe } from "../../strategy.js";
 import { whose } from "../../util.js";
 
 // The Sailor, mixed into Engine.prototype (see characters/index.js),
@@ -95,7 +95,9 @@ export const sailor = {
   },
 
   // Who the Storyteller makes drunk for a Sailor's choice, and why:
-  // - never a twin;
+  // - never their choice if that's a twin (see twinSafe()), but the Sailor
+  //   themself, twin or not: it's their own ability (else a good twin
+  //   Sailor could never die, nor a Demon they chose ever act);
   // - with fewer than SAILOR_LATE_ALIVE alive, the Sailor more often than
   //   not (SAILOR_LATE_DRUNK_CHANCE);
   // - when it decides whether an attack on `victim` kills, the choice that
@@ -103,7 +105,7 @@ export const sailor = {
   // - otherwise the Sailor at SAILOR_DRUNK_SELF_CHANCE.
   sailorDrunk(sailor, target, demon, victim) {
     const s = this.s;
-    const options = untwinned(s, [sailor, target]);
+    const options = [sailor, target].filter((x) => x === sailor || !twinSafe(s, x));
 
     if (options.length < 2) {
       return { drunk: options[0] ?? null, why: "" };

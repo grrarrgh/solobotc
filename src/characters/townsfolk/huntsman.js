@@ -67,7 +67,8 @@ export const huntsman = {
 
   // The Damsel t becomes a Townsfolk that isn't in play (her cover claim
   // too), chosen by Huntsman h. An NPC says so at dawn (see
-  // announceClaims(), damselSaved()).
+  // announceClaims(), damselSaved()). (Never the Pixie: a face-down
+  // character, shown a Townsfolk only at setup; see pixie.js pixieStart().)
   huntsmanSaves(t, h) {
     const s = this.s;
     const used = new Set(s.players.flatMap((x) => [x.role, x.shown]));
@@ -75,6 +76,7 @@ export const huntsman = {
       s.script.ids.filter(
         (id) =>
           team(id) === "townsfolk" &&
+          id !== "pixie" &&
           !used.has(id) &&
           id !== t.claim,
       ),

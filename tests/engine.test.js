@@ -57,6 +57,7 @@ import {
   sideOf,
   teammate,
   spares,
+  twinSafe,
 } from "../src/strategy.js";
 import {
   nightInfo,
@@ -4355,12 +4356,18 @@ test("the Demon never kills either twin, nor does the Mayor's bounce land on one
   }
 
   // With only the twins left to kill, the Demon kills you (see the next
-  // test); with you dead too, nobody.
+  // test); with you dead too, the good twin (else the game could never end).
   s.players[2].alive = false;
 
   assert.equal(strat.demon(s, imp), s.players[0]);
   s.players[0].alive = false;
-  assert.equal(strat.demon(s, imp), null);
+  assert.equal(strat.demon(s, imp), good);
+  assert.match(imp.killWhy[good.id], /^a twin, as nobody else good is left to kill/);
+
+  // Once either twin is dead, the other is a player like any other.
+  s.players[0].alive = true;
+  evil.alive = false;
+  assert.ok(!twinSafe(s, good));
 });
 
 test("Savant statements never name the human, and move on to new players each visit", () => {
@@ -6328,7 +6335,9 @@ test("the Marionette sits next to the Demon, thinks they're good, and hears fals
     assert.ok(near.some((x) => team(x.role) === "demon"), `seed ${seed}`);
     assert.equal(m.alignment, "evil");
     assert.equal(team(m.shown), "townsfolk");
-    assert.equal(m.claim, m.shown);
+    // (Shown the Pixie, a face-down character, they claim the Townsfolk the
+    // Pixie was shown instead: see pixie.js pixieStart().)
+    assert.equal(m.claim, m.shown === "pixie" ? m.pixieRole : m.shown);
     assert.ok(!s.players.some((x) => x !== m && x.role === m.shown));
     assert.deepEqual(m.bluffs, []);
     assert.ok(!m.human);
@@ -7511,7 +7520,7 @@ test("a Courtier counts down how long their choice is drunk", () => {
   assert.equal(strat.courtierLine(s, chose), "My choice, the Imp, is no longer drunk.");
 });
 
-test("log.txt names players by seat, character and claim: P4.Baron(Butler)", () => {
+test('log.txt names players by seat, character (in capitals when evil) and claim: P4 BARON "Butler", but P2 Chef when they claim what they are', () => {
   const s = base("log-names");
   const e = new Engine(s);
   const [human, chef, , baron] = s.players;
@@ -7522,14 +7531,25 @@ test("log.txt names players by seat, character and claim: P4.Baron(Butler)", () 
   baron.claim = "butler";
   e.audit("test", `${baron.label} (Baron) chose ${chef.label}; ${human.label} saw.`);
 
-  assert.ok(e.debugLog().includes(`[test] P4.Baron(Butler) chose P2.Chef(Chef); You saw.`));
-  assert.match(e.debugLog(), /^You: +P1\.[A-Za-z ]+\([A-Za-z ]+\)$/m);
+  // (No quotes for a claim that's just their character.)
+  assert.ok(e.debugLog().includes(`[test] P4 BARON "Butler" chose P2 Chef; You saw.`));
+  assert.match(e.debugLog(), /^You: +P1 [A-Za-z ]+$/m);
+
+  // What you saw or heard is marked ▶: a public statement, your own
+  // information; not the Storyteller's business.
+  e.audit("gossip", `${chef.label} said "${baron.label} is a Minion." (true).`);
+  e.audit("information", "You received: Mayor: nothing.");
+  e.audit("poison", `${baron.label} chose ${chef.label}; poisoned.`);
+  assert.match(e.debugLog(), /^▶ \[gossip\] P2 Chef said/m);
+  assert.match(e.debugLog(), /^▶ \[information\] You received/m);
+  assert.match(e.debugLog(), /^ {2}\[poison\] P4 BARON "Butler" chose/m);
 
   // A character change shows the one before: the Pit-Hag turns the Chef
   // into the Imp.
   chef.role = "imp";
+  chef.alignment = "evil";
   e.audit("test", `${chef.label} woke.`);
-  assert.ok(e.debugLog().includes(`[test] P2.Chef->Imp(Chef) woke.`));
+  assert.ok(e.debugLog().includes(`[test] P2 CHEF->IMP "Chef" woke.`));
 });
 
 test("log.txt names a claim's gained abilities after it: a pretend Philosopher-Alchemist-Poisoner, a real Philosopher", () => {
@@ -7548,7 +7568,7 @@ test("log.txt names a claim's gained abilities after it: a pretend Philosopher-A
 
   assert.ok(
     e.debugLog().includes(
-      "[test] P3.Damsel(Philosopher->Alchemist->Poisoner) and P2.Philosopher(Philosopher->Snake Charmer).",
+      '[test] P3 Damsel "Philosopher->Alchemist->Poisoner" and P2 Philosopher "Philosopher->Snake Charmer".',
     ),
   );
 });
@@ -12317,9 +12337,11 @@ test("Lil' Monsta's night kill: the Storyteller's choice, never its babysitter, 
   assert.match(kill.text, /^Lil' Monsta \(babysat by Player 4, the Poisoner\) chose .*why: the Storyteller's choice.*was killed\./);
   assert.equal(s.players.filter((x) => !x.alive).length, 1);
 
-  // With nobody it can kill (each protected by the Monk), nobody dies.
-  const t = lilDay("lil-kill-none");
+  // With no NPC it can kill (each protected by the Monk), it kills you, as
+  // any Demon does; with you dead too, nobody dies.
+  const t = lilDay("lil-kill-you");
 
+  role(t.p[0], "empath", "good");
   t.s.phase = "night";
   t.s.night = 2;
 
@@ -12328,7 +12350,12 @@ test("Lil' Monsta's night kill: the Storyteller's choice, never its babysitter, 
   }
 
   t.e.demon();
-  assert.ok(t.s.players.every((x) => x.alive));
+  assert.equal(t.p[0].alive, false);
+  assert.ok(t.s.audit.some((x) => /chose You \(why: the Storyteller's choice: nobody but its own team is left to kill, besides you\)/.test(x.text)));
+
+  t.s.night = 3;
+  t.e.demon();
+  assert.ok([t.p[1], t.p[2], t.p[3], t.p[4]].every((x) => x.alive));
   assert.ok(t.s.audit.some((x) => /Lil' Monsta: nobody dies tonight/.test(x.text)));
 });
 
@@ -12556,4 +12583,187 @@ test("whole games play out on No Roles Barred, with the new characters doing the
   for (const [k, n] of Object.entries(seen)) {
     assert.ok(n > 0, `${k}: ${JSON.stringify(seen)}`);
   }
+});
+
+// ── Games that couldn't end (random-script fuzzing) ──────────────
+
+test("a Boomdandy executed on the Mastermind's extra day loses the game for evil, with no explosion", () => {
+  const { s, e } = boomDay("boom-mastermind");
+
+  s.mastermindDay = s.day;
+  e.endDay();
+
+  assert.ok(!s.boom);
+  assert.equal(s.winner, "good");
+  assert.equal(s.reason, "An evil player was executed on the Mastermind's extra day.");
+});
+
+test("with only the evil team alive, an evil NPC nominates a teammate who isn't the Demon, and the team votes for it", () => {
+  const s = base("only-evil");
+  const strat = new SimpleStrategy();
+  const [you, chef, butler, baron, imp] = s.players;
+
+  you.alive = false;
+  chef.alive = false;
+  role(butler, "poisoner", "evil");
+
+  const n = strat.nomination(s, imp);
+
+  assert.ok([butler, baron].includes(n.target));
+  assert.match(n.why, /^only the evil team is left alive: their teammate Player \d \((Poisoner|Baron)\), to reach the final 2$/);
+  assert.equal(strat.vote(s, baron, butler), true);
+  assert.equal(strat.vote(s, butler, butler), true);
+
+  // (Never the Demon.)
+  assert.equal(strat.vote(s, baron, imp), false);
+
+  // With anyone good alive, as before.
+  chef.alive = true;
+  assert.ok(!strat.nomination(s, imp)?.why);
+});
+
+test("the Demon never chooses you the night you came back to life (you can't die again tonight)", () => {
+  const s = base("revived-you");
+  const strat = new SimpleStrategy();
+  const [you, chef, butler, , imp] = s.players;
+
+  role(you, "empath", "good");
+  chef.alive = false;
+  butler.alive = false;
+  s.revived = [you.id];
+
+  assert.notEqual(strat.demon(s, imp), you);
+
+  s.revived = [];
+  assert.equal(strat.demon(s, imp), you);
+});
+
+// ── The Pixie is face-down ───────────────────────────────────────
+
+test("the Pixie is face-down: every NPC Pixie (real, shown or bluffed) claims their Townsfolk from setup, and nobody alive ever claims the Pixie", () => {
+  const kinds = new Set();
+
+  for (let g = 0; g < 120; g++) {
+    const raw = g % 2 ? tr : nrb;
+    const s = createState(raw, 8 + (g % 8), `pixie-face-down-${g}`);
+    const e = new Engine(s);
+    const pixies = s.players.filter(
+      (x) => !x.human && (x.role === "pixie" || x.shown === "pixie" || x.bluff === "pixie"),
+    );
+
+    for (const p of pixies.filter((x) => x.pixieRole)) {
+      kinds.add(p.role === "pixie" ? "real" : p.shown === "pixie" ? "shown" : "bluffed");
+      assert.equal(p.claim, p.pixieRole, `game ${g}`);
+      assert.ok(p.pixieMad);
+      assert.equal(team(p.pixieRole), "townsfolk");
+      assert.ok(s.audit.some((x) => x.type === "pixie" && /is face-down: shown the .+, they're mad that they are it, and claim it\./.test(x.text)));
+
+      // (A real one is shown a Townsfolk in play.)
+      if (p.role === "pixie") {
+        assert.ok(s.players.some((x) => x !== p && x.role === p.pixieRole), `game ${g}`);
+      }
+    }
+
+    const audit = e.audit.bind(e);
+
+    e.audit = (...args) => {
+      for (const p of s.players.filter((x) => x.alive && !x.human)) {
+        assert.notEqual(p.claim, "pixie", `game ${g}: ${p.label} claims the Pixie (${args[1]})`);
+      }
+
+      return audit(...args);
+    };
+
+    e.start();
+
+    for (let turn = 0; turn < 12 && !s.winner; turn++) {
+      settle(e);
+
+      if (s.phase === "day" && !s.winner && !s.pendingVote && !s.roshambo && !s.boom) {
+        e.endDay();
+      }
+    }
+  }
+
+  assert.ok(kinds.has("real") && kinds.has("bluffed"), [...kinds].join(", "));
+});
+
+test("log.txt lists whom each NPC talked to in seat order", () => {
+  const { s } = playOut(nrb, 12, "talks-in-seat-order");
+
+  for (const entry of s.audit.filter((x) => x.type === "talks")) {
+    for (const line of entry.text.split("\n")) {
+      const seats = line
+        .split(" → ")[1]
+        .split(", ")
+        .map((x) => (x === "You" ? 1 : Number(x.replace("Player ", ""))));
+
+      assert.deepEqual(seats, [...seats].sort((a, b) => a - b), line);
+    }
+  }
+});
+
+test("a good player pretending to be the Gossip (a Damsel hiding as one) still makes a statement by the end of the day", () => {
+  const s = base("damsel-gossip");
+  const strat = new SimpleStrategy();
+  const damsel = s.players[2];
+
+  role(damsel, "damsel", "good");
+  damsel.claim = "gossip";
+  s.r = () => 0.99; // (no statement on the day's chance)
+
+  // Strongly suspecting nobody, nothing during the day...
+  assert.equal(strat.gossip(s, damsel), null);
+
+  // ...but at the end of the day, about their suspect, as a real Gossip.
+  const said = strat.gossip(s, damsel, true);
+
+  assert.ok(said?.target && !said.target.human && said.target !== damsel);
+});
+
+test("a good player pretending to be a character acts it out in public as a real one does: shares made-up information, uses a Seamstress's once-per-game choice, and shoots as the Slayer", () => {
+  // Sharing: a Damsel hiding as the Noble shares her made-up Night 1
+  // information in public (12+ seats), never her real character's.
+  const s = createState(script, 12, "pretend-share");
+  const e = new Engine(s);
+  const damsel = s.players[2];
+
+  role(damsel, "damsel", "good");
+  damsel.claim = "noble";
+  bluffState(damsel).hidden = {
+    as: "noble",
+    memories: [{ night: 1, role: "noble", text: "Noble: one of Player 4, Player 5 and Player 6 is evil.", targets: [] }],
+  };
+  s.day = 1;
+  s.night = 1;
+  s.r = () => 0; // (every share's chance comes up)
+  e.shareInfo();
+  assert.ok(s.audit.some((x) => x.type === "share" && /Player 3 says: "I am the Noble\. Night 1: .* \(made up: they aren't the Noble\)$/.test(x.text)));
+
+  // A Seamstress's once-per-game choice, in a made-up story.
+  const t = base("pretend-seamstress");
+  const mutant = t.players[2];
+
+  role(mutant, "mutant", "good");
+  mutant.claim = "seamstress";
+  t.night = 2;
+  t.r = () => 0; // (the once-per-game chance comes up)
+
+  const story = backStory(t, mutant, "seamstress", new SimpleStrategy());
+
+  assert.ok(story.some((m) => m.role === "seamstress" && m.night === 2 && /^Seamstress: /.test(m.text)));
+  assert.ok(mutant.seamUsed);
+
+  // The Slayer: with nobody they strongly suspect, their suspect.
+  const u = base("pretend-slayer");
+  const d = u.players[2];
+
+  role(d, "damsel", "good");
+  d.claim = "slayer";
+  u.day = 3; // (the Slayer's once-per-game timing: not on Day 1)
+  u.r = () => 0;
+
+  const shot = new SimpleStrategy().slay(u, d);
+
+  assert.ok(shot && !shot.human && shot !== d);
 });
