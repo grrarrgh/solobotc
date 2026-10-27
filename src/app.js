@@ -26,7 +26,7 @@ import {
   JINXES,
 } from "./data.js";
 import { createState, parseScript } from "./setup.js";
-import { ability, minionAbility, wishBarred } from "./storyteller.js";
+import { ability, minionAbility, wishBarred, listLabels } from "./storyteller.js";
 import { WIZARD_WISHES } from "./characters/minion/wizard.js";
 import { Engine, canPick } from "./engine.js";
 import {
@@ -305,7 +305,11 @@ function circle() {
           class="seat ${p.human ? "human" : ""} ${p.alive ? "" : "dead"} ${
             mark ? `guess-${mark}` : ""
           } ${
-            (s.pending ? nightPicks.includes(p.id) : p.id === selectedPlayerId)
+            (s.pending
+              ? nightPicks.includes(p.id)
+              : artistMode
+                ? artistPicks.includes(p.id)
+                : p.id === selectedPlayerId)
               ? "selected"
               : ""
           }"
@@ -375,6 +379,15 @@ function circle() {
 
         if (s.pending) {
           pickAtNight(b.dataset.id);
+        } else if (artistMode) {
+          // (Your Artist question: any other player, dead or alive.)
+          const id = b.dataset.id;
+
+          if (!e.player(id).human) {
+            artistPicks = artistPicks.includes(id)
+              ? artistPicks.filter((x) => x !== id)
+              : [...artistPicks, id];
+          }
         } else {
           // (Choosing someone else ends any conversation.)
           if (b.dataset.id !== talkingTo) {
@@ -706,6 +719,126 @@ function renderNightChoice() {
 
 // A clock tower (spire, clock face, belfry and door), drawn in the town
 // square's gold and stone colours.
+// ── The Sun/Moon clock ───────────────────────────────────────
+
+// How long the Sun/Moon clock takes to turn from day to night, or back
+// (half a turn), in ms. A night you sleep through turns it a whole turn,
+// taking twice as long.
+const DIAL_TURN_MS = 1500;
+
+// The wheel behind the clock's window (see .phase-wheel in styles.css): the
+// day sky and the Sun on its top half, the night sky, stars and the Moon on
+// its bottom half (drawn upside down, so they're upright once it turns).
+// The window shows the middle of its top half.
+const PHASE_WHEEL_SVG = `<svg viewBox="0 0 200 200" aria-hidden="true">
+  <defs>
+    <linearGradient id="dial-day" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5d9bd5" />
+      <stop offset="1" stop-color="#f3c98b" />
+    </linearGradient>
+    <linearGradient id="dial-night" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#0d1530" />
+      <stop offset="1" stop-color="#2b3566" />
+    </linearGradient>
+  </defs>
+  <path d="M0 100 A100 100 0 0 1 200 100 Z" fill="url(#dial-day)" />
+  <path d="M0 100 A100 100 0 0 0 200 100 Z" fill="url(#dial-night)" />
+  <g fill="#ffd34d" stroke="#ffd34d" stroke-width="3" stroke-linecap="round">
+    <circle cx="100" cy="48" r="15" stroke="none" />
+    ${[0, 45, 90, 135, 180, 225, 270, 315]
+      .map((a) => `<line x1="100" y1="25" x2="100" y2="17" transform="rotate(${a} 100 48)" />`)
+      .join("")}
+  </g>
+  <g transform="rotate(180 100 100)">
+    <path d="M108 32 A17 17 0 1 0 108 64 A13 13 0 1 1 108 32 Z" fill="#f4eccb" />
+    <g fill="#f4eccb">
+      <circle cx="72" cy="30" r="1.6" />
+      <circle cx="128" cy="40" r="1.3" />
+      <circle cx="80" cy="60" r="1.1" />
+      <circle cx="122" cy="66" r="1.5" />
+      <circle cx="92" cy="22" r="1" />
+    </g>
+  </g>
+</svg>`;
+
+// The wheel's angle (a multiple of 360: the Sun is up; of 180 but not 360:
+// the Moon), and the day or night it last showed ("d3", "n4").
+let dialAngle = 0;
+let dialShown = null;
+
+// The Sun/Moon clock: the Moon at night (it waits there while you choose:
+// the engine stops on s.pending), the Sun by day, turning between them; a
+// night you sleep through, a whole turn, from Sun to Moon to Sun. The day
+// (or night) under it. As the Artist, by day, press the Sun to ask your
+// question (see artistCan()).
+function renderDial() {
+  const wheel = $("phase-wheel");
+  const night = s.phase === "night" && !s.winner;
+  const key = night ? `n${s.night}` : `d${s.day}`;
+  const label = night ? `Night ${s.night}` : `Day ${s.day}`;
+
+  if (!wheel.firstChild) {
+    wheel.innerHTML = PHASE_WHEEL_SVG;
+  }
+
+  if (dialShown !== key) {
+    const up = dialAngle % 360 === 0 ? "sun" : "moon";
+    // (Half turns: to the other side, or right round to a new day.)
+    const turns = dialShown === null ? 0 : (night ? "moon" : "sun") === up ? 2 : 1;
+
+    dialAngle = dialShown === null ? (night ? 180 : 0) : dialAngle + 180 * turns;
+    dialShown = key;
+    wheel.style.transitionDuration = `${DIAL_TURN_MS * turns}ms`;
+    wheel.style.transform = `rotate(${dialAngle}deg)`;
+  }
+
+  $("phase-day").textContent = label;
+  $("phase-alive").textContent = `${e.alive().length} alive`;
+  $("phase-dial").setAttribute(
+    "aria-label",
+    `${label}${artistCan() ? ": ask your Artist question" : ""}`,
+  );
+  $("phase-dial").classList.toggle("ask", artistCan() && !artistMode);
+  $("phase-dial").title = artistCan() ? "Artist: ask the Storyteller your question" : label;
+}
+
+// ── The Artist's question ────────────────────────────────────
+
+// While you're making your Artist question (after pressing the Sun): the
+// players you've picked on the town square, dead or alive.
+let artistMode = false;
+let artistPicks = [];
+
+// Whether you can ask your Artist question now: once per game, by day,
+// alive.
+function artistCan() {
+  const h = e.human();
+
+  return (
+    s.phase === "day" &&
+    !s.winner &&
+    !s.pending &&
+    ability(h) === "artist" &&
+    !h.artistUsed &&
+    h.alive
+  );
+}
+
+// The question being made: "Is there [a Good player] among [Player 3 and
+// Player 5]?", with Ask question once a player is picked.
+function renderArtist() {
+  if (artistMode && !artistCan()) {
+    artistMode = false;
+    artistPicks = [];
+  }
+
+  $("artist-panel").hidden = !artistMode;
+  $("artist-picks").innerHTML = artistPicks.length
+    ? colourPlayers(esc(listLabels(artistPicks.map((id) => e.player(id)))))
+    : "<em>(select players on the town square)</em>";
+  $("artist-ask").disabled = !artistPicks.length;
+}
+
 const CLOCKTOWER_SVG = `<svg viewBox="0 0 64 64" aria-hidden="true">
   <circle cx="32" cy="3" r="1.5" fill="#f0cf83" />
   <path d="M32 4 21 19h22z" fill="#b69455" />
@@ -1549,12 +1682,9 @@ function draw() {
   $("self-play").hidden = !bot;
   $("self-play").textContent = `Self-play: ${selfPlayOn ? "on" : "paused"}`;
 
-  // The winner is only shown in the Final reveal.
-  $("status").textContent = s.winner
-    ? "Game Over!"
-    : s.phase === "night"
-      ? `Night ${s.night} — ${e.alive().length} alive`
-      : `Day ${s.day} — ${e.alive().length} alive`;
+  // The winner is only shown in the Final reveal. (How many are alive is
+  // under the Sun/Moon clock: see renderDial().)
+  $("status").textContent = s.winner ? "Game Over!" : "";
 
   $("selected-player").innerHTML = t ? colourPlayers(`Selected: ${t.label}`) : "";
 
@@ -1578,6 +1708,8 @@ function draw() {
   renderPublic();
   renderMark(t);
   renderNightChoice();
+  renderDial();
+  renderArtist();
 
   $("actions").hidden = !!s.winner || !t || !!s.pending || !!s.boom || !!s.roshambo;
   $("day-controls").hidden =
@@ -1700,11 +1832,6 @@ function draw() {
     !s.dayNominators.includes(h.id) &&
     !s.nominated.includes(h.id)
   );
-  $("artist-controls").hidden = !(
-    ability(h) === "artist" &&
-    !h.artistUsed &&
-    h.alive
-  );
   $("gossip-controls").hidden = !(
     ability(h) === "gossip" &&
     h.alive &&
@@ -1714,7 +1841,7 @@ function draw() {
   // With yourself selected (to nominate: see selfSelectable()), only the
   // nomination buttons apply.
   if (t?.human) {
-    for (const id of ["mark", "puzzle", "slay", "psychopath-kill", "wish-controls", "artist-controls", "gossip-controls"]) {
+    for (const id of ["mark", "puzzle", "slay", "psychopath-kill", "wish-controls", "gossip-controls"]) {
       $(id).hidden = true;
     }
   }
@@ -1850,6 +1977,9 @@ function resetGame() {
   selectedPlayerId = null;
   marks = {};
   nightPicks = [];
+  artistMode = false;
+  artistPicks = [];
+  dialShown = null;
   shownGameOver = false;
   cardsShown = 0;
   alertSeen.clear();
@@ -1865,6 +1995,7 @@ function resetGame() {
   $("night-choice").hidden = true;
   $("day-controls").hidden = true;
   $("day-answer").textContent = "";
+  $("artist-answer").textContent = "";
 
   $("game").hidden = true;
   $("setup").hidden = false;
@@ -2108,15 +2239,37 @@ $("slay").onclick = () => {
   }
 };
 
+// The Sun, as the Artist: start your question.
+$("phase-dial").onclick = () => {
+  if (!e || !artistCan()) {
+    return;
+  }
+
+  artistMode = true;
+  artistPicks = [];
+  selectedPlayerId = null;
+  talkingTo = null;
+  $("artist-answer").textContent = "";
+  render();
+};
+
 $("artist-ask").onclick = () => {
   try {
-    $("answer").innerHTML = linkRoles(
-      e.artist(selectedPlayerId, $("artist-question").value),
-    );
+    const answer = e.artist(artistPicks, $("artist-question").value);
+
+    artistMode = false;
+    artistPicks = [];
+    $("artist-answer").innerHTML = linkRoles(answer);
     render();
   } catch (err) {
-    $("answer").textContent = err.message;
+    $("artist-answer").textContent = err.message;
   }
+};
+
+$("artist-cancel").onclick = () => {
+  artistMode = false;
+  artistPicks = [];
+  render();
 };
 
 $("gossip-say").onclick = () => {
@@ -2365,8 +2518,16 @@ $("seats").innerHTML = Object.keys(COUNTS)
 
 $("seats").value = DEFAULT_SEATS;
 
-$("artist-question").innerHTML = Object.entries(ARTIST_QUESTIONS)
-  .map(([k, v]) => `<option value="${k}">Is this player ${esc(v)}?</option>`)
+// "Is there [a Good player / an Evil player / an Outsider / a Demon / a
+// Minion] among ...?"
+$("artist-question").innerHTML = [
+  ["good", "a Good player"],
+  ["evil", "an Evil player"],
+  ["outsider", "an Outsider"],
+  ["demon", "a Demon"],
+  ["minion", "a Minion"],
+]
+  .map(([k, v]) => `<option value="${k}">${esc(v)}</option>`)
   .join("");
 
 $("gossip-question").innerHTML = Object.entries(ARTIST_QUESTIONS)

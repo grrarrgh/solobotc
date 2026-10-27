@@ -6,7 +6,7 @@
 // most. They draw from their own seeded RNG, not s.r, so a game you play by
 // hand and one played for you share the same deal. Every decision is logged
 // ("selfplay" in log.txt).
-import { name, ARTIST_QUESTIONS } from "./data.js";
+import { name, ARTIST_QUESTIONS, HUMAN_ARTIST_QUESTIONS } from "./data.js";
 import { canPick } from "./engine.js";
 import { ability, wishBarred } from "./storyteller.js";
 import { AMNESIAC_GUESSES } from "./characters/townsfolk/amnesiac.js";
@@ -249,13 +249,13 @@ export class SelfPlay {
     }
 
     const t = this.suspect();
-    const question = () => pick(Object.keys(ARTIST_QUESTIONS), this.r);
+    const question = (list = ARTIST_QUESTIONS) => pick(Object.keys(list), this.r);
     const uses = {
       savant: h.savantDay !== s.day && (() => e.savant()),
       fisherman: !h.fishermanUsed && (() => e.fisherman()),
       puzzlemaster: !h.puzzleUsed && t && (() => e.puzzlemaster(t.id)),
       slayer: !s.slayerUsed && t && (() => e.slay(t.id)),
-      artist: !h.artistUsed && t && (() => e.artist(t.id, question())),
+      artist: !h.artistUsed && t && (() => e.artist([t.id], question(HUMAN_ARTIST_QUESTIONS))),
       gossip: h.gossipDay !== s.day && t && (() => e.gossip(t.id, question())),
       amnesiac:
         e.amnesiacOpen() &&

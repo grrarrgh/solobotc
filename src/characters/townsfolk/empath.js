@@ -26,7 +26,8 @@ export const info = {
   lie(s, p) {
     // Stay consistent: repeat last night's (wrong) number while the same two
     // neighbours sit either side; once one dies, report a different number.
-    // With the evil team's scapegoat as a neighbour, the number goes up.
+    // With an evil neighbour, the number goes down, to hide them; otherwise,
+    // with the evil team's scapegoat as a neighbour, it goes up.
     const near = neigh(s, p);
     const key = near.map((x) => x.id).join(",");
     const truth = empathCount(s, p);
@@ -34,12 +35,13 @@ export const info = {
     const all = [0, 1, 2].filter((k) => k !== truth && k !== last?.n);
     const close = all.filter((k) => Math.abs(k - truth) === 1);
     const options = close.length ? close : all;
-    // With the scapegoat as a neighbour the number goes up; otherwise, with an
-    // evil neighbour, it goes down.
-    const framing = near.includes(framed(s, p))
-      ? options.filter((k) => k > truth)
-      : evilNear(s, p).length
-        ? options.filter((k) => k < truth)
+    // (Hiding an evil neighbour comes first: raising the number to frame
+    // the scapegoat would point at them too.)
+    const goat = framed(s, p);
+    const framing = evilNear(s, p).length
+      ? options.filter((k) => k < truth)
+      : near.includes(goat)
+        ? options.filter((k) => k > truth)
         : options;
 
     // (An evil bluffer next to a teammate, or to you, says 0: anything more

@@ -366,8 +366,16 @@ export const info = {
       return amnesiacYes(!mates && !neigh(s, p).some(demonish), neigh(s, p));
     }
 
+    // (With an evil neighbour, a lower number, to hide them: a higher one
+    // would point at them.)
     if (key === "evilneighbours") {
-      return amnesiacNumber(mates ? 0 : wrongNumber(s, empathCount(s, p)), neigh(s, p));
+      const n = empathCount(s, p);
+      const lower = evilNear(s, p).length ? [0, 1, 2].filter((k) => k < n) : [];
+
+      return amnesiacNumber(
+        mates ? 0 : wrongNumber(s, n, lower.length ? lower : undefined),
+        neigh(s, p),
+      );
     }
 
     if (key === "evilpairs") {

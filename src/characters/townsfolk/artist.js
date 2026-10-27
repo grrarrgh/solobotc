@@ -1,4 +1,4 @@
-import { ARTIST_QUESTIONS, team } from "../../data.js";
+import { ARTIST_QUESTIONS, HUMAN_ARTIST_QUESTIONS, team } from "../../data.js";
 import {
   ability,
   infoMode,
@@ -50,11 +50,12 @@ export const artist = {
   },
 
   // Once per game, the human Artist asks the Storyteller a yes/no question
-  // about a player.
-  artist(id, question) {
+  // about one or more players, dead or alive (`ids`): "Is there a ...
+  // among them?" (see HUMAN_ARTIST_QUESTIONS).
+  artist(ids, question) {
     const s = this.s;
     const h = this.human();
-    const t = this.player(id);
+    const ts = [].concat(ids).map((id) => this.player(id));
 
     if (
       s.phase !== "day" ||
@@ -62,16 +63,18 @@ export const artist = {
       ability(h) !== "artist" ||
       h.artistUsed ||
       !h.alive ||
-      !t ||
-      !ARTIST_QUESTIONS[question]
+      !ts.length ||
+      ts.some((t) => !t || t.human) ||
+      !HUMAN_ARTIST_QUESTIONS[question]
     ) {
       throw Error("Artist unavailable.");
     }
 
     h.artistUsed = true;
 
-    const info = artistInfo(s, t, question, infoMode(s, h));
+    const info = artistInfo(s, ts, question, infoMode(s, h));
 
+    // (log.txt has it: see engine remember().)
     this.remember(h, info);
 
     return info.text;
@@ -83,7 +86,9 @@ export const artist = {
 // Artist's question: how a Recluse or Spy registers goes by the
 // Storyteller's lean (see leanRegistersEvil()).
 export const artistTruth = (t, q, s = null) =>
-  q === "evil"
+  q === "good"
+    ? !artistTruth(t, "evil", s)
+    : q === "evil"
     ? s
       ? leanRegistersEvil(s, t)
       : registersEvil(t)
@@ -107,7 +112,7 @@ export function artistInfo(s, targets, q, mode) {
     day: s.day,
     night: s.night,
     role: "artist",
-    text: `Artist: asked if ${who} is ${ARTIST_QUESTIONS[q]}: ${
+    text: `Artist: asked if ${who} is ${(ARTIST_QUESTIONS[q] ?? HUMAN_ARTIST_QUESTIONS[q])}: ${
       yes ? "YES" : "NO"
     }.`,
     targets: ts.map((t) => t.id),
@@ -128,6 +133,12 @@ export const info = {
 
     if (/ is (evil|the Demon|a Minion):/.test(m.text)) {
       return yes ? "suspicious" : "trust";
+    }
+
+    // (Asked if they're good: a NO says they're all evil; a YES vouches
+    // for a player asked about alone.)
+    if (/ is good:/.test(m.text)) {
+      return yes ? ((m.targets ?? []).length === 1 ? "trust" : null) : "suspicious";
     }
 
     return / is a Townsfolk:/.test(m.text) ? (yes ? "trust" : "suspicious") : null;

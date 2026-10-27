@@ -25,6 +25,7 @@ import {
   LEGION_STRONG_SHARE,
   ALCHEMIST_ABILITIES,
   PHILOSOPHER_AVOID,
+  FACE_DOWN_OUTSIDERS,
   name,
   team,
   alignment,
@@ -3641,9 +3642,14 @@ test("once dead, a Mutant (or Mutant bluffer) claims the Mutant; other evil keep
 
 test("an evil player who keeps the Mutant bluff claims a Townsfolk no teammate claims", () => {
   let mutantBluffs = 0;
+  // (The Demon only gets an Outsider bluff with a face-down Outsider in
+  // play, so a script with the Mutant and another: the Drunk or Lunatic.)
+  const raw = JSON.parse(
+    fs.readFileSync(new URL("../scripts/Catfishing_11_1_1.json", import.meta.url)),
+  );
 
   for (let seed = 0; seed < 600; seed++) {
-    const s = createState(sv, 10, seed);
+    const s = createState(raw, 12, seed);
 
     for (const p of s.players.filter((x) => x.bluff === "mutant")) {
       // (The Evil Twin copies their good twin's claim instead.)
@@ -12430,7 +12436,8 @@ test("the Bounty Hunter makes one Townsfolk NPC evil at setup, who doesn't know 
     assert.ok(!t[0].human && t[0] !== bh);
     assert.equal(team(t[0].role), "townsfolk");
     assert.equal(t[0].alignment, "evil");
-    assert.equal(t[0].claim, t[0].role);
+    // (A Pixie is face-down: they claim the Townsfolk they were shown.)
+    assert.equal(t[0].claim, t[0].role === "pixie" ? t[0].pixieRole : t[0].role);
     assert.deepEqual(t[0].bluffs, []);
     assert.ok(s.audit.some((x) => x.type === "bountyhunter" && /is evil\. They know they're evil/.test(x.text)));
 
@@ -13089,4 +13096,148 @@ test("whole games of Harold Holt's Revenge play out without errors, and a Leviat
       }
     }
   }
+});
+
+test("a misinformed Empath next to an evil player and the scapegoat hides the evil one: the number goes down, not up", () => {
+  const s = base("empath-frame");
+  const [, chef, butler, baron, imp] = s.players;
+
+  // You (Mayor), Chef, Empath, Imp, Baron: the Empath's neighbours are the
+  // Chef (the evil team's scapegoat) and the Imp. Truly 1; framing the Chef
+  // with a 2 would point at the Imp too.
+  role(butler, "empath", "good");
+  role(baron, "imp", "evil");
+  role(imp, "baron", "evil");
+  butler.poisoned = true;
+  s.scapegoat = chef.id;
+
+  assert.equal(scapegoat(s), chef);
+  assert.equal(infoOf("empath").lie(s, butler).text, "Empath number: 0.");
+
+  // (With no evil neighbour, it still frames the scapegoat.)
+  role(baron, "chef", "good");
+  role(imp, "imp", "evil");
+  butler.empathBluff = null;
+
+  assert.equal(infoOf("empath").lie(s, butler).text, "Empath number: 1.");
+});
+
+test("a misinformed Amnesiac told how many neighbours are evil hides an evil neighbour: a lower number", () => {
+  const s = base("amnesiac-frame");
+  const am = s.players[2];
+
+  // The Amnesiac sits between the Chef and the Baron: truly 1.
+  role(am, "amnesiac", "good");
+  am.amnesiac = "evilneighbours";
+  am.poisoned = true;
+
+  for (let i = 0; i < 10; i++) {
+    assert.equal(infoOf("amnesiac").lie(s, am).text, "Amnesiac number: 0.");
+  }
+});
+
+test("the Demon's bluffs: 1 high-value Townsfolk, 1 medium or low, and an Outsider only with a face-down Outsider in play", () => {
+  const files = JSON.parse(fs.readFileSync(new URL("../scripts/index.json", import.meta.url)));
+  let outsiders = 0;
+
+  for (const f of files) {
+    const raw = JSON.parse(
+      fs.readFileSync(new URL(`../scripts/${encodeURIComponent(f)}`, import.meta.url)),
+    );
+
+    for (let g = 0; g < 40; g++) {
+      const s = createState(raw, 8 + (g % 8), `bluff-shape-${g}`);
+      const b = s.demonBluffs;
+
+      // (Legion has its own rule: half as many bluffs as Legion.)
+      if (s.players.some((x) => x.role === "legion")) {
+        continue;
+      }
+
+      const faceDown = s.players.some((x) => FACE_DOWN_OUTSIDERS.includes(x.role));
+      const tf = b.filter((x) => team(x) === "townsfolk");
+      const out = b.filter((x) => team(x) === "outsider");
+
+      assert.ok(out.length <= 1, `${f} ${g}: ${b}`);
+      outsiders += out.length;
+
+      // (Whenever the script has one left over.)
+      const spare = (test) =>
+        s.script.ids.some(
+          (x) =>
+            team(x) === "townsfolk" &&
+            // (Never the Poppy Grower, whom nobody claims openly.)
+            x !== "poppygrower" &&
+            test(x) &&
+            !b.includes(x) &&
+            !s.players.some((p) => p.role === x || p.shown === x),
+        );
+
+      // (Without one, an Outsider only when the Townsfolk run out.)
+      if (!faceDown && out.length) {
+        assert.ok(!spare(() => true), `${f} ${g}: ${b}`);
+      }
+
+      if (spare((x) => DEMON_KILL_PRIORITY[x] === "high") || tf.some((x) => DEMON_KILL_PRIORITY[x] === "high")) {
+        // (More only when the medium and low ones run out.)
+        assert.ok(tf.some((x) => DEMON_KILL_PRIORITY[x] === "high"), `${f} ${g}: ${b}`);
+      }
+
+      if (b.length === 3) {
+        assert.ok(tf.length >= 2, `${f} ${g}: ${b}`);
+      }
+
+      assert.ok(
+        s.audit.some((x) => x.type === "bluffs" && /-value Townsfolk/.test(x.text) && /face-down Outsider/.test(x.text)),
+      );
+    }
+  }
+
+  assert.ok(outsiders > 0);
+});
+
+test("a Lunatic never claims the Mutant, Damsel or Heretic from their bluffs", () => {
+  const raw = JSON.parse(
+    fs.readFileSync(new URL("../scripts/Catfishing_11_1_1.json", import.meta.url)),
+  );
+  let lunatics = 0;
+
+  for (let seed = 0; seed < 300; seed++) {
+    const s = createState(raw, 12, `lunatic-claim-${seed}`);
+
+    for (const p of s.players.filter((x) => x.role === "lunatic" && !x.human)) {
+      lunatics++;
+      assert.ok(!["mutant", "damsel", "heretic"].includes(p.claim), p.claim);
+    }
+  }
+
+  assert.ok(lunatics > 0);
+});
+
+test("the human Artist can ask about several players, dead or alive, including whether any of them is good", () => {
+  const s = base("artist-many");
+  const [human, chef, butler, baron, imp] = s.players;
+
+  role(human, "artist", "good");
+  butler.alive = false;
+
+  const e = new Engine(s);
+  const answer = e.artist([baron.id, imp.id], "good");
+
+  assert.equal(answer, `Artist: asked if any of ${baron.label} and ${imp.label} is good: NO.`);
+  assert.ok(s.audit.some((x) => x.type === "information" && x.text.includes(answer)));
+
+  // (Once per game; and never about yourself.)
+  assert.throws(() => e.artist([chef.id], "evil"), /Artist unavailable/);
+
+  const t = base("artist-dead");
+
+  role(t.players[0], "artist", "good");
+  t.players[2].alive = false;
+
+  assert.equal(
+    new Engine(t).artist([t.players[1].id, t.players[2].id], "outsider"),
+    `Artist: asked if any of ${t.players[1].label} and ${t.players[2].label} is an Outsider: YES.`,
+  );
+  assert.throws(() => new Engine(base("artist-self")).artist([s.players[0].id], "good"), /Artist unavailable/);
 });

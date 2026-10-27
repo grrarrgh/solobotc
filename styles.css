@@ -1371,3 +1371,115 @@ button:disabled {
   color: #aab;
   font-size: 14px;
 }
+
+/* The Sun/Moon clock, top left of the town square: a round window onto a
+   wheel twice its size, turning about the window's bottom edge, with the
+   Sun at its top and the Moon at its bottom (see app.js renderDial()). As
+   big as a seat. */
+.phase-dial-wrap {
+  position: absolute;
+  left: 18px;
+  top: 18px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.phase-dial {
+  width: 92px;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 2px solid #b69455;
+  border-radius: 50%;
+  background: #181b21;
+  overflow: hidden;
+  cursor: default;
+}
+
+/* As the Artist, by day: press the Sun to ask your question. */
+.phase-dial.ask {
+  cursor: pointer;
+  box-shadow: 0 0 0 3px #f0cf83;
+}
+
+.phase-dial.ask:hover,
+.phase-dial.ask:focus-visible {
+  filter: drop-shadow(0 0 10px #f0cf83);
+}
+
+.phase-window {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.phase-wheel {
+  position: absolute;
+  left: -50%;
+  top: 0;
+  width: 200%;
+  height: 200%;
+  transition-property: transform;
+  transition-timing-function: ease-in-out;
+}
+
+.phase-wheel svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The horizon the Sun sets behind. */
+.phase-window::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 20%;
+  background: #2b2420;
+  border-top: 2px solid #b69455;
+}
+
+.phase-day {
+  color: #f0cf83;
+  font-weight: 700;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.phase-alive {
+  color: #ccc;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+/* The Artist's question, under the town square. */
+.artist-panel select {
+  margin: 0 4px;
+}
+
+.artist-panel p {
+  margin: 0 0 8px;
+}
+
+@media (max-width: 650px) {
+  .phase-dial-wrap {
+    left: 2px;
+    top: 2px;
+  }
+
+  .phase-dial {
+    width: 56px;
+  }
+
+  .phase-day,
+  .phase-alive {
+    font-size: 0.75rem;
+  }
+}

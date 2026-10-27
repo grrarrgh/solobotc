@@ -387,3 +387,27 @@ test("the version agrees: src/setup.js, package.json and the newest numbered rel
 test("night starts with nobody selected", () => {
   assert.match(app, /\(s\.phase === "night" && drawnPhase !== "night"\) \|\|[\s\S]*?selectedPlayerId = null;\s*\}\s*drawnPhase = s\.phase;/);
 });
+
+test("the Sun/Moon clock: top left of the town square, as big as a seat, turning in DIAL_TURN_MS (1.5 s), the day or night under it", () => {
+  assert.match(html, /class="town-square-wrap">[\s\S]*?<div class="phase-dial-wrap">\s*<button id="phase-dial"[\s\S]*?id="phase-wheel"[\s\S]*?<span id="phase-day"/);
+  assert.match(app, /const DIAL_TURN_MS = 1500;/);
+  assert.match(app, /wheel\.style\.transitionDuration = `\$\{DIAL_TURN_MS \* turns\}ms`/);
+  assert.match(app, /const label = night \? `Night \$\{s\.night\}` : `Day \$\{s\.day\}`;/);
+  assert.match(css, /\.phase-dial \{[^}]*width: 92px;/);
+  assert.match(css, /\.seat \{[^}]*width: 92px;/);
+  assert.match(css, /\.phase-wheel \{[^}]*transition-property: transform;/);
+  // (How many are alive, under it: the status line above says only Game
+  // Over!)
+  assert.match(html, /<span id="phase-day" class="phase-day"><\/span>\s*<span id="phase-alive"/);
+  assert.match(app, /\$\("phase-alive"\)\.textContent = `\$\{e\.alive\(\)\.length\} alive`;/);
+  assert.match(app, /\$\("status"\)\.textContent = s\.winner \? "Game Over!" : "";/);
+});
+
+test("the Artist presses the Sun to ask: a question from the dropdown, about players picked on the town square, then Ask question", () => {
+  assert.match(html, /id="artist-panel"[^>]*hidden[\s\S]*?Is there\s*<select id="artist-question"[\s\S]*?among <span id="artist-picks"><\/span>\?[\s\S]*?<button id="artist-ask"[^>]*>Ask question<\/button>/);
+  assert.match(app, /\$\("phase-dial"\)\.onclick = \(\) => \{[\s\S]*?artistMode = true;/);
+  assert.match(app, /\["good", "a Good player"\],\s*\["evil", "an Evil player"\],\s*\["outsider", "an Outsider"\],\s*\["demon", "a Demon"\],\s*\["minion", "a Minion"\],/);
+  assert.match(app, /e\.artist\(artistPicks, \$\("artist-question"\)\.value\)/);
+  assert.match(app, /\$\("artist-ask"\)\.disabled = !artistPicks\.length;/);
+  assert.doesNotMatch(html, /id="artist-controls"/);
+});

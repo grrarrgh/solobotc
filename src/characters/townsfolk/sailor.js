@@ -98,8 +98,10 @@ export const sailor = {
   // - never their choice if that's a twin (see twinSafe()), but the Sailor
   //   themself, twin or not: it's their own ability (else a good twin
   //   Sailor could never die, nor a Demon they chose ever act);
-  // - with fewer than SAILOR_LATE_ALIVE alive, the Sailor more often than
-  //   not (SAILOR_LATE_DRUNK_CHANCE);
+  // - with fewer than SAILOR_LATE_ALIVE alive, or the Sailor the last good
+  //   NPC alive (the Demon, never killing you while it has an NPC to kill,
+  //   would attack them for ever), the Sailor more often than not
+  //   (SAILOR_LATE_DRUNK_CHANCE);
   // - when it decides whether an attack on `victim` kills, the choice that
   //   saves a good victim, or lets an evil one die;
   // - otherwise the Sailor at SAILOR_DRUNK_SELF_CHANCE.
@@ -111,8 +113,18 @@ export const sailor = {
       return { drunk: options[0] ?? null, why: "" };
     }
 
-    if (this.alive().length < SAILOR_LATE_ALIVE && s.r() < SAILOR_LATE_DRUNK_CHANCE) {
-      return { drunk: sailor, why: ": few players are left" };
+    const last =
+      !sailor.human &&
+      !s.players.some((x) => x !== sailor && x.alive && !x.human && x.alignment === "good");
+
+    if (
+      (this.alive().length < SAILOR_LATE_ALIVE || last) &&
+      s.r() < SAILOR_LATE_DRUNK_CHANCE
+    ) {
+      return {
+        drunk: sailor,
+        why: this.alive().length < SAILOR_LATE_ALIVE ? ": few players are left" : ": they're the last good NPC alive",
+      };
     }
 
     if (victim) {

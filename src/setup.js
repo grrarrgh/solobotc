@@ -11,6 +11,8 @@ import {
   TRAVELLERS,
   FABLED,
   HIDDEN_OUTSIDERS,
+  FACE_DOWN_OUTSIDERS,
+  DEMON_KILL_PRIORITY,
   HIDDEN_BLUFF_CHANCE,
   HIDE_NEVER_AS,
   VILLAGE_IDIOT_EXTRAS,
@@ -129,6 +131,41 @@ export function parseScript(raw) {
   if (bad.length) throw Error(`Unsupported: ${bad}`);
 
   return { meta, ids, fabled };
+}
+
+// The Demon's 3 bluffs, from `pool` (the good characters it may be told):
+// 1 high-value Townsfolk (`kill: "high"` in CHARACTERS), 1 of medium or low
+// value, and a 3rd: an Outsider if a face-down Outsider is in play
+// (`faceDown`: the town sees one Outsider fewer than the count for the
+// seats, so a Demon claiming one fills the gap), else another medium or
+// low Townsfolk. Never more than 1 Outsider: short of a kind, any other
+// Townsfolk, and only then an Outsider.
+export function demonBluffSet(pool, faceDown, r) {
+  const tf = pool.filter((x) => team(x) === "townsfolk");
+  const high = tf.filter((x) => DEMON_KILL_PRIORITY[x] === "high");
+  const lesser = tf.filter((x) => DEMON_KILL_PRIORITY[x] !== "high");
+  const outsiders = pool.filter((x) => team(x) === "outsider");
+  const out = [];
+  const take = (list, n = 1) => {
+    if (n > 0) {
+      out.push(...sample(list.filter((x) => !out.includes(x)), n, r));
+    }
+  };
+
+  take(high);
+  take(lesser, faceDown ? 1 : 2);
+
+  if (faceDown) {
+    take(outsiders);
+  }
+
+  take(tf, 3 - out.length);
+
+  if (!out.some((x) => team(x) === "outsider")) {
+    take(outsiders, Math.min(1, 3 - out.length));
+  }
+
+  return shuffle(out, r);
 }
 
 export function createState(
@@ -438,6 +475,8 @@ export function createState(
   // an Outsider when the game has Outsiders (all Legion share them). (Never
   // the Lunatic: Legion would have no use for it.)
   const legions = demons.length > 1 ? demons.length : 0;
+  // (A face-down Outsider in play: the Demon gets an Outsider bluff.)
+  const faceDown = roles.find((x) => FACE_DOWN_OUTSIDERS.includes(x)) ?? null;
   const outsiderBluff =
     legions && o > 0
       ? sample(notInPlay.filter((x) => team(x) === "outsider" && claimable(x)), 1, r)
@@ -451,7 +490,7 @@ export function createState(
           r,
         ),
       ]
-    : sample(notInPlay, 3, r);
+    : demonBluffSet(notInPlay, faceDown, r);
   const spyOptions = notInPlay.filter((x) => !demonBluffs.includes(x) && claimable(x));
 
   // The Demon picks first and the Spy last, so the Spy sees every claim.
@@ -583,14 +622,19 @@ export function createState(
       (x) => !x.human && x !== p && x.alignment === "good",
     );
 
-    p.bluffs = sample(goods, 3, r);
+    // (Shaped like a real Demon's: with the Lunatic in play, a face-down
+    // Outsider, one of them is an Outsider.)
+    p.bluffs = demonBluffSet(goods, true, r);
     // (Preferably one nobody is, or claims: a double claim would count
     // against them, and against whoever else claims it. With the Poppy
     // Grower, they get no bluffs, as a real Demon wouldn't: any Townsfolk.)
-    // (Never the Heretic, who only says so in the final 3: see heretic.js.)
-    const claims = (poppy ? goods.filter((x) => team(x) === "townsfolk") : p.bluffs).filter(
-      (x) => x !== "heretic",
-    );
+    // (Never one who claims a Townsfolk while alive, the HIDDEN_OUTSIDERS:
+    // the Heretic only says so in the final 3, see heretic.js; the Mutant
+    // is "mad" they're not one; the Damsel hides. If those are all they
+    // have, any Townsfolk on the script.)
+    const fit = (x) => !HIDDEN_OUTSIDERS.includes(x);
+    const bluffed = (poppy ? goods.filter((x) => team(x) === "townsfolk") : p.bluffs).filter(fit);
+    const claims = bluffed.length ? bluffed : goods.filter((x) => team(x) === "townsfolk");
 
     p.claim =
       pick(
@@ -701,7 +745,7 @@ export function createState(
     : null;
 
   const s = {
-    version: "2.9.0",
+    version: "2.10.0",
     script,
     seats,
     seed: String(seed),
@@ -845,7 +889,23 @@ export function createState(
   setupLog(
     "bluffs",
     `Demon bluffs (${poppy ? "not told: the Poppy Grower" : `told to ${legions ? "every Legion" : lilMonsta ? "the Minions, for Lil' Monsta" : (demon?.label ?? "the Demon")}`}): ${
-      demonBluffs.map(name).join(", ") || "none"
+      demonBluffs
+        .map((x) =>
+          legions
+            ? name(x)
+            : `${name(x)} (${
+                team(x) === "outsider"
+                  ? "Outsider"
+                  : `${DEMON_KILL_PRIORITY[x] === "high" ? "high" : "medium/low"}-value Townsfolk`
+              })`,
+        )
+        .join(", ") || "none"
+    }${
+      legions
+        ? ""
+        : faceDown
+          ? ` (an Outsider: the ${name(faceDown)}, a face-down Outsider, is in play)`
+          : " (no Outsider: no face-down Outsider is in play)"
     }. ${demon ? `${demon.label} bluffs as ${name(demon.claim)}.` : ""}`.trim(),
   );
 

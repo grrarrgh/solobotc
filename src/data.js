@@ -361,6 +361,17 @@ export const ARTIST_QUESTIONS = {
   townsfolk: "a Townsfolk",
 };
 
+// The questions you can ask as the Artist ("Is there a ... among these
+// players?", see app.js), and how each reads ("good" is yours alone: NPC
+// Artists and Gossips use ARTIST_QUESTIONS).
+export const HUMAN_ARTIST_QUESTIONS = {
+  good: "good",
+  evil: "evil",
+  outsider: "an Outsider",
+  demon: "the Demon",
+  minion: "a Minion",
+};
+
 
 // ── Bluffs and cover stories ─────────────────────────────────
 
@@ -397,6 +408,13 @@ export const BLUFF_TRIES = 6;
 // See claimFor() and strategy revealsWhenDead(). The Heretic hides too, but
 // only says so in the final 3 (see characters/outsider/heretic.js).
 export const HIDDEN_OUTSIDERS = ["mutant", "damsel", "heretic"];
+
+// Outsiders who are face-down in play, never claiming what they are while
+// alive: the Drunk and the Lunatic (shown another character), and the
+// HIDDEN_OUTSIDERS. With one in play, the town sees one Outsider fewer than
+// the count for the seats, so one of the Demon's bluffs is an Outsider (see
+// setup.js demonBluffSet()).
+export const FACE_DOWN_OUTSIDERS = ["drunk", "lunatic", ...HIDDEN_OUTSIDERS];
 
 // The Heretic in the final 3: the chance an evil NPC claims to be the
 // Heretic when evil looks about to lose (so you'd want good to "lose").

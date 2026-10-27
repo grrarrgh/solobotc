@@ -267,6 +267,18 @@
             </button>
             <div id="count-popup" class="count-popup" hidden></div>
           </div>
+          <!-- The Sun by day, the Moon by night: the wheel turns half a turn
+               at each change (DIAL_TURN_MS in app.js), and waits on the Moon
+               while you choose at night. The day, and how many are alive,
+               under it. As the Artist, press the Sun to ask
+               your question. -->
+          <div class="phase-dial-wrap">
+            <button id="phase-dial" type="button" class="phase-dial" aria-label="Day">
+              <span class="phase-window"><span id="phase-wheel" class="phase-wheel"></span></span>
+            </button>
+            <span id="phase-day" class="phase-day"></span>
+            <span id="phase-alive" class="phase-alive"></span>
+          </div>
           <div id="circle" class="circle"></div>
         </div>
 
@@ -294,6 +306,18 @@
           <div id="round-robin-controls" class="nomination-controls" hidden>
             <button id="round-robin" type="button" title="Once per game: from Seat 1, every player says their character and information in public">Round Robin</button>
           </div>
+          <!-- The Artist's question, once you've pressed the Sun: pick
+               players on the town square, dead or alive. -->
+          <div id="artist-panel" class="artist-panel" hidden>
+            <p>
+              Is there
+              <select id="artist-question" aria-label="Artist question"></select>
+              among <span id="artist-picks"></span>?
+            </p>
+            <button id="artist-ask" type="button">Ask question</button>
+            <button id="artist-cancel" type="button">Cancel</button>
+          </div>
+          <p id="artist-answer"></p>
           <button id="savant" type="button" hidden>Visit the Storyteller</button>
           <button id="fisherman" type="button" hidden>Ask the Storyteller for advice</button>
           <!-- The Amnesiac's day: ask the Storyteller a yes/no question
@@ -352,10 +376,6 @@
             <button id="wish-make" type="button">Make your wish</button>
           </span>
           <button id="puzzle" hidden>Guess they're the puzzle's drunk</button>
-          <span id="artist-controls" hidden>
-            <select id="artist-question"></select>
-            <button id="artist-ask">Ask Storyteller</button>
-          </span>
           <span id="gossip-controls" hidden>
             <select id="gossip-question"></select>
             <button id="gossip-say">Say in public</button>

@@ -1,4 +1,5 @@
-import { name, alignment, team } from "../../data.js";
+import { name, alignment, team, FACE_DOWN_OUTSIDERS } from "../../data.js";
+import { demonBluffSet } from "../../setup.js";
 import { ability, who, bluffing, works, isDemon } from "../../storyteller.js";
 import { claimHeard } from "../../strategy.js";
 import { bluffState } from "../../bluff.js";
@@ -149,11 +150,13 @@ export const cannibal = {
       [demon, ...sample(others, Math.max(2, minions) - 1, s.r)].filter(Boolean),
       s.r,
     );
-    const bluffs = sample(
+    // (Shaped like a real Demon's: see setup.js demonBluffSet(). A
+    // face-down Outsider is in play if the Lunatic they ate was one.)
+    const bluffs = demonBluffSet(
       s.script.ids.filter(
         (id) => alignment(id) === "good" && !["drunk", "lunatic", "cannibal"].includes(id),
       ),
-      3,
+      s.players.some((x) => FACE_DOWN_OUTSIDERS.includes(x.role)),
       s.r,
     );
     const labels = bySeat(mates).map((x) => x.label);
