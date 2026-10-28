@@ -1,7 +1,13 @@
 import { name, team } from "../../data.js";
-import { works } from "../../storyteller.js";
+import { works, wishBarred } from "../../storyteller.js";
 import { untwinned } from "../../strategy.js";
 import { pick } from "../../util.js";
+
+// The Storyteller's id as a nominee: by day, with the Atheist on the script,
+// any living player may nominate the Storyteller (once a day), pressing the
+// Sun (see app.js). Executed (half the living players' votes or more), the
+// game ends: good wins if the Atheist is in play, evil if not.
+export const STORYTELLER = "storyteller";
 
 // The Atheist, mixed into Engine.prototype (see characters/index.js), so
 // `this` is the Engine.
@@ -20,8 +26,14 @@ import { pick } from "../../util.js";
 //   killing anyway: a rule break the town may notice;
 // - abilities that act, not inform (the Slayer, Snake Charmer...), see the
 //   truth: a Snake Charmer choosing the pretend Demon misses.
-// Nobody dies when "No Demon remains": the game goes on until 2 are alive
-// (engine check()).
+// Nobody wins because "No Demon remains": the game goes on until 2 are
+// alive (engine check()).
+//
+// With the Atheist on the script (an Atheist game or not), the Storyteller
+// can be nominated (nominateStoryteller()) and voted on like a player, but
+// only half the living players' votes are needed, whatever anyone else got
+// today, and it doesn't mark anyone: executed, the game ends at once
+// (storytellerVoteCast()).
 export const atheist = {
   // The living player the Storyteller pretends is the Demon, or null.
   pretendDemon() {
@@ -96,5 +108,141 @@ export const atheist = {
     }
 
     this.check();
+  },
+
+  // The Storyteller as a nominee, for the vote (see engine intents()).
+  storytellerNominee() {
+    return { id: STORYTELLER, label: "the Storyteller", storyteller: true, alive: true };
+  },
+
+  // Whether the Storyteller can be nominated at all: the Atheist is on the
+  // script.
+  storytellerOnScript() {
+    return this.s.script.ids.includes("atheist");
+  },
+
+  // Why living player p can't nominate the Storyteller now, or null if they
+  // can.
+  storytellerBarred(p) {
+    const s = this.s;
+
+    return !this.storytellerOnScript()
+      ? "The Storyteller can only be nominated with the Atheist on the script."
+      : s.phase !== "day" || s.winner
+        ? "Nominations happen by day."
+        : !p.alive
+          ? "Only a living player can nominate the Storyteller."
+          : s.dayNominators.includes(p.id)
+            ? `${p.human ? "You have" : `${p.label} has`} already nominated today.`
+            : wishBarred(s, p)
+              ? "Your wish's price: you can't nominate in the second round."
+              : s.storytellerNominated === s.day
+                ? "The Storyteller has already been nominated today."
+                : null;
+  },
+
+  // The votes executing the Storyteller needs: half the living players,
+  // rounded up.
+  storytellerNeeded() {
+    return Math.ceil(this.alive().length / 2);
+  },
+
+  // Player p nominates the Storyteller. `hand` as for engine nominate():
+  // null leaves the vote waiting (for app.js's count).
+  nominateStoryteller(p, hand = true) {
+    const s = this.s;
+    const why = this.storytellerBarred(p);
+
+    if (why) {
+      throw Error(why);
+    }
+
+    s.storytellerNominated = s.day;
+    s.dayNominators.push(p.id);
+    this.openNominations();
+
+    s.publicLog.push(`Day ${s.day} — ${p.human ? "You nominate" : `${p.label} nominates`} the Storyteller.`);
+    this.audit(
+      "nomination",
+      `${p.label} (${name(p.role)}) nominated the Storyteller${
+        s.atheist ? " (the Atheist is in play: executed, good wins)" : " (no Atheist is in play: executed, evil wins)"
+      }.`,
+      { actorId: p.id, targetId: STORYTELLER },
+    );
+
+    s.pendingVote = { nominatorId: p.id, nomineeId: STORYTELLER, storyteller: true };
+
+    if (hand === null) {
+      return {
+        nominatorId: p.id,
+        nomineeId: STORYTELLER,
+        storyteller: true,
+        needed: this.storytellerNeeded(),
+        pending: true,
+      };
+    }
+
+    return this.castVotes(hand);
+  },
+
+  // The vote on the Storyteller (from engine castVotes()): `pending` is
+  // s.pendingVote, now cleared. Who voted is public, kept apart from players'
+  // votes (s.storytellerVotes).
+  storytellerVoteCast(pending, hand) {
+    const s = this.s;
+    const nominator = this.player(pending.nominatorId);
+    const n = this.storytellerNominee();
+    const needed = this.storytellerNeeded();
+    const records = this.votes(n, nominator, nominator.human, hand && this.canVote(), pending.intents ?? null);
+    // (Legion's "executions fail if only evil players vote" holds for the
+    // Storyteller too: see legion.js.)
+    const hands = records.filter((x) => x.counted).length;
+    const failed = this.legionVeto(records, needed);
+    const count = records.filter((x) => x.counted).length;
+    const executed = count >= needed;
+    const voterIds = records.filter((x) => x.attempted).map((x) => x.playerId);
+    const result = {
+      nominatorId: nominator.id,
+      nomineeId: STORYTELLER,
+      storyteller: true,
+      count,
+      threshold: needed,
+      needed,
+      marked: false,
+      failed,
+      executed,
+      records,
+    };
+
+    (s.storytellerVotes ??= []).push({ day: s.day, nominatorId: nominator.id, voterIds, count, needed });
+    s.lastVote = result;
+
+    const outcome = failed
+      ? "Execution failed: the Storyteller lives"
+      : executed
+        ? "the Storyteller is executed"
+        : "not enough votes: the Storyteller lives";
+    const shown = failed ? hands : count;
+
+    this.audit("vote_result", `${nominator.label} nominated the Storyteller: ${count}/${needed}; ${outcome}.`, result);
+    s.publicLog.push(
+      `Day ${s.day} — ${nominator.label} nominated the Storyteller: ${shown} vote${shown === 1 ? "" : "s"} (${needed} needed); ${outcome}.`,
+    );
+
+    if (executed) {
+      const atheist = s.players.find((x) => x.role === "atheist");
+
+      this.announce(`Day ${s.day} — The Storyteller is executed.`);
+      this.finish(
+        s.atheist ? "good" : "evil",
+        s.atheist
+          ? `The Storyteller was executed, and the Atheist (${atheist?.label ?? "nobody"}) is in play.`
+          : "The Storyteller was executed, but no Atheist is in play.",
+      );
+      return result;
+    }
+
+    this.countNpcNominations();
+    return result;
   },
 };

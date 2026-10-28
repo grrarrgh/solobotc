@@ -52,6 +52,7 @@ import {
 } from "../src/characters/nightorder.js";
 import { Engine, canPick } from "../src/engine.js";
 import { SelfPlay } from "../src/selfplay.js";
+import { STORYTELLER } from "../src/characters/townsfolk/atheist.js";
 import {
   SimpleStrategy,
   speak,
@@ -13552,4 +13553,81 @@ test("Atheist games play out to the end without errors", () => {
     assert.ok(s.winner, s.seed);
     assert.ok(!s.audit.some((x) => /No Demon remains/.test(x.text)), s.seed);
   }
+});
+
+test("with the Atheist on the script, you can nominate the Storyteller once a day: executed in an Atheist game, good wins", () => {
+  const s = atheistDeal(10, "st-good");
+  const e = new Engine(s);
+
+  e.start();
+  settle(e);
+  e.openNominations();
+
+  // (Everyone good votes with you, here.)
+  e.strat.storytellerVote = () => true;
+
+  const r = e.nominate(STORYTELLER, true);
+
+  assert.ok(r.storyteller && r.executed);
+  assert.equal(r.needed, Math.ceil(e.alive().length / 2));
+  assert.equal(s.winner, "good");
+  assert.match(s.reason, /^The Storyteller was executed, and the Atheist \(/);
+  assert.ok(s.publicLog.some((x) => /nominated the Storyteller: \d+ votes \(\d+ needed\); the Storyteller is executed\./.test(x)));
+  assert.ok(s.audit.some((x) => x.type === "nomination" && /nominated the Storyteller \(the Atheist is in play: executed, good wins\)/.test(x.text)));
+});
+
+test("the Storyteller executed with no Atheist in play: evil wins; short of votes, the Storyteller lives and can't be nominated again today", () => {
+  let s;
+
+  for (let i = 0; !s; i++) {
+    const t = createState(cd, 10, `st-evil-${i}`);
+
+    s = t.atheist ? null : t;
+  }
+
+  const e = new Engine(s);
+
+  e.start();
+  settle(e);
+  e.openNominations();
+  e.strat.storytellerVote = () => false;
+
+  const r = e.nominate(STORYTELLER, true);
+
+  assert.ok(!r.executed);
+  assert.equal(s.winner, null);
+  assert.throws(() => e.nominate(STORYTELLER, true), /already nominated today/);
+  assert.equal(s.storytellerVotes.length, 1);
+
+  // (Another day, another nominator: everyone votes.)
+  const npc = s.players.find((x) => x.alive && !x.human);
+
+  s.storytellerNominated = 0;
+  e.strat.storytellerVote = () => true;
+  e.nominateStoryteller(npc, true);
+  assert.equal(s.winner, "evil");
+  assert.equal(s.reason, "The Storyteller was executed, but no Atheist is in play.");
+});
+
+test("an evil NPC votes to execute the Storyteller only when the evil votes still to come can carry it", () => {
+  const s = createState(cd, 10, "st-evil-vote");
+  const strat = new SimpleStrategy();
+  const v = s.players.find((x) => x.alignment === "evil");
+
+  if (!v) {
+    return;
+  }
+
+  assert.equal(strat.storytellerVote(s, v, { yes: 0, needed: 50 }), false);
+  assert.equal(strat.storytellerVote(s, v, { yes: 49, needed: 50 }), true);
+  // (A good NPC doesn't, yet.)
+  assert.equal(strat.storytellerVote(s, s.players.find((x) => !x.human && x.alignment === "good"), { yes: 49, needed: 50 }), false);
+});
+
+test("the Storyteller can't be nominated without the Atheist on the script", () => {
+  const s = base("st-none");
+  const e = new Engine(s);
+
+  e.openNominations();
+  assert.throws(() => e.nominate(STORYTELLER, true), /only be nominated with the Atheist on the script/);
 });

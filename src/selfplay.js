@@ -10,6 +10,7 @@ import { name, ARTIST_QUESTIONS, HUMAN_ARTIST_QUESTIONS } from "./data.js";
 import { canPick } from "./engine.js";
 import { ability, wishBarred } from "./storyteller.js";
 import { AMNESIAC_GUESSES } from "./characters/townsfolk/amnesiac.js";
+import { STORYTELLER } from "./characters/townsfolk/atheist.js";
 import { rng, pick, sample, claimTo } from "./util.js";
 
 // How likely self-play is to use an optional night ability (the Seamstress,
@@ -93,6 +94,17 @@ export class SelfPlay {
   // ghost vote only for the top suspect.
   hand(nomineeId, yours = false) {
     const e = this.e;
+
+    // (The Storyteller: only as the Atheist, or for your own nomination. See
+    // characters/townsfolk/atheist.js.)
+    if (nomineeId === STORYTELLER) {
+      const up = e.canVote() && (yours || e.human().shown === "atheist");
+
+      this.note(`hand ${up ? "up" : "down"} for the Storyteller.`);
+
+      return up;
+    }
+
     const n = e.player(nomineeId);
     const heat = this.heat();
     const top = Math.max(0, ...heat.values());

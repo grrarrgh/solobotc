@@ -1786,6 +1786,30 @@ export class SimpleStrategy {
       : null;
   }
 
+  // Whether v votes to execute the Storyteller (see
+  // characters/townsfolk/atheist.js): executed, good wins if the Atheist is
+  // in play, evil if not. `tally` as for vote(). An evil NPC knows no
+  // Atheist is in play (they're evil), so votes for it when the evil votes
+  // still to come (theirs and their teammates') can carry it, and holds back
+  // otherwise: a hand up for nothing would give them away (as it would with
+  // a working Legion and no good hand up yet: only evil votes, the
+  // execution fails). A good NPC votes only for an Atheist they believe in.
+  storytellerVote(s, v, tally) {
+    if (v.alignment === "evil") {
+      if (!tally.yes && s.players.some((x) => x.alive && x.role === "legion" && works(x))) {
+        return false;
+      }
+
+      const still = s.players.filter(
+        (x) => x.alignment === "evil" && (x.alive || x.ghost) && x.seat >= v.seat && !blind(v, x),
+      ).length;
+
+      return tally.yes + still >= tally.needed;
+    }
+
+    return false;
+  }
+
   // Whether v votes for nominee n. `tally` is how the vote stands when v
   // decides: `yes` votes so far, the votes `needed` to mark n, and the
   // `nominator`. (Evil voters decide last, so they know how it's going.)

@@ -2,7 +2,7 @@
 
 Newest first. Each release is headed with its version, the one log.txt's `Version:` line shows (from `version` in `src/setup.js` and `package.json`): a release with new features or improvements raises the middle number (2.5.0), one with only bug fixes or superficial changes the last (2.5.1). An entry without one shipped as the version below it; versions before 2.4.0 weren't recorded here.
 
-## v2.12.0 — New Script: Chef's Deluxe, with the Atheist
+## v2.12.0 — New Script & New Feature: Chef's Deluxe, with the Atheist, and Nominating the Storyteller
 
 - New script: **Chef's Deluxe** (24 characters, in `scripts/index.json`). The Atheist is its only new character.
 - New character: the **Atheist** (Townsfolk). With it on the script, a game is an Atheist game at `ATHEIST_CHANCE` (1 in 8). Dealt like any other Townsfolk, it would be in most games. In an Atheist game nobody is evil: Townsfolk are dealt in the evil seats, and the Outsiders are as many as the pretend team would make them (one more for a Fang Gu). Otherwise it isn't dealt, and nobody is shown it or bluffs it yet.
@@ -12,7 +12,10 @@ Newest first. Each release is headed with its version, the one log.txt's `Versio
 - The Storyteller also breaks the rules with information, more often as the game goes on. Each good player's information is false even to the pretence at `ATHEIST_BREAK_START` (5%) on Night 1, `ATHEIST_BREAK_RAMP` (5%) more each night after, up to `ATHEIST_BREAK_MAX` (35%). Each break is logged: "[atheist] The Storyteller breaks the rules (the Atheist is in play): P8 Savant's information is false, even to its pretence (at 10%)."
 - The Final reveal notes who the Storyteller pretended was evil ("the Storyteller pretended they were the Imp (Atheist)"), and who became the pretend Demon.
 - A Pixie is never shown the Atheist, a Mutant or Damsel never hides as it (`neverHiddenAs`), and an NPC Philosopher never gains it (`PHILOSOPHER_AVOID`).
-- Not yet: nominating the Storyteller, which is how good wins an Atheist game, and NPCs who act on an Atheist claim. Until then, evil wins every Atheist game. In 1,320 seeded games on the other 11 scripts, the logs are unchanged.
+- New feature: with the Atheist on the script, you can **nominate the Storyteller** once nominations are open. Press the Sun: it's selected like a seat, so either press **Nominate**, or use the panel's new "⚖️ Nominate the Storyteller" button. Any living player can do it, once a day; it counts as their nomination, and the Storyteller can only be nominated once a day. Executing the Storyteller needs half the living players' votes, rounded up, whatever anyone else got today, and marks nobody. Executed, the game ends: good wins if the Atheist is in play, even if they're dead; evil wins if not. Legion's rule still holds: if only evil players vote, the execution fails (`nominateStoryteller()`, `storytellerVoteCast()` in `atheist.js`).
+- The vote looks different from a player's. The clock hands turn gold and both point at the Sun, which glows. The large hand then turns back against the clock, from the Sun right round to it, counting each voter as it passes ("3 / 5 to execute the Storyteller"). If the Storyteller is executed, the Sun is eclipsed (`runVote()`, `sunAngle()` in app.js).
+- NPCs vote on the Storyteller (strategy `storytellerVote()`). An evil NPC knows no Atheist is in play, so they vote for it only when the evil votes still to come can carry it, and never with a working Legion and no good hand up yet. Good NPCs don't vote for it yet. NPCs don't nominate the Storyteller or act on an Atheist claim yet. Self-play raises your hand for the Storyteller only as the Atheist. log.txt records each nomination and vote ("P1 Atheist nominated the Storyteller (the Atheist is in play: executed, good wins).").
+- In 1,320 seeded games on the other 11 scripts, the logs are unchanged apart from the version line.
 
 ## v2.11.1 — Bug Fix & Superficial Changes: An Ogre Who Says Whom They Chose, the Sun's Tooltip Only at the Start, and the Fortune Teller's Red Herring in the Final Reveal
 

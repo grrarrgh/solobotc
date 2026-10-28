@@ -186,7 +186,7 @@ test("the menu has a link, with a bug icon, to report a bug on GitHub in a new t
 test("seats are round, and the votes needed show under the clock tower", () => {
   assert.match(css, /\.seat \{[^}]*aspect-ratio: 1/);
   assert.match(app, /class="votes-needed">\$\{needed\} votes needed/);
-  assert.match(app, /\$\{votes\} \/ \$\{result\.needed\} needed/);
+  assert.match(app, /\$\{k\} \/ \$\{result\.needed\} needed/);
   assert.match(css, /\.circle\.voting \.votes-needed/);
 });
 
@@ -455,4 +455,17 @@ test("a tooltip points at the Sun once a game, on the first day: shown for SUN_T
 test("the Final reveal names the Fortune Teller's red herring: on their row, and under the Demon bluffs", () => {
   assert.match(app, /if \(r\.red === p\.id\) \{\s*notes\.push\(`the \$\{roleLink\("fortuneteller"\)\}'s red herring \(registered as the Demon to them\)`\);/);
   assert.match(app, /<strong>\$\{roleLink\("fortuneteller"\)\}'s red herring:<\/strong>/);
+});
+
+test("with the Atheist on the script, the Sun can be nominated like a seat: gold hands point at it, count back against the clock, and an executed Storyteller eclipses it", () => {
+  assert.match(html, /<button id="nominate-storyteller" type="button" hidden>⚖️ Nominate the Storyteller<\/button>/);
+  assert.match(app, /s\.nominationsOpen && e\.storytellerOnScript\(\) && !e\.storytellerBarred\(h\) && "storyteller",/);
+  assert.match(app, /selectedPlayerId = sunOpen && sunAbilities\(\)\.includes\("storyteller"\) \? STORYTELLER : null;/);
+  assert.match(app, /\$\("phase-dial"\)\.classList\.toggle\("selected", selectedPlayerId === STORYTELLER && !voteAnim\);/);
+  assert.match(app, /aim\(hour, st \? sun : seatAngle\(result\.nominatorId\), true\);/);
+  assert.match(app, /c\.classList\.toggle\("storyteller-vote", st\);/);
+  assert.match(app, /function sunAngle\(\) \{/);
+  assert.match(css, /\.circle\.storyteller-vote \.hand,\s*\.circle\.storyteller-vote \.clock-pin \{[^}]*background: #ffd34d;/);
+  assert.match(css, /\.phase-dial\.on-trial \{\s*animation: sun-trial/);
+  assert.match(css, /\.phase-dial\.eclipse \.phase-window::before \{/);
 });

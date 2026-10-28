@@ -38,6 +38,7 @@ import {
 import { claimTo } from "./strategy.js";
 import { NIGHT_STEPS, nightOrder } from "./characters/nightorder.js";
 import { byId } from "./util.js";
+import { STORYTELLER } from "./characters/townsfolk/atheist.js";
 import { SelfPlay } from "./selfplay.js";
 
 const $ = (id) => document.getElementById(id);
@@ -503,6 +504,12 @@ function handChoice(c) {
 // or lower yours until it reaches you, and then the votes are cast; then
 // the skull marks the nominee if they're now marked for execution, and the
 // clock tower returns.
+//
+// The Storyteller nominated (with the Atheist on the script: see atheist.js)
+// is counted differently: the hands turn gold and both point at the Sun,
+// which glows; the large hand turns back against the clock, from the Sun
+// right round to it, counting each voter as it passes; executed, the Sun
+// is eclipsed.
 async function runVote(fn, yours = false) {
   if (voteAnim) {
     return;
@@ -539,17 +546,29 @@ async function runVote(fn, yours = false) {
   const minute = c.querySelector(".hand.minute");
   const tally = c.querySelector(".vote-count");
   const n = s.players.length;
+  const st = Boolean(result.storyteller);
+  const sun = st ? sunAngle() : 0;
   const start = s.players.findIndex((p) => p.id === result.nomineeId);
-  let angle = seatAngle(result.nomineeId);
+  let angle = st ? sun : seatAngle(result.nomineeId);
   let votes = 0;
+  // Where the large hand stops for each voter: clockwise from the nominee
+  // round to them; for the Storyteller, against the clock from the Sun.
+  const stops = st
+    ? s.players
+        .map((p) => ({ p, angle: sun - ((((sun - seatAngle(p.id)) % 360) + 360) % 360 || 360) }))
+        .sort((a, b) => b.angle - a.angle)
+    : s.players.map((_, i) => ({ p: s.players[(start + i + 1) % n], angle: angle + ((i + 1) * 360) / n }));
+  const counted = (k) => (st ? `${k} / ${result.needed} to execute the Storyteller` : `${k} / ${result.needed} needed`);
 
-  aim(hour, seatAngle(result.nominatorId), true);
+  aim(hour, st ? sun : seatAngle(result.nominatorId), true);
   aim(minute, angle, true);
 
   // The large hand's swing between seats takes most of each tick.
   minute.style.transitionDuration = `${Math.round(VOTE_TICK_MS * 0.8)}ms`;
-  tally.textContent = `0 / ${result.needed} needed`;
+  tally.textContent = counted(0);
   c.classList.add("voting");
+  c.classList.toggle("storyteller-vote", st);
+  $("phase-dial").classList.toggle("on-trial", st);
 
   // Let the hands fade in (0.4s), then pause before counting starts: long
   // enough for you to raise your hand, if you can vote.
@@ -570,8 +589,8 @@ async function runVote(fn, yours = false) {
 
   await sleep(VOTE_COUNT_DELAY_MS);
 
-  for (let k = 1; k <= n; k++) {
-    const p = s.players[(start + k) % n];
+  for (const stop of stops) {
+    const p = stop.p;
     const seat = c.querySelector(`[data-id="${p.id}"]`);
     // (Yours is already showing, and can change until you're counted.)
     const yours = p.human && choice;
@@ -587,7 +606,7 @@ async function runVote(fn, yours = false) {
       await sleep(Math.round(VOTE_TICK_MS * 0.55));
     }
 
-    angle += 360 / n;
+    angle = stop.angle;
     aim(minute, angle);
 
     await sleep(VOTE_TICK_MS);
@@ -611,16 +630,28 @@ async function runVote(fn, yours = false) {
     if (record?.counted) {
       voteAnim.revealed.add(p.id);
       votes++;
-      tally.textContent = `${votes} / ${result.needed} needed`;
+      tally.textContent = counted(votes);
       seat?.querySelector(".vote-hand")?.classList.add("counted");
     }
   }
 
   // (Cast, with your hand as it was when the clock hand reached you.)
   result = e.castVotes(hand);
-  tally.textContent = result.failed
-    ? "Execution failed"
-    : `${result.count} / ${result.needed} needed`;
+  tally.textContent = st
+    ? result.executed
+      ? "The Storyteller is executed"
+      : result.failed
+        ? "Execution failed: the Storyteller lives"
+        : `${result.count} / ${result.needed}: the Storyteller lives`
+    : result.failed
+      ? "Execution failed"
+      : `${result.count} / ${result.needed} needed`;
+
+  // (Back to the Sun, a whole turn.)
+  if (st) {
+    aim(minute, sun - 360);
+    $("phase-dial").classList.toggle("eclipse", Boolean(result.executed));
+  }
 
   await sleep(600);
 
@@ -638,11 +669,24 @@ async function runVote(fn, yours = false) {
 
   // Fade the hands out and the clock tower back in.
   c.classList.remove("voting");
+  $("phase-dial").classList.remove("on-trial");
 
   await sleep(500);
 
+  c.classList.remove("storyteller-vote");
   voteAnim = null;
   render();
+}
+
+// The angle (as for seatAngle()) from the town square's centre to the Sun,
+// top left of it: where the hands point when the Storyteller is nominated.
+function sunAngle() {
+  const c = $("circle").getBoundingClientRect();
+  const d = $("phase-dial").getBoundingClientRect();
+  const dx = d.left + d.width / 2 - (c.left + c.width / 2);
+  const dy = d.top + d.height / 2 - (c.top + c.height / 2);
+
+  return (Math.atan2(dx, -dy) * 180) / Math.PI;
 }
 
 // Toggles a player in or out of tonight's picks: whoever the ability's
@@ -815,6 +859,10 @@ function renderDial() {
 
   $("phase-dial").setAttribute("aria-label", `${label}${can.length ? `: ${what}` : ""}`);
   $("phase-dial").classList.toggle("ask", can.length > 0 && !sunOpen);
+  // (Selected like a seat, to nominate the Storyteller; eclipsed once they're
+  // executed. See characters/townsfolk/atheist.js.)
+  $("phase-dial").classList.toggle("selected", selectedPlayerId === STORYTELLER && !voteAnim);
+  $("phase-dial").classList.toggle("eclipse", Boolean(s.lastVote?.storyteller && s.lastVote.executed));
   $("phase-dial").title = can.length ? `Talk to the Storyteller: ${what}` : label;
 
   // (Once a game, on the first day, once no card is in the way.)
@@ -858,6 +906,7 @@ const SUN_TITLES = {
   fisherman: "ask the Storyteller for advice (Fisherman)",
   amnesiac: "ask about or guess your ability (Amnesiac)",
   puzzle: "guess the puzzle's drunk (Puzzlemaster)",
+  storyteller: "nominate the Storyteller (the Atheist is on the script)",
   wish: "make your wish (Wizard)",
 };
 
@@ -886,6 +935,9 @@ function sunAbilities() {
     e.amnesiacOpen() && "amnesiac",
     ability(h) === "puzzlemaster" && !h.puzzleUsed && "puzzle",
     minionAbility(h) === "wizard" && !h.wished && "wish",
+    // (With the Atheist on the script, once nominations are open: see
+    // characters/townsfolk/atheist.js.)
+    s.nominationsOpen && e.storytellerOnScript() && !e.storytellerBarred(h) && "storyteller",
   ].filter(Boolean);
 }
 
@@ -934,6 +986,8 @@ function renderSun() {
   $("wish-target").hidden = !target;
   $("wish-picks").innerHTML = sunPicked();
   $("wish-make").disabled = target && sunPicks.length !== 1;
+  $("nominate-storyteller").hidden = !can.includes("storyteller");
+  $("nominate-storyteller").disabled = !!voteAnim || nominating;
 }
 
 // Picks player `id` for the Storyteller panel (or drops them): never you.
@@ -1939,13 +1993,17 @@ function draw() {
   $("nominate").hidden = !h.alive;
   // (You can select yourself: see selfSelectable() and engine nominee(). An
   // Alchemist-Goblin nominates themself with their own button, claiming it.)
-  $("nominate").disabled =
-    blocked ||
-    s.dayNominators.includes(h.id) ||
-    wishBarred(s, h) ||
-    (t?.human && minionAbility(h) === "goblin");
+  // (With the Sun selected: the Storyteller, see atheist.js.)
+  const storyteller = selectedPlayerId === STORYTELLER;
+
+  $("nominate").disabled = storyteller
+    ? Boolean(e.storytellerBarred(h)) || !!voteAnim || nominating
+    : blocked ||
+      s.dayNominators.includes(h.id) ||
+      wishBarred(s, h) ||
+      (t?.human && minionAbility(h) === "goblin");
   $("request-nomination").hidden = false;
-  $("request-nomination").disabled = blocked;
+  $("request-nomination").disabled = blocked || storyteller;
   $("pass").disabled = !!voteAnim || nominating;
   // Round Robin: under the nomination buttons once ROUND_ROBIN_ALIVE or
   // fewer are alive; once used, it stays, disabled, for the rest of the game.
@@ -2397,7 +2455,8 @@ $("phase-dial").onclick = () => {
 
   sunOpen = !sunOpen;
   sunPicks = [];
-  selectedPlayerId = null;
+  // (Like selecting a seat, when you can nominate the Storyteller.)
+  selectedPlayerId = sunOpen && sunAbilities().includes("storyteller") ? STORYTELLER : null;
   talkingTo = null;
   $("day-answer").textContent = "";
   render();
@@ -2406,7 +2465,20 @@ $("phase-dial").onclick = () => {
 $("sun-close").onclick = () => {
   sunOpen = false;
   sunPicks = [];
+
+  if (selectedPlayerId === STORYTELLER) {
+    selectedPlayerId = null;
+  }
+
   render();
+};
+
+// Nominating the Storyteller, from the Storyteller panel (or select the Sun
+// and press Nominate). See characters/townsfolk/atheist.js.
+$("nominate-storyteller").onclick = () => {
+  sunOpen = false;
+  selectedPlayerId = STORYTELLER;
+  yourNomination((id) => e.nominate(id, null));
 };
 
 // What the Storyteller says (or why not) under the panel.

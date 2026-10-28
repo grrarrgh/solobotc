@@ -59,6 +59,7 @@ import { byId, bySeat, pick, shuffle } from "./util.js";
 import { formatLog, logNames, claimChain } from "./log.js";
 import { abilities, living } from "./abilities.js";
 import { characters } from "./characters/index.js";
+import { STORYTELLER } from "./characters/townsfolk/atheist.js";
 import {
   backStory,
   keepStory,
@@ -1993,7 +1994,7 @@ export class Engine {
     const intents = {};
     const tally = {
       yes: 0,
-      needed: this.votesNeeded(),
+      needed: n.storyteller ? this.storytellerNeeded() : this.votesNeeded(),
       nominator,
       humanChoice,
     };
@@ -2006,7 +2007,12 @@ export class Engine {
       // (Nor the Wizard in the second round they wished for: see wizard.js.)
       const eligible = (v.alive || v.ghost) && !wishBarred(s, v);
       const attempted = Boolean(
-        eligible && (v.human ? hand : this.strat.vote(s, v, n, { ...tally })),
+        eligible &&
+          (v.human
+            ? hand
+            : n.storyteller
+              ? this.strat.storytellerVote(s, v, { ...tally })
+              : this.strat.vote(s, v, n, { ...tally })),
       );
 
       intents[v.id] = attempted;
@@ -2073,7 +2079,7 @@ export class Engine {
       throw Error("No vote is waiting.");
     }
 
-    const n = this.player(pending.nomineeId);
+    const n = pending.storyteller ? this.storytellerNominee() : this.player(pending.nomineeId);
     const nominator = this.player(pending.nominatorId);
     const up = Boolean(hand) && this.canVote();
 
@@ -2119,6 +2125,11 @@ export class Engine {
 
     if (!h.alive) {
       throw Error("Dead players cannot nominate. Request a nomination instead.");
+    }
+
+    // (With the Atheist on the script: see atheist.js.)
+    if (id === STORYTELLER) {
+      return this.nominateStoryteller(h, hand);
     }
 
     const n = this.nominee(id);
@@ -2312,6 +2323,11 @@ export class Engine {
     }
 
     s.pendingVote = null;
+
+    // (The Storyteller nominated: see atheist.js.)
+    if (pending.storyteller) {
+      return this.storytellerVoteCast(pending, hand);
+    }
 
     const nominator = this.player(pending.nominatorId);
     const n = this.player(pending.nomineeId);

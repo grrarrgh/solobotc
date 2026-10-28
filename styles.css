@@ -1199,6 +1199,42 @@ button:disabled {
   display: none;
 }
 
+/* The Storyteller nominated (with the Atheist on the script): gold hands,
+   both pointing at the Sun, which glows while the votes are counted (see
+   app.js runVote()); executed, the Sun is eclipsed. */
+.circle.storyteller-vote .hand,
+.circle.storyteller-vote .clock-pin {
+  background: #ffd34d;
+  box-shadow: 0 0 8px #ffd34d;
+}
+
+.circle.storyteller-vote .vote-count {
+  color: #ffd34d;
+}
+
+.phase-dial.on-trial {
+  animation: sun-trial 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes sun-trial {
+  from {
+    box-shadow: 0 0 0 3px #ffd34d;
+  }
+
+  to {
+    box-shadow: 0 0 18px 6px #ffd34d;
+  }
+}
+
+.phase-dial.eclipse .phase-window::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 48%, #0b0b10 0 16%, rgb(11 11 16 / 0.7) 18%, transparent 55%);
+}
+
 /* A raised hand glows as the clock hand passes and counts it. */
 .vote-hand.counted {
   filter: drop-shadow(0 0 6px #f0cf83);
