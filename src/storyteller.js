@@ -510,30 +510,49 @@ export const atheistBreakChance = (s) =>
       ATHEIST_BREAK_RAMP * Math.max(0, Math.max(s.night, s.day) - 1 - (s.atheist?.held ?? 0)),
   );
 
-// With the Atheist on the script, living good player p's information came
-// out false (a rule break, or drunk or poisoned): the town notices that
-// something doesn't add up at ATHEIST_DOUBT_NOTICE, a doubt (s.doubts) that
-// makes good NPCs readier to believe an Atheist claim (see strategy
-// atheistBelief()). Logged. (No draw from s.r on any other script.)
+// With the Atheist on the script, living good player p's information is
+// coming out false (a rule break, or a drunk or poisoned player's lie; not
+// random information, which may happen to be true: see falseNoise()):
+// s.falseNext marks it, and engine remember() puts the mark on the memory
+// (m.doubtful), so each good NPC who hears it may notice it doesn't add up
+// (see strategy atheistHeard(), ATHEIST_DOUBT_NOTICE). Logged. (Nothing on
+// any other script.)
 function doubted(s, p, mode, broken) {
-  if (!s.script.ids.includes("atheist") || mode === "truth" || p.alignment !== "good" || !p.alive) {
+  if (!s.script.ids.includes("atheist")) {
     return;
   }
 
-  const seen = s.r() < ATHEIST_DOUBT_NOTICE;
+  s.falseNext = null;
 
-  if (seen) {
-    (s.doubts ??= []).push({ day: s.day, night: s.night, playerId: p.id, broken });
+  if (mode === "lie") {
+    markFalse(s, p, broken);
+  }
+}
+
+// A drunk or poisoned good player's random night information (see
+// infoMode()) that came out false, unlike the truth: marked as doubted()
+// marks a lie. (Nothing on any other script.)
+function falseNoise(s, p) {
+  if (s.script.ids.includes("atheist")) {
+    markFalse(s, p, false);
+  }
+}
+
+// (See doubted().)
+function markFalse(s, p, broken) {
+  if (p.alignment !== "good" || !p.alive) {
+    return;
   }
 
+  s.falseNext = { playerId: p.id, broken };
   s.audit.push({
     id: s.auditId++,
     group: s.phase === "night" ? `Night ${s.night}` : `Day ${s.day}`,
     type: "atheist",
-    text: `${Whose(p)} information is false (${broken ? "the Storyteller broke the rules" : "drunk or poisoned"}): ${
-      seen ? `the town notices something doesn't add up (doubts: ${s.doubts.length})` : "nobody notices"
-    } (at ${Math.round(ATHEIST_DOUBT_NOTICE * 100)}%).`,
-    data: { playerId: p.id, seen },
+    text: `${Whose(p)} information is false (${
+      broken ? "the Storyteller broke the rules" : "drunk or poisoned"
+    }): any good NPC who hears it may notice it doesn't add up (at ${Math.round(ATHEIST_DOUBT_NOTICE * 100)}% each).`,
+    data: { playerId: p.id },
     names: logNames(s),
   });
 }
@@ -788,6 +807,11 @@ export function nightInfo(s, p, strat) {
     ({ text, targets } = falseInfo(s, p, role, strat, poisonerPick));
   } else if (mode === "random") {
     ({ text, targets } = unreliableInfo(s, p, role, targets));
+
+    // (With the Atheist on the script, false is false: see falseNoise().)
+    if (text !== truth.text) {
+      falseNoise(s, p);
+    }
   }
 
   return keepInfo(

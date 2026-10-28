@@ -197,8 +197,11 @@ export class SelfPlay {
     }
 
     if (!s.nominationsOpen) {
-      // (As the Atheist, you tell everyone you ask that you are.)
-      const told = h.shown === "atheist" && s.talked.find((id) => !(s.toldToday ?? []).includes(id));
+      // (As the Atheist, you tell everyone you ask that you are: each once a
+      // day, so one you couldn't tell doesn't stop you telling the rest.)
+      const told =
+        h.shown === "atheist" &&
+        s.talked.find((id) => !(s.toldToday ?? []).includes(id) && !this.today().has(`tell:${id}`));
 
       if (told && this.once(`tell:${told}`)) {
         this.note(`told ${e.player(told).label} you're the Atheist.`);

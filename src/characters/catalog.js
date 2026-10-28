@@ -424,7 +424,7 @@ export const CHARACTERS = {
     team: "townsfolk",
     ability:
       "The Storyteller can break the game rules, and if executed, good wins, even if you are dead. [No evil characters]",
-    note: "Dealt in about 1 game in 8 with it on the script. Nobody is evil then: the Storyteller pretends some players are the Demon and Minions, kills at night as that Demon, and gives information as if they were, breaking the rules now and then, more often as the game goes on. Abilities that act, not inform (the Slayer, Snake Charmer...), see the truth. Any living player may nominate the Storyteller (press the Sun), once a day: executing it needs votes from half the living players (rounded up), whatever anyone else got today, and ends the game at once. In other games, an evil player may claim to be the Atheist.",
+    note: "Dealt in about 1 game in 8 with it on the script. Nobody is evil then: the Storyteller pretends some players are the Demon and Minions, kills at night as that Demon, and gives information as if they were, breaking the rules now and then, more often as the game goes on. Abilities that act, not inform (the Slayer, Snake Charmer...), see the truth. The Atheist can't be made mad (by a Cerenovus, real or pretend). Any living player may nominate the Storyteller (press the Sun), once a day: executing it needs votes from half the living players (rounded up), whatever anyone else got today, and ends the game at once. In other games, an evil player may claim to be the Atheist.",
     kill: "med",
     // (No good player pretends to be one, nor hides as one: claiming it is a
     // call to execute the Storyteller. An evil Minion may claim it: see

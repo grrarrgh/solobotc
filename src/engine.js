@@ -198,6 +198,16 @@ export class Engine {
       info.misinfo = misinformedBy(this.s, p) || null;
     }
 
+    // (With the Atheist on the script, false information is marked, so
+    // whoever hears it may notice: see storyteller.js doubted().)
+    if (this.s.falseNext?.playerId === p.id) {
+      const s = this.s;
+
+      s.doubtful = (s.doubtful ?? 0) + 1;
+      info.doubtful = { id: s.doubtful, broken: s.falseNext.broken };
+      s.falseNext = null;
+    }
+
     p.memories.push(info);
 
     this.audit(
@@ -1404,6 +1414,13 @@ export class Engine {
       lines: [s.publicLog[i]],
     });
     this.audit("nominations", "Nominations opened.");
+
+    // (With the Atheist on the script, what each NPC believes: see
+    // atheist.js.)
+    if (s.script.ids.includes("atheist")) {
+      this.atheistBeliefs();
+    }
+
     this.countNpcNominations();
   }
 

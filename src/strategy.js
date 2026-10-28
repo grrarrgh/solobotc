@@ -84,9 +84,14 @@ import {
   ATHEIST_VOTE_BELIEF,
   ATHEIST_NOMINATE_BELIEF,
   ATHEIST_DISBELIEF_EVIDENCE,
+  ATHEIST_DISBELIEF_FROM_DAY,
+  ATHEIST_DISBELIEF_MAX,
+  ATHEIST_DOUBT_NOTICE,
   STORYTELLER_NOMINATED_EVIDENCE,
   STORYTELLER_VOTED_EVIDENCE,
   EVIL_ATHEIST_TRAP_BELIEVERS,
+  ATHEIST_TRY_FROM_DAY,
+  ATHEIST_TRY_SHARE,
   exclusiveWith,
 } from "./data.js";
 import {
@@ -426,6 +431,12 @@ export function heard(s, p, memories, opinion = null, to = null) {
     return;
   }
 
+  // (With the Atheist on the script, a listener may notice false
+  // information: see atheistHeard().)
+  if (s.script.ids.includes("atheist")) {
+    atheistHeard(s, p, memories, to);
+  }
+
   const list = to ? (to.heard ??= []) : (s.statements ??= []);
   const say = (type, targetId, source) => {
     const you = byId(s, targetId)?.human;
@@ -448,6 +459,55 @@ export function heard(s, p, memories, opinion = null, to = null) {
 
   if (opinion) {
     say(opinion.type, opinion.targetId, "opinion");
+  }
+}
+
+// With the Atheist on the script: p says their information, in private `to`
+// one listener or in public (to every NPC). Each good NPC hearing a false
+// piece of it for the first time (one marked by storyteller.js doubted())
+// notices it doesn't add up with what they know at ATHEIST_DOUBT_NOTICE: a
+// doubt of their own (x.doubts), which makes them readier to believe an
+// Atheist claim (see SimpleStrategy atheistCredence()). Each piece is
+// weighed once by each listener (x.doubtsHeard). Logged.
+function atheistHeard(s, p, memories, to) {
+  const listeners = to ? [to] : s.players.filter((x) => !x.human);
+
+  for (const m of memories.filter((m) => m.doubtful)) {
+    const seen = [];
+    const missed = [];
+
+    for (const x of listeners) {
+      if (x === p || sideOf(x) !== "good" || (x.doubtsHeard ??= []).includes(m.doubtful.id)) {
+        continue;
+      }
+
+      x.doubtsHeard.push(m.doubtful.id);
+
+      if (s.r() < ATHEIST_DOUBT_NOTICE) {
+        (x.doubts ??= []).push({ byId: p.id, id: m.doubtful.id, day: s.day, broken: m.doubtful.broken });
+        seen.push(x);
+      } else {
+        missed.push(x);
+      }
+    }
+
+    if (seen.length || missed.length) {
+      const list = (xs) => xs.map((x) => x.label).join(", ");
+      const tally = seen.map((x) => `${x.label} ${x.doubts.length}`).join(", ");
+
+      note(
+        s,
+        "workings",
+        `${whose(p)} false information ("${m.text}"), told ${to ? `to ${to.label}` : "in public"}: ${
+          seen.length
+            ? `${list(seen)} notice${seen.length === 1 ? "s" : ""} it doesn't add up (doubts so far: ${tally})`
+            : `nobody notices it doesn't add up (${list(missed)})`
+        }${seen.length && missed.length ? `; ${list(missed)} ${missed.length === 1 ? "doesn't" : "don't"}` : ""} (at ${Math.round(
+          ATHEIST_DOUBT_NOTICE * 100,
+        )}% each).`,
+        { playerId: p.id, noticedIds: seen.map((x) => x.id) },
+      );
+    }
   }
 }
 
@@ -1061,11 +1121,13 @@ export class SimpleStrategy {
     }
 
     if (claim === "atheist") {
-      const own = this.atheistCredence(s, p, t).belief;
+      // (Not before Day ATHEIST_DISBELIEF_FROM_DAY, and never enough on its
+      // own to make them a suspect: see ATHEIST_DISBELIEF_MAX.)
+      const own = s.day >= ATHEIST_DISBELIEF_FROM_DAY ? this.atheistCredence(s, p, t).belief : 1;
 
       if (!this.evilShown(s) && own < ATHEIST_VOTE_BELIEF) {
         found.push({
-          weight: ATHEIST_DISBELIEF_EVIDENCE * (1 - own / ATHEIST_VOTE_BELIEF),
+          weight: Math.min(ATHEIST_DISBELIEF_MAX, ATHEIST_DISBELIEF_EVIDENCE * (1 - own / ATHEIST_VOTE_BELIEF)),
           text: "they claim the Atheist, and I don't believe it",
         });
       } else if (this.evilShown(s)) {
@@ -1114,26 +1176,95 @@ export class SimpleStrategy {
   }
 
   // How much good player p believes player c's Atheist claim, from 0 to 1
-  // (see ATHEIST_BELIEF): how much of the information hasn't added up (the
-  // town's doubts, s.doubts: see storyteller.js infoMode()), whether it's
-  // you, whether the Demon killed them, and the evidence about them.
-  // Returns { belief, reasons }.
+  // (see ATHEIST_BELIEF): how much of the information they've heard hasn't
+  // added up (their own doubts, p.doubts: see atheistHeard()), whether it's
+  // you, whether the Demon killed them, how close a vote on the Storyteller
+  // came, who they respect believes it (see respectedBelievers()), and the
+  // evidence about them. Returns { belief, reasons }.
   atheistCredence(s, p, c) {
     const A = ATHEIST_BELIEF;
-    const doubts = Math.min((s.doubts ?? []).length, A.maxDoubts);
-    const ev = this.evidence(s, p, c, false).score;
+    const doubts = Math.min((p.doubts ?? []).length, A.maxDoubts);
+    const ev = Math.min(A.maxEvidence, this.evidence(s, p, c, false).score);
     const killed = !c.alive && c.death === "demon";
+    // (Social proof: the failed vote on the Storyteller that came closest,
+    // and the players p respects who believe it.)
+    const close = Math.max(
+      0,
+      ...(s.storytellerVotes ?? []).filter((v) => !v.failed).map((v) => Math.min(1, v.count / v.needed)),
+    );
+    const respected = this.respectedBelievers(s, p, c).slice(0, A.maxRespected);
     const belief =
-      A.base + A.doubt * doubts + (c.human ? A.human : 0) + (killed ? A.killed : 0) - A.evidence * ev;
+      A.base +
+      A.doubt * doubts +
+      (c.human ? A.human : 0) +
+      (killed ? A.killed : 0) +
+      A.vote * close +
+      A.respected * respected.length -
+      A.evidence * ev;
     const reasons = [
       doubts && `${doubts} thing${doubts === 1 ? "" : "s"} that didn't add up`,
       c.human && "you claim it",
       killed && "the Demon killed them",
+      close >= 0.5 && `a vote on the Storyteller got ${Math.round(close * 100)}% of the votes it needed`,
+      respected.length && `${respected.map(who).join(" and ")} believe${respected.length === 1 && !respected[0].human ? "s" : ""} it`,
       ev >= EVIDENCE_TO_SUSPECT && "the evidence against them",
       ev <= TRUST_EVIDENCE && "the evidence for them",
     ].filter(Boolean);
 
     return { belief: Math.min(1, Math.max(0, belief)), reasons };
+  }
+
+  // The players good player p respects (you, whom good NPCs trust; anyone
+  // their information vouches for, or they've no evidence against: see
+  // trusted(), evidence()) who have shown they believe an Atheist claim:
+  // they nominated or voted to execute the Storyteller, or told p they
+  // believe it (p.atheistViews: see told()). Not claimant c themself.
+  respectedBelievers(s, p, c) {
+    const shown = new Set(
+      (s.storytellerVotes ?? []).flatMap((v) => [v.nominatorId, ...v.voterIds]),
+    );
+
+    for (const [id, v] of Object.entries(p.atheistViews ?? {})) {
+      if (v.believes) {
+        shown.add(id);
+      }
+    }
+
+    shown.delete(p.id);
+    shown.delete(c.id);
+
+    if (!shown.size) {
+      return [];
+    }
+
+    const trusted = this.trusted(s, p);
+
+    return s.players.filter(
+      (x) =>
+        shown.has(x.id) &&
+        (x.human || trusted.has(x.id) || this.evidence(s, p, x, false).score <= 0),
+    );
+  }
+
+  // What NPC p says of an Atheist claim, when asked or talking in private
+  // (see ask(), told()): { claimant, believes }, or null when nobody has
+  // claimed it to them, they claim it themself, or they're mad. A good NPC
+  // says what they believe (see atheistBelief()); an evil one backs a
+  // teammate's claim (the trap: see storytellerNomination()), and no other.
+  atheistView(s, p) {
+    if (!s.script.ids.includes("atheist") || p.human || p.mad || p.claim === "atheist") {
+      return null;
+    }
+
+    if (sideOf(p) === "evil") {
+      const c = s.players.find((x) => x !== p && claimHeard(x, p) === "atheist");
+
+      return c ? { claimant: c, believes: !thinksEvil(p) && teammate(p, c) } : null;
+    }
+
+    const b = this.atheistBelief(s, p);
+
+    return b?.claimant ? { claimant: b.claimant, believes: b.belief >= ATHEIST_VOTE_BELIEF } : null;
   }
 
   // How much p believes the Atheist is in play, from 0 to 1, with the
@@ -1181,7 +1312,8 @@ export class SimpleStrategy {
   // believe (see storytellerVote()): those who can vote (living, or dead
   // with their ghost vote), playing for good, at ATHEIST_VOTE_BELIEF or
   // more. (A good NPC weighing a nomination reads the room this way; so
-  // does the evil team, who add their own votes.)
+  // does the evil team, who add their own votes. The Marionette, playing as
+  // good, is among them: see storytellerNomination().)
   believers(s) {
     return s.players.filter(
       (x) =>
@@ -1202,15 +1334,19 @@ export class SimpleStrategy {
   // - an evil NPC (not the Lunatic), with an Atheist claim to point at,
   //   counting those believers and their own team's votes: executed, evil
   //   wins. (Only with at least EVIL_ATHEIST_TRAP_BELIEVERS good NPCs who
-  //   believe it: the trap is for good to spring, not one the evil team
-  //   springs alone once it holds half the votes. That also keeps a working
-  //   Legion's veto away: see storytellerVote().)
+  //   believe it, never counting the Marionette, who is evil: the trap is
+  //   for good to spring, not one the evil team springs alone once it holds
+  //   half the votes. That also keeps a working Legion's veto away: see
+  //   storytellerVote().)
+  // Never while mad (see cerenovus.js): they say only what they're mad
+  // about.
   storytellerNomination(s, p) {
     if (
       !s.script.ids.includes("atheist") ||
       s.storytellerNominated === s.day ||
       !p.alive ||
       p.human ||
+      p.mad ||
       wishBarred(s, p) ||
       s.roshambo
     ) {
@@ -1232,8 +1368,10 @@ export class SimpleStrategy {
       }
 
       const believers = this.believers(s);
+      const good = believers.filter((x) => x.alignment === "good");
       // (Not the Marionette, who thinks they're good: they vote by what
-      // they believe.)
+      // they believe, so count among the believers' votes, though never as
+      // a good one.)
       const team = s.players.filter(
         (x) =>
           x.alignment === "evil" &&
@@ -1242,10 +1380,14 @@ export class SimpleStrategy {
           (x === p || teammate(p, x)),
       );
 
-      if (
-        believers.length < Math.max(1, EVIL_ATHEIST_TRAP_BELIEVERS) ||
-        team.length + believers.length < needed
-      ) {
+      // (The liar may also try short of the votes, as the Atheist would, with
+      // their team's hands up: see atheistTry(), storytellerVote().)
+      const tried =
+        team.length + believers.length < needed &&
+        claimant === p &&
+        this.atheistTry(s, team.length + believers.length, needed);
+
+      if (good.length < Math.max(1, EVIL_ATHEIST_TRAP_BELIEVERS) || (team.length + believers.length < needed && !tried)) {
         return null;
       }
 
@@ -1257,9 +1399,9 @@ export class SimpleStrategy {
             ? "I'm the Atheist: execute the Storyteller, and good wins"
             : `I believe ${who(claimant)}: the Atheist is in play`,
         ],
-        why: `${team.length} evil vote${team.length === 1 ? "" : "s"} and ${believers.length} good NPC${
-          believers.length === 1 ? "" : "s"
-        } who believe the Atheist can carry it (${needed} needed): executed, evil wins`,
+        why: `${team.length} evil vote${team.length === 1 ? "" : "s"} and ${good.length} good NPC${
+          good.length === 1 ? "" : "s"
+        }${believers.length > good.length ? " (and the Marionette)" : ""} who believe the Atheist can carry it (${needed} needed): executed, evil wins`,
       };
     }
 
@@ -1272,8 +1414,10 @@ export class SimpleStrategy {
     const believers = this.believers(s);
     const h = human(s);
     const you = h && (h.alive || h.ghost) && claimTo(h, p) === "atheist" ? 1 : 0;
+    const votes = believers.length + you;
+    const tried = votes < needed && p.role === "atheist" && this.atheistTry(s, votes, needed);
 
-    if (believers.length + you < needed) {
+    if (votes < needed && !tried) {
       return null;
     }
 
@@ -1287,8 +1431,21 @@ export class SimpleStrategy {
       ],
       why: `belief ${Math.round(b.belief * 100)}%; ${believers.length} NPC${believers.length === 1 ? "" : "s"} would vote for it${
         you ? ", and you claim it" : ""
-      } (${needed} needed)`,
+      } (${needed} needed)${tried ? "; short, but enough to try (see ATHEIST_TRY_SHARE)" : ""}`,
     };
+  }
+
+  // Whether a player claiming the Atheist (the real one, or an evil liar
+  // acting the part) nominates the Storyteller short of the votes it needs,
+  // to show the town how many believe: from Day ATHEIST_TRY_FROM_DAY, with
+  // `votes` at least ATHEIST_TRY_SHARE of the `needed`, and more than any
+  // vote on it has had yet (so they don't try again for nothing). A failed
+  // vote with many hands up makes others readier to believe (see
+  // atheistCredence()).
+  atheistTry(s, votes, needed) {
+    const best = Math.max(0, ...(s.storytellerVotes ?? []).map((v) => v.count));
+
+    return s.day >= ATHEIST_TRY_FROM_DAY && votes >= Math.ceil(ATHEIST_TRY_SHARE * needed) && votes > best;
   }
 
   // An NPC's closing remark when asked, one of:
@@ -1728,6 +1885,14 @@ export class SimpleStrategy {
       return;
     }
 
+    // (With the Atheist on the script, what p makes of an Atheist claim,
+    // which `to` may weigh: see atheistView(), respectedBelievers().)
+    const view = this.atheistView(s, p);
+
+    if (view) {
+      (to.atheistViews ??= {})[p.id] = { claimantId: view.claimant.id, believes: view.believes, day: s.day };
+    }
+
     for (const [id, x] of Object.entries(p.toldMe ?? {})) {
       const about = byId(s, id);
 
@@ -1837,6 +2002,15 @@ export class SimpleStrategy {
     // (For the log: how they got there; see engine ask().)
     p.workings = st.rows;
 
+    // (With the Atheist on the script, what they make of an Atheist claim:
+    // see atheistView().)
+    const view = !hidden && this.atheistView(s, p);
+    const atheist =
+      view &&
+      `On the Atheist: I ${view.believes ? "believe" : "don't believe"} ${
+        view.claimant.human ? "you" : view.claimant.label
+      }.`;
+
     return [
       `I claim ${name(a.claim)}.`,
       ...changes.map(
@@ -1848,6 +2022,7 @@ export class SimpleStrategy {
       details,
       this.courtierLine(s, memories),
       !mad && !hidden && this.unusedAbility(copy ? copy.twin : p, memories),
+      atheist,
       // (A hider gives no reasons: they could give them away.)
       one,
     ]
@@ -2083,9 +2258,14 @@ export class SimpleStrategy {
         (x) =>
           x.alignment === "evil" && sideOf(x) === "evil" && (x.alive || x.ghost) && x.seat >= v.seat && !blind(v, x),
       ).length;
+      // (A teammate claiming the Atheist trying it short of the votes: see
+      // atheistTry().)
+      const liar =
+        tally.nominator && tally.nominator !== v && tally.nominator.claim === "atheist" && teammate(v, tally.nominator);
       const yes =
         !thinksEvil(v) &&
-        (v.claim === "atheist" || (!(legion && !tally.yes) && tally.yes + still >= tally.needed));
+        (v.claim === "atheist" ||
+          (!(legion && !tally.yes) && (liar || tally.yes + still >= tally.needed)));
 
       note(
         s,
@@ -2097,7 +2277,9 @@ export class SimpleStrategy {
               ? "they claim the Atheist"
               : legion && !tally.yes
                 ? "with Legion working and no good vote locked in, only evil votes would fail"
-                : `${tally.yes} vote${tally.yes === 1 ? "" : "s"} locked in and ${still} evil still to come, of ${tally.needed} needed`
+                : liar
+                  ? `their teammate ${tally.nominator.label} claims the Atheist: many hands up make the town readier to believe it`
+                  : `${tally.yes} vote${tally.yes === 1 ? "" : "s"} locked in and ${still} evil still to come, of ${tally.needed} needed`
         }.`,
         { playerId: v.id, vote: yes },
       );
@@ -3937,8 +4119,13 @@ export class SimpleStrategy {
   // At CERENOVUS_EVIL_CHANCE it instead makes an evil teammate mad about a
   // good character that isn't in play: a fresh bluff for a day, after which
   // they go back to their old one.
+  //
+  // Never the Atheist, who can't be made mad (nor an evil player claiming
+  // it, the evil team's trap): see characters/townsfolk/atheist.js.
   cerenovus(s, p) {
-    const others = untwinned(s, this.others(s, p));
+    const others = untwinned(s, this.others(s, p)).filter(
+      (x) => x.role !== "atheist" && x.claim !== "atheist",
+    );
     const teammates = others.filter((x) => x.alignment === "evil" && !blind(p, x));
     const evil = teammates.length && s.r() < CERENOVUS_EVIL_CHANCE;
     const target = this.noted(

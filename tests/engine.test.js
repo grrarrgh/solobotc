@@ -34,6 +34,10 @@ import {
   ATHEIST_VOTE_BELIEF,
   ATHEIST_UNSAFE_SHARE,
   EVIL_ATHEIST_BLUFF_CHANCE,
+  ATHEIST_BELIEF,
+  ATHEIST_DISBELIEF_MAX,
+  ATHEIST_DISBELIEF_FROM_DAY,
+  EVIDENCE_TO_SUSPECT,
   name,
   team,
   alignment,
@@ -13712,6 +13716,17 @@ function claimAtheist(e, x) {
 // (An Atheist game, the Atheist an NPC.)
 const npcAtheist = (s) => s.atheist && !s.players.find((x) => x.role === "atheist").human;
 
+// Each NPC has noticed `n` things that didn't add up (see strategy
+// atheistHeard()), and nothing else sways what they believe.
+function doubtAll(s, n) {
+  for (const x of s.players.filter((x) => !x.human)) {
+    x.doubts = Array.from({ length: n }, () => ({}));
+    x.atheistViews = {};
+  }
+
+  s.storytellerVotes = [];
+}
+
 test("evil NPCs never count your hand on the Storyteller: lowering it late doesn't expose them", () => {
   const s = createState(cd, 10, "ex-1");
   const e = new Engine(s);
@@ -13851,7 +13866,8 @@ test("a good NPC believes an Atheist claim as things stop adding up, more if the
   assert.equal(e.strat.atheistBelief(s, p).belief, 0);
 
   claimAtheist(e, atheist);
-  s.doubts = [];
+  doubtAll(s, 0);
+  s.day = ATHEIST_DISBELIEF_FROM_DAY;
 
   const low = e.strat.atheistBelief(s, p);
 
@@ -13861,7 +13877,12 @@ test("a good NPC believes an Atheist claim as things stop adding up, more if the
   // (Only an evil player would claim it falsely.)
   assert.match(e.strat.evidence(s, p, atheist).reasons.join("; "), /they claim the Atheist, and I don't believe it/);
 
-  s.doubts = [{}, {}, {}, {}];
+  // Each NPC believes by their own doubts: p's, not anyone else's.
+  const other = s.players.find((x) => !x.human && x !== atheist && x !== p);
+
+  other.doubts = [{}, {}, {}, {}, {}];
+  assert.equal(e.strat.atheistBelief(s, p).belief, low.belief);
+  p.doubts = [{}, {}, {}, {}];
 
   const high = e.strat.atheistBelief(s, p);
 
@@ -13873,7 +13894,7 @@ test("a good NPC believes an Atheist claim as things stop adding up, more if the
   // The Atheist knows.
   assert.equal(e.strat.atheistBelief(s, atheist).belief, 1);
 
-  s.doubts = [];
+  doubtAll(s, 0);
   atheist.alive = false;
   atheist.death = "demon";
   assert.ok(e.strat.atheistBelief(s, p).belief > low.belief);
@@ -13889,7 +13910,7 @@ test("a good NPC who doesn't believe the Atheist holds nominating or voting for 
   const [p, x, y] = s.players.filter((z) => !z.human && z !== atheist);
 
   claimAtheist(e, atheist);
-  s.doubts = [];
+  doubtAll(s, 0);
   s.storytellerVotes = [{ day: 1, nominatorId: x.id, voterIds: [x.id, y.id], count: 2, needed: 5 }];
 
   assert.match(
@@ -13899,30 +13920,270 @@ test("a good NPC who doesn't believe the Atheist holds nominating or voting for 
   assert.match(e.strat.evidence(s, p, y).reasons.join("; "), /they voted to execute the Storyteller/);
 
   // (Believing it, they don't.)
-  s.doubts = [{}, {}, {}, {}, {}, {}];
+  p.doubts = [{}, {}, {}, {}, {}, {}];
   assert.doesNotMatch(e.strat.evidence(s, p, x).reasons.join("; "), /Storyteller/);
 });
 
-test("with the Atheist on the script, false information may be noticed as a doubt", () => {
-  const { s } = cdDay(10, "doubts", (t) => t.atheist);
-  const p = s.players.find((x) => !x.human && x.alive);
+test("with the Atheist on the script, false information is marked, and each good NPC who hears it may notice it, once", () => {
+  const { s, e } = cdDay(10, "doubts", npcAtheist);
+  const [p, q, r] = s.players.filter((x) => !x.human && x.role !== "atheist");
 
-  s.doubts = [];
+  doubtAll(s, 0);
   s.r = () => 0;
   assert.equal(infoMode(s, p), "lie");
-  assert.equal(s.doubts.length, 1);
-  assert.ok(s.doubts[0].broken);
   assert.match(
     s.audit.at(-1).text,
-    /information is false \(the Storyteller broke the rules\): the town notices something doesn't add up \(doubts: 1\)/,
+    /information is false \(the Storyteller broke the rules\): any good NPC who hears it may notice/,
   );
 
-  // (Not noticed: logged all the same.)
+  const m = { night: s.night, role: p.role, text: "Chef number: 9.", targets: [], functioning: false };
+
+  e.remember(p, m);
+  assert.ok(m.doubtful?.broken);
+  assert.equal(s.falseNext, null);
+
+  // Heard in private: only the listener may notice, and only once.
+  heard(s, p, [m], null, q);
+  assert.equal(q.doubts.length, 1);
+  assert.equal(r.doubts.length, 0);
+  heard(s, p, [m], null, q);
+  assert.equal(q.doubts.length, 1);
+  assert.ok(
+    s.audit.some(
+      (x) => x.type === "workings" && /false information \("Chef number: 9\."\), told to .*: .* notices it doesn't add up/.test(x.text),
+    ),
+  );
+
+  // Heard in public but not noticed: logged all the same, and never
+  // weighed again.
   s.r = () => 0.99;
-  p.poisoned = true;
-  assert.notEqual(infoMode(s, p), "truth");
-  assert.equal(s.doubts.length, 1);
-  assert.match(s.audit.at(-1).text, /\(drunk or poisoned\): nobody notices/);
+  heard(s, p, [m]);
+  assert.equal(r.doubts.length, 0);
+  assert.ok(r.doubtsHeard.includes(m.doubtful.id));
+  assert.match(s.audit.at(-1).text, /told in public: nobody notices it doesn't add up/);
+  s.r = () => 0;
+  heard(s, p, [m]);
+  assert.equal(r.doubts.length, 0);
+
+  // (True information isn't marked.)
+  s.r = () => 0.99;
+
+  const plain = s.players.find((x) => !x.human && x.alive && infoMode(s, x) === "truth");
+
+  assert.ok(plain);
+  assert.equal(s.falseNext, null);
+});
+
+test("your own information never gives an NPC a doubt unless you share it", () => {
+  const { s, e } = cdDay(10, "doubts-you", npcAtheist);
+  const h = e.human();
+  const p = s.players.find((x) => !x.human && x.role !== "atheist" && x.alive);
+
+  doubtAll(s, 0);
+  s.r = () => 0;
+  assert.equal(infoMode(s, h), "lie");
+
+  const m = { night: s.night, role: h.shown, text: "Chef number: 9.", targets: [], functioning: false };
+  const noticed = (x) => (x.doubts ?? []).some((d) => d.id === m.doubtful.id);
+
+  e.remember(h, m);
+  assert.ok(m.doubtful);
+  // (Kept to yourself: nobody's doubt.)
+  assert.ok(s.players.every((x) => !noticed(x)));
+
+  // Shared with p (Share My Info): p may notice.
+  s.talked.push(p.id);
+  e.tell(p.id, h.shown, true);
+  assert.ok(noticed(p));
+});
+
+test("no evidence against an Atheist claimant on Day 1, and never enough from the claim alone to suspect them", () => {
+  const { s, e } = cdDay(10, "disbelief", npcAtheist);
+  const atheist = s.players.find((x) => x.role === "atheist");
+  const p = s.players.find((x) => !x.human && x !== atheist);
+
+  claimAtheist(e, atheist);
+  doubtAll(s, 0);
+  s.day = 1;
+  assert.deepEqual(e.strat.atheistEvidence(s, p, atheist, "atheist"), []);
+
+  s.day = ATHEIST_DISBELIEF_FROM_DAY;
+
+  const found = e.strat.atheistEvidence(s, p, atheist, "atheist");
+  const weight = found.reduce((n, x) => n + x.weight, 0);
+
+  assert.match(found[0].text, /they claim the Atheist, and I don't believe it/);
+  assert.ok(weight > 0 && weight <= ATHEIST_DISBELIEF_MAX, `${weight}`);
+  assert.ok(ATHEIST_DISBELIEF_MAX < EVIDENCE_TO_SUSPECT);
+});
+
+test("social proof: a close vote on the Storyteller, and those a good NPC respects believing it, raise their belief", () => {
+  const { s, e } = cdDay(10, "social", npcAtheist);
+  const atheist = s.players.find((x) => x.role === "atheist");
+  const [p, q] = s.players.filter((x) => !x.human && x !== atheist && !x.cover && x.alive);
+  const h = e.human();
+
+  claimAtheist(e, atheist);
+  doubtAll(s, 0);
+
+  const before = e.strat.atheistBelief(s, p).belief;
+
+  // A failed vote that got 4 of the 5 votes it needed.
+  s.storytellerVotes = [{ day: 1, nominatorId: atheist.id, voterIds: [], count: 4, needed: 5, failed: false }];
+
+  const close = e.strat.atheistBelief(s, p);
+
+  assert.ok(close.belief > before || close.belief === 1, `${close.belief}`);
+  assert.match(close.reasons.join("; "), /a vote on the Storyteller got 80% of the votes it needed/);
+
+  // You voted for it: good NPCs trust you.
+  s.storytellerVotes = [{ day: 1, nominatorId: atheist.id, voterIds: [h.id], count: 0, needed: 5, failed: false }];
+  assert.ok(e.strat.atheistBelief(s, p).belief > before);
+  assert.match(e.strat.atheistBelief(s, p).reasons.join("; "), /you believe it/);
+
+  // q, who believes it, tells p so in private (and you, when asked).
+  doubtAll(s, 0);
+  q.doubts = [{}, {}, {}, {}, {}, {}];
+  q.mad = null;
+  e.strat.told(s, q, p);
+  assert.deepEqual(
+    { believes: p.atheistViews[q.id].believes, claimantId: p.atheistViews[q.id].claimantId },
+    { believes: true, claimantId: atheist.id },
+  );
+  assert.match(e.strat.ask(s, q), new RegExp(`On the Atheist: I believe ${atheist.label}\\.`));
+});
+
+test("the evil trap never counts the Marionette as a good believer", () => {
+  const { s, e } = cdDay(12, "st-marionette", (t) =>
+    t.players.some((x) => x.alignment === "evil" && x.claim === "atheist") &&
+    t.players.some((x) => x.role === "marionette"),
+  );
+  const liar = s.players.find((x) => x.alignment === "evil" && x.claim === "atheist");
+  const m = s.players.find((x) => x.role === "marionette");
+
+  e.claimPublicly(liar);
+  m.alive = true;
+  doubtAll(s, 0);
+  m.doubts = [{}, {}, {}, {}, {}, {}];
+  e.openNominations();
+
+  // (The Marionette, playing as good, believes it; nobody good does.)
+  assert.ok(e.strat.believers(s).includes(m));
+  assert.equal(e.strat.storytellerNomination(s, liar), null);
+
+  doubtAll(s, 6);
+
+  const n = e.strat.storytellerNomination(s, liar);
+
+  assert.ok(n?.target.storyteller);
+  assert.match(n.why, /good NPCs \(and the Marionette\) who believe/);
+});
+
+test("the Atheist can't be made mad, by a real or pretend Cerenovus; nor nominates while mad", () => {
+  const { s, e } = cdDay(10, "st-mad", npcAtheist);
+  const atheist = s.players.find((x) => x.role === "atheist");
+  const c = s.players.find((x) => !x.human && x !== atheist && x.alive);
+
+  // (Nobody else to choose: no choice at all.)
+  for (const x of s.players.filter((x) => !x.human && x !== atheist && x !== c)) {
+    x.alive = false;
+  }
+
+  for (let i = 0; i < 20; i++) {
+    assert.equal(e.strat.cerenovus(s, c), null);
+  }
+
+  assert.match(NOTES.atheist, /can't be made mad/);
+
+  // A mad NPC doesn't nominate the Storyteller.
+  const { s: s2, e: e2 } = cdDay(10, "st-npc", npcAtheist);
+  const a2 = s2.players.find((x) => x.role === "atheist");
+
+  claimAtheist(e2, a2);
+  doubtAll(s2, 6);
+  e2.openNominations();
+  assert.ok(e2.strat.storytellerNomination(s2, a2));
+  a2.mad = { role: "chef", day: s2.day, previous: null };
+  assert.equal(e2.strat.storytellerNomination(s2, a2), null);
+});
+
+test("self-play, as the Atheist, tells everyone it asked, even if telling one fails", () => {
+  const { s, e } = cdDay(10, "sp-tell");
+  const h = e.human();
+  const [a, b] = s.players.filter((x) => !x.human && x.alive);
+
+  h.shown = "atheist";
+  s.talked = [a.id, b.id];
+  s.toldToday = [];
+
+  const sp = new SelfPlay(e);
+
+  assert.deepEqual(sp.next(), { kind: "tell", id: a.id });
+  // (Telling a failed: b is next.)
+  assert.deepEqual(sp.next(), { kind: "tell", id: b.id });
+});
+
+test("the Atheist tries the Storyteller short of the votes from Day 2, once enough believe, and not again for no more; each NPC's belief is logged", () => {
+  const { s, e } = cdDay(12, "st-try", npcAtheist);
+  const atheist = s.players.find((x) => x.role === "atheist");
+  const others = s.players.filter((x) => !x.human && x !== atheist);
+
+  claimAtheist(e, atheist);
+  doubtAll(s, 0);
+
+  const needed = e.storytellerNeeded();
+  // (Enough believers, with the Atheist, for ATHEIST_TRY_SHARE of the
+  // votes, but not all of them.)
+  const enough = Math.ceil(0.6 * needed) - 1;
+
+  for (const x of others.slice(0, enough)) {
+    x.doubts = [{}, {}, {}, {}, {}, {}];
+  }
+
+  assert.ok(e.strat.believers(s).length < needed);
+  s.day = 1;
+  assert.equal(e.strat.storytellerNomination(s, atheist), null);
+  s.day = 2;
+
+  const n = e.strat.storytellerNomination(s, atheist);
+
+  assert.ok(n?.target.storyteller);
+  assert.match(n.why, /short, but enough to try/);
+
+  // (A vote that got as many already: no new try.)
+  s.storytellerVotes = [{ day: 1, nominatorId: atheist.id, voterIds: [], count: needed - 1, needed, failed: false }];
+  assert.equal(e.strat.storytellerNomination(s, atheist), null);
+
+  // As nominations open, what each NPC believes goes in the log.
+  e.openNominations();
+  assert.ok(
+    s.audit.some((x) => x.type === "workings" && /^Belief in the Atheist claim, NPC by NPC/.test(x.text) && /% in .*'s claim/.test(x.text)),
+  );
+});
+
+test("an evil liar claiming the Atheist may try the Storyteller short of the votes; their team votes with them", () => {
+  const { s, e } = cdDay(12, "st-liar-try", (t) =>
+    t.players.some((x) => x.alignment === "evil" && x.claim === "atheist"),
+  );
+  const liar = s.players.find((x) => x.alignment === "evil" && x.claim === "atheist");
+  const mate = s.players.find((x) => x !== liar && x.alignment === "evil" && sideOf(x) === "evil");
+  const good = s.players.filter((x) => !x.human && x.alignment === "good");
+
+  e.claimPublicly(liar);
+  doubtAll(s, 0);
+  // (Two good NPCs believe it: with the evil team, enough to try.)
+  for (const x of good.slice(0, 2)) {
+    x.doubts = [{}, {}, {}, {}, {}, {}];
+  }
+
+  s.day = 2;
+  e.openNominations();
+
+  const n = e.strat.storytellerNomination(s, liar);
+
+  assert.ok(n?.target.storyteller, n?.why);
+  assert.ok(e.strat.storytellerVote(s, mate, { yes: 1, needed: 99, nominator: liar }));
+  assert.match(s.audit.at(-1).text, /their teammate .* claims the Atheist/);
 });
 
 test("good NPCs nominate the Storyteller once enough of them believe the Atheist: executed, good wins", () => {
@@ -13931,11 +14192,11 @@ test("good NPCs nominate the Storyteller once enough of them believe the Atheist
 
   claimAtheist(e, atheist);
   // (Nothing adds up yet: nobody nominates it.)
-  s.doubts = [];
+  doubtAll(s, 0);
   e.openNominations();
   assert.ok(!e.npcNominators().some((o) => o.n.target.storyteller));
 
-  s.doubts = [{}, {}, {}, {}, {}, {}];
+  doubtAll(s, 6);
 
   const r = e.npcNomination();
 
@@ -13958,7 +14219,7 @@ test("an evil Minion claiming the Atheist sets a trap: once believers and the ev
 
   assert.equal(team(liar.role), "minion");
   e.claimPublicly(liar);
-  s.doubts = [{}, {}, {}, {}, {}, {}];
+  doubtAll(s, 6);
   e.openNominations();
 
   const r = e.npcNomination();
@@ -13978,12 +14239,12 @@ test("in an Atheist game, the rule-break ramp holds once the town comes to belie
   claimAtheist(e, atheist);
   s.night = 3;
   s.day = 2;
-  s.doubts = [];
+  doubtAll(s, 0);
   e.atheistSafe();
   assert.equal(s.atheist.held ?? 0, 0);
   assert.equal(atheistBreakChance(s), ATHEIST_BREAK_START + 2 * ATHEIST_BREAK_RAMP);
 
-  s.doubts = [{}, {}, {}, {}, {}, {}];
+  doubtAll(s, 6);
   e.atheistSafe();
   assert.equal(s.atheist.held, 1);
   assert.equal(atheistBreakChance(s), ATHEIST_BREAK_START + ATHEIST_BREAK_RAMP);
@@ -14006,7 +14267,7 @@ test("in an Atheist game, a pretend Cerenovus makes a player mad, as a real one 
 
   const mad = s.players.find((x) => x.mad);
 
-  assert.ok(mad && !mad.human && mad !== c);
+  assert.ok(mad && mad !== c && mad.role !== "atheist");
   assert.notEqual(mad.mad.role, "atheist");
   assert.ok(
     s.audit.some(

@@ -143,6 +143,46 @@ export const atheist = {
     );
   },
 
+  // With the Atheist on the script, as nominations open: how much each good
+  // NPC who could vote believes an Atheist claim, where it has changed
+  // since they were last logged (p.atheistLogged), and why (see strategy
+  // atheistBelief()). Log only: no draw from s.r.
+  atheistBeliefs() {
+    const s = this.s;
+    const rows = [];
+
+    for (const x of s.players.filter((x) => !x.human && (x.alive || x.ghost) && x.role !== "atheist")) {
+      const b = this.strat.atheistBelief(s, x);
+
+      if (!b?.claimant) {
+        continue;
+      }
+
+      const now = Math.round(b.belief * 100);
+      const was = x.atheistLogged;
+
+      if (was === now) {
+        continue;
+      }
+
+      x.atheistLogged = now;
+      rows.push(
+        `${x.label}: ${was === undefined ? "" : `${was}% → `}${now}% in ${b.claimant.human ? "your" : `${b.claimant.label}'s`} claim${
+          b.reasons.length ? ` (${b.reasons.join("; ")})` : ""
+        }`,
+      );
+    }
+
+    if (rows.length) {
+      this.audit(
+        "workings",
+        `Belief in the Atheist claim, NPC by NPC, where it has changed (good NPCs vote to execute the Storyteller at ${Math.round(
+          ATHEIST_VOTE_BELIEF * 100,
+        )}% or more):\n${rows.join("\n")}`,
+      );
+    }
+  },
+
   // Each night, in an Atheist game, a living pretend Cerenovus "makes a
   // player mad": the Storyteller chooses a player and a good character, as
   // the real one would (see strategy cerenovus()), and they must be mad
