@@ -21,6 +21,7 @@ import {
   LEGION_STRONG,
   LEGION_STRONG_SHARE,
   ATHEIST_CHANCE,
+  EVIL_ATHEIST_BLUFF_CHANCE,
   exclusiveWith,
   ALCHEMIST_ABILITIES,
   team,
@@ -203,7 +204,9 @@ export function createState(
   // The Storyteller still picks a Demon (one that kills at night) and
   // Minions to pretend are in play (see characters/townsfolk/atheist.js),
   // and Townsfolk are dealt in their places; the Outsiders are as many as
-  // that pretend team would make them (one more for a Fang Gu).
+  // that pretend team would make them (one more for a Fang Gu). (Never a
+  // pretend Evil Twin or Marionette: with nobody evil, neither could work.
+  // With too few other Minions on the script, the pretend team is smaller.)
   atheistGame = script.ids.includes("atheist") && r() < ATHEIST_CHANCE;
 
   const pretend = atheistGame
@@ -212,7 +215,11 @@ export function createState(
           pool("demon").filter((x) => !["legion", "lilmonsta", "leviathan"].includes(x)),
           r,
         ) ?? "imp",
-        ...sample(pool("minion"), m, r),
+        ...sample(
+          pool("minion").filter((x) => !["eviltwin", "marionette"].includes(x)),
+          m,
+          r,
+        ),
       ]
     : [];
 
@@ -633,6 +640,26 @@ export function createState(
     taken.add(p.claim);
   }
 
+  // With the Atheist on the script but not in play, a Minion may claim it
+  // (EVIL_ATHEIST_BLUFF_CHANCE): a trap, as executing the Storyteller then
+  // wins for evil. Only one who knows they're evil and has a bluff of their
+  // own (never the Marionette, nor the Evil Twin, who claims their twin's
+  // character), and never the Demon: executed, they'd lose the game. (The
+  // draw is made only on a script with the Atheist.)
+  const atheistLiar =
+    script.ids.includes("atheist") &&
+    !atheistGame &&
+    r() < EVIL_ATHEIST_BLUFF_CHANCE &&
+    pick(
+      evil.filter((x) => team(x.role) === "minion" && x.role !== "eviltwin"),
+      r,
+    );
+
+  if (atheistLiar) {
+    atheistLiar.bluff = "atheist";
+    atheistLiar.claim = "atheist";
+  }
+
   // The Lunatic thinks they're the Demon. They're shown their own 3 bluffs
   // (good characters, which may be in play) and claim one, and their own
   // "Minions": the real Demon and good NPCs, as many as there are Minions
@@ -645,7 +672,8 @@ export function createState(
     const goods = script.ids.filter(
       (x) =>
         alignment(x) === "good" &&
-        !["drunk", "lunatic"].includes(x) &&
+        // (Nor the Atheist: a good player never claims it falsely.)
+        !["drunk", "lunatic", "atheist"].includes(x) &&
         !(legions && demonBluffs.includes(x)),
     );
     const others = players.filter(
@@ -757,26 +785,18 @@ export function createState(
   }
 
   // In an Atheist game, the players the Storyteller pretends are the Demon
-  // and Minions (p.pretend; never you, nor the Atheist): a pretend
-  // Marionette next to the pretend Demon, as a real one would be.
-  // (With a pretend Marionette, a pretend Demon with a neighbour who can be
-  // it.)
+  // and Minions (p.pretend; never you, nor the Atheist).
   const pretenders = players.filter((x) => !x.human && x.role !== "atheist");
-  const nextTo = (x) => [players[(x.seat - 2 + seats) % seats], players[x.seat % seats]];
-  const roomy = pretend.includes("marionette")
-    ? pretenders.filter((x) => nextTo(x).some((y) => pretenders.includes(y)))
-    : pretenders;
-  const pretendDemon = atheistGame ? pick(roomy.length ? roomy : pretenders, r) : null;
+  const pretendDemon = atheistGame ? pick(pretenders, r) : null;
 
   if (pretendDemon) {
-    const near = nextTo(pretendDemon);
-
     pretendDemon.pretend = pretend[0];
 
     for (const id of pretend.slice(1)) {
-      const free = pretenders.filter((x) => !x.pretend);
-      const beside = id === "marionette" ? free.filter((x) => near.includes(x)) : [];
-      const p = pick(beside.length ? beside : free, r);
+      const p = pick(
+        pretenders.filter((x) => !x.pretend),
+        r,
+      );
 
       if (p) {
         p.pretend = id;
@@ -972,6 +992,15 @@ export function createState(
         .join(", ")}, and deals Townsfolk in their places${
         more.length ? `; the Outsiders are as many as the pretend ${more.map(name).join(" and ")} would make them` : ""
       }.`,
+    );
+  }
+
+  if (atheistLiar) {
+    setupLog(
+      "atheist",
+      `${atheistLiar.label} (${name(atheistLiar.role)}) claims the Atheist, though no Atheist is in play: a trap (executing the Storyteller would win for evil), at ${Math.round(
+        EVIL_ATHEIST_BLUFF_CHANCE * 100,
+      )}%.`,
     );
   }
 

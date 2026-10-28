@@ -1,5 +1,5 @@
-import { name, team } from "../../data.js";
-import { works, wishBarred } from "../../storyteller.js";
+import { name, team, ATHEIST_UNSAFE_SHARE, ATHEIST_VOTE_BELIEF } from "../../data.js";
+import { works, wishBarred, atheistBreakChance } from "../../storyteller.js";
 import { untwinned } from "../../strategy.js";
 import { pick } from "../../util.js";
 
@@ -19,11 +19,13 @@ export const STORYTELLER = "storyteller";
 //   storyteller.js registersDemon()), so good players' information is true
 //   to the pretence, except when the Storyteller breaks the rules with a
 //   piece of it (see storyteller.js atheistBreaks()), more often as the game
-//   goes on;
+//   goes on, while the Storyteller is still safe (atheistSafe());
 // - each night* the pretend Demon "kills" (atheistNight()), as a real one
 //   would choose; if it has died, the pretend Demon passes to a pretend
 //   Minion, as an Imp's would, and with none left the Storyteller keeps
 //   killing anyway: a rule break the town may notice;
+// - a pretend Cerenovus makes a player mad (atheistCerenovus()); there's
+//   never a pretend Evil Twin or Marionette, who couldn't work (setup.js);
 // - abilities that act, not inform (the Slayer, Snake Charmer...), see the
 //   truth: a Snake Charmer choosing the pretend Demon misses.
 // Nobody wins because "No Demon remains": the game goes on until 2 are
@@ -33,7 +35,10 @@ export const STORYTELLER = "storyteller";
 // can be nominated (nominateStoryteller()) and voted on like a player, but
 // only half the living players' votes are needed, whatever anyone else got
 // today, and it doesn't mark anyone: executed, the game ends at once
-// (storytellerVoteCast()).
+// (storytellerVoteCast()). Good NPCs vote, and nominate it, by how much they
+// believe an Atheist claim; in other games an evil Minion may claim the
+// Atheist as a trap (see strategy atheistBelief(), storytellerNomination();
+// setup.js EVIL_ATHEIST_BLUFF_CHANCE).
 export const atheist = {
   // The living player the Storyteller pretends is the Demon, or null.
   pretendDemon() {
@@ -110,6 +115,57 @@ export const atheist = {
     this.check();
   },
 
+  // At nightfall in an Atheist game: while the Storyteller is still safe,
+  // its rule breaks grow more frequent each night (see storyteller.js
+  // atheistBreakChance()); once the living NPCs who believe the Atheist
+  // make up ATHEIST_UNSAFE_SHARE of the votes executing it needs, the ramp
+  // holds tonight (s.atheist.held). Logged.
+  atheistSafe() {
+    const s = this.s;
+    const needed = this.storytellerNeeded();
+    const believers = s.players.filter(
+      (x) => x.alive && !x.human && (this.strat.atheistBelief(s, x)?.belief ?? 0) >= ATHEIST_VOTE_BELIEF,
+    );
+
+    if (believers.length < needed * ATHEIST_UNSAFE_SHARE) {
+      return;
+    }
+
+    s.atheist.held = (s.atheist.held ?? 0) + 1;
+    this.audit(
+      "atheist",
+      `The town is coming to believe the Atheist (${believers.length} living NPC${
+        believers.length === 1 ? "" : "s"
+      } would vote to execute the Storyteller, of ${needed} votes needed): the Storyteller's rule breaks don't grow more frequent tonight (held at ${Math.round(
+        atheistBreakChance(s) * 100,
+      )}%).`,
+      { playerIds: believers.map((x) => x.id) },
+    );
+  },
+
+  // Each night, in an Atheist game, a living pretend Cerenovus "makes a
+  // player mad": the Storyteller chooses a player and a good character, as
+  // the real one would (see strategy cerenovus()), and they must be mad
+  // about it tomorrow, as with the real Cerenovus (see cerenovus.js).
+  atheistCerenovus() {
+    const s = this.s;
+    const c = s.atheist && s.players.find((x) => x.alive && x.pretend === "cerenovus");
+    const choice = c && this.strat.cerenovus(s, c);
+
+    if (!choice) {
+      return;
+    }
+
+    choice.target.mad = { role: choice.role, day: s.night, previous: null };
+    this.audit(
+      "atheist",
+      `The Storyteller pretends ${c.label} (${name(c.role)}), the pretend Cerenovus, made ${choice.target.label} mad that they are the ${name(
+        choice.role,
+      )}.`,
+      { actorId: c.id, targetId: choice.target.id, role: choice.role },
+    );
+  },
+
   // The Storyteller as a nominee, for the vote (see engine intents()).
   storytellerNominee() {
     return { id: STORYTELLER, label: "the Storyteller", storyteller: true, alive: true };
@@ -132,13 +188,15 @@ export const atheist = {
         ? "Nominations happen by day."
         : !p.alive
           ? "Only a living player can nominate the Storyteller."
-          : s.dayNominators.includes(p.id)
-            ? `${p.human ? "You have" : `${p.label} has`} already nominated today.`
-            : wishBarred(s, p)
-              ? "Your wish's price: you can't nominate in the second round."
-              : s.storytellerNominated === s.day
-                ? "The Storyteller has already been nominated today."
-                : null;
+          : s.storytellerNominated === s.day
+            ? "The Storyteller has already been nominated today."
+            : s.dayNominators.includes(p.id)
+              ? `${p.human ? "You have" : `${p.label} has`} already nominated today.`
+              : wishBarred(s, p)
+                ? "Your wish's price: you can't nominate in the second round."
+                : s.roshambo
+                  ? "Throw first."
+                  : null;
   },
 
   // The votes executing the Storyteller needs: half the living players,
@@ -148,10 +206,22 @@ export const atheist = {
   },
 
   // Player p nominates the Storyteller. `hand` as for engine nominate():
-  // null leaves the vote waiting (for app.js's count).
-  nominateStoryteller(p, hand = true) {
+  // null leaves the vote waiting (for app.js's count). `intro`: an NPC's
+  // nomination and why (see engine npcNomination(), which has logged it),
+  // on a card before the vote.
+  nominateStoryteller(p, hand = true, intro = null) {
     const s = this.s;
     const why = this.storytellerBarred(p);
+    const base = {
+      nominatorId: p.id,
+      nomineeId: STORYTELLER,
+      storyteller: true,
+      count: 0,
+      threshold: 0,
+      needed: 0,
+      marked: false,
+      records: [],
+    };
 
     if (why) {
       throw Error(why);
@@ -159,15 +229,39 @@ export const atheist = {
 
     s.storytellerNominated = s.day;
     s.dayNominators.push(p.id);
-    this.openNominations();
 
-    s.publicLog.push(`Day ${s.day} — ${p.human ? "You nominate" : `${p.label} nominates`} the Storyteller.`);
+    if (!intro) {
+      s.publicLog.push(`Day ${s.day} — ${p.human ? "You nominate" : `${p.label} nominates`} the Storyteller.`);
+    }
+
     this.audit(
       "nomination",
       `${p.label} (${name(p.role)}) nominated the Storyteller${
         s.atheist ? " (the Atheist is in play: executed, good wins)" : " (no Atheist is in play: executed, evil wins)"
       }.`,
       { actorId: p.id, targetId: STORYTELLER },
+    );
+
+    // A nominator cursed by the Witch dies; the vote still goes ahead unless
+    // that ended the game.
+    this.witchCurse(p);
+
+    if (s.winner) {
+      return base;
+    }
+
+    this.openNominations();
+
+    if (intro) {
+      (s.phaseCards ??= []).push({ kind: "nomination", day: s.day, lines: [intro] });
+    }
+
+    // (How the NPCs decide: see strategy storytellerVote().)
+    this.audit(
+      "workings",
+      `On the Storyteller (${this.storytellerNeeded()} votes needed), good NPCs vote if they believe an Atheist claim (at ${Math.round(
+        ATHEIST_VOTE_BELIEF * 100,
+      )}% belief or more); evil NPCs only when the votes already locked in and their team's still to come can carry it (never counting your hand, which you may lower until the clock hand reaches you), as a hand up for nothing would give them away; an evil player claiming the Atheist always votes.`,
     );
 
     s.pendingVote = { nominatorId: p.id, nomineeId: STORYTELLER, storyteller: true };
@@ -201,6 +295,15 @@ export const atheist = {
     const count = records.filter((x) => x.counted).length;
     const executed = count >= needed;
     const voterIds = records.filter((x) => x.attempted).map((x) => x.playerId);
+    // (What each NPC who could vote believed, for log.txt.)
+    const views = s.players
+      .filter((x) => !x.human && (x.alive || x.ghost || voterIds.includes(x.id)))
+      .map((x) => {
+        const b = this.strat.atheistBelief(s, x);
+        const up = voterIds.includes(x.id) ? "voted" : "didn't vote";
+
+        return b ? `${x.label}: ${up} (belief ${Math.round(b.belief * 100)}%${b.reasons.length ? `: ${b.reasons.join("; ")}` : ""})` : `${x.label}: ${up} (plays for evil)`;
+      });
     const result = {
       nominatorId: nominator.id,
       nomineeId: STORYTELLER,
@@ -214,8 +317,18 @@ export const atheist = {
       records,
     };
 
-    (s.storytellerVotes ??= []).push({ day: s.day, nominatorId: nominator.id, voterIds, count, needed });
+    (s.storytellerVotes ??= []).push({ day: s.day, nominatorId: nominator.id, voterIds, count, needed, failed });
     s.lastVote = result;
+
+    // (Only evil voted, as for a player: good NPCs weigh it. See strategy
+    // evidence().)
+    if (failed) {
+      (s.failedExecutions ??= []).push({ day: s.day, nomineeId: STORYTELLER, voterIds });
+    }
+
+    if (views.length) {
+      this.audit("workings", `The vote on the Storyteller, NPC by NPC:\n${views.join("\n")}`);
+    }
 
     const outcome = failed
       ? "Execution failed: the Storyteller lives"

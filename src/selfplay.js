@@ -6,7 +6,7 @@
 // most. They draw from their own seeded RNG, not s.r, so a game you play by
 // hand and one played for you share the same deal. Every decision is logged
 // ("selfplay" in log.txt).
-import { name, ARTIST_QUESTIONS, HUMAN_ARTIST_QUESTIONS } from "./data.js";
+import { name, ARTIST_QUESTIONS, HUMAN_ARTIST_QUESTIONS, ATHEIST_VOTE_BELIEF } from "./data.js";
 import { canPick } from "./engine.js";
 import { ability, wishBarred } from "./storyteller.js";
 import { AMNESIAC_GUESSES } from "./characters/townsfolk/amnesiac.js";
@@ -95,12 +95,14 @@ export class SelfPlay {
   hand(nomineeId, yours = false) {
     const e = this.e;
 
-    // (The Storyteller: only as the Atheist, or for your own nomination. See
-    // characters/townsfolk/atheist.js.)
+    // (The Storyteller: as the Atheist, for your own nomination, or if you
+    // believe an Atheist claim as a good NPC would. See
+    // characters/townsfolk/atheist.js, strategy atheistBelief().)
     if (nomineeId === STORYTELLER) {
-      const up = e.canVote() && (yours || e.human().shown === "atheist");
+      const belief = e.strat.atheistBelief(e.s, e.human())?.belief ?? 0;
+      const up = e.canVote() && (yours || e.human().shown === "atheist" || belief >= ATHEIST_VOTE_BELIEF);
 
-      this.note(`hand ${up ? "up" : "down"} for the Storyteller.`);
+      this.note(`hand ${up ? "up" : "down"} for the Storyteller (belief ${Math.round(belief * 100)}%).`);
 
       return up;
     }
@@ -179,6 +181,7 @@ export class SelfPlay {
 
   // The next thing to do by day, or null at night or once the game is over:
   //   { kind: "ask", id }         ask an NPC
+  //   { kind: "tell", id }        tell an NPC you asked that you're the Atheist
   //   { kind: "ability", run }    use a day ability (run() calls the engine)
   //   { kind: "open" }            start nominations
   //   { kind: "nominate", id }    your nomination (or, dead, your request)
@@ -194,6 +197,14 @@ export class SelfPlay {
     }
 
     if (!s.nominationsOpen) {
+      // (As the Atheist, you tell everyone you ask that you are.)
+      const told = h.shown === "atheist" && s.talked.find((id) => !(s.toldToday ?? []).includes(id));
+
+      if (told && this.once(`tell:${told}`)) {
+        this.note(`told ${e.player(told).label} you're the Atheist.`);
+        return { kind: "tell", id: told };
+      }
+
       const asked = e.talkStatus();
       const t = asked.remaining
         ? pick(
@@ -230,6 +241,18 @@ export class SelfPlay {
       : true;
     // (A Wizard's wish can open a second round of nominations today.)
     const round = s.secondRound?.open && s.secondRound.day === s.day ? 2 : 1;
+
+    // (As the Atheist, you nominate the Storyteller once enough NPCs would
+    // vote for it.)
+    if (
+      h.shown === "atheist" &&
+      !e.storytellerBarred(h) &&
+      e.strat.believers(s).length + 1 >= e.storytellerNeeded() &&
+      this.once("storyteller")
+    ) {
+      this.note("nominated the Storyteller.");
+      return { kind: "nominate", id: STORYTELLER };
+    }
 
     if (t && canNominate && this.once(`nominate:${round}`)) {
       this.note(`${h.alive ? "nominated" : "asked for a nomination of"} ${t.label}.`, {
@@ -332,6 +355,8 @@ export class SelfPlay {
     try {
       if (a.kind === "ask") {
         e.ask(a.id);
+      } else if (a.kind === "tell") {
+        e.tell(a.id, "atheist");
       } else if (a.kind === "ability") {
         a.run();
       } else if (a.kind === "open") {

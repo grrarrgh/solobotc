@@ -80,6 +80,13 @@ import {
   LEVIATHAN_STRONG_EVIDENCE,
   LEVIATHAN_LATE_VOTE_BONUS,
   LEVIATHAN_LAST_DAY_VOTE_CHANCE,
+  ATHEIST_BELIEF,
+  ATHEIST_VOTE_BELIEF,
+  ATHEIST_NOMINATE_BELIEF,
+  ATHEIST_DISBELIEF_EVIDENCE,
+  STORYTELLER_NOMINATED_EVIDENCE,
+  STORYTELLER_VOTED_EVIDENCE,
+  EVIL_ATHEIST_TRAP_BELIEVERS,
   exclusiveWith,
 } from "./data.js";
 import {
@@ -114,6 +121,7 @@ import { wishGifts } from "./characters/minion/wizard.js";
 import { infoOf } from "./characters/info.js";
 import { PAIR_TEAM } from "./characters/pairinfo.js";
 import { bluffTonight, backStory, bluffState, gainedRole } from "./bluff.js";
+import { STORYTELLER } from "./characters/townsfolk/atheist.js";
 
 export { claimTo, claimHeard, tick };
 
@@ -753,7 +761,10 @@ export class SimpleStrategy {
   // data.js: their own claim against t's, double claims, what players said,
   // abilities seen to work or fail, and your marks and nominations. Returns
   // the total `score` and up to two `reasons` against t, strongest first.
-  evidence(s, p, t) {
+  // (`atheist`: false leaves out what p makes of an Atheist claim and of
+  // the votes on the Storyteller, for atheistCredence(), which weighs the
+  // rest.)
+  evidence(s, p, t, atheist = true) {
     const W = EVIDENCE_WEIGHT;
     const found = [];
     const add = (weight, text) => found.push({ weight, text });
@@ -1015,12 +1026,268 @@ export class SimpleStrategy {
       }
     }
 
+    // (With the Atheist on the script: what p makes of t's Atheist claim,
+    // and of t pushing to execute the Storyteller. See atheistEvidence().)
+    if (atheist && s.script.ids.includes("atheist")) {
+      for (const x of this.atheistEvidence(s, p, t, claim)) {
+        add(x.weight, x.text);
+      }
+    }
+
     return {
       score: found.reduce((n, x) => n + x.weight, 0),
       reasons: merged(found.filter((x) => x.weight > 0))
         .sort((a, b) => b.weight - a.weight)
         .slice(0, 2)
         .map((x) => x.text),
+    };
+  }
+
+  // ── The Atheist ────────────────────────────────────────────
+
+  // Good player p's evidence against t, with the Atheist on the script (see
+  // evidence()): if p doesn't believe t's Atheist claim, only an evil player
+  // would make it (ATHEIST_DISBELIEF_EVIDENCE, the more the less they
+  // believe it); and if p doesn't believe any Atheist claim, t nominating
+  // the Storyteller, or voting to execute it, counts against them
+  // (STORYTELLER_*_EVIDENCE: executed, evil would win). (A failed Legion
+  // vote on the Storyteller counts as any failed execution does.)
+  atheistEvidence(s, p, t, claim) {
+    const found = [];
+    const b = this.atheistBelief(s, p);
+
+    if (!b || t === p) {
+      return found;
+    }
+
+    if (claim === "atheist") {
+      const own = this.atheistCredence(s, p, t).belief;
+
+      if (!this.evilShown(s) && own < ATHEIST_VOTE_BELIEF) {
+        found.push({
+          weight: ATHEIST_DISBELIEF_EVIDENCE * (1 - own / ATHEIST_VOTE_BELIEF),
+          text: "they claim the Atheist, and I don't believe it",
+        });
+      } else if (this.evilShown(s)) {
+        found.push({
+          weight: ATHEIST_DISBELIEF_EVIDENCE,
+          text: `they claim the Atheist, but ${this.evilShown(s)}`,
+        });
+      }
+
+      return found;
+    }
+
+    if (b.belief >= ATHEIST_VOTE_BELIEF) {
+      return found;
+    }
+
+    for (const v of s.storytellerVotes ?? []) {
+      if (v.nominatorId === t.id) {
+        found.push({
+          weight: STORYTELLER_NOMINATED_EVIDENCE,
+          text: "they nominated the Storyteller, and I don't believe there's an Atheist",
+        });
+      } else if (v.voterIds.includes(t.id)) {
+        found.push({
+          weight: STORYTELLER_VOTED_EVIDENCE,
+          text: "they voted to execute the Storyteller, and I don't believe there's an Atheist",
+        });
+      }
+    }
+
+    return found;
+  }
+
+  // Why good players know someone is evil, so no Atheist is in play: an
+  // execution that failed with only evil votes (Legion), anyone who has
+  // shown they're evil (a Psychopath's kill, a Goblin claim...), a Damsel
+  // guess (only a Minion's counts). Null if nothing has.
+  evilShown(s) {
+    return (s.failedExecutions ?? []).length
+      ? "an execution failed with only evil votes"
+      : (s.outed ?? []).length
+        ? "someone has shown they're evil"
+        : (s.damselGuesses ?? []).length
+          ? "someone guessed the Damsel, as only a Minion would"
+          : null;
+  }
+
+  // How much good player p believes player c's Atheist claim, from 0 to 1
+  // (see ATHEIST_BELIEF): how much of the information hasn't added up (the
+  // town's doubts, s.doubts: see storyteller.js infoMode()), whether it's
+  // you, whether the Demon killed them, and the evidence about them.
+  // Returns { belief, reasons }.
+  atheistCredence(s, p, c) {
+    const A = ATHEIST_BELIEF;
+    const doubts = Math.min((s.doubts ?? []).length, A.maxDoubts);
+    const ev = this.evidence(s, p, c, false).score;
+    const killed = !c.alive && c.death === "demon";
+    const belief =
+      A.base + A.doubt * doubts + (c.human ? A.human : 0) + (killed ? A.killed : 0) - A.evidence * ev;
+    const reasons = [
+      doubts && `${doubts} thing${doubts === 1 ? "" : "s"} that didn't add up`,
+      c.human && "you claim it",
+      killed && "the Demon killed them",
+      ev >= EVIDENCE_TO_SUSPECT && "the evidence against them",
+      ev <= TRUST_EVIDENCE && "the evidence for them",
+    ].filter(Boolean);
+
+    return { belief: Math.min(1, Math.max(0, belief)), reasons };
+  }
+
+  // How much p believes the Atheist is in play, from 0 to 1, with the
+  // Atheist on the script: { belief, claimant, reasons }, for the claimant
+  // they believe most (see atheistCredence()). Certain if they're the
+  // Atheist; nothing with nobody claiming it, or once anyone has shown
+  // they're evil (see evilShown()). Null for anyone playing for evil, who
+  // knows (or thinks) there's an evil team, and on any other script. (No
+  // draw from s.r: the log and the UI may ask.)
+  atheistBelief(s, p) {
+    if (!s.script.ids.includes("atheist") || sideOf(p) !== "good") {
+      return null;
+    }
+
+    if (p.role === "atheist") {
+      return { belief: 1, claimant: p, reasons: ["they're the Atheist"] };
+    }
+
+    const claimants = s.players.filter((x) => x !== p && claimTo(x, p) === "atheist");
+
+    if (!claimants.length) {
+      return { belief: 0, claimant: null, reasons: [] };
+    }
+
+    const proof = this.evilShown(s);
+
+    if (proof) {
+      return { belief: 0, claimant: claimants[0], reasons: [proof] };
+    }
+
+    const best = claimants
+      .map((c) => ({ claimant: c, ...this.atheistCredence(s, p, c) }))
+      .reduce((a, b) => (b.belief > a.belief ? b : a));
+
+    // (Two or more claim it: at most one is telling the truth. The double
+    // claim counts against each, as evidence.)
+    if (claimants.length > 1) {
+      best.reasons = [...best.reasons, `${claimants.length} players claim it`];
+    }
+
+    return best;
+  }
+
+  // The NPCs who would vote to execute the Storyteller now, by what they
+  // believe (see storytellerVote()): those who can vote (living, or dead
+  // with their ghost vote), playing for good, at ATHEIST_VOTE_BELIEF or
+  // more. (A good NPC weighing a nomination reads the room this way; so
+  // does the evil team, who add their own votes.)
+  believers(s) {
+    return s.players.filter(
+      (x) =>
+        !x.human &&
+        (x.alive || x.ghost) &&
+        !wishBarred(s, x) &&
+        (this.atheistBelief(s, x)?.belief ?? 0) >= ATHEIST_VOTE_BELIEF,
+    );
+  }
+
+  // Whether living NPC p nominates the Storyteller now (with the Atheist on
+  // the script; once a day, by anyone): a nomination as nomination() returns
+  // it, first of the day's (it would end the game), or null. Only once they
+  // count enough votes to carry it (half the living players, rounded up):
+  // - a good NPC who believes an Atheist claim (ATHEIST_NOMINATE_BELIEF), or
+  //   the Atheist, counting the NPCs who believe it (see believers()), and
+  //   you if you've told them you're the Atheist;
+  // - an evil NPC (not the Lunatic), with an Atheist claim to point at,
+  //   counting those believers and their own team's votes: executed, evil
+  //   wins. (Only with at least EVIL_ATHEIST_TRAP_BELIEVERS good NPCs who
+  //   believe it: the trap is for good to spring, not one the evil team
+  //   springs alone once it holds half the votes. That also keeps a working
+  //   Legion's veto away: see storytellerVote().)
+  storytellerNomination(s, p) {
+    if (
+      !s.script.ids.includes("atheist") ||
+      s.storytellerNominated === s.day ||
+      !p.alive ||
+      p.human ||
+      wishBarred(s, p) ||
+      s.roshambo
+    ) {
+      return null;
+    }
+
+    const needed = Math.ceil(s.players.filter((x) => x.alive).length / 2);
+    const target = { id: STORYTELLER, label: "the Storyteller", storyteller: true, alive: true };
+    const score = NPC_NOMINATE_EVIDENCE + 100;
+
+    if (sideOf(p) === "evil") {
+      const claimant =
+        (p.claim === "atheist" ? p : null) ??
+        s.players.find((x) => x !== p && claimHeard(x, p) === "atheist") ??
+        null;
+
+      if (!claimant || thinksEvil(p)) {
+        return null;
+      }
+
+      const believers = this.believers(s);
+      // (Not the Marionette, who thinks they're good: they vote by what
+      // they believe.)
+      const team = s.players.filter(
+        (x) =>
+          x.alignment === "evil" &&
+          sideOf(x) === "evil" &&
+          (x.alive || x.ghost) &&
+          (x === p || teammate(p, x)),
+      );
+
+      if (
+        believers.length < Math.max(1, EVIL_ATHEIST_TRAP_BELIEVERS) ||
+        team.length + believers.length < needed
+      ) {
+        return null;
+      }
+
+      return {
+        target,
+        score: score + (claimant === p ? 1 : 0),
+        reasons: [
+          claimant === p
+            ? "I'm the Atheist: execute the Storyteller, and good wins"
+            : `I believe ${who(claimant)}: the Atheist is in play`,
+        ],
+        why: `${team.length} evil vote${team.length === 1 ? "" : "s"} and ${believers.length} good NPC${
+          believers.length === 1 ? "" : "s"
+        } who believe the Atheist can carry it (${needed} needed): executed, evil wins`,
+      };
+    }
+
+    const b = this.atheistBelief(s, p);
+
+    if (!b?.claimant || b.belief < (p.role === "atheist" ? 1 : ATHEIST_NOMINATE_BELIEF)) {
+      return null;
+    }
+
+    const believers = this.believers(s);
+    const h = human(s);
+    const you = h && (h.alive || h.ghost) && claimTo(h, p) === "atheist" ? 1 : 0;
+
+    if (believers.length + you < needed) {
+      return null;
+    }
+
+    return {
+      target,
+      score: score + (b.claimant === p ? 1 : 0),
+      reasons: [
+        b.claimant === p
+          ? "I'm the Atheist: execute the Storyteller, and good wins"
+          : `I believe ${who(b.claimant)}: the Atheist is in play (${b.reasons.join("; ") || "I believe it"})`,
+      ],
+      why: `belief ${Math.round(b.belief * 100)}%; ${believers.length} NPC${believers.length === 1 ? "" : "s"} would vote for it${
+        you ? ", and you claim it" : ""
+      } (${needed} needed)`,
     };
   }
 
@@ -1696,6 +1963,14 @@ export class SimpleStrategy {
       return null;
     }
 
+    // (With the Atheist on the script, the Storyteller: see
+    // storytellerNomination().)
+    const storyteller = this.storytellerNomination(s, p);
+
+    if (storyteller) {
+      return storyteller;
+    }
+
     // (An evil NPC nominating their Boomdandy makes up a reason.)
     const boom = this.boomPush(s, p);
 
@@ -1788,26 +2063,49 @@ export class SimpleStrategy {
 
   // Whether v votes to execute the Storyteller (see
   // characters/townsfolk/atheist.js): executed, good wins if the Atheist is
-  // in play, evil if not. `tally` as for vote(). An evil NPC knows no
-  // Atheist is in play (they're evil), so votes for it when the evil votes
-  // still to come (theirs and their teammates') can carry it, and holds back
-  // otherwise: a hand up for nothing would give them away (as it would with
-  // a working Legion and no good hand up yet: only evil votes, the
-  // execution fails). A good NPC votes only for an Atheist they believe in.
+  // in play, evil if not. `tally` as for vote(), but its `yes` counts only
+  // votes already locked in: never your hand, which you may lower until the
+  // clock hand reaches you (see engine intents()). Good players decide
+  // first, so their votes are locked in when the evil team decides.
+  //
+  // An evil NPC knows no Atheist is in play (they're evil), so votes for it
+  // when the votes locked in and the evil votes still to come (theirs and
+  // their teammates') can carry it, and holds back otherwise: a hand up for
+  // nothing would give them away (as it would with a working Legion and no
+  // good vote locked in: only evil votes, the execution fails). An evil
+  // player claiming the Atheist always votes, as the Atheist would. (The
+  // Lunatic, whose evil team is imagined, holds back.) A good NPC votes if
+  // they believe an Atheist claim (see atheistBelief()). Logged.
   storytellerVote(s, v, tally) {
-    if (v.alignment === "evil") {
-      if (!tally.yes && s.players.some((x) => x.alive && x.role === "legion" && works(x))) {
-        return false;
-      }
-
+    if (sideOf(v) === "evil") {
+      const legion = s.players.some((x) => x.alive && x.role === "legion" && works(x));
       const still = s.players.filter(
-        (x) => x.alignment === "evil" && (x.alive || x.ghost) && x.seat >= v.seat && !blind(v, x),
+        (x) =>
+          x.alignment === "evil" && sideOf(x) === "evil" && (x.alive || x.ghost) && x.seat >= v.seat && !blind(v, x),
       ).length;
+      const yes =
+        !thinksEvil(v) &&
+        (v.claim === "atheist" || (!(legion && !tally.yes) && tally.yes + still >= tally.needed));
 
-      return tally.yes + still >= tally.needed;
+      note(
+        s,
+        "workings",
+        `${v.label} (${name(v.role)}) ${yes ? "votes" : "holds back"} on the Storyteller: ${
+          thinksEvil(v)
+            ? "their evil team is imagined"
+            : v.claim === "atheist"
+              ? "they claim the Atheist"
+              : legion && !tally.yes
+                ? "with Legion working and no good vote locked in, only evil votes would fail"
+                : `${tally.yes} vote${tally.yes === 1 ? "" : "s"} locked in and ${still} evil still to come, of ${tally.needed} needed`
+        }.`,
+        { playerId: v.id, vote: yes },
+      );
+
+      return yes;
     }
 
-    return false;
+    return (this.atheistBelief(s, v)?.belief ?? 0) >= ATHEIST_VOTE_BELIEF;
   }
 
   // Whether v votes for nominee n. `tally` is how the vote stands when v
@@ -3679,8 +3977,9 @@ export class SimpleStrategy {
         s.script.ids.filter(
           (id) =>
             alignment(id) === "good" &&
-            // (Nor the Lunatic, who never knows they are one.)
-            !["drunk", "lunatic", "pixie", ...HIDDEN_OUTSIDERS].includes(id) &&
+            // (Nor the Lunatic, who never knows they are one; nor the
+            // Atheist, whom no good player claims falsely.)
+            !["drunk", "lunatic", "pixie", "atheist", ...HIDDEN_OUTSIDERS].includes(id) &&
             !own.includes(id) &&
             (!evil || !tokens.has(id)),
         ),

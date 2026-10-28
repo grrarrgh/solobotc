@@ -273,6 +273,12 @@ export class Engine {
     this.puzzleDrunk();
     this.barberNight();
 
+    // (An Atheist game: the rule-break ramp holds while the town comes to
+    // believe the Atheist. See atheist.js.)
+    if (s.atheist) {
+      this.atheistSafe();
+    }
+
     if (this.wakeChoice()) {
       return;
     }
@@ -542,6 +548,7 @@ export class Engine {
     this.twinInfo();
     this.witch();
     this.cerenovus();
+    this.atheistCerenovus();
     this.fearmonger();
     this.pitHag();
     this.mezepheles();
@@ -1468,6 +1475,11 @@ export class Engine {
       targetId: n.target.id,
     });
 
+    // (The Storyteller, with the Atheist on the script: see atheist.js.)
+    if (n.target.storyteller) {
+      return this.nominateStoryteller(p, null, line);
+    }
+
     return this.runNomination(p, n.target, false, null, line);
   }
 
@@ -1943,6 +1955,8 @@ export class Engine {
       sideOf(n) === "evil" &&
       !n.cameClean &&
       !isTwin(s, n) &&
+      // (Nor an Atheist claim, a trap they keep up: see setup.js.)
+      n.claim !== "atheist" &&
       DEMON_KILL_PRIORITY[n.claim] !== "high" &&
       s.r() < FAKE_CLEAN_CHANCE
     ) {
@@ -2016,7 +2030,11 @@ export class Engine {
       );
 
       intents[v.id] = attempted;
-      tally.yes += attempted ? 1 : 0;
+      // (On the Storyteller, your hand isn't counted for the NPCs who decide
+      // after you: you may still lower it until the clock hand reaches you,
+      // so only votes already locked in count. See strategy
+      // storytellerVote().)
+      tally.yes += attempted && !(n.storyteller && v.human) ? 1 : 0;
     }
 
     return intents;
@@ -2124,7 +2142,12 @@ export class Engine {
     const h = this.human();
 
     if (!h.alive) {
-      throw Error("Dead players cannot nominate. Request a nomination instead.");
+      // (Nobody can be asked to nominate the Storyteller for you.)
+      throw Error(
+        id === STORYTELLER
+          ? "Only a living player can nominate the Storyteller."
+          : "Dead players cannot nominate. Request a nomination instead.",
+      );
     }
 
     // (With the Atheist on the script: see atheist.js.)

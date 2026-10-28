@@ -8,6 +8,7 @@ import {
   ATHEIST_BREAK_START,
   ATHEIST_BREAK_RAMP,
   ATHEIST_BREAK_MAX,
+  ATHEIST_DOUBT_NOTICE,
   exclusiveWith,
   name,
   team,
@@ -490,14 +491,52 @@ export const nameable = (s, p) =>
 // good players. (The Vortox's false information is always false.)
 export function infoMode(s, p, deadOk = false) {
   const mode = misinformMode(s, p, deadOk);
+  const broken = mode === "truth" && atheistBreaks(s, p);
+  const out = broken ? "lie" : mode;
 
-  return mode === "truth" && atheistBreaks(s, p) ? "lie" : mode;
+  doubted(s, p, out, broken);
+
+  return out;
 }
 
 // How often, in an Atheist game, the Storyteller breaks the rules with a
-// piece of information (see ATHEIST_BREAK_START): more each night.
+// piece of information (see ATHEIST_BREAK_START): more each night, except
+// on nights it held the ramp as the town came to believe the Atheist
+// (s.atheist.held; see characters/townsfolk/atheist.js atheistSafe()).
 export const atheistBreakChance = (s) =>
-  Math.min(ATHEIST_BREAK_MAX, ATHEIST_BREAK_START + ATHEIST_BREAK_RAMP * (Math.max(s.night, s.day) - 1));
+  Math.min(
+    ATHEIST_BREAK_MAX,
+    ATHEIST_BREAK_START +
+      ATHEIST_BREAK_RAMP * Math.max(0, Math.max(s.night, s.day) - 1 - (s.atheist?.held ?? 0)),
+  );
+
+// With the Atheist on the script, living good player p's information came
+// out false (a rule break, or drunk or poisoned): the town notices that
+// something doesn't add up at ATHEIST_DOUBT_NOTICE, a doubt (s.doubts) that
+// makes good NPCs readier to believe an Atheist claim (see strategy
+// atheistBelief()). Logged. (No draw from s.r on any other script.)
+function doubted(s, p, mode, broken) {
+  if (!s.script.ids.includes("atheist") || mode === "truth" || p.alignment !== "good" || !p.alive) {
+    return;
+  }
+
+  const seen = s.r() < ATHEIST_DOUBT_NOTICE;
+
+  if (seen) {
+    (s.doubts ??= []).push({ day: s.day, night: s.night, playerId: p.id, broken });
+  }
+
+  s.audit.push({
+    id: s.auditId++,
+    group: s.phase === "night" ? `Night ${s.night}` : `Day ${s.day}`,
+    type: "atheist",
+    text: `${Whose(p)} information is false (${broken ? "the Storyteller broke the rules" : "drunk or poisoned"}): ${
+      seen ? `the town notices something doesn't add up (doubts: ${s.doubts.length})` : "nobody notices"
+    } (at ${Math.round(ATHEIST_DOUBT_NOTICE * 100)}%).`,
+    data: { playerId: p.id, seen },
+    names: logNames(s),
+  });
+}
 
 // Whether, in an Atheist game, the Storyteller breaks the rules with good
 // player p's information: false even to its pretence (see

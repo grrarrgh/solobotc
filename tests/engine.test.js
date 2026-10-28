@@ -31,6 +31,9 @@ import {
   ATHEIST_BREAK_START,
   ATHEIST_BREAK_RAMP,
   ATHEIST_BREAK_MAX,
+  ATHEIST_VOTE_BELIEF,
+  ATHEIST_UNSAFE_SHARE,
+  EVIL_ATHEIST_BLUFF_CHANCE,
   name,
   team,
   alignment,
@@ -2570,6 +2573,12 @@ function playOut(raw, seats, seed) {
     }
   };
 
+  // (With the Atheist on the script: your hand goes up for the Storyteller
+  // if you're the Atheist, or believe one as a good NPC would; see strategy
+  // atheistBelief().)
+  const storytellerHand = () =>
+    e.human().shown === "atheist" || (e.strat.atheistBelief(s, e.human())?.belief ?? 0) >= ATHEIST_VOTE_BELIEF;
+
   e.start();
 
   for (let turn = 0; turn < 40 && !s.winner; turn++) {
@@ -2581,6 +2590,16 @@ function playOut(raw, seats, seed) {
 
     for (const p of s.players.filter((x) => !x.human).slice(0, 2)) {
       attempt(() => e.ask(p.id));
+
+      // (As the Atheist, you tell them so.)
+      if (
+        e.human().shown === "atheist" &&
+        s.talked.includes(p.id) &&
+        !(s.toldToday ?? []).includes(p.id) &&
+        !s.nominationsOpen
+      ) {
+        e.tell(p.id, "atheist");
+      }
     }
 
     if (e.human().shown === "savant" && e.human().alive) {
@@ -2603,15 +2622,27 @@ function playOut(raw, seats, seed) {
       (x) => x.alive && !x.human && !e.nominatedToday(x.id),
     );
 
-    if (turn % 2 && target) {
+    // (As the Atheist, you nominate the Storyteller once enough NPCs would
+    // vote for it.)
+    const atheist =
+      e.human().shown === "atheist" &&
+      !e.storytellerBarred(e.human()) &&
+      e.strat.believers(s).length + 1 >= e.storytellerNeeded();
+
+    if (turn % 2 && (target || atheist)) {
       attempt(() =>
-        e.human().alive ? e.nominate(target.id) : e.requestNomination(target.id),
+        atheist
+          ? e.nominate(STORYTELLER, true)
+          : e.human().alive
+            ? e.nominate(target.id)
+            : e.requestNomination(target.id),
       );
 
-      // Then any NPC nominations (your hand up).
+      // Then any NPC nominations (your hand up; for the Storyteller, see
+      // storytellerHand()).
       while (s.phase === "day" && !s.winner && e.npcNomination()) {
         if (s.pendingVote) {
-          e.castVotes(true);
+          e.castVotes(s.pendingVote.storyteller ? storytellerHand() : true);
         }
       }
     } else if (s.phase === "day") {
@@ -13381,6 +13412,7 @@ test("Chef's Deluxe loads from the script list: 24 characters, with the Atheist"
 
 test("about 1 Chef's Deluxe game in 8 is an Atheist game: nobody evil, and a pretend Demon and Minions", () => {
   let atheists = 0;
+  let liars = 0;
 
   for (let g = 0; g < 400; g++) {
     const seats = 8 + (g % 8);
@@ -13388,8 +13420,21 @@ test("about 1 Chef's Deluxe game in 8 is an Atheist game: nobody evil, and a pre
     const roles = s.players.map((x) => x.role);
 
     if (!s.atheist) {
-      // (Otherwise it isn't dealt, nor shown, nor anyone's claim.)
-      assert.ok(!s.players.some((x) => [x.role, x.shown, x.claim].includes("atheist") || x.pretend), `${g}`);
+      // (Otherwise it isn't dealt, nor shown, nor anyone's claim but an
+      // evil Minion's: see EVIL_ATHEIST_BLUFF_CHANCE.)
+      const claims = s.players.filter((x) => x.claim === "atheist");
+
+      assert.ok(!s.players.some((x) => [x.role, x.shown].includes("atheist") || x.pretend), `${g}`);
+      assert.ok(claims.length <= 1, `${g}`);
+
+      for (const x of claims) {
+        assert.equal(team(x.role), "minion", `${g}`);
+        assert.ok(!["eviltwin", "marionette"].includes(x.role), `${g}`);
+        assert.equal(x.bluff, "atheist", `${g}`);
+        assert.match(formatLog(s), /\[atheist\] .* claims the Atheist, though no Atheist is in play: a trap/, `${g}`);
+        liars++;
+      }
+
       continue;
     }
 
@@ -13403,19 +13448,14 @@ test("about 1 Chef's Deluxe game in 8 is an Atheist game: nobody evil, and a pre
     assert.equal(roles.filter((x) => x === "atheist").length, 1, `${g}`);
     assert.equal(demon.length, 1, `${g}`);
     assert.ok(["imp", "fanggu"].includes(demon[0].pretend), `${g}: ${demon[0].pretend}`);
-    assert.equal(minions.length, m, `${g}`);
+    // (Never a pretend Evil Twin or Marionette: only the Spy and Cerenovus
+    // are left to pretend.)
+    assert.equal(minions.length, Math.min(m, 2), `${g}`);
+    assert.ok(minions.every((x) => ["spy", "cerenovus"].includes(x.pretend)), `${g}`);
 
-    // Never you, nor the Atheist; a pretend Marionette beside the Demon.
+    // Never you, nor the Atheist.
     for (const x of [...demon, ...minions]) {
       assert.ok(!x.human && x.role !== "atheist", `${g}`);
-    }
-
-    const mar = minions.find((x) => x.pretend === "marionette");
-
-    if (mar) {
-      const apart = Math.abs(mar.seat - demon[0].seat);
-
-      assert.equal(Math.min(apart, seats - apart), 1, `${g}`);
     }
 
     // The Outsiders a real team would make (one more for a Fang Gu).
@@ -13435,6 +13475,8 @@ test("about 1 Chef's Deluxe game in 8 is an Atheist game: nobody evil, and a pre
   }
 
   assert.ok(atheists > 400 * ATHEIST_CHANCE * 0.6 && atheists < 400 * ATHEIST_CHANCE * 1.4, `${atheists}`);
+  // (Legion games have no Minions to claim it.)
+  assert.ok(liars > 0 && liars < (400 - atheists) * EVIL_ATHEIST_BLUFF_CHANCE * 1.4, `${liars}`);
 });
 
 test("in an Atheist game, the pretend Demon and Minions register as evil to information; a pretend Spy as good", () => {
@@ -13596,8 +13638,14 @@ test("the Storyteller executed with no Atheist in play: evil wins; short of vote
 
   assert.ok(!r.executed);
   assert.equal(s.winner, null);
-  assert.throws(() => e.nominate(STORYTELLER, true), /already nominated today/);
+  assert.throws(() => e.nominate(STORYTELLER, true), /The Storyteller has already been nominated today/);
   assert.equal(s.storytellerVotes.length, 1);
+
+  // (Nor by anyone else today.)
+  const other = s.players.find((x) => x.alive && !x.human && !s.dayNominators.includes(x.id));
+
+  assert.throws(() => e.nominateStoryteller(other, true), /The Storyteller has already been nominated today/);
+  assert.equal(e.strat.storytellerNomination(s, other), null);
 
   // (Another day, another nominator: everyone votes.)
   const npc = s.players.find((x) => x.alive && !x.human);
@@ -13612,7 +13660,9 @@ test("the Storyteller executed with no Atheist in play: evil wins; short of vote
 test("an evil NPC votes to execute the Storyteller only when the evil votes still to come can carry it", () => {
   const s = createState(cd, 10, "st-evil-vote");
   const strat = new SimpleStrategy();
-  const v = s.players.find((x) => x.alignment === "evil");
+  // (Not the Marionette, who thinks they're good; nor one claiming the
+  // Atheist, who always votes.)
+  const v = s.players.find((x) => x.alignment === "evil" && x.role !== "marionette" && x.claim !== "atheist");
 
   if (!v) {
     return;
@@ -13630,4 +13680,355 @@ test("the Storyteller can't be nominated without the Atheist on the script", () 
 
   e.openNominations();
   assert.throws(() => e.nominate(STORYTELLER, true), /only be nominated with the Atheist on the script/);
+});
+
+// ── The Atheist, phase 3: belief, nominating the Storyteller, the evil bluff ──
+
+// A Chef's Deluxe deal at `seats` that `ok` accepts, started and settled into
+// Day 1.
+function cdDay(seats, prefix, ok = () => true) {
+  for (let i = 0; ; i++) {
+    const s = createState(cd, seats, `${prefix}-${i}`);
+
+    if (ok(s)) {
+      const e = new Engine(s);
+
+      e.start();
+      settle(e);
+
+      return { s, e };
+    }
+  }
+}
+
+// The Atheist says so in public (not mad about another character today:
+// a pretend Cerenovus may have made them so).
+function claimAtheist(e, x) {
+  x.mad = null;
+  x.claim = "atheist";
+  e.claimPublicly(x);
+}
+
+// (An Atheist game, the Atheist an NPC.)
+const npcAtheist = (s) => s.atheist && !s.players.find((x) => x.role === "atheist").human;
+
+test("evil NPCs never count your hand on the Storyteller: lowering it late doesn't expose them", () => {
+  const s = createState(cd, 10, "ex-1");
+  const e = new Engine(s);
+
+  e.start();
+  settle(e);
+
+  // 7 alive (4 votes needed): the evil team is 3.
+  for (const x of s.players.filter((x) => !x.human && x.alignment === "good").slice(0, 3)) {
+    x.alive = false;
+    x.ghost = false;
+  }
+
+  const evil = s.players.filter((x) => x.alignment === "evil");
+
+  assert.equal(evil.length, 3);
+  e.openNominations();
+
+  const r = e.nominate(STORYTELLER, null);
+
+  assert.equal(r.needed, 4);
+
+  // Your hand up: still, no evil hand goes up (3 of 4, without yours).
+  const up = e.openVote(true);
+
+  assert.ok(evil.every((x) => !up.find((v) => v.playerId === x.id).attempted));
+  assert.ok(
+    s.audit.some(
+      (x) =>
+        x.type === "workings" &&
+        /holds back on the Storyteller: 0 votes locked in and 3 evil still to come, of 4 needed/.test(x.text),
+    ),
+  );
+
+  // You lower it: nobody voted, nobody is exposed.
+  const result = e.castVotes(false);
+
+  assert.equal(result.count, 0);
+  assert.deepEqual(s.storytellerVotes[0].voterIds, []);
+});
+
+test("evil NPCs vote on the Storyteller once a good vote locked in lets them carry it, whatever your hand does", () => {
+  const s = createState(cd, 10, "ex-1");
+  const e = new Engine(s);
+
+  e.start();
+  settle(e);
+
+  for (const x of s.players.filter((x) => !x.human && x.alignment === "good").slice(0, 3)) {
+    x.alive = false;
+    x.ghost = false;
+  }
+
+  // (One good NPC believes an Atheist claim.)
+  const believer = s.players.find((x) => x.alive && !x.human && x.alignment === "good");
+  const real = e.strat.atheistBelief.bind(e.strat);
+
+  e.strat.atheistBelief = (s, p) => (p === believer ? { belief: 1, claimant: null, reasons: [] } : real(s, p));
+  e.openNominations();
+  e.nominate(STORYTELLER, null);
+  e.openVote(true);
+
+  const result = e.castVotes(false);
+
+  assert.equal(result.count, 4);
+  assert.ok(result.executed);
+  assert.equal(s.winner, "evil");
+});
+
+test("the Storyteller can't be nominated by a dead player, by night, nor before a throw; a dead you is told so", () => {
+  const { s, e } = cdDay(10, "st-barred");
+  const npc = s.players.find((x) => x.alive && !x.human);
+
+  e.openNominations();
+  npc.alive = false;
+  assert.equal(e.storytellerBarred(npc), "Only a living player can nominate the Storyteller.");
+  assert.throws(() => e.nominateStoryteller(npc, true), /Only a living player can nominate the Storyteller/);
+  npc.alive = true;
+
+  s.roshambo = { day: s.day };
+  assert.equal(e.storytellerBarred(npc), "Throw first.");
+  s.roshambo = null;
+
+  s.phase = "night";
+  assert.equal(e.storytellerBarred(npc), "Nominations happen by day.");
+  s.phase = "day";
+
+  // (Nobody can nominate it for you: Request a nomination is off with the
+  // Sun selected.)
+  e.human().alive = false;
+  assert.throws(() => e.nominate(STORYTELLER, true), /^Error: Only a living player can nominate the Storyteller\.$/);
+});
+
+test("a nominator cursed by the Witch dies nominating the Storyteller", () => {
+  const { s, e } = cdDay(10, "st-witch");
+  const npc = s.players.find((x) => x.alive && !x.human);
+
+  e.openNominations();
+  s.witched = { effective: true, targetId: npc.id, day: s.day };
+  e.strat.storytellerVote = () => false;
+  e.nominateStoryteller(npc, true);
+
+  assert.ok(!npc.alive);
+  assert.ok(s.audit.some((x) => x.type === "witch" && x.text.startsWith(`${npc.label} nominated while cursed`)));
+});
+
+test("Legion vetoes a Storyteller vote with only evil votes: recorded like any failed execution, and good NPCs know there's evil", () => {
+  const { s, e } = cdDay(12, "st-legion", (t) => t.players.some((x) => x.role === "legion"));
+  const voters = s.players.filter((x) => x.alignment === "evil");
+  const good = s.players.find((x) => !x.human && x.alive && x.alignment === "good");
+
+  e.openNominations();
+  e.strat.storytellerVote = (s, v) => v.alignment === "evil";
+
+  const r = e.nominate(STORYTELLER, false);
+
+  assert.ok(r.failed && !r.executed);
+  assert.equal(s.winner, null);
+  assert.equal(s.failedExecutions.at(-1).nomineeId, STORYTELLER);
+  assert.deepEqual(
+    s.failedExecutions.at(-1).voterIds,
+    voters.map((x) => x.id),
+  );
+  assert.match(e.strat.evidence(s, good, voters[0]).reasons.join("; "), /voted for an execution that failed/);
+  assert.equal(e.strat.evilShown(s), "an execution failed with only evil votes");
+});
+
+test("a good NPC believes an Atheist claim as things stop adding up, more if the Demon killed the claimant; never once evil has shown itself", () => {
+  const { s, e } = cdDay(10, "belief", npcAtheist);
+  const atheist = s.players.find((x) => x.role === "atheist");
+  const p = s.players.find((x) => !x.human && x !== atheist);
+
+  // (Nobody has claimed it to them yet: nothing to believe.)
+  p.toldMe = {};
+  p.secondHand = {};
+  atheist.claimKnown = false;
+  assert.equal(e.strat.atheistBelief(s, p).belief, 0);
+
+  claimAtheist(e, atheist);
+  s.doubts = [];
+
+  const low = e.strat.atheistBelief(s, p);
+
+  assert.equal(low.claimant, atheist);
+  assert.ok(low.belief < ATHEIST_VOTE_BELIEF, `${low.belief}`);
+  assert.equal(e.strat.storytellerVote(s, p, { yes: 0, needed: 5 }), false);
+  // (Only an evil player would claim it falsely.)
+  assert.match(e.strat.evidence(s, p, atheist).reasons.join("; "), /they claim the Atheist, and I don't believe it/);
+
+  s.doubts = [{}, {}, {}, {}];
+
+  const high = e.strat.atheistBelief(s, p);
+
+  assert.ok(high.belief >= ATHEIST_VOTE_BELIEF, `${high.belief}`);
+  assert.match(high.reasons.join("; "), /4 things that didn't add up/);
+  assert.equal(e.strat.storytellerVote(s, p, { yes: 0, needed: 5 }), true);
+  assert.doesNotMatch(e.strat.evidence(s, p, atheist).reasons.join("; "), /don't believe/);
+
+  // The Atheist knows.
+  assert.equal(e.strat.atheistBelief(s, atheist).belief, 1);
+
+  s.doubts = [];
+  atheist.alive = false;
+  atheist.death = "demon";
+  assert.ok(e.strat.atheistBelief(s, p).belief > low.belief);
+  assert.match(e.strat.atheistBelief(s, p).reasons.join("; "), /the Demon killed them/);
+
+  s.outed = [{ id: atheist.id, day: s.day, why: "test" }];
+  assert.equal(e.strat.atheistBelief(s, p).belief, 0);
+});
+
+test("a good NPC who doesn't believe the Atheist holds nominating or voting for the Storyteller against a player", () => {
+  const { s, e } = cdDay(10, "st-evidence", npcAtheist);
+  const atheist = s.players.find((x) => x.role === "atheist");
+  const [p, x, y] = s.players.filter((z) => !z.human && z !== atheist);
+
+  claimAtheist(e, atheist);
+  s.doubts = [];
+  s.storytellerVotes = [{ day: 1, nominatorId: x.id, voterIds: [x.id, y.id], count: 2, needed: 5 }];
+
+  assert.match(
+    e.strat.evidence(s, p, x).reasons.join("; "),
+    /they nominated the Storyteller, and I don't believe there's an Atheist/,
+  );
+  assert.match(e.strat.evidence(s, p, y).reasons.join("; "), /they voted to execute the Storyteller/);
+
+  // (Believing it, they don't.)
+  s.doubts = [{}, {}, {}, {}, {}, {}];
+  assert.doesNotMatch(e.strat.evidence(s, p, x).reasons.join("; "), /Storyteller/);
+});
+
+test("with the Atheist on the script, false information may be noticed as a doubt", () => {
+  const { s } = cdDay(10, "doubts", (t) => t.atheist);
+  const p = s.players.find((x) => !x.human && x.alive);
+
+  s.doubts = [];
+  s.r = () => 0;
+  assert.equal(infoMode(s, p), "lie");
+  assert.equal(s.doubts.length, 1);
+  assert.ok(s.doubts[0].broken);
+  assert.match(
+    s.audit.at(-1).text,
+    /information is false \(the Storyteller broke the rules\): the town notices something doesn't add up \(doubts: 1\)/,
+  );
+
+  // (Not noticed: logged all the same.)
+  s.r = () => 0.99;
+  p.poisoned = true;
+  assert.notEqual(infoMode(s, p), "truth");
+  assert.equal(s.doubts.length, 1);
+  assert.match(s.audit.at(-1).text, /\(drunk or poisoned\): nobody notices/);
+});
+
+test("good NPCs nominate the Storyteller once enough of them believe the Atheist: executed, good wins", () => {
+  const { s, e } = cdDay(10, "st-npc", npcAtheist);
+  const atheist = s.players.find((x) => x.role === "atheist");
+
+  claimAtheist(e, atheist);
+  // (Nothing adds up yet: nobody nominates it.)
+  s.doubts = [];
+  e.openNominations();
+  assert.ok(!e.npcNominators().some((o) => o.n.target.storyteller));
+
+  s.doubts = [{}, {}, {}, {}, {}, {}];
+
+  const r = e.npcNomination();
+
+  assert.ok(r.storyteller && r.pending);
+  assert.ok(s.publicLog.some((x) => / nominates the Storyteller: "I('m| believe)/.test(x)));
+  assert.ok(s.phaseCards.some((c) => c.kind === "nomination" && / nominates the Storyteller/.test(c.lines[0])));
+
+  const v = e.castVotes(false);
+
+  assert.ok(v.executed);
+  assert.equal(s.winner, "good");
+  assert.ok(s.audit.some((x) => x.type === "workings" && /^The vote on the Storyteller, NPC by NPC:/.test(x.text)));
+});
+
+test("an evil Minion claiming the Atheist sets a trap: once believers and the evil team can carry it, they nominate the Storyteller, and evil wins", () => {
+  const { s, e } = cdDay(10, "st-trap", (t) =>
+    t.players.some((x) => x.alignment === "evil" && x.claim === "atheist"),
+  );
+  const liar = s.players.find((x) => x.alignment === "evil" && x.claim === "atheist");
+
+  assert.equal(team(liar.role), "minion");
+  e.claimPublicly(liar);
+  s.doubts = [{}, {}, {}, {}, {}, {}];
+  e.openNominations();
+
+  const r = e.npcNomination();
+
+  assert.ok(r.storyteller);
+  assert.ok(s.audit.some((x) => x.type === "npc_nomination" && /nominates the Storyteller/.test(x.text)));
+  assert.ok(e.strat.storytellerVote(s, liar, { yes: 0, needed: 99 }));
+
+  e.castVotes(false);
+  assert.equal(s.winner, "evil");
+});
+
+test("in an Atheist game, the rule-break ramp holds once the town comes to believe the Atheist", () => {
+  const { s, e } = cdDay(10, "st-ramp", npcAtheist);
+  const atheist = s.players.find((x) => x.role === "atheist");
+
+  claimAtheist(e, atheist);
+  s.night = 3;
+  s.day = 2;
+  s.doubts = [];
+  e.atheistSafe();
+  assert.equal(s.atheist.held ?? 0, 0);
+  assert.equal(atheistBreakChance(s), ATHEIST_BREAK_START + 2 * ATHEIST_BREAK_RAMP);
+
+  s.doubts = [{}, {}, {}, {}, {}, {}];
+  e.atheistSafe();
+  assert.equal(s.atheist.held, 1);
+  assert.equal(atheistBreakChance(s), ATHEIST_BREAK_START + ATHEIST_BREAK_RAMP);
+  assert.match(s.audit.at(-1).text, /^The town is coming to believe the Atheist \(\d+ living NPCs would vote/);
+  assert.ok(ATHEIST_UNSAFE_SHARE > 0);
+});
+
+test("in an Atheist game, a pretend Cerenovus makes a player mad, as a real one would", () => {
+  const { s, e } = cdDay(10, "st-ceren", (t) => t.atheist);
+  const c = s.players.find((x) => x.pretend && team(x.pretend) === "minion") ?? s.players.find((x) => x.pretend);
+
+  for (const x of s.players.filter((x) => x.pretend === "cerenovus")) {
+    x.pretend = "spy";
+  }
+
+  c.pretend = "cerenovus";
+  s.phase = "night";
+  s.night = 2;
+  e.atheistCerenovus();
+
+  const mad = s.players.find((x) => x.mad);
+
+  assert.ok(mad && !mad.human && mad !== c);
+  assert.notEqual(mad.mad.role, "atheist");
+  assert.ok(
+    s.audit.some(
+      (x) =>
+        x.type === "atheist" &&
+        x.text.startsWith(`The Storyteller pretends ${c.label}`) &&
+        /made .* mad that they are the /.test(x.text),
+    ),
+  );
+});
+
+test("self-play nominates the Storyteller in Chef's Deluxe games, and good can win an Atheist game by it", () => {
+  let wins = 0;
+
+  for (let i = 0; i < 12; i++) {
+    const seats = 8 + (i % 8);
+    const s0 = atheistDeal(seats, `st-selfplay-${i}`);
+    const { s } = playOut(cd, seats, s0.seed);
+
+    assert.ok(s.winner, s.seed);
+    wins += s.storytellerVotes?.some((v) => v.count >= v.needed && !v.failed) && s.winner === "good" ? 1 : 0;
+  }
+
+  assert.ok(wins > 0, `${wins}`);
 });
