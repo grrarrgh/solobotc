@@ -2285,22 +2285,22 @@ export class SimpleStrategy {
 
   // Whether v votes to execute the Storyteller (see
   // characters/townsfolk/atheist.js): executed, good wins if the Atheist is
-  // in play, evil if not. `tally` as for vote(), but its `yes` counts only
-  // votes already locked in: never your hand, which you may lower until the
-  // clock hand reaches you (see engine intents()). Good players decide
-  // first, so their votes are locked in when the evil team decides.
+  // in play, evil if not. `tally` as for vote(): its `yes` counts the hands
+  // already counted, as the clock hand comes round from the Sun: yours
+  // first, then seat by seat (see engine intents()).
   //
   // An evil NPC knows no Atheist is in play (they're evil), so votes for it
-  // when the votes locked in and the evil votes still to come (theirs and
+  // when the hands counted and the evil votes still to come (theirs and
   // their teammates') can carry it: executed, evil wins. Otherwise they vote
   // as they say they would (see atheistView()), as a good NPC would: a hand
   // up for a claim they've said they doubt, or down for one they've said
   // they believe, would give them away. (Not with a working Legion and no
-  // good vote locked in: only evil votes, the execution fails, and shows
+  // good vote counted: only evil votes, the execution fails, and shows
   // it.) An evil player claiming the Atheist always votes, as the Atheist
   // would. (The Lunatic, whose evil team is imagined, only votes as they
   // say.) A good NPC votes if they believe an Atheist claim (see
-  // atheistBelief()). Logged.
+  // atheistBelief()), or your nomination sways them (see storytellerSway()).
+  // Logged.
   storytellerVote(s, v, tally) {
     if (sideOf(v) === "evil") {
       const legion = s.players.some((x) => x.alive && x.role === "legion" && works(x));
@@ -2314,9 +2314,9 @@ export class SimpleStrategy {
       ).length;
       const vetoed = legion && !tally.yes;
       const carries = !thinksEvil(v) && !vetoed && tally.yes + still >= tally.needed;
-      const said = !vetoed && (this.atheistBelief(s, v, true)?.belief ?? 0) >= ATHEIST_VOTE_BELIEF;
+      const said = !vetoed && this.storytellerSway(s, v, tally, this.atheistBelief(s, v, true));
       const yes = v.claim === "atheist" || carries || said;
-      const locked = `${tally.yes} vote${tally.yes === 1 ? "" : "s"} locked in`;
+      const locked = `${tally.yes} vote${tally.yes === 1 ? "" : "s"} counted`;
 
       note(
         s,
@@ -2325,7 +2325,7 @@ export class SimpleStrategy {
           v.claim === "atheist"
             ? "they claim the Atheist"
             : vetoed
-              ? "with Legion working and no good vote locked in, only evil votes would fail"
+              ? "with Legion working and no good vote counted, only evil votes would fail"
               : carries
                 ? `${locked} and ${still} evil still to come carry it (${tally.needed} needed)`
                 : `${
@@ -2341,7 +2341,43 @@ export class SimpleStrategy {
       return yes;
     }
 
-    return (this.atheistBelief(s, v)?.belief ?? 0) >= ATHEIST_VOTE_BELIEF;
+    return this.storytellerSway(s, v, tally, this.atheistBelief(s, v));
+  }
+
+  // Whether good NPC v (or an evil one, saying what a good NPC would) votes
+  // to execute the Storyteller with belief `b` (see atheistBelief()). Your
+  // nomination sways them as it does on a player (see vote()): in the final
+  // 3 they always vote for it, whatever they believe; in the final 4 at
+  // NEAR_FINAL_HUMAN_VOTE_CHANCE at least (not on the Mastermind's extra
+  // day); otherwise it adds HUMAN_NOMINATION_BONUS to their belief. Logged
+  // when your nomination made the difference.
+  storytellerSway(s, v, tally, b) {
+    const belief = b?.belief ?? 0;
+
+    if (!tally?.humanChoice || belief >= ATHEIST_VOTE_BELIEF) {
+      return belief >= ATHEIST_VOTE_BELIEF;
+    }
+
+    const why = atFinal(s)
+      ? "in the final 3, they vote for your pick, whatever they believe"
+      : nearFinal(s) && s.mastermindDay !== s.day && s.r() < NEAR_FINAL_HUMAN_VOTE_CHANCE
+        ? `one execution from the final 3, they vote for your pick (at ${Math.round(
+            NEAR_FINAL_HUMAN_VOTE_CHANCE * 100,
+          )}% at least), whatever they believe`
+        : belief + HUMAN_NOMINATION_BONUS >= ATHEIST_VOTE_BELIEF
+          ? `your nomination adds ${Math.round(HUMAN_NOMINATION_BONUS * 100)}% to their belief of ${Math.round(
+              belief * 100,
+            )}%`
+          : null;
+
+    if (why) {
+      note(s, "workings", `${v.label} (${name(v.role)}) is swayed to vote on the Storyteller: ${why}.`, {
+        playerId: v.id,
+        vote: true,
+      });
+    }
+
+    return Boolean(why);
   }
 
   // Whether v votes for nominee n. `tally` is how the vote stands when v

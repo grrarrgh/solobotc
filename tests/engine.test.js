@@ -9692,6 +9692,28 @@ test("Legion: each night the Storyteller chooses who might die: never you, nor t
   }
 });
 
+test("Legion at the final 3: nobody dies after a day with an execution; after one without, a good NPC dies and evil wins", () => {
+  for (const executed of [true, false]) {
+    const { s, p, e } = trNight(`legion-final3-${executed}`, [null, null, null, "legion", "legion"], 2);
+
+    // (You, a good NPC and the last Legion.)
+    p[2].alive = false;
+    p[4].alive = false;
+    s.revived = [];
+    s.executedToday = executed;
+    e.legionNight();
+
+    assert.ok(p[0].alive && p[3].alive);
+    assert.equal(p[1].alive, executed);
+
+    if (!executed) {
+      assert.ok(
+        s.audit.some((x) => /the final 3 went a day without an execution, so a good player dies: evil wins/.test(x.text)),
+      );
+    }
+  }
+});
+
 test("the Magician: evil NPCs count them as one of their own, until they hear them claim it", () => {
   const { s, p, strat } = trNight("magician", [null, "magician"]);
   const [, mag, chef, baron, imp] = p;
@@ -13841,7 +13863,7 @@ function doubtAll(s, n) {
   s.storytellerVotes = [];
 }
 
-test("evil NPCs never count your hand on the Storyteller: lowering it late doesn't expose them", () => {
+test("evil NPCs count your hand on the Storyteller once it's counted: free to change until then, and it stands after", () => {
   const s = createState(cd, 10, "ex-1");
   const e = new Engine(s);
 
@@ -13863,26 +13885,32 @@ test("evil NPCs never count your hand on the Storyteller: lowering it late doesn
 
   assert.equal(r.needed, 4);
 
-  // Your hand up: still, no evil hand goes up (3 of 4, without yours).
-  const up = e.openVote(true);
+  // Until the clock hand reaches you, nobody else has decided, and you can
+  // raise or lower your hand.
+  assert.ok(e.openVote(true).every((v) => v.playerId === s.humanId || !v.attempted));
+  assert.ok(e.openVote(false).every((v) => !v.attempted));
 
-  assert.ok(evil.every((x) => !up.find((v) => v.playerId === x.id).attempted));
+  // Counted up: the evil team's 3 carry it (4 of 4).
+  const up = e.openVote(true, true);
+
+  assert.ok(evil.every((x) => up.find((v) => v.playerId === x.id).attempted));
   assert.ok(
     s.audit.some(
       (x) =>
         x.type === "workings" &&
-        /holds back on the Storyteller: 0 votes locked in and 3 evil still to come, of 4 needed/.test(x.text),
+        /votes on the Storyteller: \d votes? counted and \d evil still to come carry it \(4 needed\)/.test(x.text),
     ),
   );
 
-  // You lower it: nobody voted, nobody is exposed.
+  // Once counted, it stands: executed, evil wins.
   const result = e.castVotes(false);
 
-  assert.equal(result.count, 0);
-  assert.deepEqual(s.storytellerVotes[0].voterIds, []);
+  assert.equal(result.count, 4);
+  assert.ok(result.executed);
+  assert.equal(s.winner, "evil");
 });
 
-test("evil NPCs vote on the Storyteller once a good vote locked in lets them carry it, whatever your hand does", () => {
+test("evil NPCs hold back on the Storyteller with your hand counted down: raising it after changes nothing", () => {
   const s = createState(cd, 10, "ex-1");
   const e = new Engine(s);
 
@@ -13894,6 +13922,39 @@ test("evil NPCs vote on the Storyteller once a good vote locked in lets them car
     x.ghost = false;
   }
 
+  e.openNominations();
+  e.nominate(STORYTELLER, null);
+
+  const down = e.openVote(false, true);
+
+  assert.ok(down.every((v) => !v.attempted));
+  assert.ok(
+    s.audit.some(
+      (x) =>
+        x.type === "workings" &&
+        /holds back on the Storyteller: 0 votes counted and 3 evil still to come, of 4 needed/.test(x.text),
+    ),
+  );
+
+  const result = e.castVotes(true);
+
+  assert.equal(result.count, 0);
+  assert.deepEqual(s.storytellerVotes[0].voterIds, []);
+});
+
+test("evil NPCs vote on the Storyteller once a good vote counted lets them carry it, your hand down", () => {
+  const s = createState(cd, 10, "ex-1");
+  const e = new Engine(s);
+
+  e.start();
+  settle(e);
+
+  // (The last 3 good NPCs: the first is counted before the evil team.)
+  for (const x of s.players.filter((x) => !x.human && x.alignment === "good").slice(-3)) {
+    x.alive = false;
+    x.ghost = false;
+  }
+
   // (One good NPC believes an Atheist claim.)
   const believer = s.players.find((x) => x.alive && !x.human && x.alignment === "good");
   const real = e.strat.atheistBelief.bind(e.strat);
@@ -13901,9 +13962,12 @@ test("evil NPCs vote on the Storyteller once a good vote locked in lets them car
   e.strat.atheistBelief = (s, p) => (p === believer ? { belief: 1, claimant: null, reasons: [] } : real(s, p));
   e.openNominations();
   e.nominate(STORYTELLER, null);
-  e.openVote(true);
+  // (The believer is counted before the evil team, as the clock hand
+  // comes round.)
+  assert.ok(s.players.indexOf(believer) < s.players.findIndex((x) => x.alignment === "evil"));
+  e.openVote(false, true);
 
-  const result = e.castVotes(false);
+  const result = e.castVotes(true);
 
   assert.equal(result.count, 4);
   assert.ok(result.executed);
@@ -13928,10 +13992,52 @@ test("the Storyteller can't be nominated by a dead player, by night, nor before 
   assert.equal(e.storytellerBarred(npc), "Nominations happen by day.");
   s.phase = "day";
 
-  // (Nobody can nominate it for you: Request a nomination is off with the
-  // Sun selected.)
+  // (Dead, you ask for a nomination instead.)
   e.human().alive = false;
-  assert.throws(() => e.nominate(STORYTELLER, true), /^Error: Only a living player can nominate the Storyteller\.$/);
+  assert.throws(() => e.nominate(STORYTELLER, true), /^Error: Dead players cannot nominate\. Request a nomination instead\.$/);
+});
+
+test("you can ask for a nomination of the Storyteller, dead or alive: an NPC nominates it, and your sway holds", () => {
+  const { s, e } = cdDay(10, "st-request");
+  const h = e.human();
+
+  h.alive = false;
+  h.ghost = true;
+  e.openNominations();
+  assert.equal(e.storytellerRequestBarred(), null);
+
+  const r = e.requestNomination(STORYTELLER, null);
+  const nominator = e.player(r.nominatorId);
+
+  assert.ok(r.pending && r.storyteller);
+  assert.ok(!nominator.human && nominator.alive);
+  assert.ok(s.pendingVote.requested);
+  assert.ok(s.publicLog.some((x) => x.endsWith(`You asked for a nomination: ${nominator.label} nominates the Storyteller.`)));
+  assert.ok(s.audit.some((x) => x.type === "request" && /You asked for a nomination of the Storyteller/.test(x.text)));
+
+  e.castVotes(false);
+
+  // Once a day, as for anyone's nomination of it.
+  assert.equal(e.storytellerRequestBarred(), "The Storyteller has already been nominated today.");
+  assert.throws(() => e.requestNomination(STORYTELLER, true), /already been nominated today/);
+});
+
+test("your requested nomination of the Storyteller sways good NPCs in the final 3, as your own does", () => {
+  const { s, e } = cdDay(10, "st-request-final");
+  const good = s.players.find((x) => !x.human && x.alignment === "good");
+  const evil = s.players.find((x) => x.alignment === "evil");
+
+  for (const x of s.players) {
+    x.alive = x.human || x === good || x === evil;
+  }
+
+  // (No Atheist claim: only your request sways them.)
+  e.openNominations();
+  e.requestNomination(STORYTELLER, null);
+
+  const records = e.openVote(true, true);
+
+  assert.ok(records.find((v) => v.playerId === good.id).attempted);
 });
 
 test("a nominator cursed by the Witch dies nominating the Storyteller", () => {
@@ -13945,6 +14051,68 @@ test("a nominator cursed by the Witch dies nominating the Storyteller", () => {
 
   assert.ok(!npc.alive);
   assert.ok(s.audit.some((x) => x.type === "witch" && x.text.startsWith(`${npc.label} nominated while cursed`)));
+});
+
+test("Legion votes on the Storyteller with your hand counted: no veto, executed, evil wins", () => {
+  const { s, e } = cdDay(10, "st-legion-up", (t) => t.players.some((x) => x.role === "legion"));
+  const legion = s.players.filter((x) => x.role === "legion" && (x.alive || x.ghost));
+
+  e.openNominations();
+  e.nominate(STORYTELLER, null);
+
+  const up = e.openVote(true, true);
+
+  // (Enough Legion to carry it with yours, as in the log that found this.)
+  assert.ok(legion.length + 1 >= e.storytellerNeeded());
+  assert.ok(legion.every((x) => up.find((v) => v.playerId === x.id).attempted));
+  assert.ok(!s.audit.some((x) => /no good vote counted, only evil votes would fail/.test(x.text)));
+
+  const result = e.castVotes(false);
+
+  assert.ok(result.executed && !result.failed);
+  assert.equal(s.winner, "evil");
+});
+
+test("your Storyteller nomination sways good NPCs as on a player: always in the final 3, with no Atheist claim", () => {
+  const { s, e } = cdDay(10, "st-sway");
+  const good = s.players.find((x) => !x.human && x.alignment === "good");
+  const evil = s.players.find((x) => x.alignment === "evil");
+
+  for (const x of s.players) {
+    x.alive = x.human || x === good || x === evil;
+  }
+
+  assert.equal(e.strat.atheistBelief(s, good).belief, 0);
+  assert.equal(e.strat.storytellerVote(s, good, { yes: 1, needed: 2 }), false);
+  assert.equal(e.strat.storytellerVote(s, good, { yes: 1, needed: 2, humanChoice: true }), true);
+  assert.ok(
+    s.audit.some((x) => /is swayed to vote on the Storyteller: in the final 3, they vote for your pick/.test(x.text)),
+  );
+
+  // Before the final 4, your nomination adds to their belief: not enough
+  // on its own, with nobody claiming the Atheist.
+  for (const x of s.players) {
+    x.alive = true;
+  }
+
+  assert.equal(e.strat.storytellerVote(s, good, { yes: 1, needed: 5, humanChoice: true }), false);
+});
+
+test("a human Philosopher can't choose the Atheist", () => {
+  for (let i = 0; ; i++) {
+    const s = createState(cd, 10, `phil-atheist-${i}`);
+
+    if (s.players[0].role !== "philosopher") {
+      continue;
+    }
+
+    const e = new Engine(s);
+
+    e.start();
+    assert.ok(s.pending.characters.length > 0);
+    assert.ok(!s.pending.characters.includes("atheist"));
+    break;
+  }
 });
 
 test("Legion vetoes a Storyteller vote with only evil votes: recorded like any failed execution, and good NPCs know there's evil", () => {

@@ -260,6 +260,7 @@ export const CHARACTERS = {
     ability:
       "Once per game, at night, choose a good character: gain that ability. If this character is in play, they are drunk.",
     kill: "med",
+    note: "Can't choose the Atheist, whose ability is about setup (no evil characters), so would give nothing.",
     oncePerGame: { AFTER_DAY: 1, START_CHANCE: 1, STEP_CHANCE: 0 }, // night
     vsLegion: true,
   },
@@ -424,7 +425,7 @@ export const CHARACTERS = {
     team: "townsfolk",
     ability:
       "The Storyteller can break the game rules, and if executed, good wins, even if you are dead. [No evil characters]",
-    note: "Dealt in about 1 game in 8 with it on the script. Nobody is evil then: the Storyteller pretends some players are the Demon and Minions, kills at night as that Demon, and gives information as if they were, breaking the rules now and then, more often as the game goes on. Abilities that act, not inform (the Slayer, Snake Charmer...), see the truth. The Atheist can't be made mad (by a Cerenovus, real or pretend). Any living player may nominate the Storyteller (press the Sun), once a day: executing it needs votes from half the living players (rounded up), whatever anyone else got today, and ends the game at once. In other games, an evil player may claim to be the Atheist.",
+    note: "The Storyteller pretends some players are the Demon and Minions, kills at night as that Demon, and gives information as if they were the Demon. Abilities that act, not inform (the Slayer, Snake Charmer...), see the truth. The Atheist can't be made mad (by a Cerenovus, real or pretend). Any living player may nominate the Storyteller (press the Sun), once a day: executing it needs votes from half the living players (rounded up), whatever anyone else got today, and ends the game at once. In other games, an evil player may claim to be the Atheist.",
     kill: "med",
     // (No good player pretends to be one, nor hides as one: claiming it is a
     // call to execute the Storyteller. An evil Minion may claim it: see
@@ -478,7 +479,7 @@ export const CHARACTERS = {
     team: "townsfolk",
     ability:
       "Once per game, during the day, visit the Storyteller for some advice to help your team win.",
-    note: "Kept simple here: the advice is one tip, and the later you visit, the more it narrows things down: early, which players are good; later, a Minion, or who isn't the Demon; late, which 3 (or 2) players the Demon is among.",
+    note: "Kept simple here: the advice is one tip, chosen from a set list of tips.",
     kill: "med",
     oncePerGame: { AFTER_DAY: 1, START_CHANCE: 0.4, STEP_CHANCE: 0.3 }, // day
     vsLegion: true,
@@ -761,7 +762,7 @@ export const CHARACTERS = {
     team: "minion",
     ability:
       "Once per game, choose to make a wish. If granted, it might have a price & leave a clue as to its nature.",
-    note: "Kept simple here: a set list of wishes. A death (never the Demon's); the Grimoire (evil only); who the Demon is (good only: the Demon learns who wished); the Demon's whispers (good only: the town hears its bluffs, and it learns new ones); a second execution today (5+ alive: the Wizard can't nominate or vote in it); or, on Day 1 only, a Townsfolk ability for the Demon (evil only: the Fool or the Virgin, not in play; the Wizard dies that night).",
+    note: "Kept simple here: Select from a list of wishes, each with a price.",
     kill: "avoid",
   },
   boomdandy: {

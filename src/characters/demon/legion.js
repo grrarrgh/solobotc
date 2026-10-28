@@ -21,7 +21,9 @@ export const legion = {
   // of the closest, at random; nobody only after a day with an execution,
   // so the game moves on. Never you, as with any night death; never
   // the last Legion; and never a good player once LEGION_GOOD_MIN are left,
-  // so good can still win. The kill is Legion's: the Monk, Soldier, Mayor
+  // so good can still win, unless that's the final 3 and a day went by
+  // without an execution: then a good player dies, and evil wins, as it
+  // would with any Demon (else the game would never end). The kill is Legion's: the Monk, Soldier, Mayor
   // and the rest apply, and it fails if no living Legion's ability works
   // (or every one left was chosen by the Exorcist).
   legionNight() {
@@ -37,8 +39,11 @@ export const legion = {
     // (Never a good player once only 2 are left, you included: with 1, good
     // can't win, as executing a Legion leaves 2 alive and evil wins.)
     const goodAlive = s.players.filter((x) => x.alive && x.alignment === "good").length;
+    // (The final 3, 1 Legion left, after a day without an execution: good
+    // had its chance.)
+    const stalled = !legion.length && goodAlive <= LEGION_GOOD_MIN && !s.executedToday;
     const good =
-      goodAlive > LEGION_GOOD_MIN ? pool.filter((x) => x.alignment === "good") : [];
+      goodAlive > LEGION_GOOD_MIN || stalled ? pool.filter((x) => x.alignment === "good") : [];
     const n = s.players.filter((x) => x.alive).length;
     const e = all.length;
     // (Nobody dies only after a day with an execution: the game moves on.)
@@ -67,7 +72,9 @@ export const legion = {
     }${
       !good.length && goodAlive <= LEGION_GOOD_MIN
         ? ` (never a good player: only ${goodAlive} good players are left)`
-        : ""
+        : stalled && good.length
+          ? " (the final 3 went a day without an execution, so a good player dies: evil wins)"
+          : ""
     }`;
 
     // The Legion it comes from: one whose ability works (not the victim,

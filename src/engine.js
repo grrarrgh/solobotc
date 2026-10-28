@@ -409,13 +409,15 @@ export class Engine {
       },
       // (Not a character whose ability needs what you never face: see
       // FORBIDDEN_HUMAN. Nor one jinxed with a character in play: see
-      // jinxBarred().)
+      // jinxBarred(). Nor the Atheist, whose ability is about setup, so a
+      // Philosopher would gain nothing: see PHILOSOPHER_AVOID.)
       philosopher: !h.gained && {
         count: 0,
         characters: s.script.ids.filter(
           (id) =>
             alignment(id) === "good" &&
             id !== "philosopher" &&
+            id !== "atheist" &&
             !FORBIDDEN_HUMAN.has(id) &&
             !jinxBarred(s).has(id),
         ),
@@ -2033,10 +2035,15 @@ export class Engine {
       nominator,
       humanChoice,
     };
-    const order = [
-      ...s.players.filter((v) => v.alignment !== "evil"),
-      ...s.players.filter((v) => v.alignment === "evil"),
-    ];
+    // (On the Storyteller, each decides as the clock hand comes round to
+    // them, clockwise from the Sun: you first, then seat by seat, counting
+    // the hands already counted. See app.js runVote().)
+    const order = n.storyteller
+      ? s.players
+      : [
+          ...s.players.filter((v) => v.alignment !== "evil"),
+          ...s.players.filter((v) => v.alignment === "evil"),
+        ];
 
     for (const v of order) {
       // (Nor the Wizard in the second round they wished for: see wizard.js.)
@@ -2051,11 +2058,7 @@ export class Engine {
       );
 
       intents[v.id] = attempted;
-      // (On the Storyteller, your hand isn't counted for the NPCs who decide
-      // after you: you may still lower it until the clock hand reaches you,
-      // so only votes already locked in count. See strategy
-      // storytellerVote().)
-      tally.yes += attempted && !(n.storyteller && v.human) ? 1 : 0;
+      tally.yes += attempted ? 1 : 0;
     }
 
     return intents;
@@ -2110,7 +2113,7 @@ export class Engine {
   // as it is), and their votes stand (kept for castVotes()). Your hand can
   // still change until the clock hand reaches you: call again with it to
   // see the records as they'd be. Nothing is cast yet.
-  openVote(hand = false) {
+  openVote(hand = false, locked = false) {
     const s = this.s;
     const pending = s.pendingVote;
 
@@ -2120,8 +2123,17 @@ export class Engine {
 
     const n = pending.storyteller ? this.storytellerNominee() : this.player(pending.nomineeId);
     const nominator = this.player(pending.nominatorId);
-    const up = Boolean(hand) && this.canVote();
+    // (On the Storyteller, your hand is counted first, then each NPC decides
+    // by the hands counted before them: so nobody has decided until yours
+    // is `locked`, as the clock hand reaches you, and then it stands. See
+    // intents(), app.js runVote().)
+    const up = pending.storyteller && pending.intents ? pending.hand : Boolean(hand) && this.canVote();
 
+    if (pending.storyteller && !pending.intents && !locked) {
+      return this.tallied({ [s.humanId]: up });
+    }
+
+    pending.hand ??= up;
     pending.intents ??= this.intents(n, nominator, nominator.human || pending.requested, up);
 
     return this.tallied({ ...pending.intents, [s.humanId]: up });
@@ -2163,12 +2175,7 @@ export class Engine {
     const h = this.human();
 
     if (!h.alive) {
-      // (Nobody can be asked to nominate the Storyteller for you.)
-      throw Error(
-        id === STORYTELLER
-          ? "Only a living player can nominate the Storyteller."
-          : "Dead players cannot nominate. Request a nomination instead.",
-      );
+      throw Error("Dead players cannot nominate. Request a nomination instead.");
     }
 
     // (With the Atheist on the script: see atheist.js.)
@@ -2194,11 +2201,17 @@ export class Engine {
     return this.runNomination(h, n, false, hand);
   }
 
-  // The human asks the town for a nomination (of an NPC, or of themself); a
-  // living NPC who hasn't nominated today makes it. (A dead human can still
-  // do this.) `hand` as for nominate().
+  // The human asks the town for a nomination (of an NPC, themself, or the
+  // Storyteller: see atheist.js requestStoryteller()); a living NPC who
+  // hasn't nominated today makes it. (A dead human can still do this.)
+  // `hand` as for nominate().
   requestNomination(id, hand = true) {
     const s = this.s;
+
+    if (id === STORYTELLER) {
+      return this.requestStoryteller(hand);
+    }
+
     const n = this.nominee(id);
     const nominator = this.strat.nominator(s, n);
 
@@ -2370,7 +2383,7 @@ export class Engine {
 
     // (The Storyteller nominated: see atheist.js.)
     if (pending.storyteller) {
-      return this.storytellerVoteCast(pending, hand);
+      return this.storytellerVoteCast(pending, pending.intents ? pending.hand : hand);
     }
 
     const nominator = this.player(pending.nominatorId);

@@ -425,7 +425,7 @@ test("day abilities that are a word with the Storyteller wait for the Sun: the S
   const actions = /<section id="actions"[\s\S]*?<\/section>/.exec(html)[0];
 
   assert.doesNotMatch(actions, /id="puzzle"|id="wish-controls"/);
-  assert.match(app, /\$\("sun-panel"\)\.hidden = !sunOpen;/);
+  assert.match(app, /\$\("sun-panel"\)\.hidden = !sunOpen \|\| !can\.some\(\(k\) => k !== "storyteller"\);/);
   assert.match(app, /ability\(h\) === "savant" && h\.savantDay !== s\.day && "savant",/);
   assert.match(app, /e\.amnesiacOpen\(\) && "amnesiac",/);
   assert.match(app, /minionAbility\(h\) === "wizard" && !h\.wished && "wish",/);
@@ -457,13 +457,18 @@ test("the Final reveal names the Fortune Teller's red herring: on their row, and
   assert.match(app, /<strong>\$\{roleLink\("fortuneteller"\)\}'s red herring:<\/strong>/);
 });
 
-test("with the Atheist on the script, the Sun can be nominated like a seat: gold hands point at it, count back against the clock, and an executed Storyteller eclipses it", () => {
-  assert.match(html, /<button id="nominate-storyteller" type="button" hidden>⚖️ Nominate the Storyteller<\/button>/);
-  assert.match(app, /s\.nominationsOpen && e\.storytellerOnScript\(\) && !e\.storytellerBarred\(h\) && "storyteller",/);
+test("with the Atheist on the script, the Sun can be nominated (or asked for) like a seat, with the usual buttons: gold hands point at it, count clockwise from it, and an executed Storyteller eclipses it", () => {
+  assert.doesNotMatch(html, /nominate-storyteller/);
+  assert.match(app, /\$\("sun-panel"\)\.hidden = !sunOpen \|\| !can\.some\(\(k\) => k !== "storyteller"\);/);
   assert.match(app, /selectedPlayerId = sunOpen && sunAbilities\(\)\.includes\("storyteller"\) \? STORYTELLER : null;/);
   assert.match(app, /\$\("phase-dial"\)\.classList\.toggle\("selected", selectedPlayerId === STORYTELLER && !voteAnim\);/);
   assert.match(app, /aim\(hour, st \? sun : seatAngle\(result\.nominatorId\), true\);/);
   assert.match(app, /c\.classList\.toggle\("storyteller-vote", st\);/);
+  assert.match(app, /angle: sun \+ \(\(\(\(seatAngle\(p\.id\) - sun\) % 360\) \+ 360\) % 360 \|\| 360\) \}\)\)\s*\.sort\(\(a, b\) => a\.angle - b\.angle\)/);
+  assert.match(app, /aim\(minute, sun \+ 360\);/);
+  // (Dead, or once you've nominated today, you ask for it instead.)
+  assert.match(app, /\(!e\.storytellerBarred\(h\) \|\| !e\.storytellerRequestBarred\(\)\)/);
+  assert.match(app, /\$\("request-nomination"\)\.disabled = storyteller\s*\? Boolean\(e\.storytellerRequestBarred\(\)\)/);
   assert.match(app, /function sunAngle\(\) \{/);
   assert.match(css, /\.circle\.storyteller-vote \.hand,\s*\.circle\.storyteller-vote \.clock-pin \{[^}]*background: #ffd34d;/);
   assert.match(css, /\.phase-dial\.on-trial \{\s*animation: sun-trial/);

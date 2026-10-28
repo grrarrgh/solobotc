@@ -249,6 +249,53 @@ export const atheist = {
                   : null;
   },
 
+  // Why you can't ask for a nomination of the Storyteller now, or null if
+  // you can: alive or dead, as for a player (see engine
+  // requestNomination()), with a living NPC still able to nominate. (No
+  // draw from s.r: the UI asks.)
+  storytellerRequestBarred() {
+    const s = this.s;
+    const able = s.players.some(
+      (x) => x.alive && !x.human && !s.dayNominators.includes(x.id) && !wishBarred(s, x),
+    );
+
+    return !this.storytellerOnScript()
+      ? "The Storyteller can only be nominated with the Atheist on the script."
+      : s.phase !== "day" || s.winner
+        ? "Nominations happen by day."
+        : s.storytellerNominated === s.day
+          ? "The Storyteller has already been nominated today."
+          : s.roshambo
+            ? "Throw first."
+            : !able
+              ? "Nobody is able to nominate."
+              : null;
+  },
+
+  // You ask for a nomination of the Storyteller: a living NPC who hasn't
+  // nominated today makes it (see strategy nominator()). Your pick, so your
+  // sway holds, as on a player (see strategy storytellerSway()). `hand` as
+  // for nominateStoryteller().
+  requestStoryteller(hand = true) {
+    const s = this.s;
+    const why = this.storytellerRequestBarred();
+
+    if (why) {
+      throw Error(why);
+    }
+
+    const nominator = this.strat.nominator(s, this.storytellerNominee());
+
+    s.publicLog.push(`Day ${s.day} — You asked for a nomination: ${nominator.label} nominates the Storyteller.`);
+    this.audit(
+      "request",
+      `You asked for a nomination of the Storyteller; ${nominator.label} (${name(nominator.role)}) nominated.`,
+      { actorId: nominator.id, targetId: STORYTELLER },
+    );
+
+    return this.nominateStoryteller(nominator, hand, null, true);
+  },
+
   // The votes executing the Storyteller needs: half the living players,
   // rounded up.
   storytellerNeeded() {
@@ -258,8 +305,9 @@ export const atheist = {
   // Player p nominates the Storyteller. `hand` as for engine nominate():
   // null leaves the vote waiting (for app.js's count). `intro`: an NPC's
   // nomination and why (see engine npcNomination(), which has logged it),
-  // on a card before the vote.
-  nominateStoryteller(p, hand = true, intro = null) {
+  // on a card before the vote. `requested`: you asked for it (see
+  // requestStoryteller()).
+  nominateStoryteller(p, hand = true, intro = null, requested = false) {
     const s = this.s;
     const why = this.storytellerBarred(p);
     const base = {
@@ -280,7 +328,7 @@ export const atheist = {
     s.storytellerNominated = s.day;
     s.dayNominators.push(p.id);
 
-    if (!intro) {
+    if (!intro && !requested) {
       s.publicLog.push(`Day ${s.day} — ${p.human ? "You nominate" : `${p.label} nominates`} the Storyteller.`);
     }
 
@@ -311,10 +359,10 @@ export const atheist = {
       "workings",
       `On the Storyteller (${this.storytellerNeeded()} votes needed), good NPCs vote if they believe an Atheist claim (at ${Math.round(
         ATHEIST_VOTE_BELIEF * 100,
-      )}% belief or more); evil NPCs only when the votes already locked in and their team's still to come can carry it (never counting your hand, which you may lower until the clock hand reaches you), as a hand up for nothing would give them away; an evil player claiming the Atheist always votes.`,
+      )}% belief or more), or your nomination sways them, as on a player; evil NPCs only when the hands already counted (yours first, as the clock hand comes round from the Sun) and their team's still to come can carry it, as a hand up for nothing would give them away; an evil player claiming the Atheist always votes.`,
     );
 
-    s.pendingVote = { nominatorId: p.id, nomineeId: STORYTELLER, storyteller: true };
+    s.pendingVote = { nominatorId: p.id, nomineeId: STORYTELLER, storyteller: true, requested };
 
     if (hand === null) {
       return {
@@ -337,7 +385,13 @@ export const atheist = {
     const nominator = this.player(pending.nominatorId);
     const n = this.storytellerNominee();
     const needed = this.storytellerNeeded();
-    const records = this.votes(n, nominator, nominator.human, hand && this.canVote(), pending.intents ?? null);
+    const records = this.votes(
+      n,
+      nominator,
+      nominator.human || Boolean(pending.requested),
+      hand && this.canVote(),
+      pending.intents ?? null,
+    );
     // (Legion's "executions fail if only evil players vote" holds for the
     // Storyteller too: see legion.js.)
     const hands = records.filter((x) => x.counted).length;
