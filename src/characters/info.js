@@ -1,8 +1,10 @@
 // Each character's `info`, from their own module: the information they
 // learn each night (`truth`, and for a drunk or poisoned one `lie` or
 // `random`; see storyteller.js infoMode()), on which nights (`nights`:
-// "first", "each" or "later"; see storyteller.js actsTonight()), and what it
-// leaves behind (`keep`); how a piece of their information reads (`stance`:
+// "first", "each" or "later"; see storyteller.js actsTonight()), what it
+// leaves behind (`keep`), and whether a `random` answer happens to be true
+// where more than one answer would be (`holds`; see storyteller.js
+// falseNoise()); how a piece of their information reads (`stance`:
 // does it trust or suspect the players it names? `named`: the characters it
 // says they are, and `claimStance`: how that reads against their claims;
 // see strategy stanceOn()); and what's said in their name by

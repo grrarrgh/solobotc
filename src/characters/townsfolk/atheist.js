@@ -1,6 +1,6 @@
 import { name, team, ATHEIST_UNSAFE_SHARE, ATHEIST_VOTE_BELIEF } from "../../data.js";
 import { works, wishBarred, atheistBreakChance } from "../../storyteller.js";
-import { untwinned } from "../../strategy.js";
+import { untwinned, sideOf } from "../../strategy.js";
 import { pick } from "../../util.js";
 
 // The Storyteller's id as a nominee: by day, with the Atheist on the script,
@@ -146,13 +146,18 @@ export const atheist = {
   // With the Atheist on the script, as nominations open: how much each good
   // NPC who could vote believes an Atheist claim, where it has changed
   // since they were last logged (p.atheistLogged), and why (see strategy
-  // atheistBelief()). Log only: no draw from s.r.
+  // atheistBelief()); and how much each evil NPC says they believe it, as a
+  // good NPC would (see strategy atheistView()). Log only: no draw from s.r.
   atheistBeliefs() {
     const s = this.s;
     const rows = [];
+    const voters = s.players.filter(
+      (x) => !x.human && (x.alive || x.ghost) && x.role !== "atheist",
+    );
 
-    for (const x of s.players.filter((x) => !x.human && (x.alive || x.ghost) && x.role !== "atheist")) {
-      const b = this.strat.atheistBelief(s, x);
+    for (const x of voters) {
+      const evil = sideOf(x) === "evil";
+      const b = this.strat.atheistBelief(s, x, evil);
 
       if (!b?.claimant) {
         continue;
@@ -167,19 +172,21 @@ export const atheist = {
 
       x.atheistLogged = now;
       rows.push(
-        `${x.label}: ${was === undefined ? "" : `${was}% → `}${now}% in ${b.claimant.human ? "your" : `${b.claimant.label}'s`} claim${
+        `${x.label}${evil ? ` (evil: says, as a good NPC would)` : ""}: ${
+          was === undefined ? "" : `${was}% → `
+        }${now}% in ${b.claimant.human ? "your" : `${b.claimant.label}'s`} claim${
           b.reasons.length ? ` (${b.reasons.join("; ")})` : ""
         }`,
       );
     }
 
     if (rows.length) {
-      this.audit(
-        "workings",
-        `Belief in the Atheist claim, NPC by NPC, where it has changed (good NPCs vote to execute the Storyteller at ${Math.round(
-          ATHEIST_VOTE_BELIEF * 100,
-        )}% or more):\n${rows.join("\n")}`,
-      );
+      const at = Math.round(ATHEIST_VOTE_BELIEF * 100);
+      const head =
+        "Belief in the Atheist claim, NPC by NPC, where it has changed " +
+        `(NPCs vote to execute the Storyteller at ${at}% or more):`;
+
+      this.audit("workings", `${head}\n${rows.join("\n")}`);
     }
   },
 
@@ -335,14 +342,20 @@ export const atheist = {
     const count = records.filter((x) => x.counted).length;
     const executed = count >= needed;
     const voterIds = records.filter((x) => x.attempted).map((x) => x.playerId);
-    // (What each NPC who could vote believed, for log.txt.)
+    // (What each NPC who could vote believed, for log.txt; for one playing
+    // for evil, what they say they believe, as a good NPC would: see
+    // strategy atheistView().)
     const views = s.players
       .filter((x) => !x.human && (x.alive || x.ghost || voterIds.includes(x.id)))
       .map((x) => {
         const b = this.strat.atheistBelief(s, x);
+        const said = !b && this.strat.atheistBelief(s, x, true);
         const up = voterIds.includes(x.id) ? "voted" : "didn't vote";
+        const pct = (y) => `${Math.round(y.belief * 100)}%`;
 
-        return b ? `${x.label}: ${up} (belief ${Math.round(b.belief * 100)}%${b.reasons.length ? `: ${b.reasons.join("; ")}` : ""})` : `${x.label}: ${up} (plays for evil)`;
+        return b
+          ? `${x.label}: ${up} (belief ${pct(b)}${b.reasons.length ? `: ${b.reasons.join("; ")}` : ""})`
+          : `${x.label}: ${up} (plays for evil${said?.claimant ? `; says ${pct(said)}` : ""})`;
       });
     const result = {
       nominatorId: nominator.id,

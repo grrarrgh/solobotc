@@ -13,7 +13,7 @@ import {
   wrongNumber,
   listLabels,
 } from "../../storyteller.js";
-import { bySeat, pick, sample } from "../../util.js";
+import { byId, bySeat, pick, sample } from "../../util.js";
 import { chefCount } from "./chef.js";
 import { empathCount } from "./empath.js";
 
@@ -418,6 +418,20 @@ export const info = {
           ? amnesiacNumber(you ? 0 : Math.floor(s.r() * 3), near)
           : amnesiacNumber(Math.floor(s.r() * 3))
         : amnesiacPlayers(sample(npcs, shape === "player" ? 1 : 2, s.r));
+  },
+
+  // (Random, it may happen to be true: a player who registers good, or a
+  // pair with 1 and only 1 who registers evil; anything else, the truth's
+  // own answer. See storyteller.js falseNoise().)
+  holds(s, p, m, truth) {
+    const key = amnesiacKey(s, p);
+    const ts = (m.targets ?? []).map((id) => byId(s, id));
+
+    return key === "goodplayer"
+      ? ts.length === 1 && !registersEvil(ts[0])
+      : key === "evilpair"
+        ? ts.length === 2 && ts.filter(registersEvil).length === 1
+        : m.text === truth.text;
   },
 
   random(s, p) {

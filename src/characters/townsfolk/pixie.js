@@ -180,6 +180,10 @@ export const info = {
       : { targets: [], text: "No information." };
   },
 
+  // (Random, it may happen to be true: any Townsfolk in play, as a working
+  // Pixie could learn. See storyteller.js falseNoise().)
+  holds: (s, p, m) => pixieOptions(s, p).some((id) => m.text === pixieText(id)),
+
   // (A Pixie bluffer goes mad about it, as a real one would: see
   // pixieMadness() above.)
   random(s, p) {

@@ -6,6 +6,7 @@ import {
   bluffing,
   range,
   wrongNumber,
+  falseNoise,
 } from "../../storyteller.js";
 import { byId, pick } from "../../util.js";
 import { dayBluff } from "../../bluff.js";
@@ -113,7 +114,7 @@ export function jugglerInfo(s, guesses, mode, juggler = null) {
         ? (wrongNumber(s, n, options) ?? n)
         : pick(options, s.r);
 
-  return {
+  const info = {
     night: s.night,
     role: juggler ? "cannibal" : "juggler",
     text: `${juggler ? "Cannibal" : "Juggler"}: ${said} of ${
@@ -125,4 +126,7 @@ export function jugglerInfo(s, guesses, mode, juggler = null) {
     trigger: "normal",
     functioning: mode === "truth",
   };
+
+  // (Random, it may happen to be right: see storyteller.js falseNoise().)
+  return falseNoise(s, info, mode !== "random" || said === n);
 }

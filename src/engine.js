@@ -26,6 +26,7 @@ import {
   isDemon,
   isDrunk,
   misinformedBy,
+  noticeNoise,
   who,
   steer,
   steerWhy,
@@ -199,7 +200,10 @@ export class Engine {
     }
 
     // (With the Atheist on the script, false information is marked, so
-    // whoever hears it may notice: see storyteller.js doubted().)
+    // whoever hears it may notice: see storyteller.js doubted(), and
+    // falseNoise() for random information.)
+    noticeNoise(this.s, p, info);
+
     if (this.s.falseNext?.playerId === p.id) {
       const s = this.s;
 

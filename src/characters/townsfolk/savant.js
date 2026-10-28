@@ -14,6 +14,7 @@ import {
   adviceLevel,
   adviceWhy,
   leanRegistersEvil,
+  falseNoise,
 } from "../../storyteller.js";
 import { adviceAt } from "./fisherman.js";
 import { pick, sample, shuffle } from "../../util.js";
@@ -184,14 +185,17 @@ export function savantInfo(s, p, mode) {
   // Remembered so the next visit is about other players.
   p.lastPicks = { ...p.lastPicks, savant: [...a.ids, ...b.ids] };
 
+  // (Random: each statement true or false at random, so it's only true
+  // information when just one of them is: see storyteller.js falseNoise().)
+  const flips = mode === "random" ? [a, b].map(() => s.r() < 0.5) : null;
   const said =
     mode === "truth"
       ? shuffle([a.yes, b.no], s.r)
       : mode === "lie"
         ? [a.no, b.no]
-        : [a, b].map((f) => (s.r() < 0.5 ? f.yes : f.no));
+        : [a, b].map((f, i) => (flips[i] ? f.yes : f.no));
 
-  return {
+  const info = {
     day: s.day,
     night: s.night,
     role: "savant",
@@ -203,6 +207,8 @@ export function savantInfo(s, p, mode) {
       a.evil ? ", and helps evil" : ""
     }`,
   };
+
+  return falseNoise(s, info, !flips || flips[0] !== flips[1]);
 }
 
 // An evil Savant bluffer's daily visit: two made-up statements, each one

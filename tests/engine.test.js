@@ -37,6 +37,7 @@ import {
   ATHEIST_BELIEF,
   ATHEIST_DISBELIEF_MAX,
   ATHEIST_DISBELIEF_FROM_DAY,
+  ATHEIST_TRY_SHARE,
   EVIDENCE_TO_SUSPECT,
   name,
   team,
@@ -93,6 +94,7 @@ import {
   atheistBreakChance,
 } from "../src/storyteller.js";
 import { fishermanInfo } from "../src/characters/townsfolk/fisherman.js";
+import { jugglerInfo } from "../src/characters/townsfolk/juggler.js";
 import { ravenInfo } from "../src/characters/townsfolk/ravenkeeper.js";
 import { artistInfo } from "../src/characters/townsfolk/artist.js";
 import { savantInfo, savantBluff } from "../src/characters/townsfolk/savant.js";
@@ -14148,7 +14150,7 @@ test("the Atheist tries the Storyteller short of the votes from Day 2, once enou
   const n = e.strat.storytellerNomination(s, atheist);
 
   assert.ok(n?.target.storyteller);
-  assert.match(n.why, /short, but enough to try/);
+  assert.match(n.why, /short, but [0-9]+ hands are enough to try/);
 
   // (A vote that got as many already: no new try.)
   s.storytellerVotes = [{ day: 1, nominatorId: atheist.id, voterIds: [], count: needed - 1, needed, failed: false }];
@@ -14161,29 +14163,218 @@ test("the Atheist tries the Storyteller short of the votes from Day 2, once enou
   );
 });
 
-test("an evil liar claiming the Atheist may try the Storyteller short of the votes; their team votes with them", () => {
+test("an evil liar claiming the Atheist tries the Storyteller short of the votes only on the Atheist's terms: their own hand and good believers', never their team's", () => {
   const { s, e } = cdDay(12, "st-liar-try", (t) =>
     t.players.some((x) => x.alignment === "evil" && x.claim === "atheist"),
   );
   const liar = s.players.find((x) => x.alignment === "evil" && x.claim === "atheist");
   const mate = s.players.find((x) => x !== liar && x.alignment === "evil" && sideOf(x) === "evil");
-  const good = s.players.filter((x) => !x.human && x.alignment === "good");
+  const good = s.players.filter((x) => !x.human && x.alignment === "good" && sideOf(x) === "good");
 
   e.claimPublicly(liar);
   doubtAll(s, 0);
-  // (Two good NPCs believe it: with the evil team, enough to try.)
-  for (const x of good.slice(0, 2)) {
+  s.day = 2;
+  e.openNominations();
+
+  const needed = e.storytellerNeeded();
+  const share = Math.ceil(ATHEIST_TRY_SHARE * needed);
+
+  // (Good believers one short of the share, with the liar's own hand: the
+  // evil team's hands, which would have made it up, don't count.)
+  for (const x of good.slice(0, share - 2)) {
     x.doubts = [{}, {}, {}, {}, {}, {}];
   }
 
-  s.day = 2;
-  e.openNominations();
+  assert.ok(e.strat.believers(s).length + 3 < needed);
+  assert.equal(e.strat.storytellerNomination(s, liar), null);
+
+  // One more good believer: as the Atheist would, they try.
+  good[share - 2].doubts = [{}, {}, {}, {}, {}, {}];
 
   const n = e.strat.storytellerNomination(s, liar);
 
   assert.ok(n?.target.storyteller, n?.why);
-  assert.ok(e.strat.storytellerVote(s, mate, { yes: 1, needed: 99, nominator: liar }));
-  assert.match(s.audit.at(-1).text, /their teammate .* claims the Atheist/);
+  assert.match(n.why, /short of the votes .* enough to try/);
+
+  // Their teammate votes as they say they believe it, as a good NPC would:
+  // not, with nothing that doesn't add up.
+  assert.equal(e.strat.storytellerVote(s, mate, { yes: 1, needed: 99, nominator: liar }), false);
+  assert.match(s.audit.at(-1).text, /as they say, they don't believe an Atheist claim/);
+});
+
+test("an evil liar's try on the Storyteller is refused with no good believers, however big their team", () => {
+  const { s, e } = cdDay(12, "st-liar-none", (t) =>
+    t.players.some((x) => x.alignment === "evil" && x.claim === "atheist"),
+  );
+  const liar = s.players.find((x) => x.alignment === "evil" && x.claim === "atheist");
+
+  e.claimPublicly(liar);
+  doubtAll(s, 0);
+
+  for (const day of [2, 3, 4]) {
+    s.day = day;
+    e.openNominations();
+    assert.equal(e.strat.atheistTry(s, liar, e.storytellerNeeded()), 0);
+    assert.equal(e.strat.storytellerNomination(s, liar), null);
+  }
+
+  // (Even with their whole team voting, and a failed vote behind them.)
+  s.storytellerVotes = [{ day: 1, nominatorId: liar.id, voterIds: [], count: 1, needed: 6, failed: false }];
+  assert.equal(e.strat.atheistTry(s, liar, e.storytellerNeeded()), 0);
+});
+
+test("evil NPCs say what they make of an Atheist claim as a good NPC would, and vote as they say, unless their vote ends the game", () => {
+  const { s, e } = cdDay(12, "st-evil-view", (t) =>
+    t.players.some((x) => x.alignment === "evil" && x.claim === "atheist"),
+  );
+  const liar = s.players.find((x) => x.alignment === "evil" && x.claim === "atheist");
+  const mate = s.players.find(
+    (x) => x !== liar && x.alignment === "evil" && sideOf(x) === "evil" && !x.cover,
+  );
+  const p = s.players.find((x) => !x.human && x.alignment === "good" && sideOf(x) === "good");
+
+  e.claimPublicly(liar);
+  mate.mad = null;
+  doubtAll(s, 0);
+
+  // Nothing adds up for anyone: the teammate doesn't back it, as p doesn't.
+  assert.equal(e.strat.atheistView(s, p).believes, false);
+  assert.deepEqual(e.strat.atheistView(s, mate), { claimant: liar, believes: false });
+  assert.match(e.strat.ask(s, mate), new RegExp(`On the Atheist: I don't believe ${liar.label}\\.`));
+  assert.equal(e.strat.storytellerVote(s, mate, { yes: 0, needed: 99, nominator: liar }), false);
+
+  // Things that didn't add up: both believe it, and the teammate votes so.
+  doubtAll(s, 6);
+  assert.equal(e.strat.atheistView(s, p).believes, true);
+  assert.equal(e.strat.atheistView(s, mate).believes, true);
+  assert.equal(e.strat.storytellerVote(s, mate, { yes: 0, needed: 99, nominator: liar }), true);
+
+  // Whatever they say, a hand that carries it goes up: executed, evil wins.
+  doubtAll(s, 0);
+  assert.equal(e.strat.storytellerVote(s, mate, { yes: 98, needed: 99, nominator: liar }), true);
+  assert.match(s.audit.at(-1).text, /evil still to come carry it/);
+
+  // The log lists what they say, as nominations open.
+  doubtAll(s, 6);
+  e.openNominations();
+  assert.ok(
+    s.audit.some(
+      (x) =>
+        x.type === "workings" &&
+        x.text.includes(`${mate.label} (evil: says, as a good NPC would)`),
+    ),
+  );
+});
+
+test("evil NPCs answer your own Atheist claim as a good NPC would, and vote on it the same way", () => {
+  const { s, e } = cdDay(
+    10,
+    "st-you-claim",
+    (t) => !t.atheist && !t.players.some((x) => x.claim === "atheist"),
+  );
+  const h = e.human();
+  const mate = s.players.find(
+    (x) => !x.human && x.alignment === "evil" && sideOf(x) === "evil" && !x.cover,
+  );
+  const p = s.players.find((x) => !x.human && x.alignment === "good" && sideOf(x) === "good");
+
+  // (You tell them both you're the Atheist.)
+  mate.mad = null;
+  s.talked.push(mate.id, p.id);
+  e.tell(mate.id, "atheist");
+  e.tell(p.id, "atheist");
+
+  for (const n of [0, 6]) {
+    doubtAll(s, n);
+
+    const good = e.strat.atheistView(s, p);
+    const evil = e.strat.atheistView(s, mate);
+
+    assert.equal(evil.claimant, h);
+    assert.equal(evil.believes, good.believes, `${n} doubts`);
+    assert.match(
+      e.strat.ask(s, mate),
+      new RegExp(`On the Atheist: I ${evil.believes ? "believe" : "don't believe"} you\\.`),
+    );
+    assert.equal(
+      e.strat.storytellerVote(s, mate, { yes: 0, needed: 99, nominator: h }),
+      evil.believes,
+    );
+  }
+
+  // (With 6 doubts, you're believed.)
+  assert.equal(e.strat.atheistView(s, mate).believes, true);
+});
+
+test("social proof: a player who pushed for the Storyteller counts as respected only if something else speaks for them", () => {
+  const { s, e } = cdDay(10, "social-push", npcAtheist);
+  const atheist = s.players.find((x) => x.role === "atheist");
+  const [p, x] = s.players.filter((z) => !z.human && z !== atheist && !z.cover && z.alive);
+
+  claimAtheist(e, atheist);
+  doubtAll(s, 0);
+
+  // x voted for it, with nothing else for or against them: not respected.
+  s.storytellerVotes = [
+    { day: 1, nominatorId: atheist.id, voterIds: [x.id], count: 2, needed: 5, failed: false },
+  ];
+  assert.ok(e.strat.evidence(s, p, x, false).score <= 0);
+  assert.ok(!e.strat.trusted(s, p).has(x.id));
+  assert.deepEqual(e.strat.respectedBelievers(s, p, atheist), []);
+
+  // Told p they believe it, without voting: respected.
+  s.storytellerVotes = [];
+  p.atheistViews = { [x.id]: { claimantId: atheist.id, believes: true, day: s.day } };
+  assert.deepEqual(e.strat.respectedBelievers(s, p, atheist), [x]);
+
+  // Voted, but confirmed good: respected.
+  s.storytellerVotes = [
+    { day: 1, nominatorId: atheist.id, voterIds: [x.id], count: 2, needed: 5, failed: false },
+  ];
+  s.confirmed = { ...s.confirmed, [x.id]: { level: "certain", why: "test" } };
+  assert.deepEqual(e.strat.respectedBelievers(s, p, atheist), [x]);
+});
+
+test("random information that happens to be true isn't marked false; random day information that's false is", () => {
+  const { s, e } = cdDay(10, "noise", npcAtheist);
+  const [p, q] = s.players.filter((x) => !x.human && x.alive && x.role !== "atheist");
+  const marked = (m) => {
+    e.remember(p, m);
+
+    return Boolean(m.doubtful);
+  };
+
+  // The Juggler: 1 guess, right, and a random count of 0 or 1.
+  const guesses = [{ id: q.id, role: q.pretend ?? q.role }];
+
+  s.r = () => 0.9;
+  assert.equal(marked(jugglerInfo(s, guesses, "random")), false);
+  s.r = () => 0.1;
+  assert.equal(marked(jugglerInfo(s, guesses, "random")), true);
+  assert.match(
+    s.audit.findLast((x) => x.type === "atheist").text,
+    /information is false \(drunk or poisoned\)/,
+  );
+
+  // The Fisherman: the true tip, or its false twin.
+  s.r = () => 0.1;
+  assert.equal(marked(fishermanInfo(s, p, "random")), false);
+  s.r = () => 0.9;
+  assert.equal(marked(fishermanInfo(s, p, "random")), true);
+
+  // The Pixie: any Townsfolk in play is true, not just the one they'd learn.
+  const pixie = infoOf("pixie");
+  const other = (id) => team(id) === "townsfolk" && !["pixie", "atheist"].includes(id);
+  const inPlay = s.players.find((x) => x !== p && other(x.role));
+  const out = s.script.ids.find((id) => other(id) && !s.players.some((x) => x.role === id));
+  const said = (id) => ({ text: `Pixie: the ${name(id)} is in play.`, targets: [] });
+
+  assert.equal(pixie.holds(s, p, said(inPlay.role)), true);
+  assert.equal(pixie.holds(s, p, said(out)), false);
+
+  // (The truth, and lies, are left to doubted(): never marked here.)
+  s.r = () => 0.9;
+  assert.equal(marked(fishermanInfo(s, p, "truth")), false);
 });
 
 test("good NPCs nominate the Storyteller once enough of them believe the Atheist: executed, good wins", () => {

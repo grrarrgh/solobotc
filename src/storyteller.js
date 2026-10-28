@@ -529,11 +529,29 @@ function doubted(s, p, mode, broken) {
   }
 }
 
-// A drunk or poisoned good player's random night information (see
-// infoMode()) that came out false, unlike the truth: marked as doubted()
-// marks a lie. (Nothing on any other script.)
-function falseNoise(s, p) {
-  if (s.script.ids.includes("atheist")) {
+// Random information (see infoMode(): a drunk or poisoned player's, while
+// the Storyteller helps good) that came out false: not `right`, as the
+// character's information would truly be (the same text, or for some, any
+// answer that's true: see each character's `holds`, nightInfo()). With the
+// Atheist on the script, `info` is marked, by night or by day (the Savant,
+// Fisherman, Juggler, Puzzlemaster), and once it's remembered as the
+// Storyteller's information, it counts as doubted() counts a lie (see
+// noticeNoise()). (Made up by a bluffer, it's never remembered that way.)
+// Returns `info`. (Nothing on any other script.)
+const noisy = new WeakSet();
+
+export function falseNoise(s, info, right) {
+  if (!right && s.script.ids.includes("atheist")) {
+    noisy.add(info);
+  }
+
+  return info;
+}
+
+// (Engine remember(): see falseNoise().)
+export function noticeNoise(s, p, info) {
+  if (noisy.has(info)) {
+    noisy.delete(info);
     markFalse(s, p, false);
   }
 }
@@ -802,19 +820,22 @@ export function nightInfo(s, p, strat) {
     s.poisoned === p.id &&
     FIRST_NIGHT.includes(role);
   const mode = poisonerPick ? "lie" : infoMode(s, p);
+  // (Random information may happen to be true: see falseNoise().)
+  let right = true;
 
   if (mode === "lie") {
     ({ text, targets } = falseInfo(s, p, role, strat, poisonerPick));
   } else if (mode === "random") {
     ({ text, targets } = unreliableInfo(s, p, role, targets));
 
-    // (With the Atheist on the script, false is false: see falseNoise().)
-    if (text !== truth.text) {
-      falseNoise(s, p);
-    }
+    const holds = infoOf(role)?.holds;
+
+    right =
+      !s.script.ids.includes("atheist") ||
+      (holds ? holds(s, p, { text, targets }, truth) : text === truth.text);
   }
 
-  return keepInfo(
+  const info = keepInfo(
     s,
     p,
     {
@@ -827,6 +848,8 @@ export function nightInfo(s, p, strat) {
     },
     truth,
   );
+
+  return falseNoise(s, info, right);
 }
 
 // What a night's information leaves behind, as it's remembered (see each

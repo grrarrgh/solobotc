@@ -11,6 +11,7 @@ import {
   adviceWhy,
   leanRegistersEvil,
   suspectedBy,
+  falseNoise,
 } from "../../storyteller.js";
 import { pick, sample } from "../../util.js";
 import { dayBluff } from "../../bluff.js";
@@ -216,7 +217,7 @@ export function adviceAt(tips, level, leaning) {
 // one tip (see fishermanTips()), as pointed as the game's stage and the
 // Storyteller's lean make it (see adviceLevel()): true, false ("lie": a
 // Drunk, a poisoned Fisherman, the Vortox, an evil bluffer) or either
-// ("random").
+// ("random": see storyteller.js falseNoise()).
 export function fishermanInfo(s, p, mode) {
   const level = adviceLevel(s);
   const f = pick(adviceAt(fishermanTips(s, p), level, lean(s)), s.r);
@@ -230,7 +231,7 @@ export function fishermanInfo(s, p, mode) {
           ? f.yes
           : f.no;
 
-  return {
+  const info = {
     day: s.day,
     night: s.night,
     role: "fisherman",
@@ -244,6 +245,8 @@ export function fishermanInfo(s, p, mode) {
       ? `${adviceWhy(s, level)}; a level ${f.level} tip${f.evil ? " that helps evil" : ""}`
       : null,
   };
+
+  return falseNoise(s, info, mode !== "random" || said === (f?.yes ?? null));
 }
 
 // How the Fisherman's advice reads (see strategy stanceOn()): good players

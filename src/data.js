@@ -818,12 +818,13 @@ export const ATHEIST_BREAK_MAX = 0.35;
 export const ATHEIST_UNSAFE_SHARE = 0.5;
 // With the Atheist on the script, a good player's information that comes
 // out false (a rule break in an Atheist game; a drunk or poisoned player's,
-// in any game, when it isn't the truth) is marked (see storyteller.js
-// doubted()): each good NPC who hears it (told in private, or said in
-// public; never your information unless you share it) notices it doesn't
-// add up with what they know at this chance, once each: a doubt of their
-// own, which makes them readier to believe an Atheist claim (see strategy
-// atheistHeard(), p.doubts).
+// in any game: a lie, or random information that isn't true) is marked
+// (see storyteller.js doubted(), falseNoise()): each NPC who hears it
+// (told in private, or said in public; never your information unless you
+// share it) notices it doesn't add up with what they know at this chance,
+// once each: a doubt of their own, which makes them readier to believe an
+// Atheist claim (see strategy atheistHeard(), p.doubts). (Evil NPCs too:
+// they say what they make of a claim as a good NPC would.)
 export const ATHEIST_DOUBT_NOTICE = 0.5;
 // In a game with the Atheist on the script but not in play, the chance an
 // evil Minion (one who knows they're evil: not the Marionette, nor the Evil
@@ -850,19 +851,22 @@ export const EVIL_ATHEIST_TRAP_BELIEVERS = 1;
 //   proof);
 // - plus `respected` for each player they respect (you, whom good NPCs
 //   trust; anyone their information vouches for, or they've no evidence
-//   against) who has shown they believe it (voted for or nominated the
+//   against, counting voting for or nominating the Storyteller as
+//   evidence) who has shown they believe it (voted for or nominated the
 //   Storyteller, or told them so: social proof), up to `maxRespected`;
 // - less `evidence` for each point of evidence against the claimant (see
 //   strategy evidence()), counting at most `maxEvidence`.
 // Nothing, once anyone has shown they're evil (a failed Legion execution,
-// an outed Psychopath or Goblin, a Damsel guess). (At these values, in 600
-// self-play games of each kind on Chef's Deluxe, good won about 40% of
-// Atheist games, the Atheist lived to Day 3 in over 80% of them, and an
-// evil Atheist claim got the Storyteller executed in about 13% of the games
-// with one, where good won about as often as in other games.)
+// an outed Psychopath or Goblin, a Damsel guess). An evil NPC says what
+// they'd believe by the same sum (see strategy atheistView()). (At these
+// values, in 600 games of each kind on Chef's Deluxe, played two ways,
+// good won 37–44% of Atheist games, the Atheist lived to Day 3 in 80–86%
+// of them, and an evil Atheist claim got the Storyteller executed in
+// 11–12% of the games with one, where good won 36–44%, against 32–43% of
+// games with no Atheist claim.)
 export const ATHEIST_BELIEF = {
   base: 0.2,
-  doubt: 0.1,
+  doubt: 0.12,
   maxDoubts: 6,
   human: 0.2,
   killed: 0.25,
@@ -879,10 +883,11 @@ export const ATHEIST_VOTE_BELIEF = 0.5;
 export const ATHEIST_NOMINATE_BELIEF = 0.6;
 // A player claiming the Atheist (the real one, or an evil liar acting the
 // part) nominates the Storyteller short of the votes it needs, from Day
-// ATHEIST_TRY_FROM_DAY, once those who'd vote for it make up at least
-// ATHEIST_TRY_SHARE of them, and more than any vote on it has had yet: a
-// failed vote with many hands up makes others readier to believe (see
-// ATHEIST_BELIEF.vote; strategy atheistTry()).
+// ATHEIST_TRY_FROM_DAY, once their own hand and the good NPCs' who'd vote
+// for it (never the evil team's: a liar tries on the same terms) make up
+// at least ATHEIST_TRY_SHARE of them, and more than any vote on it has had
+// yet: a failed vote with many hands up makes others readier to believe
+// (see ATHEIST_BELIEF.vote; strategy atheistTry()).
 export const ATHEIST_TRY_FROM_DAY = 2;
 export const ATHEIST_TRY_SHARE = 0.6;
 // Evidence against a player claiming the Atheist, from a good NPC who
@@ -898,6 +903,8 @@ export const ATHEIST_DISBELIEF_FROM_DAY = 2;
 export const ATHEIST_DISBELIEF_MAX = 0.5;
 // Evidence against a player who nominated the Storyteller, and against one
 // who voted to execute it, from a good NPC who doesn't believe the Atheist.
+// (Counted, too, when a good NPC weighs whether they respect them as a
+// believer: see strategy respectedBelievers().)
 export const STORYTELLER_NOMINATED_EVIDENCE = 0.5;
 export const STORYTELLER_VOTED_EVIDENCE = 0.25;
 

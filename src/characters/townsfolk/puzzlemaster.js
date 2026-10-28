@@ -9,6 +9,7 @@ import {
   who,
   nameable,
   framed,
+  falseNoise,
 } from "../../storyteller.js";
 import { untwinned } from "../../strategy.js";
 import { pick } from "../../util.js";
@@ -148,7 +149,12 @@ export function puzzleInfo(s, p, t, mode) {
           ? goat
           : pick(wrong, s.r);
 
-  return {
+  // (Random, it may happen to be what they'd truly learn: the Demon after a
+  // right guess, anyone else after a wrong one. See storyteller.js
+  // falseNoise().)
+  const truthful =
+    mode !== "random" || !shown || (right && d ? shown === d : !registersDemon(shown));
+  const info = {
     day: s.day,
     night: s.night,
     role: "puzzlemaster",
@@ -162,6 +168,8 @@ export function puzzleInfo(s, p, t, mode) {
     trigger: "day",
     functioning: mode === "truth",
   };
+
+  return falseNoise(s, info, truthful);
 }
 
 // How the Puzzlemaster's information reads (see strategy stanceOn()): the
