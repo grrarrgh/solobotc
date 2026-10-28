@@ -5,6 +5,9 @@ import {
   ADVICE_STAGES,
   HIDDEN_OUTSIDERS,
   ALCHEMIST_ABILITIES,
+  ATHEIST_BREAK_START,
+  ATHEIST_BREAK_RAMP,
+  ATHEIST_BREAK_MAX,
   exclusiveWith,
   name,
   team,
@@ -41,6 +44,15 @@ export const isDemon = (p) => team(p.role) === "demon" || Boolean(p.babysitting)
 // Whether p registers as a Minion: a Minion, or Legion ("You register as a
 // Minion too").
 export const isMinion = (p) => team(p.role) === "minion" || p.role === "legion";
+
+// With the Atheist in play nobody is evil, but the Storyteller pretends some
+// players are the Demon and Minions (p.pretend: the character it pretends
+// they are; see characters/townsfolk/atheist.js), so to information
+// abilities they register as those characters. Abilities that act (the
+// Slayer, Snake Charmer...) see the truth, so they go by isDemon().
+export const registersDemon = (p) => isDemon(p) || team(p.pretend) === "demon";
+export const registersMinion = (p) => isMinion(p) || team(p.pretend) === "minion";
+export const registeredRole = (p) => p.pretend ?? p.role;
 
 // Whether evil player p doesn't know that evil player x is on their team:
 // the Poppy Grower kept the team apart (see poppygrower.js), or either is
@@ -357,12 +369,16 @@ export const killHelps = (x) => (x.alignment === "evil" ? "good" : "evil");
 
 // How a player registers to information abilities. (A drunk or poisoned
 // Spy has no ability, so registers as what they are.)
+// (A pretend Minion or Demon registers as evil, but a pretend Spy, as a real
+// one would, as good.)
 export const registersEvil = (p) =>
-  p.role === "recluse"
-    ? true
-    : p.role === "spy" && !isDrunk(p) && !p.poisoned
-      ? false
-      : p.alignment === "evil";
+  p.pretend
+    ? p.pretend !== "spy"
+    : p.role === "recluse"
+      ? true
+      : p.role === "spy" && !isDrunk(p) && !p.poisoned
+        ? false
+        : p.alignment === "evil";
 
 const evil = registersEvil;
 
@@ -473,6 +489,41 @@ export const nameable = (s, p) =>
 // good player's information is just random rather than a lie that frames
 // good players. (The Vortox's false information is always false.)
 export function infoMode(s, p, deadOk = false) {
+  const mode = misinformMode(s, p, deadOk);
+
+  return mode === "truth" && atheistBreaks(s, p) ? "lie" : mode;
+}
+
+// How often, in an Atheist game, the Storyteller breaks the rules with a
+// piece of information (see ATHEIST_BREAK_START): more each night.
+export const atheistBreakChance = (s) =>
+  Math.min(ATHEIST_BREAK_MAX, ATHEIST_BREAK_START + ATHEIST_BREAK_RAMP * (Math.max(s.night, s.day) - 1));
+
+// Whether, in an Atheist game, the Storyteller breaks the rules with good
+// player p's information: false even to its pretence (see
+// characters/townsfolk/atheist.js). Counted, and logged.
+function atheistBreaks(s, p) {
+  const chance = atheistBreakChance(s);
+
+  if (!s.atheist || p.alignment !== "good" || s.r() >= chance) {
+    return false;
+  }
+
+  s.atheist.breaks++;
+  s.audit.push({
+    id: s.auditId++,
+    group: s.phase === "night" ? `Night ${s.night}` : `Day ${s.day}`,
+    type: "atheist",
+    text: `The Storyteller breaks the rules (the Atheist is in play): ${Whose(p)} information is false, even to its pretence (at ${Math.round(chance * 100)}%).`,
+    data: { playerId: p.id },
+    names: logNames(s),
+  });
+
+  return true;
+}
+
+// infoMode() without the Atheist's rule breaks.
+function misinformMode(s, p, deadOk) {
   const soft = lean(s) === "good" && p.alignment === "good";
   const misled = soft ? "random" : "lie";
 

@@ -117,10 +117,12 @@ const pixieOptions = (s, p, notInPlay = false) => {
       : [],
   );
 
+  // (Never the Atheist: mad about it, they'd call for the Storyteller's
+  // execution. See characters/townsfolk/atheist.js.)
   return s.script.ids.filter(
     (id) =>
       team(id) === "townsfolk" &&
-      id !== "pixie" &&
+      !["pixie", "atheist"].includes(id) &&
       !teamClaims.has(id) &&
       inPlay.has(id) !== notInPlay,
   );

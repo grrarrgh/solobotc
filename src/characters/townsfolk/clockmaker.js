@@ -1,4 +1,4 @@
-import { isDemon, isMinion, range, wrongNumber } from "../../storyteller.js";
+import { registersDemon, registersMinion, range, wrongNumber } from "../../storyteller.js";
 import { pick } from "../../util.js";
 
 // Possible Clockmaker answers: 1 up to half the circle.
@@ -7,10 +7,10 @@ const clockRange = (s) => range(1, Math.max(1, Math.floor(s.players.length / 2))
 // Seats from the Demon to its nearest Minion, the shorter way round.
 function clockmakerCount(s) {
   const n = s.players.length;
-  const d = s.players.findIndex(isDemon);
+  const d = s.players.findIndex(registersDemon);
   const steps = s.players
     .map((x, i) => [x, Math.abs(i - d)])
-    .filter(([x], i) => isMinion(x) && i !== d)
+    .filter(([x], i) => registersMinion(x) && i !== d)
     .map(([, k]) => Math.min(k, n - k));
 
   return d < 0 || !steps.length ? 0 : Math.min(...steps);

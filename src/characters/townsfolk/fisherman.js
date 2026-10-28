@@ -2,7 +2,7 @@ import {
   ability,
   infoMode,
   bluffing,
-  isDemon,
+  registersDemon,
   nameable,
   framed,
   listLabels,
@@ -88,7 +88,7 @@ export const fisherman = {
 // (see leanRegistersEvil()).
 function fishermanTips(s, p) {
   const named = nameable(s, p).filter((x) => x.alive && !x.human);
-  const d = named.find(isDemon);
+  const d = named.find(registersDemon);
   const evilish = (x) => leanRegistersEvil(s, x);
   const leaning = lean(s);
   // (Only good players who register as good: vouching for a Spy is a
@@ -117,7 +117,9 @@ function fishermanTips(s, p) {
   const vouch2 = vouch && hottest(good.filter((x) => x !== vouch));
   const scape = good.includes(goat) ? goat : pick(good, s.r);
   const minion = pick(
-    named.filter((x) => evilish(x) && !isDemon(x) && x.alignment === "evil"),
+    named.filter(
+      (x) => evilish(x) && !registersDemon(x) && (x.alignment === "evil" || Boolean(x.pretend)),
+    ),
     s.r,
   );
   const shield = pick(
@@ -126,7 +128,7 @@ function fishermanTips(s, p) {
   );
   const tip = (ts, text) => ts && { ids: ts.map((x) => x.id), text };
   const demonIn = (ts) => `The Demon is one of ${listLabels(ts)}.`;
-  const others = named.filter((x) => !isDemon(x));
+  const others = named.filter((x) => !registersDemon(x));
   const withDemon = (n) => d && [d, ...sample(others, n - 1, s.r)];
   const without = (n) => sample(others, n, s.r);
   const three = withDemon(3);

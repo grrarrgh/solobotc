@@ -20,6 +20,7 @@ import {
   LEGION_MAJORITY,
   LEGION_STRONG,
   LEGION_STRONG_SHARE,
+  ATHEIST_CHANCE,
   exclusiveWith,
   ALCHEMIST_ABILITIES,
   team,
@@ -184,16 +185,43 @@ export function createState(
 
   // (Once the evil team is drawn, characters jinxed never to be in play
   // with any of them are left out: the Heretic with a Baron, Spy...)
+  // (The Atheist is dealt only in an Atheist game: see below.)
   let barred = [];
+  let atheistGame = false;
   const r = rng(seed),
-    pool = (t) => script.ids.filter((id) => team(id) === t && !barred.includes(id));
+    pool = (t) =>
+      script.ids.filter(
+        (id) => team(id) === t && !barred.includes(id) && (id !== "atheist" || atheistGame),
+      );
 
   // Draw roles. Some characters change the Outsider count (the Baron +2,
   // the Fang Gu +1, the Vigormortis -1, the Godfather -1 or +1, the
   // Sentinel Fabled -1, 0 or +1), trading Townsfolk for Outsiders.
   let [t, o, m] = base;
-  let mins = sample(pool("minion"), m, r);
-  let demons = sample(pool("demon"), 1, r);
+
+  // The Atheist: with it on the script, at ATHEIST_CHANCE nobody is evil.
+  // The Storyteller still picks a Demon (one that kills at night) and
+  // Minions to pretend are in play (see characters/townsfolk/atheist.js),
+  // and Townsfolk are dealt in their places; the Outsiders are as many as
+  // that pretend team would make them (one more for a Fang Gu).
+  atheistGame = script.ids.includes("atheist") && r() < ATHEIST_CHANCE;
+
+  const pretend = atheistGame
+    ? [
+        pick(
+          pool("demon").filter((x) => !["legion", "lilmonsta", "leviathan"].includes(x)),
+          r,
+        ) ?? "imp",
+        ...sample(pool("minion"), m, r),
+      ]
+    : [];
+
+  if (atheistGame) {
+    t += m + 1;
+  }
+
+  let mins = atheistGame ? [] : sample(pool("minion"), m, r);
+  let demons = atheistGame ? [] : sample(pool("demon"), 1, r);
 
   // Lil' Monsta isn't a player: an extra Minion is dealt in its place, and
   // the Minions choose which of them babysits it (see
@@ -222,7 +250,7 @@ export function createState(
   barred = [...new Set([...mins, ...demons])].flatMap((x) =>
     exclusiveWith(x).filter((id) => script.ids.includes(id)),
   );
-  const shift = [...mins, ...demons, ...script.fabled].reduce((n, id) => {
+  const shift = [...mins, ...demons, ...pretend, ...script.fabled].reduce((n, id) => {
     const k = OUTSIDER_MODIFIERS[id] ?? 0;
 
     return n + (Array.isArray(k) ? pick(k, r) : k);
@@ -241,11 +269,13 @@ export function createState(
         r,
       )
     : [];
+  const forced = atheistGame ? ["atheist"] : [];
   const townsfolk = [
+    ...forced,
     ...strong,
     ...drawTownsfolk(
-      pool("townsfolk").filter((x) => !strong.includes(x)),
-      t - strong.length,
+      pool("townsfolk").filter((x) => !strong.includes(x) && !forced.includes(x)),
+      t - strong.length - forced.length,
       r,
     ),
   ];
@@ -465,7 +495,7 @@ export function createState(
     (x) =>
       alignment(x) === "good" &&
       x !== "drunk" &&
-      !["poppygrower", "heretic"].includes(x) &&
+      !["poppygrower", "heretic", "atheist"].includes(x) &&
       !tokens.has(x) &&
       !roles.includes(x),
   );
@@ -726,6 +756,34 @@ export function createState(
     evilTwin.bluff = goodTwin.claim;
   }
 
+  // In an Atheist game, the players the Storyteller pretends are the Demon
+  // and Minions (p.pretend; never you, nor the Atheist): a pretend
+  // Marionette next to the pretend Demon, as a real one would be.
+  // (With a pretend Marionette, a pretend Demon with a neighbour who can be
+  // it.)
+  const pretenders = players.filter((x) => !x.human && x.role !== "atheist");
+  const nextTo = (x) => [players[(x.seat - 2 + seats) % seats], players[x.seat % seats]];
+  const roomy = pretend.includes("marionette")
+    ? pretenders.filter((x) => nextTo(x).some((y) => pretenders.includes(y)))
+    : pretenders;
+  const pretendDemon = atheistGame ? pick(roomy.length ? roomy : pretenders, r) : null;
+
+  if (pretendDemon) {
+    const near = nextTo(pretendDemon);
+
+    pretendDemon.pretend = pretend[0];
+
+    for (const id of pretend.slice(1)) {
+      const free = pretenders.filter((x) => !x.pretend);
+      const beside = id === "marionette" ? free.filter((x) => near.includes(x)) : [];
+      const p = pick(beside.length ? beside : free, r);
+
+      if (p) {
+        p.pretend = id;
+      }
+    }
+  }
+
   // Fortune Teller red herring.
   const red = pick(
     players.filter((x) => x.alignment === "good"),
@@ -745,7 +803,7 @@ export function createState(
     : null;
 
   const s = {
-    version: "2.11.1",
+    version: "2.12.0",
     script,
     seats,
     seed: String(seed),
@@ -805,6 +863,12 @@ export function createState(
     pending: null,
     humanChoice: null,
   };
+
+  // (An Atheist game: how many times the Storyteller has broken the rules.
+  // See characters/townsfolk/atheist.js.)
+  if (atheistGame) {
+    s.atheist = { breaks: 0 };
+  }
 
   const setupLog = (type, text) =>
     s.audit.push({ id: s.auditId++, group: "Setup", type, text, names: logNames(s) });
@@ -895,30 +959,49 @@ export function createState(
     );
   }
 
-  setupLog(
-    "bluffs",
-    `Demon bluffs (${poppy ? "not told: the Poppy Grower" : `told to ${legions ? "every Legion" : lilMonsta ? "the Minions, for Lil' Monsta" : (demon?.label ?? "the Demon")}`}): ${
-      demonBluffs
-        .map((x) =>
-          legions
-            ? name(x)
-            : `${name(x)} (${
-                team(x) === "outsider"
-                  ? "Outsider"
-                  : `${DEMON_KILL_PRIORITY[x] === "high" ? "high" : "medium/low"}-value Townsfolk`
-              })`,
-        )
-        .join(", ") || "none"
-    }${
-      legions
-        ? ""
-        : faceDown
-          ? demonBluffs.some((x) => team(x) === "outsider")
-            ? ` (an Outsider: the ${name(faceDown)}, a face-down Outsider, is in play)`
-            : ` (no Outsider left to give, though the ${name(faceDown)}, a face-down Outsider, is in play)`
-          : " (no Outsider: no face-down Outsider is in play)"
-    }. ${demon ? `${demon.label} bluffs as ${name(demon.claim)}.` : ""}`.trim(),
-  );
+  if (atheistGame) {
+    const atheist = players.find((x) => x.role === "atheist");
+    // (The pretend Demon first.)
+    const fake = [pretendDemon, ...players.filter((x) => x.pretend && x !== pretendDemon)];
+    const more = pretend.filter((x) => OUTSIDER_MODIFIERS[x]);
+
+    setupLog(
+      "atheist",
+      `The Atheist is in play (${atheist.label}): nobody is evil. The Storyteller pretends ${fake
+        .map((x) => `${x.label} (${name(x.role)}) is the ${name(x.pretend)}`)
+        .join(", ")}, and deals Townsfolk in their places${
+        more.length ? `; the Outsiders are as many as the pretend ${more.map(name).join(" and ")} would make them` : ""
+      }.`,
+    );
+  }
+
+  // (With no Demon, nobody is told any bluffs.)
+  if (!atheistGame) {
+    setupLog(
+      "bluffs",
+      `Demon bluffs (${poppy ? "not told: the Poppy Grower" : `told to ${legions ? "every Legion" : lilMonsta ? "the Minions, for Lil' Monsta" : (demon?.label ?? "the Demon")}`}): ${
+        demonBluffs
+          .map((x) =>
+            legions
+              ? name(x)
+              : `${name(x)} (${
+                  team(x) === "outsider"
+                    ? "Outsider"
+                    : `${DEMON_KILL_PRIORITY[x] === "high" ? "high" : "medium/low"}-value Townsfolk`
+                })`,
+          )
+          .join(", ") || "none"
+      }${
+        legions
+          ? ""
+          : faceDown
+            ? demonBluffs.some((x) => team(x) === "outsider")
+              ? ` (an Outsider: the ${name(faceDown)}, a face-down Outsider, is in play)`
+              : ` (no Outsider left to give, though the ${name(faceDown)}, a face-down Outsider, is in play)`
+            : " (no Outsider: no face-down Outsider is in play)"
+      }. ${demon ? `${demon.label} bluffs as ${name(demon.claim)}.` : ""}`.trim(),
+    );
+  }
 
   for (const p of players.filter((x) => x.pixieMad)) {
     setupLog(

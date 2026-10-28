@@ -4,6 +4,7 @@ import {
   bluffing,
   registersEvil,
   isDemon,
+  registersDemon,
   neigh,
   nameable,
   covered,
@@ -284,7 +285,7 @@ const amnesiacNumber = (n, ts = []) => ({
   text: `Amnesiac number: ${n}.`,
 });
 // Whether a player registers as the Demon (as the Recluse might).
-const demonish = (x) => isDemon(x) || x.role === "recluse";
+const demonish = (x) => registersDemon(x) || x.role === "recluse";
 
 // The Amnesiac: each night, what their secret ability (amnesiacKey()) tells
 // them.

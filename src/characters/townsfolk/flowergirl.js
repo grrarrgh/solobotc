@@ -1,7 +1,7 @@
 import { byId } from "../../util.js";
-import { isDemon } from "../../storyteller.js";
+import { registersDemon } from "../../storyteller.js";
 
-const demonVoted = (s) => s.dayVoters.some((id) => isDemon(byId(s, id)));
+const demonVoted = (s) => s.dayVoters.some((id) => registersDemon(byId(s, id)));
 
 const flowerText = (yes) =>
   `Flowergirl: a Demon ${yes ? "voted" : "did not vote"} today.`;

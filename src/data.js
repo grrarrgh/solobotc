@@ -447,7 +447,8 @@ export const FEARMONGER_CAUTION = 0.5;
 // Grower's, Pixie's, Magician's and Amnesiac's only work from setup, the
 // Cannibal's only for a real Cannibal, the Huntsman's only with a Damsel in
 // play (which the Philosopher can't know), and the Gambler's mostly kills
-// them. The Bounty Hunter's might turn a Townsfolk evil (their jinx). Add
+// them. The Bounty Hunter's might turn a Townsfolk evil (their jinx). The
+// Atheist's is about setup (no evil characters), so it gains nothing. Add
 // any other wasted pick here.
 export const PHILOSOPHER_AVOID = [
   "poppygrower",
@@ -461,6 +462,7 @@ export const PHILOSOPHER_AVOID = [
   "damsel",
   "general",
   "steward",
+  "atheist",
 ];
 
 // The Psychopath (characters/minion/psychopath.js): the chance an NPC
@@ -794,6 +796,21 @@ export const LEGION_HEARSAY_FACTOR = 0.3;
 // Minion to the Minstrel (everyone else but Legion is drunk, and the
 // Minstrel learns it was Legion).
 export const LEGION_MINSTREL_CHANCE = 0.5;
+
+// The Atheist (see characters/townsfolk/atheist.js): with it on the script,
+// this is the chance a game is an Atheist game, with no evil players. (The
+// Storyteller chooses to put it in; dealt like any Townsfolk, it would be
+// in most games.)
+export const ATHEIST_CHANCE = 1 / 8;
+// In an Atheist game, the Storyteller pretends a Demon and Minions are in
+// play, and good players' information is true to that pretence; but it
+// breaks the rules now and then, giving a piece of information that's
+// false even to it: at ATHEIST_BREAK_START on Night 1, ATHEIST_BREAK_RAMP
+// more each night after, up to ATHEIST_BREAK_MAX, so an attentive town can
+// catch it out as the game goes on (see atheistBreakChance()).
+export const ATHEIST_BREAK_START = 0.05;
+export const ATHEIST_BREAK_RAMP = 0.05;
+export const ATHEIST_BREAK_MAX = 0.35;
 
 
 // ── Timings and display ──────────────────────────────────────

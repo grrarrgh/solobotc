@@ -4,6 +4,8 @@ import {
   infoMode,
   bluffing,
   isDemon,
+  registersDemon,
+  registeredRole,
   nameable,
   neigh,
   scapegoat,
@@ -95,7 +97,7 @@ function savantFacts(s, p) {
     s.r,
   );
   const c = pick(others, s.r);
-  const d = s.players.find((x) => x.alive && isDemon(x));
+  const d = s.players.find((x) => x.alive && registersDemon(x));
   const x = pick(
     others.filter((y) => y.alive && y !== d),
     s.r,
@@ -140,11 +142,11 @@ function savantFacts(s, p) {
     },
     c && {
       ids: [c.id],
-      level: isDemon(c) ? 3 : c.alignment === "evil" ? 2 : 0,
-      yes: `${c.label} is the ${name(c.role)}.`,
+      level: registersDemon(c) ? 3 : c.alignment === "evil" || c.pretend ? 2 : 0,
+      yes: `${c.label} is the ${name(registeredRole(c))}.`,
       no: `${c.label} is the ${name(
         pick(
-          s.script.ids.filter((id) => id !== c.role),
+          s.script.ids.filter((id) => id !== registeredRole(c)),
           s.r,
         ),
       )}.`,

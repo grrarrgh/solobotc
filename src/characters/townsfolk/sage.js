@@ -3,7 +3,7 @@ import {
   ability,
   bluffing,
   infoMode,
-  isDemon,
+  registersDemon,
   nameable,
   steer,
   killHelps,
@@ -38,7 +38,7 @@ export const sage = {
 // By the Recluse and Sage jinx, a living Recluse might register as the
 // Demon (at RECLUSE_SAGE_CHANCE): shown in the Demon's place.
 export function sageInfo(s, p, mode) {
-  const demon = s.players.find((x) => x.alive && isDemon(x));
+  const demon = s.players.find((x) => x.alive && registersDemon(x));
   const recluse = s.players.find((x) => x.alive && x !== p && x.role === "recluse");
   const d =
     mode === "truth" && demon && recluse && s.r() < RECLUSE_SAGE_CHANCE

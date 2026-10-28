@@ -4,7 +4,8 @@ import {
   infoMode,
   bluffing,
   registersEvil,
-  isDemon,
+  registersDemon,
+  registeredRole,
   listLabels,
   lean,
   leanRegistersEvil,
@@ -93,8 +94,8 @@ export const artistTruth = (t, q, s = null) =>
       ? leanRegistersEvil(s, t)
       : registersEvil(t)
     : q === "demon"
-      ? isDemon(t)
-      : team(t.role) === q;
+      ? registersDemon(t)
+      : team(registeredRole(t)) === q;
 
 // The Storyteller's yes/no answer to an Artist asking about one or more
 // players ("is any of them ...?"). `mode` is "truth", "lie" (an evil bluffer,

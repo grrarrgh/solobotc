@@ -1,4 +1,4 @@
-import { name } from "../../data.js";
+import { name, team } from "../../data.js";
 import { ability, works, isDemon } from "../../storyteller.js";
 
 // The Snake Charmer, mixed into Engine.prototype (see characters/index.js),
@@ -26,7 +26,12 @@ export const snakecharmer = {
       this.audit(
         "snakecharmer",
         `${c.label} (${name(c.role)}) chose ${t.label}; ${
-          swap ? "swapped with the Demon" : "no effect"
+          swap
+            ? "swapped with the Demon"
+            : `no effect${
+                // (An Atheist game: see characters/townsfolk/atheist.js.)
+                team(t.pretend) === "demon" ? ": the Storyteller only pretends they're the Demon" : ""
+              }`
         }.`,
         { actorId: c.id, targetId: t.id, effective: swap },
       );

@@ -1,4 +1,4 @@
-import { isDemon, framed } from "../../storyteller.js";
+import { registersDemon, framed } from "../../storyteller.js";
 import { byId, bySeat, pick, sample, shuffle } from "../../util.js";
 
 const fortuneText = (yes, ts) =>
@@ -9,7 +9,7 @@ const fortuneText = (yes, ts) =>
 // Whether either player registers as the Demon to the Fortune Teller (the
 // red herring and the Recluse do).
 const fortuneYes = (s, ts) =>
-  ts.some((x) => isDemon(x) || x.id === s.red || x.role === "recluse");
+  ts.some((x) => registersDemon(x) || x.id === s.red || x.role === "recluse");
 
 // The Fortune Teller: is either of 2 chosen players a Demon?
 export const info = {

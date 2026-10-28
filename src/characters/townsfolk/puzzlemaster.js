@@ -3,6 +3,7 @@ import {
   ability,
   isDemon,
   isMinion,
+  registersDemon,
   infoMode,
   bluffing,
   who,
@@ -135,9 +136,9 @@ export const puzzlemaster = {
 export function puzzleInfo(s, p, t, mode) {
   const right = s.puzzle?.drunkId === t.id;
   const named = nameable(s, p).filter((x) => !x.human);
-  const d = s.players.find((x) => (x.alive || x.undead) && isDemon(x));
+  const d = s.players.find((x) => (x.alive || x.undead) && registersDemon(x));
   const goat = framed(s, p);
-  const wrong = named.filter((x) => !isDemon(x));
+  const wrong = named.filter((x) => !registersDemon(x));
   const shown =
     mode === "truth" && right && d
       ? d

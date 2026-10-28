@@ -1328,6 +1328,8 @@ function playerNotes(p, r) {
       notes.push(`character swapped by the Barber (${when})`);
     } else if (ev.type === "succession" && d.playerId === p.id) {
       notes.push(`became the Demon (${when})`);
+    } else if (ev.type === "atheist" && d.previousId && d.playerId === p.id) {
+      notes.push(`became the pretend Demon (${when})`);
     } else if (ev.type === "succession" && d.previousDemonId === p.id && p.alive) {
       notes.push(`stopped being the Demon (${when})`);
     } else if (ev.type === "mezepheles" && d.targetId === p.id && d.effective) {
@@ -1341,6 +1343,11 @@ function playerNotes(p, r) {
 
   if (p.lastingPoison) {
     notes.push("poisoned from then on (Snake Charmer)");
+  }
+
+  // (An Atheist game: see characters/townsfolk/atheist.js.)
+  if (p.pretend) {
+    notes.push(`the Storyteller pretended they were the ${roleLink(p.pretend)} (${roleLink("atheist")})`);
   }
 
   if (p.magicianTrick) {

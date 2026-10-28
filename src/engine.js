@@ -80,6 +80,7 @@ const KEY_MOMENT_TYPES = new Set([
   "fool",
   "moonchild",
   "assassin",
+  "atheist",
   "heretic",
   "politician",
   "advocate",
@@ -794,6 +795,13 @@ export class Engine {
   demon() {
     const s = this.s;
     const d = s.players.find((x) => living(x) && isDemon(x));
+
+    // (With the Atheist in play, the Storyteller pretends there's a Demon:
+    // see atheist.js.)
+    if (s.atheist) {
+      this.atheistNight();
+      return;
+    }
 
     // (On the Mastermind's extra day, the game goes on without a Demon.)
     if (!d) {
@@ -2689,6 +2697,7 @@ export class Engine {
 
   // A Zombuul that registers as dead still counts as alive here. On the
   // Mastermind's extra day, only the day's execution decides the game.
+  // (With the Atheist in play there's no Demon to die: see atheist.js.)
   check() {
     const alive = this.s.players.filter(living);
 
@@ -2696,7 +2705,7 @@ export class Engine {
       return;
     }
 
-    if (!alive.some(isDemon)) {
+    if (!alive.some(isDemon) && !this.s.atheist) {
       this.finish("good", this.s.lilMonsta ? "Lil' Monsta's babysitter died." : "No Demon remains.");
     } else if (alive.length <= 2) {
       this.finish("evil", "Two alive remain.");

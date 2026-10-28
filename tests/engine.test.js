@@ -27,6 +27,10 @@ import {
   PHILOSOPHER_AVOID,
   LEVIATHAN_STRONG_EVIDENCE,
   FACE_DOWN_OUTSIDERS,
+  ATHEIST_CHANCE,
+  ATHEIST_BREAK_START,
+  ATHEIST_BREAK_RAMP,
+  ATHEIST_BREAK_MAX,
   name,
   team,
   alignment,
@@ -74,6 +78,11 @@ import {
   ability,
   isDemon,
   covered,
+  registersEvil,
+  registersDemon,
+  registersMinion,
+  registeredRole,
+  atheistBreakChance,
 } from "../src/storyteller.js";
 import { fishermanInfo } from "../src/characters/townsfolk/fisherman.js";
 import { ravenInfo } from "../src/characters/townsfolk/ravenkeeper.js";
@@ -13151,8 +13160,9 @@ test("the Demon's bluffs: 1 high-value Townsfolk, 1 medium or low, and an Outsid
       const s = createState(raw, 8 + (g % 8), `bluff-shape-${g}`);
       const b = s.demonBluffs;
 
-      // (Legion has its own rule: half as many bluffs as Legion.)
-      if (s.players.some((x) => x.role === "legion")) {
+      // (Legion has its own rule: half as many bluffs as Legion. An Atheist
+      // game has no Demon to tell them to.)
+      if (s.players.some((x) => x.role === "legion") || s.atheist) {
         continue;
       }
 
@@ -13168,8 +13178,9 @@ test("the Demon's bluffs: 1 high-value Townsfolk, 1 medium or low, and an Outsid
         s.script.ids.some(
           (x) =>
             team(x) === "townsfolk" &&
-            // (Never the Poppy Grower, whom nobody claims openly.)
-            x !== "poppygrower" &&
+            // (Never the Poppy Grower, whom nobody claims openly, nor the
+            // Atheist, never a bluff.)
+            !["poppygrower", "atheist"].includes(x) &&
             test(x) &&
             !b.includes(x) &&
             !s.players.some((p) => p.role === x || p.shown === x),
@@ -13318,4 +13329,227 @@ test("the Fortune Teller's red herring is in log.txt's setup and the Final revea
   t.winner = "good";
   assert.ok(!t.players.some((x) => [x.role, x.shown].includes("fortuneteller")));
   assert.equal(new Engine(t).reveal().red, null);
+});
+
+// ── Chef's Deluxe and the Atheist ────────────────────────────
+
+const cd = JSON.parse(
+  fs.readFileSync(new URL("../scripts/Chef's Deluxe_1_0_1.json", import.meta.url)),
+);
+
+// The first Chef's Deluxe deal at `seats` that is an Atheist game.
+function atheistDeal(seats, prefix = "atheist") {
+  for (let i = 0; ; i++) {
+    const s = createState(cd, seats, `${prefix}-${i}`);
+
+    if (s.atheist) {
+      return s;
+    }
+  }
+}
+
+// base() as an Atheist game: you (Mayor), Chef, Butler (the pretend
+// Poisoner), Virgin (the pretend Imp), Atheist; nobody evil.
+function atheistBase(seed = "atheist") {
+  const s = base(seed);
+
+  role(s.players[3], "virgin", "good");
+  role(s.players[4], "atheist", "good");
+  s.players[2].pretend = "poisoner";
+  s.players[3].pretend = "imp";
+  s.atheist = { breaks: 0 };
+
+  return { s, e: new Engine(s), p: s.players };
+}
+
+test("Chef's Deluxe loads from the script list: 24 characters, with the Atheist", () => {
+  const files = JSON.parse(fs.readFileSync(new URL("../scripts/index.json", import.meta.url)));
+
+  assert.ok(files.includes("Chef's Deluxe_1_0_1.json"));
+
+  const s = createState(cd, 12, "cd");
+
+  assert.equal(s.script.meta.name, "Chef's Deluxe");
+  assert.equal(s.script.ids.length, 24);
+  assert.equal(team("atheist"), "townsfolk");
+  assert.ok(NOTES.atheist);
+  // (Nobody good pretends to be it, and a Philosopher gains nothing by it.)
+  assert.ok(NEVER_BLUFFED.includes("atheist"));
+  assert.ok(PHILOSOPHER_AVOID.includes("atheist"));
+});
+
+test("about 1 Chef's Deluxe game in 8 is an Atheist game: nobody evil, and a pretend Demon and Minions", () => {
+  let atheists = 0;
+
+  for (let g = 0; g < 400; g++) {
+    const seats = 8 + (g % 8);
+    const s = createState(cd, seats, `atheist-deal-${g}`);
+    const roles = s.players.map((x) => x.role);
+
+    if (!s.atheist) {
+      // (Otherwise it isn't dealt, nor shown, nor anyone's claim.)
+      assert.ok(!s.players.some((x) => [x.role, x.shown, x.claim].includes("atheist") || x.pretend), `${g}`);
+      continue;
+    }
+
+    atheists++;
+
+    const [, o, m] = COUNTS[seats];
+    const demon = s.players.filter((x) => team(x.pretend) === "demon");
+    const minions = s.players.filter((x) => team(x.pretend) === "minion");
+
+    assert.ok(s.players.every((x) => x.alignment === "good"), `${g}: ${roles}`);
+    assert.equal(roles.filter((x) => x === "atheist").length, 1, `${g}`);
+    assert.equal(demon.length, 1, `${g}`);
+    assert.ok(["imp", "fanggu"].includes(demon[0].pretend), `${g}: ${demon[0].pretend}`);
+    assert.equal(minions.length, m, `${g}`);
+
+    // Never you, nor the Atheist; a pretend Marionette beside the Demon.
+    for (const x of [...demon, ...minions]) {
+      assert.ok(!x.human && x.role !== "atheist", `${g}`);
+    }
+
+    const mar = minions.find((x) => x.pretend === "marionette");
+
+    if (mar) {
+      const apart = Math.abs(mar.seat - demon[0].seat);
+
+      assert.equal(Math.min(apart, seats - apart), 1, `${g}`);
+    }
+
+    // The Outsiders a real team would make (one more for a Fang Gu).
+    assert.equal(
+      roles.filter((x) => team(x) === "outsider").length,
+      o + (demon[0].pretend === "fanggu" ? 1 : 0),
+      `${g}`,
+    );
+
+    // Nobody else claims or is shown it (not a Pixie, nor a hiding Mutant).
+    assert.ok(
+      s.players.every((x) => x.role === "atheist" || ![x.shown, x.claim, x.pixieRole].includes("atheist")),
+      `${g}`,
+    );
+    assert.ok(formatLog(s).includes("[atheist] The Atheist is in play"), `${g}`);
+    assert.ok(!s.audit.some((x) => x.type === "bluffs"), `${g}`);
+  }
+
+  assert.ok(atheists > 400 * ATHEIST_CHANCE * 0.6 && atheists < 400 * ATHEIST_CHANCE * 1.4, `${atheists}`);
+});
+
+test("in an Atheist game, the pretend Demon and Minions register as evil to information; a pretend Spy as good", () => {
+  const { s, p } = atheistBase();
+
+  assert.ok(registersEvil(p[2]) && registersEvil(p[3]));
+  assert.ok(registersDemon(p[3]) && !isDemon(p[3]));
+  assert.ok(registersMinion(p[2]) && !registersDemon(p[2]));
+  assert.equal(registeredRole(p[3]), "imp");
+  // (They sit together: 1 pair.)
+  assert.equal(infoOf("chef").truth(s).text, "Chef number: 1.");
+
+  p[2].pretend = "spy";
+  assert.ok(!registersEvil(p[2]));
+  assert.equal(infoOf("chef").truth(s).text, "Chef number: 0.");
+});
+
+test("in an Atheist game, the Storyteller breaks the rules with information now and then, more as the game goes on", () => {
+  const { s, p } = atheistBase();
+
+  s.phase = "night";
+  s.night = 1;
+  assert.equal(atheistBreakChance(s), ATHEIST_BREAK_START);
+  s.night = 3;
+  assert.equal(atheistBreakChance(s), ATHEIST_BREAK_START + 2 * ATHEIST_BREAK_RAMP);
+  s.night = 30;
+  assert.equal(atheistBreakChance(s), ATHEIST_BREAK_MAX);
+
+  s.night = 2;
+  s.r = () => 0.99;
+  assert.equal(infoMode(s, p[1]), "truth");
+  s.r = () => 0;
+  assert.equal(infoMode(s, p[1]), "lie");
+  assert.equal(s.atheist.breaks, 1);
+  assert.match(
+    s.audit.at(-1).text,
+    /^The Storyteller breaks the rules \(the Atheist is in play\): Player 2's information is false/,
+  );
+
+  // (Not in any other game: and no extra draw from s.r.)
+  const t = base("no-atheist");
+  let draws = 0;
+
+  t.r = () => (draws++, 0);
+  assert.equal(infoMode(t, t.players[1]), "truth");
+  assert.equal(draws, 0);
+});
+
+test("in an Atheist game, the Storyteller kills for the pretend Demon, never its pretend team, and nobody wins for want of a Demon", () => {
+  const { s, e, p } = atheistBase("atheist-kill");
+
+  s.phase = "night";
+  s.night = 2;
+  e.demon();
+
+  const dead = s.players.filter((x) => !x.alive);
+
+  assert.equal(dead.length, 1);
+  assert.ok([p[1], p[4]].includes(dead[0]), dead[0].label);
+  assert.equal(s.winner, null);
+  assert.ok(
+    s.audit.some(
+      (x) => x.type === "atheist" && /^The Storyteller kills Player \d for the pretend Imp \(Player 4\)/.test(x.text),
+    ),
+  );
+
+  // The pretend Imp dies: it passes to the pretend Poisoner.
+  p[3].alive = false;
+  s.night = 3;
+  e.demon();
+  assert.equal(p[2].pretend, "imp");
+  assert.ok(s.audit.some((x) => x.type === "atheist" && /is the Imp now/.test(x.text)));
+  assert.equal(s.atheist.breaks, 0);
+});
+
+test("in an Atheist game, the pretend team all dead, the Storyteller keeps killing (a rule break), until 2 are alive", () => {
+  const { s, e, p } = atheistBase("atheist-break");
+
+  p[2].alive = false;
+  p[3].alive = false;
+  s.phase = "night";
+  s.night = 3;
+  e.demon();
+
+  assert.equal(s.atheist.breaks, 1);
+  assert.ok(s.audit.some((x) => x.type === "atheist" && /no pretend Demon .*a rule break/.test(x.text)));
+  assert.equal(s.players.filter((x) => x.alive).length, 2);
+  assert.equal(s.winner, "evil");
+});
+
+test("in an Atheist game, a Snake Charmer choosing the pretend Demon misses", () => {
+  const { s, e, p } = atheistBase("atheist-snake");
+
+  role(p[1], "snakecharmer", "good");
+  e.strat.snake = () => p[3];
+  s.phase = "night";
+  s.night = 2;
+  e.snakeCharmers();
+
+  assert.equal(p[1].role, "snakecharmer");
+  assert.equal(p[3].role, "virgin");
+  assert.ok(
+    s.audit.some(
+      (x) => x.type === "snakecharmer" && /no effect: the Storyteller only pretends they're the Demon/.test(x.text),
+    ),
+  );
+});
+
+test("Atheist games play out to the end without errors", () => {
+  for (let i = 0; i < 8; i++) {
+    const seats = 8 + i;
+    const s0 = atheistDeal(seats, `atheist-play-${i}`);
+    const { s } = playOut(cd, seats, s0.seed);
+
+    assert.ok(s.atheist, s.seed);
+    assert.ok(s.winner, s.seed);
+    assert.ok(!s.audit.some((x) => /No Demon remains/.test(x.text)), s.seed);
+  }
 });

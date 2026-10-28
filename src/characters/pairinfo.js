@@ -1,7 +1,8 @@
 import { name, team, NEVER_BLUFFED, roleByName } from "../data.js";
 import { pick, sample, shuffle, claimHeard, whose } from "../util.js";
 import {
-  isMinion,
+  registersMinion,
+  registeredRole,
   steer,
   killHelps,
   nameable,
@@ -47,7 +48,8 @@ export const pairInfo = (role) => {
     truth(s, p) {
       const real = pick(
         nameable(s, p).filter(
-          (x) => team(x.role) === wanted || (wanted === "minion" && isMinion(x)),
+          (x) =>
+            team(registeredRole(x)) === wanted || (wanted === "minion" && registersMinion(x)),
         ),
         s.r,
       );
@@ -71,7 +73,7 @@ export const pairInfo = (role) => {
 
       return {
         targets: [real.id, fake.id],
-        text: oneOf(real, fake, real.role),
+        text: oneOf(real, fake, registeredRole(real)),
       };
     },
 

@@ -2,6 +2,7 @@ import { name } from "../../data.js";
 import {
   ability,
   infoMode,
+  registeredRole,
   bluffing,
   range,
   wrongNumber,
@@ -103,7 +104,7 @@ export const juggler = {
 // The Juggler, the night after juggling: how many guesses were right. (Or,
 // by their jinx, the Cannibal who ate the Juggler `juggler`.)
 export function jugglerInfo(s, guesses, mode, juggler = null) {
-  const n = guesses.filter((g) => byId(s, g.id)?.role === g.role).length;
+  const n = guesses.filter((g) => (byId(s, g.id) && registeredRole(byId(s, g.id))) === g.role).length;
   const options = range(0, guesses.length);
   const said =
     mode === "truth"

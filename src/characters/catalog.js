@@ -419,6 +419,18 @@ export const CHARACTERS = {
     kill: "high", // once they die, the evil team knows each other
     neverHiddenAs: true, // a real one always hides, so nobody claims it openly
   },
+  atheist: {
+    name: "Atheist",
+    team: "townsfolk",
+    ability:
+      "The Storyteller can break the game rules, and if executed, good wins, even if you are dead. [No evil characters]",
+    note: "Dealt in about 1 game in 8 with it on the script. Nobody is evil then: the Storyteller pretends some players are the Demon and Minions, kills at night as that Demon, and gives information as if they were, breaking the rules now and then, more often as the game goes on. Abilities that act, not inform (the Slayer, Snake Charmer...), see the truth.",
+    kill: "med",
+    // (No good player pretends to be one, nor hides as one: claiming it is a
+    // call to execute the Storyteller.)
+    neverBluffed: true,
+    neverHiddenAs: true,
+  },
   general: {
     name: "General",
     team: "townsfolk",

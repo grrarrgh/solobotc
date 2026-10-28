@@ -1,8 +1,8 @@
 import { byId } from "../../util.js";
-import { isMinion } from "../../storyteller.js";
+import { registersMinion } from "../../storyteller.js";
 
 const minionNominated = (s) =>
-  s.dayNominators.some((id) => byId(s, id) && isMinion(byId(s, id)));
+  s.dayNominators.some((id) => byId(s, id) && registersMinion(byId(s, id)));
 
 const crierText = (yes) =>
   `Town Crier: a Minion ${yes ? "nominated" : "did not nominate"} today.`;
