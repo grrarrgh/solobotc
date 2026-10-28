@@ -52,7 +52,7 @@ import {
   AMNESIAC_SHAPES,
   amnesiacShape,
 } from "../src/characters/townsfolk/amnesiac.js";
-import { logNames, formatLog } from "../src/log.js";
+import { logNames, formatLog, claimChain } from "../src/log.js";
 import {
   NIGHT_STEPS,
   FIRST_NIGHT,
@@ -6509,6 +6509,41 @@ test("a Cannibal who gains a first-night ability uses it that night", () => {
   assert.ok(!c.memories.some((m) => m.night === 3));
 });
 
+test("a Philosopher who gains the Cannibal ability eats executees: a first-night ability is used that night", () => {
+  const { s, p, e } = opNight("philosopher-cannibal", ["philosopher", null, "chef"]);
+  const [you, , chef, baron] = p;
+
+  e.philosopherGain(you, "cannibal");
+  assert.equal(you.cannibal, true);
+  e.night();
+  s.phase = "day";
+  s.day = 1;
+  e.execute(chef);
+  assert.equal(you.gained, "chef");
+  assert.equal(ability(you), "chef");
+  assert.ok(
+    s.audit.some(
+      (x) =>
+        x.type === "cannibal" &&
+        /\(Philosopher with the Cannibal ability\) has .* ability: Chef\./.test(x.text),
+    ),
+  );
+  assert.ok(s.privateLog.some((x) => /You now have the ability of/.test(x)));
+  assert.deepEqual(claimChain(you), ["philosopher", "cannibal", "chef"]);
+
+  s.night++;
+  e.night();
+  assert.ok(you.memories.some((m) => m.night === 2 && /^Chef number/.test(m.text)));
+
+  // An evil executee: a good ability, and poisoned, as for a real Cannibal.
+  s.phase = "day";
+  s.day = 2;
+  e.execute(baron);
+  assert.equal(alignment(you.gained), "good");
+  assert.equal(you.poisoned, true);
+  assert.equal(you.cannibal, true);
+});
+
 test("a dead player's execution gives the Cannibal nothing", () => {
   const { s, p, e } = opNight("cannibal-dead", [null, "cannibal"]);
 
@@ -9797,6 +9832,40 @@ test("the Legion and Minstrel jinx: an executed Legion leaves Legion sober, and 
   assert.ok(butler.drunkTonight);
   assert.ok(!l2.drunkTonight);
   assert.match(minstrel.memories.at(-1).text, /was Legion/);
+});
+
+test("a Cannibal who used an eaten bluffer's fake Seamstress ability may use a real Seamstress's, unpoisoned", () => {
+  const { s, p, strat, e } = trNight("cannibal-seamstress", [null, "cannibal", "seamstress", "baron"]);
+  const [, c, seamstress, baron, other] = p;
+
+  baron.claim = "seamstress";
+  e.night();
+  s.phase = "day";
+  s.day = 1;
+
+  // The Baron, bluffing the Seamstress: a (fake) Seamstress ability, poisoned.
+  e.execute(baron);
+  assert.equal(c.gained, "seamstress");
+  assert.equal(c.poisoned, true);
+  c.seamUsed = true;
+
+  // The real Seamstress: no longer poisoned, and their ability afresh.
+  e.execute(seamstress);
+  assert.equal(c.gained, "seamstress");
+  assert.equal(c.poisoned, false);
+  assert.equal(c.seamUsed, false);
+  assert.ok(
+    s.audit.some(
+      (x) => x.type === "cannibal" && x.data.fresh && /may use it again/.test(x.text),
+    ),
+  );
+
+  strat.seamstress = () => [p[0], other];
+  s.phase = "night";
+  s.night = 2;
+  e.night();
+  assert.ok(c.memories.some((m) => m.night === 2 && m.role === "seamstress" && m.functioning));
+  assert.equal(c.seamUsed, true);
 });
 
 test("Trust Redux's night order has its new characters", () => {

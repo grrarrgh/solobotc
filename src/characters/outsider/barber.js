@@ -50,6 +50,7 @@ export const barber = {
       x.shown = x.role;
       x.claim = this.claimFor(x);
       x.gained = null;
+      x.cannibal = false;
       x.gainedNight = s.night;
     }
 

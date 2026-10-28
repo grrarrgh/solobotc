@@ -446,7 +446,8 @@ export const FEARMONGER_CAUTION = 0.5;
 // Philosopher never gains, as the ability would do the town no good (see
 // strategy philosopher(), which never picks an Outsider either). The Poppy
 // Grower's, Pixie's, Magician's and Amnesiac's only work from setup, the
-// Cannibal's only for a real Cannibal, the Huntsman's only with a Damsel in
+// Cannibal's only pays off with a good executee, and an evil one poisons
+// them (you may still take it: see cannibals()), the Huntsman's only with a Damsel in
 // play (which the Philosopher can't know), and the Gambler's mostly kills
 // them. The Bounty Hunter's might turn a Townsfolk evil (their jinx). The
 // Atheist's is about setup (no evil characters), so it gains nothing. Add

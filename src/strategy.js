@@ -114,6 +114,7 @@ import {
   bluffing,
   shownBefore,
   unknownMate,
+  hasCannibal,
 } from "./storyteller.js";
 import { byId, pick, sample, claimTo, claimHeard, tick } from "./util.js";
 import { logNames } from "./log.js";
@@ -1543,7 +1544,7 @@ export class SimpleStrategy {
       claim === "cannibal" &&
       byId(
         s,
-        p.role === "cannibal"
+        hasCannibal(p)
           ? p.cannibalFrom
           : p.alignment === "evil"
             ? p.bluffState?.gained?.fromId

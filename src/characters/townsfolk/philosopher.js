@@ -36,6 +36,9 @@ export const philosopher = {
 
     p.gained = role;
     p.gainedNight = s.night;
+    // (The Cannibal's ability is kept apart, as "gained" becomes what they
+    // eat: see cannibals().)
+    p.cannibal = role === "cannibal";
 
     // (The Alchemist's ability is a Minion's, as a real Alchemist is given at
     // setup: one on the script that isn't in play. See alchemist.js.)

@@ -1382,7 +1382,10 @@ function playerNotes(p, r) {
     notes.push(`thought they were the ${roleLink(p.shown)}`);
   }
 
-  if (p.gained) {
+  // (A Philosopher with the Cannibal ability: then the last one they ate.)
+  if (p.cannibal && p.gained !== "cannibal") {
+    notes.push(`gained the ${roleLink("cannibal")} ability, then ate the ${roleLink(p.gained)} ability`);
+  } else if (p.gained) {
     notes.push(`gained the ${roleLink(p.gained)} ability`);
   }
 

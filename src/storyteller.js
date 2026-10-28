@@ -94,6 +94,11 @@ export const ability = (p) =>
     ? p.shown
     : (p.gained ?? p.role);
 
+// Whether p eats executees' abilities: the Cannibal, or a Philosopher who
+// gained its ability (see philosopher.js). Their "gained" is what they last
+// ate, once they've eaten (see characters/townsfolk/cannibal.js).
+export const hasCannibal = (p) => p.role === "cannibal" || p.cannibal;
+
 // Whether p is the Wizard who can't nominate or vote in the second round of
 // nominations they wished for: their wish's price (see wizard.js).
 export const wishBarred = (s, p) =>

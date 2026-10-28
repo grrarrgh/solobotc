@@ -1,14 +1,41 @@
 import { name, alignment, team, FACE_DOWN_OUTSIDERS } from "../../data.js";
 import { demonBluffSet } from "../../setup.js";
-import { ability, who, bluffing, works, isDemon, alchemistOptions } from "../../storyteller.js";
+import {
+  ability,
+  who,
+  bluffing,
+  works,
+  isDemon,
+  alchemistOptions,
+  hasCannibal,
+} from "../../storyteller.js";
 import { claimHeard } from "../../strategy.js";
 import { bluffState } from "../../bluff.js";
 import { bySeat, pick, sample, shuffle, whose } from "../../util.js";
 
+// Each once-per-game ability's "used" flag (and the Virgin's and Fool's
+// "first time"). A Cannibal who gains one has it afresh, even if they used
+// it before, as a player who becomes a new character does (see the wiki's
+// Abilities page). (Not the Juggler's: by their jinx the Cannibal learns
+// the eaten Juggler's count instead; see jugglerNight().)
+const ONCE_USED = {
+  slayer: "shotUsed",
+  artist: "artistUsed",
+  seamstress: "seamUsed",
+  courtier: "courtierUsed",
+  professor: "professorUsed",
+  fisherman: "fishermanUsed",
+  huntsman: "huntsmanUsed",
+  puzzlemaster: "puzzleUsed",
+  virgin: "virginUsed",
+  fool: "foolUsed",
+};
+
 // The Cannibal, mixed into Engine.prototype (see characters/index.js),
 // so `this` is the Engine.
 export const cannibal = {
-  // A player died by execution: each living Cannibal gains their ability.
+  // A player died by execution: each living Cannibal (or Philosopher with
+  // the Cannibal ability: see hasCannibal()) gains their ability.
   // If they were evil, the Cannibal is told a good ability (the one the
   // executee claimed, if any) and is poisoned until a good player dies by
   // execution. They don't learn the character, only whose ability it is,
@@ -61,7 +88,7 @@ export const cannibal = {
 
     for (const x of s.players.filter(
       (y) =>
-        y.alive && y !== dead && !y.human && y.alignment === "good" && y.role !== "cannibal",
+        y.alive && y !== dead && !y.human && y.alignment === "good" && !hasCannibal(y),
     )) {
       bluffState(x).eaten.push({
         night: s.night + 1,
@@ -71,7 +98,7 @@ export const cannibal = {
     }
 
     for (const c of s.players.filter(
-      (x) => x.alive && x !== dead && x.role === "cannibal",
+      (x) => x.alive && x !== dead && hasCannibal(x),
     )) {
       const evil = dead.alignment === "evil";
       const was = c.cannibalPoison;
@@ -96,6 +123,13 @@ export const cannibal = {
       }
 
       const butler = !evil && c.gained === "butler";
+      // (Poisoned or not: a poisoned Cannibal is woken as if they had it.)
+      const used = ONCE_USED[c.gained];
+      const fresh = Boolean(used && c[used]);
+
+      if (fresh) {
+        c[used] = false;
+      }
 
       if (!evil && dead.juggle && ability(dead) === "juggler") {
         c.cannibalJuggle = { ...dead.juggle, fromId: dead.id };
@@ -113,12 +147,16 @@ export const cannibal = {
 
       this.audit(
         "cannibal",
-        `${c.label} (Cannibal) has ${whose(dead)} ability: ${name(c.gained)}${
+        `${c.label} (${
+          c.role === "cannibal" ? "Cannibal" : `${name(c.role)} with the Cannibal ability`
+        }) has ${whose(dead)} ability: ${name(c.gained)}${
           c.alchemist ? ` (the ${name(c.alchemist)} ability)` : ""
         }${
           evil ? ", poisoned until a good player dies by execution" : ""
-        }${butler ? " (and learns it: the Cannibal and Butler jinx)" : ""}.`,
-        { playerId: c.id, fromId: dead.id, role: c.gained, poisoned: evil },
+        }${butler ? " (and learns it: the Cannibal and Butler jinx)" : ""}${
+          fresh ? "; they may use it again, though they used it before" : ""
+        }.`,
+        { playerId: c.id, fromId: dead.id, role: c.gained, poisoned: evil, fresh },
       );
 
       if (c.gained === "lunatic") {

@@ -2842,6 +2842,7 @@ export class Engine {
         role: p.role,
         shown: p.shown,
         gained: p.gained,
+        cannibal: p.cannibal,
         gainFailed: Boolean(failed),
         // (While mad: the claim they had, and go back to.)
         claim: p.mad?.previous ?? p.claim,

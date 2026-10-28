@@ -64,6 +64,7 @@ export const snakecharmer = {
     c.shown = demon;
     c.alignment = "evil";
     c.gained = null;
+    c.cannibal = false;
     c.gainedNight = 0;
     c.bluffs = d.bluffs;
     c.suspicion = null;

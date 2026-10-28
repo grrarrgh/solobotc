@@ -7,6 +7,7 @@ import {
   range,
   wrongNumber,
   falseNoise,
+  hasCannibal,
 } from "../../storyteller.js";
 import { byId, pick } from "../../util.js";
 import { dayBluff } from "../../bluff.js";
@@ -54,7 +55,7 @@ export const juggler = {
 
       c.cannibalJuggle = null;
 
-      if (c.alive && c.role === "cannibal") {
+      if (c.alive && hasCannibal(c)) {
         this.remember(c, jugglerInfo(s, guesses, infoMode(s, c), this.player(fromId)));
       }
     }

@@ -449,6 +449,7 @@ export function createState(
       vigor: false, // a Minion killed by the Vigormortis keeps their ability
       gained: null, // the ability a Philosopher (or Cannibal, Pixie) gained
       gainedNight: 0, // the night a gained first-night ability is used (Cannibal, Barber swap)
+      cannibal: false, // has the Cannibal ability without being the Cannibal (a Philosopher's)
       seamUsed: false,
       juggled: false,
       savantDay: 0,
@@ -823,7 +824,7 @@ export function createState(
     : null;
 
   const s = {
-    version: "2.14.1",
+    version: "2.14.2",
     script,
     seats,
     seed: String(seed),

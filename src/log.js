@@ -25,6 +25,12 @@ export function claimChain(p) {
       ? p.gained
       : (state?.gained?.role ?? (claim === "philosopher" ? state?.philosopher : null));
 
+    // (A Philosopher with the Cannibal ability says so, then what they ate:
+    // "Philosopher->Cannibal->Chef".)
+    if (honest && p.cannibal && gained !== "cannibal") {
+      chain.push("cannibal");
+    }
+
     if (gained) {
       chain.push(gained);
     }
@@ -151,7 +157,9 @@ function stateLines(players, rename) {
       p.role === p.shown ? name(p.role) : `${name(p.role)} (as ${name(p.shown)})`
     }${
       p.gained
-        ? ` (${p.gainFailed ? "thinks they have" : "has"} ${name(p.gained)}${p.gained === "alchemist" ? minion(p) : ""})`
+        ? ` (${p.gainFailed ? "thinks they have" : "has"} ${
+            p.cannibal && p.gained !== "cannibal" ? "Cannibal->" : ""
+          }${name(p.gained)}${p.gained === "alchemist" ? minion(p) : ""})`
         : p.alchemist
           ? ` (${p.role === "alchemist" ? "has" : "thinks they have"} ${name(p.alchemist)})`
           : ""
