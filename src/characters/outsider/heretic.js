@@ -1,5 +1,5 @@
 import { HERETIC_BLUFF_CHANCE, NPC_NOMINATE_EVIDENCE, name } from "../../data.js";
-import { ability, atFinal, isDemon, isDrunk } from "../../storyteller.js";
+import { ability, atFinal, nearFinal, isDemon, isDrunk } from "../../storyteller.js";
 import { lied } from "../../strategy.js";
 
 // The Heretic, mixed into Engine.prototype (see characters/index.js),
@@ -31,19 +31,30 @@ export const heretic = {
     };
   },
 
-  // At dawn in the final 3, once per game, when evil looks about to lose:
-  // an NPC Heretic (alive or dead) says so in public, so you know good must
-  // "lose" today. Until then they hide behind a Townsfolk claim (see
-  // HIDDEN_OUTSIDERS). With no Heretic saying so, an evil NPC might claim to
-  // be one (HERETIC_BLUFF_CHANCE), to have you spare the Demon.
+  // At dawn, once per game, an NPC Heretic says so in public, so you know
+  // good must "lose": the first dawn after they die (with nothing left to
+  // hide from the Demon), or, alive, at the final 4 or 3 (when an
+  // execution of the Demon would end the game) once evil looks about to
+  // lose. Until then they hide behind a Townsfolk claim (see
+  // HIDDEN_OUTSIDERS). With no Heretic saying so by then, an evil NPC might
+  // claim to be one (HERETIC_BLUFF_CHANCE), to have you spare the Demon.
   hereticReveals() {
     const s = this.s;
 
-    if (!s.script.ids.includes("heretic") || s.hereticClaim || !atFinal(s)) {
+    if (!s.script.ids.includes("heretic") || s.hereticClaim) {
       return;
     }
 
     const real = s.players.find((x) => !x.human && x.role === "heretic");
+
+    if (real && !real.alive) {
+      this.hereticSays(real, "they're dead, so the Demon can no longer kill them for it");
+      return;
+    }
+
+    if (!atFinal(s) && !nearFinal(s)) {
+      return;
+    }
 
     if (real) {
       const why = this.hereticSeesLoss(real);
@@ -127,7 +138,9 @@ export const heretic = {
     const was = p.cover?.as ?? p.claim;
     const line = `Day ${s.day} — ${p.label} says: "${
       was && was !== "heretic" ? `I said I was the ${name(was)}, but I'm` : "I'm"
-    } the Heretic: whoever wins, loses. If good wins today, good loses."`;
+    } the Heretic: whoever wins, loses. If good wins${
+      atFinal(s) || nearFinal(s) ? " today" : ""
+    }, good loses."`;
 
     s.hereticClaim = p.id;
     p.claim = "heretic";

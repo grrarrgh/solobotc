@@ -47,6 +47,20 @@ export const damsel = {
       return;
     }
 
+    // A dead Damsel's ability is gone: once a dead player who isn't evil has
+    // revealed they were her (see engine learnsDeath()), the Minions stop
+    // guessing (see strategy damselGuess()).
+    const dead = s.players.find((x) => !x.alive && x.claim === "damsel" && x.alignment !== "evil");
+
+    if (dead && !s.damselRevealed) {
+      s.damselRevealed = dead.id;
+      this.audit(
+        "damsel",
+        `The Minions stop guessing the Damsel: ${dead.label} died and revealed they were her.`,
+        { playerId: dead.id },
+      );
+    }
+
     for (const m of s.players.filter(
       (x) =>
         !x.human && x.alive && team(x.role) === "minion" && sideOf(x) === "evil",

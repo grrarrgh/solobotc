@@ -638,7 +638,8 @@ export const CHARACTERS = {
     team: "outsider",
     ability: "Whoever wins, loses & whoever loses, wins, even if you are dead.",
     kill: "low",
-    // (Only claimed in the final 3: see characters/outsider/heretic.js.)
+    // (Only claimed once dead, or in the final 4 or 3: see
+    // characters/outsider/heretic.js.)
     neverHiddenAs: true,
   },
   poisoner: {

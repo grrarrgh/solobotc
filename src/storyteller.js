@@ -126,11 +126,17 @@ export const minionLabel = (p) =>
 // good player whose cover story it is (see strategy coverFor()). They use it
 // as a real one would, to no effect, and any information it gives them is
 // made up (see bluff.js madeUpMemories()). (A good one only acts against a
-// player they strongly suspect: see strategy strongSuspect().)
+// player they strongly suspect: see strategy strongSuspect().) An evil
+// Philosopher or Cannibal bluffer acts out the character they say they
+// gained (see bluff.js gainedRole()), as a real one would: the Juggler's
+// juggle, the Fisherman's question...
 export const bluffing = (p, role) =>
   !p.human &&
   ability(p) !== role &&
   (p.cover?.as === role ||
+    (p.alignment === "evil" &&
+      ["philosopher", "cannibal"].includes(p.claim) &&
+      p.bluffState?.gained?.role === role) ||
     (p.claim === role &&
       (p.alignment === "evil" ||
         p.role === "lunatic" ||

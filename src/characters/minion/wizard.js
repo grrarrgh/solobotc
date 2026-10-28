@@ -16,9 +16,11 @@ import { pick, sample } from "../../util.js";
 //   killed them.
 // - "demon": learn who the Demon is. Only for a good Wizard (an Alchemist
 //   with the ability): the evil team knows already. Price: the Demon learns
-//   who wished, and goes after them.
+//   who wished, and goes after them. Clue: the town hears a wish was
+//   granted today.
 // - "grimoire": see the Grimoire, as a Widow does. Only for an evil one
-//   (declined for a good one: it would win the game outright).
+//   (declined for a good one: it would win the game outright). Clue: the
+//   town hears a wish was granted today.
 // - "whispers": the town hears the 3 characters the Demon was told are not
 //   in play (its bluffs). Only for a good Wizard: the evil team knows them
 //   already. Price: the Demon learns 3 new ones. Clue: any evil player
@@ -189,12 +191,19 @@ export const wizard = {
       { playerId: p.id, kind, targetId: t?.id ?? null, granted: true, effective },
     );
 
-    // (After the wish is on record: these log what they do.)
+    // (After the wish is on record: these log what they do.) The wishes
+    // with no clue of their own, to see the Grimoire or learn the Demon,
+    // still have the Storyteller tell the town a wish was granted, but not
+    // what it was (or that it did nothing, for a drunk or poisoned Wizard).
+    if (kind === "grimoire" || kind === "demon") {
+      this.wishTell(`Day ${s.day} — The Storyteller: a wish was granted today.`);
+    }
+
     if (effective && kind === "whispers") {
       said = this.exposeBluffs(p);
     } else if (effective && kind === "second") {
       s.secondRound = { day: s.day, wizardId: p.id, open: false };
-      this.announce(
+      this.wishTell(
         `Day ${s.day} — The Storyteller: a wish was granted: there will be a second execution today.`,
       );
       this.audit(
@@ -242,7 +251,7 @@ export const wizard = {
       x.bluffs = fresh;
     }
 
-    this.announce(
+    this.wishTell(
       `Day ${s.day} — The Storyteller: a wish was granted. The Demon was told these characters are not in play: ${old
         .map(name)
         .join(", ")}.`,
@@ -391,9 +400,17 @@ export const wizard = {
     const s = this.s;
 
     if (s.wishClue?.night === s.night) {
-      this.announce(`Day ${s.day} — ${s.wishClue.text}`);
+      this.wishTell(`Day ${s.day} — ${s.wishClue.text}`);
       s.wishClue = null;
     }
+  },
+
+  // The Storyteller tells the town something of a wish (`line`, for the
+  // Public Log): everyone hears it, so it goes in log.txt as seen (the
+  // "wish" entries: see log.js PUBLIC).
+  wishTell(line) {
+    this.announce(line);
+    this.audit("wish", line.replace(/^Day \d+ — /, ""));
   },
 };
 

@@ -406,7 +406,8 @@ export const BLUFF_TRIES = 6;
 // Outsiders who claim a Townsfolk while alive, and admit it once dead: the
 // Mutant ("mad" they're not one) and the Damsel (hiding from the Minions).
 // See claimFor() and strategy revealsWhenDead(). The Heretic hides too, but
-// only says so in the final 3 (see characters/outsider/heretic.js).
+// says so at the next dawn after dying, or alive in the final 4 or 3 (see
+// characters/outsider/heretic.js).
 export const HIDDEN_OUTSIDERS = ["mutant", "damsel", "heretic"];
 
 // Outsiders who are face-down in play, never claiming what they are while
@@ -416,7 +417,7 @@ export const HIDDEN_OUTSIDERS = ["mutant", "damsel", "heretic"];
 // setup.js demonBluffSet()).
 export const FACE_DOWN_OUTSIDERS = ["drunk", "lunatic", ...HIDDEN_OUTSIDERS];
 
-// The Heretic in the final 3: the chance an evil NPC claims to be the
+// The Heretic in the final 4 or 3: the chance an evil NPC claims to be the
 // Heretic when evil looks about to lose (so you'd want good to "lose").
 export const HERETIC_BLUFF_CHANCE = 0.5;
 

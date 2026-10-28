@@ -95,6 +95,7 @@ import {
   falseNoise,
 } from "../src/storyteller.js";
 import { fishermanInfo } from "../src/characters/townsfolk/fisherman.js";
+import { alchemistAbility } from "../src/characters/townsfolk/alchemist.js";
 import { jugglerInfo } from "../src/characters/townsfolk/juggler.js";
 import { ravenInfo } from "../src/characters/townsfolk/ravenkeeper.js";
 import { artistInfo } from "../src/characters/townsfolk/artist.js";
@@ -10697,12 +10698,36 @@ test("in the final 3, the Heretic says so if evil looks about to lose; else an e
   e.hereticReveals();
   assert.equal(s.publicLog.filter((x) => /the Heretic: whoever wins/.test(x)).length, 1);
 
-  // Not before the final 3.
+  // Not before the final 4, alive...
   ({ s, e, heretic, imp } = final3("heretic-early"));
   s.players[2].alive = true;
+  s.players[3].alive = true;
   e.strat.suspicion = (_, p) => (p === heretic ? { targetId: imp.id, score: 9 } : null);
   e.hereticReveals();
   assert.equal(heretic.claim, "chef");
+
+  // ...but in the final 4, when executing the Demon would end the game.
+  s.players[3].alive = false;
+  e.hereticReveals();
+  assert.equal(heretic.claim, "heretic");
+  assert.match(s.publicLog.at(-1), /If good wins today, good loses\."$/);
+
+  // Dead, they say so at the next dawn, however many are alive (here, with
+  // 6 seats, 5 of them).
+  ({ s, e, heretic, imp } = final3("heretic-dead"));
+  s.players.push(role({ ...s.players[2], id: 6, seat: 6, label: "Player 6" }, "chef", "good"));
+  s.seats = 6;
+  s.players[2].alive = true;
+  s.players[3].alive = true;
+  heretic.alive = false;
+  e.strat.suspicion = () => null;
+  e.hereticReveals();
+  assert.equal(s.hereticClaim, heretic.id);
+  assert.equal(
+    s.publicLog.at(-1),
+    `Day 1 — ${heretic.label} says: "I said I was the Chef, but I'm the Heretic: whoever wins, loses. If good wins, good loses."`,
+  );
+  assert.match(s.audit.at(-1).text, /\(the real Heretic; they're dead, so the Demon can no longer kill them for it\)$/);
 
   // No Heretic in play, and you marked the Imp evil: a dead Minion might claim it.
   let bluffed = 0;
@@ -10727,6 +10752,85 @@ test("in the final 3, the Heretic says so if evil looks about to lose; else an e
   }
 
   assert.ok(bluffed > 0 && bluffed < 40, `${bluffed} of 40`);
+});
+
+const outedEvil = JSON.parse(
+  fs.readFileSync(new URL("../scripts/Outed Evil_5_0_0.json", import.meta.url)),
+);
+
+test("a Cannibal who eats an Alchemist gains a Minion ability, never the one the Alchemist had", () => {
+  for (let seed = 0; seed < 20; seed++) {
+    const s = base(`cannibal-alchemist-${seed}`, outedEvil);
+    const e = new Engine(s);
+    const [, c, alch] = s.players;
+
+    role(c, "cannibal", "good");
+    role(alch, "alchemist", "good");
+    alch.alchemist = "poisoner";
+    e.execute(alch);
+
+    assert.equal(c.gained, "alchemist");
+    assert.ok(["fearmonger", "psychopath", "wizard", "goblin"].includes(c.alchemist), c.alchemist);
+    assert.match(s.audit.at(-1).text, /\(Cannibal\) has .* ability: Alchemist \(the .+ ability\)\.$/);
+  }
+});
+
+test("an evil Cannibal bluffer who 'eats' an Alchemist never says they have that Alchemist's ability", () => {
+  for (let seed = 0; seed < 20; seed++) {
+    const s = base(`cannibal-alchemist-bluff-${seed}`, outedEvil);
+    const e = new Engine(s);
+    const [, , alch, minion] = s.players;
+
+    role(alch, "alchemist", "good");
+    alch.alchemist = "poisoner";
+    minion.claim = "cannibal";
+    minion.bluff = "cannibal";
+    e.claimPublicly(alch);
+    e.execute(alch);
+
+    assert.equal(gainedRole(minion), "alchemist");
+    assert.notEqual(alchemistAbility(s, minion), "poisoner");
+    // (Nor their own team's: the Baron and the Imp aren't on Outed Evil.)
+    assert.ok(!["baron", "imp"].includes(alchemistAbility(s, minion)));
+  }
+});
+
+test("an evil Cannibal bluffer who 'eats' a Juggler juggles the next day, as a real one would", () => {
+  const s = base("cannibal-juggle-bluff", outedEvil);
+  const e = new Engine(s);
+  const [, , jug, minion] = s.players;
+
+  role(jug, "juggler", "good");
+  minion.claim = "cannibal";
+  minion.bluff = "cannibal";
+  e.claimPublicly(jug);
+  e.execute(jug);
+  assert.equal(gainedRole(minion), "juggler");
+
+  s.day = 2;
+  e.npcJugglers();
+  assert.equal(minion.juggled, true);
+  assert.equal(minion.juggle.night, 3);
+  assert.ok(s.publicLog.some((x) => x.startsWith(`Day 2 — ${minion.label} claims Juggler and guesses:`)));
+});
+
+test("once the dead Damsel has revealed herself, the Minions stop guessing", () => {
+  const s = base("damsel-dead", outedEvil);
+  const e = new Engine(s);
+  const [, , damsel, minion, imp] = s.players;
+
+  role(damsel, "damsel", "good");
+  s.damselKnown = true;
+  s.day = 4;
+  e.execute(damsel);
+  assert.equal(damsel.claim, "damsel");
+
+  // (Even as a last chance, with their Demon about to be executed.)
+  e.npcDamselGuesses(imp);
+  assert.equal(s.damselGuesses, undefined);
+  assert.ok(!minion.damselGuessed);
+  assert.equal(s.damselRevealed, damsel.id);
+  assert.ok(s.audit.some((x) => /The Minions stop guessing the Damsel: .* died and revealed they were her\./.test(x.text)));
 });
 
 // ── Outed Evil, phase 2: the Goblin, Fearmonger and Psychopath ───
@@ -11767,11 +11871,16 @@ test("the Wizard's wishes: a death (never the Demon), the Grimoire (evil only), 
   s.day = 2;
   e.wizardDawn();
   assert.equal(s.publicLog.at(-1), `Day 2 — The Storyteller: a wish was granted, and ${p[1].label} died of it.`);
+  // (In log.txt too, as something you heard.)
+  assert.ok(formatLog(s).includes(`▶ [wish] The Storyteller: a wish was granted, and ${logNames(s)[p[1].seat]} died of it.`));
 
   // The Grimoire: the evil team knows every character.
   ({ s, e, p } = minionDay("wizard-grimoire", "wizard"));
   e.wishFor(p[3], "grimoire");
   assert.equal(new SimpleStrategy().seenRole(s, p[1], p[4]), p[1].role);
+  // The town hears a wish was granted, not what it was.
+  assert.equal(s.publicLog.at(-1), "Day 1 — The Storyteller: a wish was granted today.");
+  assert.ok(formatLog(s).includes("▶ [wish] The Storyteller: a wish was granted today."));
 
   // A good one (you, an Alchemist): the Demon, and the Demon learns who wished.
   const y = alchemistDay("wizard-you", "wizard", true);
@@ -11780,6 +11889,7 @@ test("the Wizard's wishes: a death (never the Demon), the Grimoire (evil only), 
   assert.throws(() => y.e.wish("death"), /Select a living player/);
   y.e.wish("demon");
   assert.equal(y.p[4].wisherId, y.p[0].id);
+  assert.equal(y.s.publicLog.at(-1), "Day 1 — The Storyteller: a wish was granted today.");
   assert.ok(y.p[0].memories.some((m) => m.text === `Wizard: the Demon is ${y.p[4].label}.`));
   assert.throws(() => y.e.wish("demon"), /unavailable/);
 });

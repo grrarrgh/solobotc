@@ -1566,7 +1566,8 @@ export class SimpleStrategy {
       return null;
     }
 
-    // (Not the Heretic: they only say so in the final 3. See heretic.js.)
+    // (Not the Heretic: they say so at dawn, in their own words. See
+    // heretic.js.)
     const hidden = [p.role, p.bluff].find(
       (x) => HIDDEN_OUTSIDERS.includes(x) && x !== "heretic",
     );
@@ -3064,6 +3065,7 @@ export class SimpleStrategy {
   damselGuess(s, p, doomed = null) {
     if (
       !s.damselKnown ||
+      s.damselRevealed ||
       s.damselJinx ||
       s.damselGone ||
       p.damselGuessed ||

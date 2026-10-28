@@ -1,6 +1,6 @@
 import { name, alignment, team, FACE_DOWN_OUTSIDERS } from "../../data.js";
 import { demonBluffSet } from "../../setup.js";
-import { ability, who, bluffing, works, isDemon } from "../../storyteller.js";
+import { ability, who, bluffing, works, isDemon, alchemistOptions } from "../../storyteller.js";
 import { claimHeard } from "../../strategy.js";
 import { bluffState } from "../../bluff.js";
 import { bySeat, pick, sample, shuffle, whose } from "../../util.js";
@@ -86,6 +86,15 @@ export const cannibal = {
       c.cannibalPoison = evil ? `eating ${who(dead)}` : null;
       c.cannibalFrom = dead.id;
 
+      // An Alchemist's ability is a Minion ability, as for a Philosopher
+      // (see philosopher.js): one on the script, neither in play nor
+      // another Alchemist's (so never the one the eaten Alchemist had).
+      c.alchemist = null;
+
+      if (c.gained === "alchemist") {
+        c.alchemist = pick(alchemistOptions(s), s.r) ?? null;
+      }
+
       const butler = !evil && c.gained === "butler";
 
       if (!evil && dead.juggle && ability(dead) === "juggler") {
@@ -105,6 +114,8 @@ export const cannibal = {
       this.audit(
         "cannibal",
         `${c.label} (Cannibal) has ${whose(dead)} ability: ${name(c.gained)}${
+          c.alchemist ? ` (the ${name(c.alchemist)} ability)` : ""
+        }${
           evil ? ", poisoned until a good player dies by execution" : ""
         }${butler ? " (and learns it: the Cannibal and Butler jinx)" : ""}.`,
         { playerId: c.id, fromId: dead.id, role: c.gained, poisoned: evil },

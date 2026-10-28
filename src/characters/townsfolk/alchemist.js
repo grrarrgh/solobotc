@@ -15,26 +15,33 @@ const alchemistText = (id) =>
 // up to them (the Psychopath's kill, the Goblin's claim); never the
 // Fearmonger's, whose every choice is announced; never a
 // Minion an evil one knows is in play (their own character, and their
-// team's, unless the Poppy Grower keeps them apart). The same one each time.
+// team's, unless the Poppy Grower keeps them apart); never one another
+// Alchemist (real or pretend) has said they have, which a real one can't
+// share (see storyteller alchemistOptions()). The same one each time.
 const QUIET = ["poisoner", "wizard"];
 const OPTIONAL = ["psychopath", "goblin"];
 
 function pretended(s, p) {
   const said = bluffState(p).said;
+  const others = s.players
+    .filter((x) => x !== p && [x.claim, x.gained, gainedRole(x)].includes("alchemist"))
+    .map((x) => x.alchemist ?? x.bluffState?.said?.alchemist);
   const own =
     p.alignment !== "evil" ? [] : p.poppyBlind ? [p.role] : s.players.filter((x) => x.alignment === "evil").map((x) => x.role);
+  // (If every one is ruled out, another Alchemist's is better than a
+  // teammate's.)
+  const choose = (not) =>
+    pick(
+      s.script.ids.filter((id) => QUIET.includes(id) && !not.includes(id)),
+      s.r,
+    ) ??
+    pick(s.script.ids.filter((id) => OPTIONAL.includes(id) && !not.includes(id)), s.r) ??
+    pick(
+      s.script.ids.filter((id) => team(id) === "minion" && id !== "fearmonger" && !not.includes(id)),
+      s.r,
+    );
 
-  said.alchemist ??=
-    pick(
-      s.script.ids.filter((id) => QUIET.includes(id) && !own.includes(id)),
-      s.r,
-    ) ??
-    pick(s.script.ids.filter((id) => OPTIONAL.includes(id) && !own.includes(id)), s.r) ??
-    pick(
-      s.script.ids.filter((id) => team(id) === "minion" && id !== "fearmonger" && !own.includes(id)),
-      s.r,
-    ) ??
-    "poisoner";
+  said.alchemist ??= choose([...own, ...others.filter(Boolean)]) ?? choose(own) ?? "poisoner";
 
   return said.alchemist;
 }

@@ -231,6 +231,7 @@ const PUBLIC = new Set([
   "pacifist",
   "conversation",
   "tell",
+  "wish",
 ]);
 
 // Whether you saw or heard log entry e (marked ▶ in log.txt): said or
@@ -252,6 +253,9 @@ function seen(e) {
     case "wake":
     case "choice":
       return you;
+    // (The Minions giving up on the Damsel is the Storyteller's note.)
+    case "damsel":
+      return !/^The Minions stop guessing/.test(e.text);
     default:
       return PUBLIC.has(e.type);
   }
