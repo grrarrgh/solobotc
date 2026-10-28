@@ -803,7 +803,7 @@ export const LEGION_MINSTREL_CHANCE = 0.5;
 // this is the chance a game is an Atheist game, with no evil players. (The
 // Storyteller chooses to put it in; dealt like any Townsfolk, it would be
 // in most games.)
-export const ATHEIST_CHANCE = 1 / 8;
+export const ATHEIST_CHANCE = 0.2;
 // In an Atheist game, the Storyteller pretends a Demon and Minions are in
 // play, and good players' information is true to that pretence; but it
 // breaks the rules now and then, giving a piece of information that's
@@ -833,8 +833,11 @@ export const ATHEIST_DOUBT_NOTICE = 0.5;
 // Twin, who claims their twin's character) claims the Atheist from the
 // start instead of their bluff: a trap, as executing the Storyteller then
 // wins for evil (see setup.js). With ATHEIST_CHANCE, it decides how often
-// an Atheist claim is true.
-export const EVIL_ATHEIST_BLUFF_CHANCE = 0.15;
+// an Atheist claim is true. (Only about half the games without the Atheist
+// have such a Minion: on Chef's Deluxe, a Spy or Cerenovus. So 0.4 gives a
+// false claim in about 1 in 5 of them, and an Atheist claim is true a
+// little over half the time.)
+export const EVIL_ATHEIST_BLUFF_CHANCE = 0.4;
 // The evil team nominates the Storyteller only once at least this many good
 // NPCs (never the Marionette, who is evil, though they vote as good)
 // believe an Atheist claim, and with them it can carry the vote: the trap

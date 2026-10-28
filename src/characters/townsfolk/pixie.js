@@ -106,7 +106,9 @@ const pixieText = (role) => `Pixie: the ${name(role)} is in play.`;
 // The Townsfolk a Pixie can learn: those in play, or (`notInPlay`) those
 // that aren't. Never the Pixie, nor, for an evil Pixie bluffer, one a
 // teammate claims: they'd claim it too once "mad" about it, and two evil
-// players claiming one character gives them away.
+// players claiming one character gives them away. Nor one of the Demon's
+// bluffs: a misinformed Pixie (a Drunk or Marionette shown it) mad about
+// one would claim it alongside the Demon, all but clearing it.
 const pixieOptions = (s, p, notInPlay = false) => {
   const inPlay = new Set(
     s.players.filter((x) => x !== p).map((x) => x.role),
@@ -124,6 +126,7 @@ const pixieOptions = (s, p, notInPlay = false) => {
       team(id) === "townsfolk" &&
       !["pixie", "atheist"].includes(id) &&
       !teamClaims.has(id) &&
+      !(s.demonBluffs ?? []).includes(id) &&
       inPlay.has(id) !== notInPlay,
   );
 };
@@ -135,8 +138,11 @@ const pixieOptions = (s, p, notInPlay = false) => {
 // Drunk or Marionette shown the Pixie, one that isn't (if they can); and an
 // evil player or the Lunatic bluffing the Pixie, one that isn't either
 // (never a teammate's claim), as their own bluffed information says on
-// Night 1. Returns the Townsfolk, or null. (`s`: the state, or as much of
-// it as setup has: `players`, `script`, `r`.)
+// Night 1. With no such Townsfolk left (all in play, or the Demon's
+// bluffs), a misinformed one is shown one in play: they claim it, but never
+// gain its ability, as theirs doesn't work (see pixieGains()). Returns the
+// Townsfolk, or null. (`s`: the state, or as much of it as setup has:
+// `players`, `script`, `r`, `demonBluffs`.)
 export function pixieStart(s, p) {
   const real = p.role === "pixie";
 

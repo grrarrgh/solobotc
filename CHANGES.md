@@ -2,6 +2,11 @@
 
 Newest first. Each release is headed with its version, the one log.txt's `Version:` line shows (from `version` in `src/setup.js` and `package.json`): a release with new features or improvements raises the middle number (2.5.0), one with only bug fixes or superficial changes the last (2.5.1). An entry without one shipped as the version below it; versions before 2.4.0 weren't recorded here.
 
+## v2.15.0 — Improvements & Bug Fixes: More Atheist Games and Atheist Claims, and a Drunk Pixie Is Never Mad About a Demon Bluff
+
+- Improvement: on Chef's Deluxe, 1 game in 5 is now an Atheist game (`ATHEIST_CHANCE`, was 1 in 8), and about 1 in 5 of the others has a Minion falsely claiming the Atheist (`EVIL_ATHEIST_BLUFF_CHANCE` 0.4, was 0.15: only a Spy or Cerenovus can, and about half those games have neither, so it was about 1 in 14). About a third of games now have an Atheist claim, true a little over half the time: the claim alone is close to a coin flip, and the Storyteller's rule breaks are what tell an Atheist game apart.
+- Bug fix: a Drunk or Marionette shown the Pixie is never shown one of the Demon's bluffs as their Townsfolk. Mad about it, they'd claim it alongside the Demon, as good as clearing the Demon. They're shown another Townsfolk not in play, or, with none left, one in play: they claim it, but never gain its ability, as their Pixie ability doesn't work. (`pixieOptions()` in `src/characters/townsfolk/pixie.js`.)
+
 ## v2.14.2 — Bug Fixes: A Philosopher Who Gains the Cannibal Eats, and a Cannibal's Once-per-Game Abilities Afresh
 
 - Bug fix: as the Philosopher, gaining the Cannibal ability now works. Each executee's ability is yours from that night, as for a real Cannibal: a first-night one (the Chef's, the Librarian's...) is used that night, an evil executee gives you a good ability and poisons you until a good player dies by execution, and the Butler, Juggler and Lunatic jinxes and the Alchemist's Minion ability apply. Before, nothing happened: only the Cannibal character ate. (`hasCannibal()` in `src/storyteller.js`, and the player's `cannibal`, as their `gained` becomes what they last ate.)

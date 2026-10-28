@@ -767,7 +767,7 @@ export function createState(
         x.shown === "pixie" ||
         ((x.alignment === "evil" || x.role === "lunatic") && x.bluff === "pixie")),
   )) {
-    pixieStart({ players, script, r }, p);
+    pixieStart({ players, script, r, demonBluffs }, p);
   }
 
   // The Evil Twin is paired with a good player; they know each other. The
@@ -824,7 +824,7 @@ export function createState(
     : null;
 
   const s = {
-    version: "2.14.2",
+    version: "2.15.0",
     script,
     seats,
     seed: String(seed),

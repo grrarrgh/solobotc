@@ -10256,7 +10256,14 @@ test("every good character on every script can be bluffed, by a good or an evil 
 
   for (const file of files) {
     const raw = JSON.parse(fs.readFileSync(new URL(`../scripts/${file}`, import.meta.url)));
-    const s = createState(raw, 10, `bluff-all-${file}`);
+    // (Not an Atheist game: it has no evil player.)
+    let n = 0;
+    let s = createState(raw, 10, `bluff-all-${file}`);
+
+    while (!s.players.some((x) => x.alignment === "evil")) {
+      s = createState(raw, 10, `bluff-all-${file}-${++n}`);
+    }
+
     const e = new Engine(s);
 
     e.start();
@@ -13648,7 +13655,7 @@ test("the Puzzlemaster is an Outsider: dealt in an Outsider's place, never shown
   assert.ok(dealt > 0);
 });
 
-test("about 1 Chef's Deluxe game in 8 is an Atheist game: nobody evil, and a pretend Demon and Minions", () => {
+test("about 1 Chef's Deluxe game in 5 is an Atheist game: nobody evil, and a pretend Demon and Minions", () => {
   let atheists = 0;
   let liars = 0;
 
@@ -14539,8 +14546,14 @@ test("the Atheist tries the Storyteller short of the votes from Day 2, once enou
 });
 
 test("an evil liar claiming the Atheist tries the Storyteller short of the votes only on the Atheist's terms: their own hand and good believers', never their team's", () => {
-  const { s, e } = cdDay(12, "st-liar-try", (t) =>
-    t.players.some((x) => x.alignment === "evil" && x.claim === "atheist"),
+  // (An evil team of 2 who vote as evil, the third the Marionette: with 3,
+  // their hands and one more believer would carry it, not just try.)
+  const { s, e } = cdDay(
+    12,
+    "st-liar-try",
+    (t) =>
+      t.players.some((x) => x.alignment === "evil" && x.claim === "atheist") &&
+      t.players.filter((x) => x.alignment === "evil" && x.role !== "marionette").length === 2,
   );
   const liar = s.players.find((x) => x.alignment === "evil" && x.claim === "atheist");
   const mate = s.players.find((x) => x !== liar && x.alignment === "evil" && sideOf(x) === "evil");
@@ -14990,4 +15003,22 @@ test("self-play nominates the Storyteller in Chef's Deluxe games, and good can w
   }
 
   assert.ok(wins > 0, `${wins}`);
+});
+
+test("a Drunk or Marionette shown the Pixie is never mad about one of the Demon's bluffs", () => {
+  let seen = 0;
+
+  for (const script of [cd, op]) {
+    for (let seed = 0; seed < 600; seed++) {
+      const s = createState(script, 8 + (seed % 8), seed);
+
+      for (const p of s.players.filter((x) => x.shown === "pixie" && x.pixieRole)) {
+        seen++;
+        assert.ok(!s.demonBluffs.includes(p.pixieRole), `seed ${seed}: ${p.pixieRole}`);
+        assert.equal(p.claim, p.pixieRole);
+      }
+    }
+  }
+
+  assert.ok(seen > 0, `${seen}`);
 });
