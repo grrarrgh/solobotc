@@ -533,8 +533,9 @@ function doubted(s, p, mode, broken) {
 // the Storyteller helps good) that came out false: not `right`, as the
 // character's information would truly be (the same text, or for some, any
 // answer that's true: see each character's `holds`, nightInfo()). With the
-// Atheist on the script, `info` is marked, by night or by day (the Savant,
-// Fisherman, Juggler, Puzzlemaster), and once it's remembered as the
+// Atheist on the script, `info` is marked, by night (nightInfo(), and the
+// Juggler's count, which comes outside it) or by day (the Savant,
+// Fisherman, Puzzlemaster), and once it's remembered as the
 // Storyteller's information, it counts as doubted() counts a lie (see
 // noticeNoise()). (Made up by a bluffer, it's never remembered that way.)
 // Returns `info`. (Nothing on any other script.)

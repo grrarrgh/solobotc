@@ -92,12 +92,14 @@ import {
   registersMinion,
   registeredRole,
   atheistBreakChance,
+  falseNoise,
 } from "../src/storyteller.js";
 import { fishermanInfo } from "../src/characters/townsfolk/fisherman.js";
 import { jugglerInfo } from "../src/characters/townsfolk/juggler.js";
 import { ravenInfo } from "../src/characters/townsfolk/ravenkeeper.js";
 import { artistInfo } from "../src/characters/townsfolk/artist.js";
 import { savantInfo, savantBluff } from "../src/characters/townsfolk/savant.js";
+import { puzzleInfo } from "../src/characters/townsfolk/puzzlemaster.js";
 import { sageInfo } from "../src/characters/townsfolk/sage.js";
 import { evilTwinInfo } from "../src/characters/minion/eviltwin.js";
 import {
@@ -14375,6 +14377,126 @@ test("random information that happens to be true isn't marked false; random day 
   // (The truth, and lies, are left to doubted(): never marked here.)
   s.r = () => 0.9;
   assert.equal(marked(fishermanInfo(s, p, "truth")), false);
+});
+
+test("random information is marked false only when it is: the Amnesiac's good player and evil pair, the Savant, the Puzzlemaster", () => {
+  const { s, e } = cdDay(10, "noise-real", (t) => !t.atheist);
+  const good = s.players.filter((x) => !x.human && x.alive && x.alignment === "good");
+  const p = good.find((x) => x.role !== "recluse");
+  const d = s.players.find((x) => registersDemon(x));
+  const fine = good.filter((x) => x !== p && !registersEvil(x));
+  const marked = (m) => {
+    e.remember(p, m);
+
+    return Boolean(m.doubtful);
+  };
+  const amnesiac = (key, ts) => {
+    const m = {
+      night: s.night,
+      role: "amnesiac",
+      text: "Amnesiac: ...",
+      targets: ts.map((x) => x.id),
+      functioning: false,
+    };
+
+    p.amnesiac = key;
+
+    return falseNoise(s, m, infoOf("amnesiac").holds(s, p, m, { text: "" }));
+  };
+
+  // The Amnesiac: a player who registers good is a true "good player"; a
+  // pair with exactly one who registers evil, a true "evil pair".
+  assert.equal(marked(amnesiac("goodplayer", [fine[0]])), false);
+  assert.equal(marked(amnesiac("goodplayer", [d])), true);
+  assert.equal(marked(amnesiac("evilpair", [fine[0], d])), false);
+  assert.equal(marked(amnesiac("evilpair", [fine[0], fine[1]])), true);
+
+  // The Savant: each statement true or false at random (the last two
+  // draws), so it's true information only when exactly one is. (Counted
+  // with the same players left to talk about: see p.lastPicks.)
+  const savant = (flips) => {
+    const last = p.lastPicks;
+    let calls = 0;
+
+    s.r = () => {
+      calls++;
+
+      return 0.3;
+    };
+    savantInfo(s, p, "random");
+    p.lastPicks = last;
+
+    const n = calls;
+    let i = 0;
+
+    s.r = () => (i++ < n - 2 ? 0.3 : flips[i - n + 1] ? 0.1 : 0.9);
+
+    const info = savantInfo(s, p, "random");
+
+    p.lastPicks = last;
+
+    return info;
+  };
+
+  assert.equal(marked(savant([true, false])), false);
+  assert.equal(marked(savant([false, true])), false);
+  assert.equal(marked(savant([true, true])), true);
+  assert.equal(marked(savant([false, false])), true);
+
+  // The Puzzlemaster: a random "Demon" is true after a right guess only if
+  // it's the Demon, and after a wrong one only if it isn't.
+  const t = fine[0];
+  const seen = new Set();
+
+  for (const drunk of [null, t.id]) {
+    s.puzzle = drunk ? { byId: p.id, drunkId: drunk } : undefined;
+
+    for (let k = 0; k < 20; k++) {
+      s.r = () => (k + 0.5) / 20;
+
+      const info = puzzleInfo(s, p, t, "random");
+      const isDemon = info.targets[0] === d.id;
+
+      assert.equal(marked(info), drunk ? !isDemon : isDemon);
+      seen.add(`${Boolean(drunk)} ${isDemon}`);
+    }
+  }
+
+  assert.equal(seen.size, 4);
+});
+
+test("through nightInfo(), a poisoned Pixie's random answer that's true isn't marked false", () => {
+  const { s, e } = cdDay(10, "noise-pixie", (t) => !t.atheist);
+  const p = s.players.find(
+    (x) => !x.human && x.alive && x.alignment === "good" && team(x.role) === "townsfolk",
+  );
+
+  role(p, "pixie", "good");
+  p.poisoned = true;
+  p.pixieRole = null;
+  s.phase = "night";
+  s.night = 1;
+  s.day = 0;
+
+  // (Random, not a lie: the Storyteller leans good once enough good players
+  // are dead. See misinformMode().)
+  for (const x of s.players.filter((x) => !x.human && x !== p && x.alignment === "good")) {
+    if (lean(s) === "good") {
+      break;
+    }
+
+    x.alive = false;
+  }
+
+  assert.equal(lean(s), "good");
+
+  const m = nightInfo(s, p, e.strat);
+
+  assert.equal(m.functioning, false);
+  assert.ok(infoOf("pixie").holds(s, p, m));
+  e.remember(p, m);
+  assert.equal(m.doubtful, undefined);
+  assert.ok(!s.audit.some((x) => x.type === "atheist" && /information is false/.test(x.text)));
 });
 
 test("good NPCs nominate the Storyteller once enough of them believe the Atheist: executed, good wins", () => {

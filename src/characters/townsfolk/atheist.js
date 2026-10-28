@@ -124,7 +124,10 @@ export const atheist = {
     const s = this.s;
     const needed = this.storytellerNeeded();
     const believers = s.players.filter(
-      (x) => x.alive && !x.human && (this.strat.atheistBelief(s, x)?.belief ?? 0) >= ATHEIST_VOTE_BELIEF,
+      (x) =>
+        x.alive &&
+        !x.human &&
+        (this.strat.atheistBelief(s, x)?.belief ?? 0) >= ATHEIST_VOTE_BELIEF,
     );
 
     if (believers.length < needed * ATHEIST_UNSAFE_SHARE) {

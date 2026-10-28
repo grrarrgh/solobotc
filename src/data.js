@@ -859,11 +859,11 @@ export const EVIL_ATHEIST_TRAP_BELIEVERS = 1;
 // Nothing, once anyone has shown they're evil (a failed Legion execution,
 // an outed Psychopath or Goblin, a Damsel guess). An evil NPC says what
 // they'd believe by the same sum (see strategy atheistView()). (At these
-// values, in 600 games of each kind on Chef's Deluxe, played two ways,
-// good won 37–44% of Atheist games, the Atheist lived to Day 3 in 80–86%
-// of them, and an evil Atheist claim got the Storyteller executed in
-// 11–12% of the games with one, where good won 36–44%, against 32–43% of
-// games with no Atheist claim.)
+// values, in 1,000 seeded games on Chef's Deluxe, good won 49.6% of the
+// 127 Atheist games, and the Atheist was alive at the start of Day 3 in
+// 75.6% of them; an evil Atheist claim got the Storyteller executed in
+// 11.3% of the 71 games with one, where good won 35.2%, against 43.4% of
+// the other 801 games.)
 export const ATHEIST_BELIEF = {
   base: 0.2,
   doubt: 0.12,
