@@ -45,7 +45,6 @@ import { info as noble } from "./townsfolk/noble.js";
 import { info as oracle } from "./townsfolk/oracle.js";
 import { info as pixie } from "./townsfolk/pixie.js";
 import { info as professor } from "./townsfolk/professor.js";
-import { info as puzzlemaster } from "./townsfolk/puzzlemaster.js";
 import { info as ravenkeeper } from "./townsfolk/ravenkeeper.js";
 import { info as sage } from "./townsfolk/sage.js";
 import { info as sailor } from "./townsfolk/sailor.js";
@@ -61,6 +60,7 @@ import { info as butler } from "./outsider/butler.js";
 import { info as lunatic } from "./outsider/lunatic.js";
 import { info as moonchild } from "./outsider/moonchild.js";
 import { info as ogre } from "./outsider/ogre.js";
+import { info as puzzlemaster } from "./outsider/puzzlemaster.js";
 
 import { info as eviltwin } from "./minion/eviltwin.js";
 

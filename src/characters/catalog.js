@@ -493,14 +493,6 @@ export const CHARACTERS = {
     // (A guess: NPCs wait for the Damsel to tell them; see strategy huntsman().)
     oncePerGame: { AFTER_DAY: 3, START_CHANCE: 0.3, STEP_CHANCE: 0.2 }, // night
   },
-  puzzlemaster: {
-    name: "Puzzlemaster",
-    team: "townsfolk",
-    ability:
-      "1 player is drunk, even if you die. If you guess (once) who it is, learn the Demon player, but guess wrong & get false info.",
-    kill: "med", // could learn the Demon
-    oncePerGame: { AFTER_DAY: 2, START_CHANCE: 0.4, STEP_CHANCE: 0.2 }, // day
-  },
   cannibal: {
     name: "Cannibal",
     team: "townsfolk",
@@ -626,6 +618,14 @@ export const CHARACTERS = {
     kill: "low",
     neverHiddenAs: true,
     notForHuman: true,
+  },
+  puzzlemaster: {
+    name: "Puzzlemaster",
+    team: "outsider",
+    ability:
+      "1 player is drunk, even if you die. If you guess (once) who it is, learn the Demon player, but guess wrong & get false info.",
+    kill: "med", // could learn the Demon
+    oncePerGame: { AFTER_DAY: 2, START_CHANCE: 0.4, STEP_CHANCE: 0.2 }, // day
   },
   politician: {
     name: "Politician",

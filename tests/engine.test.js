@@ -4,6 +4,7 @@ import fs from "node:fs";
 
 import {
   COUNTS,
+  OUTSIDER_MODIFIERS,
   PLAYER_COLOURS,
   DEMON_KILL_PRIORITY,
   FORBIDDEN_HUMAN,
@@ -100,7 +101,7 @@ import { jugglerInfo } from "../src/characters/townsfolk/juggler.js";
 import { ravenInfo } from "../src/characters/townsfolk/ravenkeeper.js";
 import { artistInfo } from "../src/characters/townsfolk/artist.js";
 import { savantInfo, savantBluff } from "../src/characters/townsfolk/savant.js";
-import { puzzleInfo } from "../src/characters/townsfolk/puzzlemaster.js";
+import { puzzleInfo } from "../src/characters/outsider/puzzlemaster.js";
 import { sageInfo } from "../src/characters/townsfolk/sage.js";
 import { evilTwinInfo } from "../src/characters/minion/eviltwin.js";
 import {
@@ -13550,6 +13551,34 @@ test("Chef's Deluxe loads from the script list: 24 characters, with the Atheist"
   assert.ok(PHILOSOPHER_AVOID.includes("atheist"));
 });
 
+test("the Puzzlemaster is an Outsider: dealt in an Outsider's place, never shown to the Drunk or Marionette", () => {
+  assert.equal(team("puzzlemaster"), "outsider");
+
+  let dealt = 0;
+
+  for (const raw of [ec, cd]) {
+    for (let seed = 0; seed < 200; seed++) {
+      // (10 seats: no Outsiders, unless a Baron, Godfather, the Sentinel...
+      // brings some.)
+      const s = createState(raw, 10, `pm-outsider-${seed}`);
+      const pm = s.players.some((x) => x.role === "puzzlemaster");
+
+      dealt += pm;
+      assert.ok(!s.players.some((x) => x.role !== "puzzlemaster" && x.shown === "puzzlemaster"));
+
+      if (pm && !s.atheist) {
+        assert.ok(
+          [...s.players.map((x) => x.role), ...s.script.fabled].some(
+            (id) => OUTSIDER_MODIFIERS[id] !== undefined,
+          ),
+        );
+      }
+    }
+  }
+
+  assert.ok(dealt > 0);
+});
+
 test("about 1 Chef's Deluxe game in 8 is an Atheist game: nobody evil, and a pretend Demon and Minions", () => {
   let atheists = 0;
   let liars = 0;
@@ -13863,12 +13892,17 @@ function doubtAll(s, n) {
   s.storytellerVotes = [];
 }
 
-test("evil NPCs count your hand on the Storyteller once it's counted: free to change until then, and it stands after", () => {
-  const s = createState(cd, 10, "ex-1");
-  const e = new Engine(s);
+// (A game with an evil team of 3 who know each other: no Legion, no Poppy
+// Grower. And a good NPC seated before them all, counted first as the
+// clock hand comes round.)
+const evilTeamDeal = (s) =>
+  !s.atheist &&
+  !s.players.some((x) => ["legion", "poppygrower"].includes(x.role)) &&
+  s.players.findIndex((x) => !x.human && x.alignment === "good") <
+    s.players.findIndex((x) => x.alignment === "evil");
 
-  e.start();
-  settle(e);
+test("evil NPCs count your hand on the Storyteller once it's counted: free to change until then, and it stands after", () => {
+  const { s, e } = cdDay(10, "ex", evilTeamDeal);
 
   // 7 alive (4 votes needed): the evil team is 3.
   for (const x of s.players.filter((x) => !x.human && x.alignment === "good").slice(0, 3)) {
@@ -13911,11 +13945,7 @@ test("evil NPCs count your hand on the Storyteller once it's counted: free to ch
 });
 
 test("evil NPCs hold back on the Storyteller with your hand counted down: raising it after changes nothing", () => {
-  const s = createState(cd, 10, "ex-1");
-  const e = new Engine(s);
-
-  e.start();
-  settle(e);
+  const { s, e } = cdDay(10, "ex", evilTeamDeal);
 
   for (const x of s.players.filter((x) => !x.human && x.alignment === "good").slice(0, 3)) {
     x.alive = false;
@@ -13943,11 +13973,7 @@ test("evil NPCs hold back on the Storyteller with your hand counted down: raisin
 });
 
 test("evil NPCs vote on the Storyteller once a good vote counted lets them carry it, your hand down", () => {
-  const s = createState(cd, 10, "ex-1");
-  const e = new Engine(s);
-
-  e.start();
-  settle(e);
+  const { s, e } = cdDay(10, "ex", evilTeamDeal);
 
   // (The last 3 good NPCs: the first is counted before the evil team.)
   for (const x of s.players.filter((x) => !x.human && x.alignment === "good").slice(-3)) {
@@ -14558,8 +14584,10 @@ test("evil NPCs answer your own Atheist claim as a good NPC would, and vote on i
   );
   const p = s.players.find((x) => !x.human && x.alignment === "good" && sideOf(x) === "good");
 
-  // (You tell them both you're the Atheist.)
+  // (You tell them both you're the Atheist. Neither is mad: a Cerenovus
+  // may have made them so.)
   mate.mad = null;
+  p.mad = null;
   s.talked.push(mate.id, p.id);
   e.tell(mate.id, "atheist");
   e.tell(p.id, "atheist");
@@ -14589,10 +14617,13 @@ test("evil NPCs answer your own Atheist claim as a good NPC would, and vote on i
 test("social proof: a player who pushed for the Storyteller counts as respected only if something else speaks for them", () => {
   const { s, e } = cdDay(10, "social-push", npcAtheist);
   const atheist = s.players.find((x) => x.role === "atheist");
-  const [p, x] = s.players.filter((z) => !z.human && z !== atheist && !z.cover && z.alive);
+  const [p, ...others] = s.players.filter((z) => !z.human && z !== atheist && !z.cover && z.alive);
 
   claimAtheist(e, atheist);
   doubtAll(s, 0);
+
+  // (x: nobody else has anything for or against them.)
+  const x = others.find((z) => e.strat.evidence(s, p, z, false).score === 0);
 
   // x voted for it, with nothing else for or against them: not respected.
   s.storytellerVotes = [
@@ -14772,9 +14803,16 @@ test("through nightInfo(), a poisoned Pixie's random answer that's true isn't ma
 
   assert.equal(m.functioning, false);
   assert.ok(infoOf("pixie").holds(s, p, m));
+
+  // (Only what's logged from here: your own information may have been
+  // false.)
+  const from = s.audit.length;
+
   e.remember(p, m);
   assert.equal(m.doubtful, undefined);
-  assert.ok(!s.audit.some((x) => x.type === "atheist" && /information is false/.test(x.text)));
+  assert.ok(
+    !s.audit.slice(from).some((x) => x.type === "atheist" && /information is false/.test(x.text)),
+  );
 });
 
 test("good NPCs nominate the Storyteller once enough of them believe the Atheist: executed, good wins", () => {

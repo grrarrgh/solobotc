@@ -2,6 +2,11 @@
 
 Newest first. Each release is headed with its version, the one log.txt's `Version:` line shows (from `version` in `src/setup.js` and `package.json`): a release with new features or improvements raises the middle number (2.5.0), one with only bug fixes or superficial changes the last (2.5.1). An entry without one shipped as the version below it; versions before 2.4.0 weren't recorded here.
 
+## v2.14.1 — Bug Fixes: The Puzzlemaster Is an Outsider
+
+- Bug fix: the Puzzlemaster is an Outsider, as in the real game, not a Townsfolk. On Extension Cord and Chef's Deluxe it now takes one of the Outsiders' places (so it isn't dealt at 7, 10 or 13 seats unless a Baron, Godfather, Fang Gu, Balloonist or the Sentinel brings Outsiders), is never shown to a Drunk or Marionette, and counts as an Outsider wherever the game counts them: the Godfather's first night, a Savant's statements, the Fang Gu's jump, the Pit-Hag's choice, the Demon's bluffs and what NPCs reason about the Outsiders. Its module moved to `src/characters/outsider/puzzlemaster.js`.
+- Every other character was checked against its official type: all were right.
+
 ## v2.14.0 — New Features, Improvements, Bug Fixes & Superficial Changes: Ask for a Nomination of the Storyteller, Your Storyteller Nominations Hold Sway, Legion Votes With Your Hand, No Stalled Final 3, No Atheist for a Philosopher, Fairer Character Notes, and the Storyteller's Vote Counted Clockwise
 
 - New feature: you can ask for a nomination of the Storyteller, alive or dead, as you can for a player. Select the Sun, then press Request nomination: a living NPC who hasn't nominated today makes it, and your sway holds, as below. Before, only a living player could nominate it, and nobody could do it for you (`requestStoryteller()`, `storytellerRequestBarred()` in `characters/townsfolk/atheist.js`).

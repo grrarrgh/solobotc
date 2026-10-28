@@ -31,7 +31,6 @@ import { pixie } from "./townsfolk/pixie.js";
 import { poppygrower } from "./townsfolk/poppygrower.js";
 import { atheist } from "./townsfolk/atheist.js";
 import { professor } from "./townsfolk/professor.js";
-import { puzzlemaster } from "./townsfolk/puzzlemaster.js";
 import { ravenkeeper } from "./townsfolk/ravenkeeper.js";
 import { sage } from "./townsfolk/sage.js";
 import { sailor } from "./townsfolk/sailor.js";
@@ -49,6 +48,7 @@ import { klutz } from "./outsider/klutz.js";
 import { lunatic } from "./outsider/lunatic.js";
 import { moonchild } from "./outsider/moonchild.js";
 import { ogre } from "./outsider/ogre.js";
+import { puzzlemaster } from "./outsider/puzzlemaster.js";
 import { politician } from "./outsider/politician.js";
 import { sweetheart } from "./outsider/sweetheart.js";
 import { tinker } from "./outsider/tinker.js";
@@ -108,7 +108,6 @@ export const characters = {
   poppygrower,
   atheist,
   professor,
-  puzzlemaster,
   ravenkeeper,
   sage,
   sailor,
@@ -125,6 +124,7 @@ export const characters = {
   lunatic,
   moonchild,
   ogre,
+  puzzlemaster,
   politician,
   sweetheart,
   tinker,

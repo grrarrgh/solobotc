@@ -130,7 +130,7 @@ export const puzzlemaster = {
 };
 
 // The Puzzlemaster's guess (once): `t` is who they think their puzzle made
-// drunk (s.puzzle; see characters/townsfolk/puzzlemaster.js). A right guess
+// drunk (s.puzzle; see characters/outsider/puzzlemaster.js). A right guess
 // (working: `mode` "truth") learns the Demon; a wrong one, or a misinformed
 // Puzzlemaster's, a player who isn't the Demon (the evil team's scapegoat
 // first); "random", anyone. Never the human as the "Demon".
