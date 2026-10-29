@@ -786,18 +786,24 @@ export function createState(
   }
 
   // In an Atheist game, the players the Storyteller pretends are the Demon
-  // and Minions (p.pretend; never you, nor the Atheist).
+  // and Minions (p.pretend; never you, nor the Atheist): Townsfolk, dealt in
+  // their places, so the Outsiders are the ones the pretend team made. (Any
+  // other player only when no Townsfolk is left: a few seats with a pretend
+  // Baron, say.)
   const pretenders = players.filter((x) => !x.human && x.role !== "atheist");
-  const pretendDemon = atheistGame ? pick(pretenders, r) : null;
+  const pretender = () => {
+    const free = pretenders.filter((x) => !x.pretend);
+    const townsfolk = free.filter((x) => team(x.role) === "townsfolk");
+
+    return pick(townsfolk.length ? townsfolk : free, r);
+  };
+  const pretendDemon = atheistGame ? pretender() : null;
 
   if (pretendDemon) {
     pretendDemon.pretend = pretend[0];
 
     for (const id of pretend.slice(1)) {
-      const p = pick(
-        pretenders.filter((x) => !x.pretend),
-        r,
-      );
+      const p = pretender();
 
       if (p) {
         p.pretend = id;
@@ -824,7 +830,7 @@ export function createState(
     : null;
 
   const s = {
-    version: "2.15.0",
+    version: "2.15.1",
     script,
     seats,
     seed: String(seed),

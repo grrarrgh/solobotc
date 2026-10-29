@@ -52,7 +52,9 @@ export const puzzlemaster = {
 
     this.audit(
       "puzzlemaster",
-      `The Puzzlemaster's puzzle: ${t.label} (${name(t.role)}) is drunk for the rest of the game.`,
+      `The Puzzlemaster's puzzle: ${t.label} (${name(t.role)}) ${
+        t.human ? "are" : "is"
+      } drunk for the rest of the game.`,
       { actorId: pm.id, targetId: t.id },
     );
   },

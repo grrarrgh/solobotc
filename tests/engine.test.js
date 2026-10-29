@@ -94,6 +94,7 @@ import {
   registeredRole,
   atheistBreakChance,
   falseNoise,
+  neigh,
 } from "../src/storyteller.js";
 import { fishermanInfo } from "../src/characters/townsfolk/fisherman.js";
 import { alchemistAbility } from "../src/characters/townsfolk/alchemist.js";
@@ -3599,6 +3600,8 @@ test("the Juggler's guesses aren't always the claimed characters", () => {
   const juggler = s.players[1];
 
   s.r = () => 0.99; // never within JUGGLER_CLAIM_GUESS_CHANCE
+  // (Everyone's claim known: an unheard one could be guessed by chance.)
+  s.players.forEach((x) => (x.claimKnown = true));
 
   for (const g of strat.juggle(s, juggler)) {
     assert.notEqual(g.role, s.players.find((x) => x.id === g.id).claim);
@@ -14308,7 +14311,7 @@ test("a good NPC who doesn't believe the Atheist holds nominating or voting for 
   assert.doesNotMatch(e.strat.evidence(s, p, x).reasons.join("; "), /Storyteller/);
 });
 
-test("with the Atheist on the script, false information is marked, and each good NPC who hears it may notice it, once", () => {
+test("with the Atheist on the script, false information is marked, and each NPC who hears it may notice it, once", () => {
   const { s, e } = cdDay(10, "doubts", npcAtheist);
   const [p, q, r] = s.players.filter((x) => !x.human && x.role !== "atheist");
 
@@ -14317,7 +14320,7 @@ test("with the Atheist on the script, false information is marked, and each good
   assert.equal(infoMode(s, p), "lie");
   assert.match(
     s.audit.at(-1).text,
-    /information is false \(the Storyteller broke the rules\): any good NPC who hears it may notice/,
+    /information is false \(the Storyteller broke the rules\): any NPC who hears it may notice/,
   );
 
   const m = { night: s.night, role: p.role, text: "Chef number: 9.", targets: [], functioning: false };
@@ -15021,4 +15024,155 @@ test("a Drunk or Marionette shown the Pixie is never mad about one of the Demon'
   }
 
   assert.ok(seen > 0, `${seen}`);
+});
+
+// With Legion, every Legion is the Demon: the Savant's false statement about
+// "the Demon" is never true by another Legion.
+test("with Legion, the Savant is told exactly one true statement", () => {
+  const s = base("savant-legion");
+  const [, a, savant, b] = s.players;
+
+  role(a, "legion", "evil");
+  role(savant, "savant", "good");
+  role(b, "legion", "evil");
+  role(s.players[4], "chef", "good");
+
+  const by = (label) => s.players.find((x) => x.label === label);
+  const legion = (x) => x.role === "legion";
+  const truth = (said) => {
+    let m;
+
+    if ((m = said.match(/^The Demon is (not )?a neighbour of (.+)\.$/))) {
+      const near = neigh(s, by(m[2])).some(legion);
+
+      return m[1] ? !near : near;
+    }
+
+    if ((m = said.match(/^The Demon is one of (.+)\.$/))) {
+      return m[1].split(/, | and /).map(by).some(legion);
+    }
+
+    if ((m = said.match(/^There (?:is|are) (\d+) Outsiders? in play\.$/))) {
+      return Number(m[1]) === s.players.filter((x) => team(x.role) === "outsider").length;
+    }
+
+    if ((m = said.match(/^(.+) is (good|evil)\.$/))) {
+      return by(m[1]).alignment === m[2];
+    }
+
+    m = said.match(/^(.+) is the (.+)\.$/);
+
+    return name(by(m[1]).role) === m[2];
+  };
+  let neighbours = 0;
+
+  for (let i = 0; i < 200; i++) {
+    s.r = rng(`savant-legion-${i}`);
+    savant.lastPicks = null;
+
+    const said = [...savantInfo(s, savant, "truth").text.matchAll(/"(.+)"/g)].map((m) => m[1]);
+
+    neighbours += said.filter((x) => /neighbour/.test(x)).length;
+    assert.equal(said.filter(truth).length, 1, said.join(" / "));
+  }
+
+  assert.ok(neighbours > 0);
+});
+
+test("an Atheist game's pretend Demon and Minions are Townsfolk", () => {
+  let games = 0;
+
+  for (let seed = 0; seed < 400; seed++) {
+    const s = createState(cd, 8 + (seed % 8), `atheist-pretend-${seed}`);
+
+    if (s.atheist) {
+      games++;
+
+      for (const p of s.players.filter((x) => x.pretend)) {
+        assert.equal(team(p.role), "townsfolk", `${seed}: ${p.label} ${p.role}`);
+      }
+    }
+  }
+
+  assert.ok(games > 10, `${games}`);
+});
+
+test("a mad Mutant who dies and reveals it says so when the madness ends, not their old claim", () => {
+  const s = base("mad-reveal", sv);
+  const e = new Engine(s);
+  const p = s.players[2];
+
+  role(p, "mutant", "good");
+  p.claim = "savant";
+  p.mad = { role: "savant", day: s.day, previous: "chef" };
+  p.toldMe = {};
+  s.players[1].toldMe = { [p.id]: { claim: "savant", day: s.day } };
+
+  e.kill(p, "execution");
+
+  assert.equal(p.claim, "mutant");
+  assert.equal(p.mad.previous, "mutant");
+  assert.equal(e.strat.answer(s, p).claim, "mutant");
+
+  s.night = 2;
+  e.cerenovusLasting();
+
+  assert.equal(p.claim, "mutant");
+  assert.equal(p.wasMad, "savant");
+});
+
+test("a Cannibal who ate a Philosopher chooses a character, and the human is woken to", () => {
+  const s = base("cannibal-philosopher");
+  const e = new Engine(s);
+  const c = s.players[2];
+
+  role(c, "cannibal", "good");
+  c.gained = "philosopher";
+  c.gainedNight = 2;
+  s.phase = "night";
+  s.night = 2;
+  e.philosophers();
+
+  assert.notEqual(c.gained, "philosopher");
+  assert.ok(!c.cannibal && !c.drunkFrom);
+  assert.match(
+    s.audit.findLast((x) => x.type === "philosopher").text,
+    /\(Cannibal, using the Philosopher ability they ate\) gained the/,
+  );
+
+  // Poisoned (they ate an evil player): it doesn't work, but they aren't
+  // made drunk for good.
+  c.gained = "philosopher";
+  c.poisoned = true;
+  e.philosophers();
+
+  assert.notEqual(c.gained, "philosopher");
+  assert.ok(!c.drunkFrom);
+  assert.match(s.audit.findLast((x) => x.type === "philosopher").text, /but it doesn't work/);
+
+  const h = s.players[0];
+
+  role(h, "cannibal", "good");
+  h.gained = "philosopher";
+
+  assert.equal(e.wakeHuman()?.role, "philosopher");
+});
+
+test("a good Juggler never guesses the Demon's bluffs, nor their own character", () => {
+  const s = base("juggle-bluffs");
+  const strat = new SimpleStrategy();
+  const juggler = s.players[1];
+
+  role(juggler, "juggler", "good");
+  s.demonBluffs = ["soldier", "monk", "ravenkeeper"];
+  // (Everyone's claim known, so they guess from what they've heard.)
+  s.players.forEach((x) => (x.claimKnown = true));
+
+  for (let i = 0; i < 50; i++) {
+    s.r = rng(`juggle-bluffs-${i}`);
+
+    for (const g of strat.juggle(s, juggler)) {
+      assert.ok(!s.demonBluffs.includes(g.role) && g.role !== "juggler", g.role);
+    }
+  }
 });

@@ -525,8 +525,9 @@ export const atheistBreakChance = (s) =>
 // coming out false (a rule break, or a drunk or poisoned player's lie; not
 // random information, which may happen to be true: see falseNoise()):
 // s.falseNext marks it, and engine remember() puts the mark on the memory
-// (m.doubtful), so each good NPC who hears it may notice it doesn't add up
-// (see strategy atheistHeard(), ATHEIST_DOUBT_NOTICE). Logged. (Nothing on
+// (m.doubtful), so each NPC who hears it (evil ones too: see strategy
+// atheistHeard(), ATHEIST_DOUBT_NOTICE) may notice it doesn't add up.
+// Logged. (Nothing on
 // any other script.)
 function doubted(s, p, mode, broken) {
   if (!s.script.ids.includes("atheist")) {
@@ -581,7 +582,7 @@ function markFalse(s, p, broken) {
     type: "atheist",
     text: `${Whose(p)} information is false (${
       broken ? "the Storyteller broke the rules" : "drunk or poisoned"
-    }): any good NPC who hears it may notice it doesn't add up (at ${Math.round(ATHEIST_DOUBT_NOTICE * 100)}% each).`,
+    }): any NPC who hears it may notice it doesn't add up (at ${Math.round(ATHEIST_DOUBT_NOTICE * 100)}% each).`,
     data: { playerId: p.id },
     names: logNames(s),
   });

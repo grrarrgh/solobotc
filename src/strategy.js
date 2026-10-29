@@ -282,7 +282,9 @@ export function abilityUsed(p, role) {
     artist: p.artistUsed,
     seamstress: p.seamUsed,
     juggler: p.juggled,
-    philosopher: p.gained ?? gainedRole(p),
+    // (A Cannibal who ate a Philosopher hasn't used it until they choose:
+    // see philosopher.js philosophers().)
+    philosopher: hasCannibal(p) ? p.gained !== "philosopher" : (p.gained ?? gainedRole(p)),
     virgin: p.virginUsed,
     fool: p.foolUsed,
     courtier: p.courtierUsed,
@@ -1711,7 +1713,9 @@ export class SimpleStrategy {
   // bluffed info.
   //
   // An NPC the Cerenovus made "mad" claims that character instead, with
-  // made-up information to match (and an opinion drawn from it).
+  // made-up information to match (and an opinion drawn from it): while it's
+  // still their claim (not once a dead Pixie or Mutant reveals what they
+  // were: see engine learnsDeath()).
   //
   // The Evil Twin answers exactly as their good twin does (see twinCopy()).
   //
@@ -1721,7 +1725,8 @@ export class SimpleStrategy {
   // baiting, with an opinion drawn from it; hiding, with no reasons for
   // their opinion (which could give them away).
   answer(s, p, to = null) {
-    const mad = p.mad?.day === s.day ? p.mad : this.pixieMad(s, p);
+    const mad =
+      p.mad?.day === s.day && p.claim === p.mad.role ? p.mad : this.pixieMad(s, p);
     const copy = !mad && this.twinCopy(s, p);
     const hidden = !mad && !copy && p.cover && !this.truthTo(s, p, to);
 
@@ -3962,16 +3967,18 @@ export class SimpleStrategy {
   // The Juggler guesses up to 5 living players' characters, players whose
   // claim they know first (see claimTo()): what they claim (at
   // JUGGLER_CLAIM_GUESS_CHANCE), otherwise another plausible character: one
-  // they've heard somebody claim, or one of the evil team's bluffs. (A
+  // they've heard somebody claim, or, for an evil Juggler bluffer, one of
+  // the evil team's bluffs (a good Juggler never knows those); with none,
+  // any on the script. Never the Juggler they claim to be themself. (A
   // Juggler bluffer guesses the same way.)
   juggle(s, p) {
     const plausible = [
       ...new Set([
         ...s.players.map((y) => claimHeard(y, p)).filter(Boolean),
         // (Not ones they were never told: see poppygrower.js.)
-        ...(p.poppyBlind ? [] : (s.demonBluffs ?? [])),
+        ...(p.alignment !== "evil" || p.poppyBlind ? [] : (s.demonBluffs ?? [])),
       ]),
-    ];
+    ].filter((id) => id !== p.claim);
     const others = this.others(s, p);
     const known = others.filter((x) => claimHeard(x, p));
     const picks = [
@@ -3995,8 +4002,10 @@ export class SimpleStrategy {
                 plausible.filter((id) => id !== claim),
                 s.r,
               ) ??
-              claim ??
-              pick(s.script.ids, s.r)),
+              pick(
+                s.script.ids.filter((id) => id !== claim && id !== p.claim),
+                s.r,
+              )),
       };
     });
   }

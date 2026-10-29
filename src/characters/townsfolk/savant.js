@@ -98,9 +98,12 @@ function savantFacts(s, p) {
     s.r,
   );
   const c = pick(others, s.r);
-  const d = s.players.find((x) => x.alive && registersDemon(x));
+  // (With Legion, every Legion is the Demon: a statement about "the Demon"
+  // goes by all of them, so its false version is never true by another.)
+  const demons = s.players.filter((x) => x.alive && registersDemon(x));
+  const d = demons[0];
   const x = pick(
-    others.filter((y) => y.alive && y !== d),
+    others.filter((y) => y.alive && !demons.includes(y)),
     s.r,
   );
   const outsiders = s.players.filter(
@@ -108,13 +111,13 @@ function savantFacts(s, p) {
   ).length;
   const thereAre = (n) =>
     `There ${n === 1 ? "is 1 Outsider" : `are ${n} Outsiders`} in play.`;
-  const near = Boolean(d && x && neigh(s, x).includes(d));
+  const near = Boolean(x && neigh(s, x).some((y) => demons.includes(y)));
   const evilish = (y) => leanRegistersEvil(s, y);
   const leaning = lean(s);
   const living = others.filter((y) => y.alive);
   const three = d && [d, ...sample(living.filter((y) => y !== d), 2, s.r)];
   const notThree = sample(
-    living.filter((y) => y !== d),
+    living.filter((y) => !demons.includes(y)),
     3,
     s.r,
   );

@@ -18,7 +18,7 @@ import { bySeat, pick, sample, shuffle, whose } from "../../util.js";
 // it before, as a player who becomes a new character does (see the wiki's
 // Abilities page). (Not the Juggler's: by their jinx the Cannibal learns
 // the eaten Juggler's count instead; see jugglerNight().)
-const ONCE_USED = {
+export const ONCE_USED = {
   slayer: "shotUsed",
   artist: "artistUsed",
   seamstress: "seamUsed",

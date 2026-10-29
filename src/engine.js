@@ -25,6 +25,7 @@ import {
   works,
   isDemon,
   isDrunk,
+  hasCannibal,
   misinformedBy,
   noticeNoise,
   who,
@@ -410,8 +411,9 @@ export class Engine {
       // (Not a character whose ability needs what you never face: see
       // FORBIDDEN_HUMAN. Nor one jinxed with a character in play: see
       // jinxBarred(). Nor the Atheist, whose ability is about setup, so a
-      // Philosopher would gain nothing: see PHILOSOPHER_AVOID.)
-      philosopher: !h.gained && {
+      // Philosopher would gain nothing: see PHILOSOPHER_AVOID.) (A Cannibal
+      // who ate a Philosopher has it too: see philosophers().)
+      philosopher: (!h.gained || hasCannibal(h)) && {
         count: 0,
         characters: s.script.ids.filter(
           (id) =>
@@ -1171,6 +1173,13 @@ export class Engine {
 
       p.claim = reveal;
       p.cover = null;
+
+      // (Made mad today, they go back to this claim when it ends, and say
+      // so to anyone who heard the madness: see explainMadness().)
+      if (p.mad?.previous) {
+        p.mad.previous = reveal;
+      }
+
       this.claimPublicly(p);
       this.s.publicLog.push(`Day ${this.s.day} — ${p.label} reveals they were ${what}.`);
       this.audit(reveal, `${p.label} revealed they were ${what}.`, {
