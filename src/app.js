@@ -2182,8 +2182,7 @@ const BUG_REPORT_URL_MAX = 7500;
 
 // A new GitHub issue filled in for this game: titled with its script and
 // seed, and its version and log up to the end of Setup (the whole log is too
-// long for a link, so it's downloaded on the same click: see the
-// "report-bug" click below).
+// long for a link: the menu's "Download log.txt" gives the rest).
 function bugReportUrl() {
   // (The header, then Setup: the first section.)
   let lines = e.debugLog().split("\n\n=== ").slice(0, 2).join("\n\n=== ").split("\n");
@@ -2199,7 +2198,7 @@ function bugReportUrl() {
         "**What did you expect?**",
         "",
         "",
-        "**Log** (to the end of Setup; please drag in the log.txt that just downloaded for the rest):",
+        "**Log** (to the end of Setup; for the rest, attach the menu's Download log.txt):",
         "```text",
         ...lines,
         ...(cut ? ["… (cut short)"] : []),
@@ -2294,14 +2293,6 @@ $("random-seed").onclick = randomSeed;
 $("count-info").onclick = toggleCountInfo;
 
 $("size-settings").onclick = () => toggleSizeSettings();
-// Reporting a bug mid-game also downloads its whole log.txt, to drag into
-// the issue (see bugReportUrl()).
-$("report-bug").onclick = () => {
-  if (Boolean(e) && $("setup").hidden) {
-    updateLogLink();
-    $("menu-log").click();
-  }
-};
 $("size-down").onclick = () => setSquareSize(squareSize - TOWN_SQUARE_SIZE_STEP);
 $("size-up").onclick = () => setSquareSize(squareSize + TOWN_SQUARE_SIZE_STEP);
 setSquareSize(squareSize);

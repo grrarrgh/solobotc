@@ -4,7 +4,7 @@ Newest first. Each release is headed with its version, the one log.txt's `Versio
 
 ## v2.16.0 — New Features: A Bug Report Filled In for You
 
-- New feature: during a game, the menu's Report a bug opens a GitHub issue that's already filled in. Its title is the script and seed ("Trouble Brewing — seed 12345"). Its description has the version, spaces for what happened and what you expected, and log.txt up to the end of Setup (the deal, bluffs and red herring). The same click downloads the whole log.txt to drag into the issue, since a link can't carry it all (GitHub turns away links much over 8 KB) and a website can't attach a file to the issue for you. Outside a game, it opens a blank issue as before. (`bugReportUrl()` in `src/app.js`.)
+- New feature: during a game, the menu's Report a bug opens a GitHub issue that's already filled in. Its title is the script and seed ("Trouble Brewing — seed 12345"). Its description has the version, spaces for what happened and what you expected, and log.txt up to the end of Setup (the deal, bluffs and red herring). The whole log is too long for a link (GitHub turns away links much over 8 KB), so for the rest, attach the menu's Download log.txt. Outside a game, it opens a blank issue as before. (`bugReportUrl()` in `src/app.js`.)
 
 ## v2.15.1 — Bug Fixes & Superficial Changes: A Savant Told One Truth With Legion, Townsfolk Pretend Evil, a Dead Pixie's Reveal Kept, a Cannibal Who Eats a Philosopher Chooses, and a Juggler Who Doesn't Know the Demon's Bluffs
 
