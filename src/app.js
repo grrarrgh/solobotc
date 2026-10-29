@@ -2167,12 +2167,55 @@ function toggleSizeSettings(open = $("size-popup").hidden) {
   $("menu-seed").hidden = !game;
   $("menu-version").hidden = !game;
   $("menu-log").hidden = !game;
+  $("report-bug").href = game ? bugReportUrl() : BUG_REPORT_URL;
 
   if (open && game) {
     $("menu-seed").textContent = `Seed: ${s.seed}`;
     $("menu-version").textContent = `Version: ${s.version}`;
     updateLogLink();
   }
+}
+
+const BUG_REPORT_URL = "https://github.com/grrarrgh/solobotc/issues/new";
+// GitHub turns away a new-issue link much longer than 8 KB.
+const BUG_REPORT_URL_MAX = 7500;
+
+// A new GitHub issue filled in for this game: titled with its script and
+// seed, and its version and log up to the end of Setup (the whole log is too
+// long for a link, so it's downloaded on the same click: see the
+// "report-bug" click below).
+function bugReportUrl() {
+  // (The header, then Setup: the first section.)
+  let lines = e.debugLog().split("\n\n=== ").slice(0, 2).join("\n\n=== ").split("\n");
+  const url = (cut) =>
+    `${BUG_REPORT_URL}?${new URLSearchParams({
+      title: `${s.script.meta.name} — seed ${s.seed}`,
+      body: [
+        `Version: ${s.version}`,
+        "",
+        "**What happened?**",
+        "",
+        "",
+        "**What did you expect?**",
+        "",
+        "",
+        "**Log** (to the end of Setup; please drag in the log.txt that just downloaded for the rest):",
+        "```text",
+        ...lines,
+        ...(cut ? ["… (cut short)"] : []),
+        "```",
+      ].join("\n"),
+    })}`;
+
+  // (A Setup too long for the link is cut short, from the end.)
+  let cut = false;
+
+  while (url(cut).length > BUG_REPORT_URL_MAX && lines.length > 1) {
+    lines = lines.slice(0, -1);
+    cut = true;
+  }
+
+  return url(cut);
 }
 
 function closeCountInfo() {
@@ -2251,6 +2294,14 @@ $("random-seed").onclick = randomSeed;
 $("count-info").onclick = toggleCountInfo;
 
 $("size-settings").onclick = () => toggleSizeSettings();
+// Reporting a bug mid-game also downloads its whole log.txt, to drag into
+// the issue (see bugReportUrl()).
+$("report-bug").onclick = () => {
+  if (Boolean(e) && $("setup").hidden) {
+    updateLogLink();
+    $("menu-log").click();
+  }
+};
 $("size-down").onclick = () => setSquareSize(squareSize - TOWN_SQUARE_SIZE_STEP);
 $("size-up").onclick = () => setSquareSize(squareSize + TOWN_SQUARE_SIZE_STEP);
 setSquareSize(squareSize);

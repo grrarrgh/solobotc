@@ -323,6 +323,15 @@ test("the menu shows the game's seed and version under Report a bug, and its log
   assert.match(app, /\$\("menu-log"\)\.href = link\.href;/);
 });
 
+test("Report a bug mid-game fills in the issue (script and seed, version, log to the end of Setup) and downloads log.txt", () => {
+  assert.match(app, /\$\("report-bug"\)\.href = game \? bugReportUrl\(\) : BUG_REPORT_URL;/);
+  assert.match(app, /title: `\$\{s\.script\.meta\.name\} — seed \$\{s\.seed\}`/);
+  assert.match(app, /`Version: \$\{s\.version\}`/);
+  assert.match(app, /e\.debugLog\(\)\.split\("\\n\\n=== "\)\.slice\(0, 2\)/);
+  assert.match(app, /url\(cut\)\.length > BUG_REPORT_URL_MAX/);
+  assert.match(app, /\$\("report-bug"\)\.onclick = \(\) => \{\s*if \(Boolean\(e\) && \$\("setup"\)\.hidden\) \{\s*updateLogLink\(\);\s*\$\("menu-log"\)\.click\(\);/);
+});
+
 test("you can nominate yourself, or ask to be nominated, by selecting your own seat once nominations are open", () => {
   assert.doesNotMatch(html, /id="nominate-self"|id="request-self"/);
   assert.doesNotMatch(app, /nominate-self|request-self/);

@@ -2,6 +2,10 @@
 
 Newest first. Each release is headed with its version, the one log.txt's `Version:` line shows (from `version` in `src/setup.js` and `package.json`): a release with new features or improvements raises the middle number (2.5.0), one with only bug fixes or superficial changes the last (2.5.1). An entry without one shipped as the version below it; versions before 2.4.0 weren't recorded here.
 
+## v2.16.0 — New Features: A Bug Report Filled In for You
+
+- New feature: during a game, the menu's Report a bug opens a GitHub issue that's already filled in. Its title is the script and seed ("Trouble Brewing — seed 12345"). Its description has the version, spaces for what happened and what you expected, and log.txt up to the end of Setup (the deal, bluffs and red herring). The same click downloads the whole log.txt to drag into the issue, since a link can't carry it all (GitHub turns away links much over 8 KB) and a website can't attach a file to the issue for you. Outside a game, it opens a blank issue as before. (`bugReportUrl()` in `src/app.js`.)
+
 ## v2.15.1 — Bug Fixes & Superficial Changes: A Savant Told One Truth With Legion, Townsfolk Pretend Evil, a Dead Pixie's Reveal Kept, a Cannibal Who Eats a Philosopher Chooses, and a Juggler Who Doesn't Know the Demon's Bluffs
 
 - Bug fix: with Legion, the Savant was sometimes told two true statements. "The Demon is (not) a neighbour of X" and "The Demon is one of A, B and C" were worked out from the first living Legion only, so the false one could be true by another Legion (say, "The Demon is a neighbour of Player 4" beside a different Legion). They now go by every Legion, and "X" is never a Legion. (`savantFacts()` in `src/characters/townsfolk/savant.js`.)
