@@ -743,9 +743,13 @@ function renderNightChoice() {
     ].join("");
   }
 
+  // The Engineer chooses the Demon (one) or the Minions (as many as the
+  // setup sheet has), from the script's: a select for each.
+  renderEngineerChoice(p, key);
+
   const excluded = (p.exclude ?? []).map((id) => e.player(id).label);
 
-  $("night-picks").innerHTML = p.characters
+  $("night-picks").innerHTML = p.characters || p.engineer
     ? ""
     : nightPicks.length
       ? colourPlayers(`Selected: ${labels}`)
@@ -757,10 +761,63 @@ function renderNightChoice() {
           }`,
         );
 
-  $("night-select").disabled = p.characters
-    ? !characters.value
-    : nightPicks.length !== p.count;
+  $("night-select").disabled = p.engineer
+    ? !engineerPick()
+    : p.characters
+      ? !characters.value
+      : nightPicks.length !== p.count;
   $("night-skip").hidden = !p.optional;
+}
+
+// The Engineer's choice (see renderNightChoice()): Demon or Minions, then a
+// select for the Demon, or one for each Minion (`p.engineer.count`), from
+// the characters offered. Rebuilt when the night, or Demon or Minions,
+// changes.
+function renderEngineerChoice(p, key) {
+  const box = $("engineer-choice");
+  const kind = $("engineer-kind");
+
+  box.hidden = !p.engineer;
+
+  if (!p.engineer) {
+    return;
+  }
+
+  if (box.dataset.key !== key) {
+    box.dataset.key = key;
+    kind.value = "";
+  }
+
+  const want = `${key}:${kind.value}`;
+
+  if ($("engineer-roles").dataset.key === want) {
+    return;
+  }
+
+  $("engineer-roles").dataset.key = want;
+
+  const ids = kind.value === "demon" ? p.engineer.demons : kind.value === "minions" ? p.engineer.minions : [];
+  const n = kind.value === "demon" ? 1 : kind.value === "minions" ? p.engineer.count : 0;
+
+  $("engineer-roles").innerHTML = Array.from(
+    { length: n },
+    (_, i) =>
+      `<select class="engineer-role" aria-label="${kind.value === "demon" ? "Demon" : `Minion ${i + 1}`}">${[
+        `<option value="">Choose ${kind.value === "demon" ? "a Demon" : "a Minion"}</option>`,
+        ...ids.map((id) => `<option value="${id}">${esc(name(id))}</option>`),
+      ].join("")}</select>`,
+  ).join(" ");
+}
+
+// The Engineer's choice as it stands ({ kind, roles }), or null until it's
+// complete: every select chosen, all different.
+function engineerPick() {
+  const kind = $("engineer-kind").value;
+  const roles = [...document.querySelectorAll("#engineer-roles .engineer-role")].map((x) => x.value);
+
+  return kind && roles.length && roles.every(Boolean) && new Set(roles).size === roles.length
+    ? { kind, roles }
+    : null;
 }
 
 // ── Script sheet ─────────────────────────────────────────────
@@ -2570,9 +2627,20 @@ $("gossip-say").onclick = () => {
 };
 
 $("night-character").onchange = () => render();
+$("engineer-kind").onchange = () => render();
+$("engineer-roles").onchange = () => render();
 
 $("night-select").onclick = () => {
   try {
+    // (The Engineer: see renderEngineerChoice().)
+    const pick = s.pending?.engineer && engineerPick();
+
+    if (pick) {
+      e.engineerChoose(pick.kind, pick.roles);
+      render();
+      return;
+    }
+
     e.choose(
       nightPicks,
       s.pending?.characters ? $("night-character").value : null,
@@ -2724,9 +2792,14 @@ async function selfPlayStep() {
     } else if (s.roshambo) {
       e.roshambo(bot.roshambo());
     } else if (s.pending) {
-      const { ids, character } = bot.nightChoice();
+      const { ids, character, engineer } = bot.nightChoice();
 
-      e.choose(ids, character);
+      if (engineer) {
+        e.engineerChoose(engineer.kind, engineer.roles);
+      } else {
+        e.choose(ids, character);
+      }
+
       nightPicks = [];
     } else {
       const a = bot.next();

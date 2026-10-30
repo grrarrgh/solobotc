@@ -379,6 +379,15 @@
           <h3 id="night-prompt"></h3>
           <p id="night-picks"></p>
           <select id="night-character" aria-label="Character" hidden></select>
+          <!-- The Engineer: the Demon, or the Minions, then which. -->
+          <span id="engineer-choice" hidden>
+            <select id="engineer-kind" aria-label="Demon or Minions">
+              <option value="">Demon or Minions?</option>
+              <option value="demon">The Demon</option>
+              <option value="minions">The Minions</option>
+            </select>
+            <span id="engineer-roles"></span>
+          </span>
           <button id="night-select" type="button">Select</button>
           <button id="night-skip" type="button" hidden>Not tonight</button>
           <p id="night-error"></p>

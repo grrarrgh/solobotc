@@ -491,3 +491,18 @@ test("as the Golem, the Nominate button says you nominate once; after that, pres
   // (The engine's message shows where any refused nomination's does.)
   assert.match(app, /result = fn\(\);\s*\} catch \(err\) \{\s*\$\("answer"\)\.textContent = err\.message;/);
 });
+
+test("as the Engineer, you choose the Demon or the Minions, then which, from selects; or Not tonight", () => {
+  assert.match(html, /<span id="engineer-choice" hidden>/);
+  assert.match(html, /<select id="engineer-kind" aria-label="Demon or Minions">/);
+  assert.match(html, /<option value="demon">The Demon<\/option>/);
+  assert.match(html, /<option value="minions">The Minions<\/option>/);
+  assert.match(html, /<span id="engineer-roles"><\/span>/);
+  assert.match(app, /function renderEngineerChoice\(p, key\) \{/);
+  assert.match(app, /const n = kind\.value === "demon" \? 1 : kind\.value === "minions" \? p\.engineer\.count : 0;/);
+  assert.match(app, /function engineerPick\(\) \{/);
+  assert.match(app, /new Set\(roles\)\.size === roles\.length/);
+  assert.match(app, /\$\("night-select"\)\.disabled = p\.engineer\s*\? !engineerPick\(\)/);
+  assert.match(app, /e\.engineerChoose\(pick\.kind, pick\.roles\);/);
+  assert.match(app, /e\.engineerChoose\(engineer\.kind, engineer\.roles\);/);
+});

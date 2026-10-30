@@ -15,6 +15,7 @@ import { bountyhunter } from "./townsfolk/bountyhunter.js";
 import { cannibal } from "./townsfolk/cannibal.js";
 import { chambermaid } from "./townsfolk/chambermaid.js";
 import { courtier } from "./townsfolk/courtier.js";
+import { engineer } from "./townsfolk/engineer.js";
 import { exorcist } from "./townsfolk/exorcist.js";
 import { farmer } from "./townsfolk/farmer.js";
 import { fisherman } from "./townsfolk/fisherman.js";
@@ -96,6 +97,7 @@ export const characters = {
   cannibal,
   chambermaid,
   courtier,
+  engineer,
   exorcist,
   farmer,
   fisherman,

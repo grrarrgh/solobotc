@@ -63,6 +63,7 @@ import { abilities, living } from "./abilities.js";
 import { characters } from "./characters/index.js";
 import { STORYTELLER } from "./characters/townsfolk/atheist.js";
 import { golemHinge } from "./characters/outsider/golem.js";
+import { engineerOptions } from "./characters/townsfolk/engineer.js";
 import {
   backStory,
   keepStory,
@@ -125,6 +126,7 @@ const KEY_MOMENT_TYPES = new Set([
   "mezepheles",
   "legion",
   "farmer",
+  "engineer",
   "golem",
   "spiritofivory",
   "game_over",
@@ -433,6 +435,16 @@ export class Engine {
         prompt:
           "Once per game: choose a good character to gain its ability (if a player has it, they are drunk), or skip tonight.",
       },
+      // (Legion in play: no ability, their jinx. See engineer.js.)
+      engineer: !h.engineerUsed &&
+        !s.players.some((x) => x.role === "legion") && {
+          count: 0,
+          engineer: engineerOptions(s),
+          optional: true,
+          prompt: `Once per game: choose which Demon is in play, or which ${engineerOptions(s).count} Minion${
+            engineerOptions(s).count === 1 ? "" : "s"
+          }, or not tonight.`,
+        },
       courtier: !h.courtierUsed && {
         count: 0,
         characters: s.script.ids,
@@ -558,6 +570,8 @@ export class Engine {
     const s = this.s;
     // (The Poppy Grower died today: the evil team learns each other now.)
     this.poppyWakes();
+    // (Before the Poisoner: a Minion the Engineer makes acts tonight.)
+    this.engineers();
     this.poisoners();
     this.alchemists();
     this.lleechHosts();
@@ -695,6 +709,7 @@ export class Engine {
       this.madRavenkeeperClean();
       this.ravenkeeperReveal();
       this.shareInfo();
+      this.npcEngineers();
       this.npcShots();
       this.npcArtists();
       this.moonchildDawn();

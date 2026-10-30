@@ -144,6 +144,16 @@ export class SelfPlay {
       return { ids: [], character: null };
     }
 
+    // (As the Engineer: the Demon or the Minions, at random. See
+    // settle().)
+    if (c.engineer) {
+      const kind = c.engineer.minions.length && (!c.engineer.demons.length || this.r() < 0.5) ? "minions" : "demon";
+      const roles = kind === "demon" ? [pick(c.engineer.demons, this.r)] : sample(c.engineer.minions, c.engineer.count, this.r);
+
+      this.note(`chose to make the ${kind === "demon" ? "Demon" : "Minions"} ${roles.map(name).join(" and ")} (Engineer).`);
+      return { ids: [], character: null, engineer: { kind, roles } };
+    }
+
     if (c.characters) {
       const character = pick(c.characters, this.r);
 
@@ -326,9 +336,14 @@ export class SelfPlay {
     }
 
     if (s.pending) {
-      const { ids, character } = this.nightChoice();
+      const { ids, character, engineer } = this.nightChoice();
 
-      e.choose(ids, character);
+      if (engineer) {
+        e.engineerChoose(engineer.kind, engineer.roles);
+      } else {
+        e.choose(ids, character);
+      }
+
       return true;
     }
 

@@ -54,6 +54,11 @@ import {
   NPC_NOMINATE_EVIDENCE,
   GOLEM_READY_ALIVE,
   GOLEM_LATEST_ALIVE,
+  ENGINEER_NIGHT_CHANCE,
+  ENGINEER_LAST_NIGHT,
+  ENGINEER_MINION_SHARE,
+  ENGINEER_THREAT,
+  ENGINEER_THREAT_DEFAULT,
   PIXIE_DOUBLE_CLAIM_FACTOR,
   TRUST_EVIDENCE,
   HIDDEN_OUTSIDERS,
@@ -117,8 +122,9 @@ import {
   shownBefore,
   unknownMate,
   hasCannibal,
+  demonTo,
 } from "./storyteller.js";
-import { byId, pick, sample, claimTo, claimHeard, tick } from "./util.js";
+import { byId, pick, sample, shuffle, claimTo, claimHeard, tick } from "./util.js";
 import { logNames } from "./log.js";
 import {
   AMNESIAC_ABILITIES,
@@ -131,6 +137,7 @@ import { PAIR_TEAM } from "./characters/pairinfo.js";
 import { bluffTonight, backStory, bluffState, gainedRole } from "./bluff.js";
 import { STORYTELLER } from "./characters/townsfolk/atheist.js";
 import { golemHinge } from "./characters/outsider/golem.js";
+import { engineerOptions } from "./characters/townsfolk/engineer.js";
 
 export { claimTo, claimHeard, tick };
 
@@ -294,6 +301,7 @@ export function abilityUsed(p, role) {
     professor: p.professorUsed,
     assassin: p.assassinUsed,
     golem: p.golemUsed,
+    engineer: p.engineerUsed,
   };
 
   return role in used ? Boolean(used[role]) : null;
@@ -4067,6 +4075,76 @@ export class SimpleStrategy {
     );
 
     return pick(info.length ? info : inPlay, s.r);
+  }
+
+  // Whether an Engineer (or someone claiming to be one) uses it tonight: at
+  // ENGINEER_NIGHT_CHANCE, and on Night ENGINEER_LAST_NIGHT or later, surely.
+  engineerTonight(s) {
+    return s.night >= ENGINEER_LAST_NIGHT || s.r() < ENGINEER_NIGHT_CHANCE;
+  }
+
+  // An NPC Engineer's choice tonight, or null if not tonight (see
+  // engineerTonight(), engineerPick()).
+  engineer(s, p) {
+    return this.engineerTonight(s) ? this.engineerPick(s, p) : null;
+  }
+
+  // The Engineer's choice that helps p's side most ({ kind, roles, why }):
+  // not knowing what's in play, the Demon or Minions least threatening to
+  // good, whichever gains good more over the script's typical ones (see
+  // ENGINEER_THREAT); for evil, the most threatening. Null with nothing to
+  // choose. (Ties at random.)
+  engineerPick(s, p) {
+    const { demons, minions, count } = engineerOptions(s, true);
+    const evil = sideOf(p) === "evil";
+    const threat = (id) => ENGINEER_THREAT[id] ?? ENGINEER_THREAT_DEFAULT;
+    const rank = (ids) =>
+      shuffle(ids, s.r).sort((a, b) => (evil ? threat(b) - threat(a) : threat(a) - threat(b)));
+    const mean = (ids) => ids.reduce((n, id) => n + threat(id), 0) / ids.length;
+    const demon = rank(demons)[0];
+    const mins = rank(minions).slice(0, count);
+    const gainDemon = demon ? Math.abs(mean(demons) - threat(demon)) : -1;
+    const gainMinions = mins.length
+      ? Math.abs(mean(minions) - mean(mins)) * mins.length * ENGINEER_MINION_SHARE
+      : -1;
+
+    if (!demon && !mins.length) {
+      return null;
+    }
+
+    const round = (x) => Math.round(x * 100) / 100;
+    const why = `${evil ? "for evil" : "for good"}: the Demon option gains ${round(gainDemon)}, the Minions ${round(gainMinions)}`;
+
+    return demon && gainDemon >= gainMinions
+      ? { kind: "demon", roles: [demon], why }
+      : { kind: "minions", roles: mins, why };
+  }
+
+  // What an evil player claiming the Engineer says they made, to mislead:
+  // the Demon a Demon on the script that isn't the one in play (as far as
+  // they know), so the town reads the Demon's kills wrong; with no other,
+  // the Minions ones that aren't in play, so the town thinks the real ones
+  // are gone.
+  engineerBluff(s, p) {
+    const { demons, minions, count } = engineerOptions(s, true);
+    const real = demonTo(s, p)?.role;
+    const others = demons.filter((id) => id !== real);
+
+    if (others.length && real) {
+      return { kind: "demon", roles: [pick(others, s.r)] };
+    }
+
+    const absent = minions.filter((id) => !s.players.some((x) => x.role === id));
+    const roles = [
+      ...sample(absent, count, s.r),
+      ...sample(
+        minions.filter((id) => !absent.includes(id)),
+        Math.max(0, count - absent.length),
+        s.r,
+      ),
+    ];
+
+    return roles.length ? { kind: "minions", roles } : null;
   }
 
   // The Juggler guesses up to 5 living players' characters, players whose

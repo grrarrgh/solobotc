@@ -946,6 +946,55 @@ export const STORYTELLER_NOMINATED_EVIDENCE = 0.5;
 export const STORYTELLER_VOTED_EVIDENCE = 0.25;
 
 
+// The Engineer (characters/townsfolk/engineer.js). An NPC Engineer uses it
+// at ENGINEER_NIGHT_CHANCE each night, and on Night ENGINEER_LAST_NIGHT at
+// the latest. They don't know which Demon or Minions are in play, so they
+// count on a typical one: the Demon option makes the Demon the least
+// threatening Demon on the script (ENGINEER_THREAT, from 1, mild, to 5),
+// gaining the script's average threat less its own; the Minion option makes
+// the Minions the least threatening ones, gaining their average shortfall
+// times how many, weighed at ENGINEER_MINION_SHARE (each Minion matters
+// less than the Demon). Whichever gains more (the Demon on a tie). (An
+// evil Engineer, turned by the Mezepheles, does the opposite.)
+export const ENGINEER_NIGHT_CHANCE = 0.4;
+export const ENGINEER_LAST_NIGHT = 3;
+export const ENGINEER_MINION_SHARE = 0.5;
+// The threat to good of each Demon and Minion, made mid-game (so the
+// Baron's Outsiders, from setup, count for nothing). Any not listed:
+// ENGINEER_THREAT_DEFAULT.
+export const ENGINEER_THREAT = {
+  imp: 3,
+  zombuul: 3,
+  pukka: 3,
+  fanggu: 4,
+  vigormortis: 4,
+  nodashii: 4,
+  shabaloth: 4,
+  po: 4,
+  lleech: 4,
+  vortox: 5,
+  baron: 1,
+  cerenovus: 2,
+  goblin: 2,
+  boomdandy: 2,
+  spy: 3,
+  scarletwoman: 3,
+  godfather: 3,
+  devilsadvocate: 3,
+  mastermind: 3,
+  witch: 3,
+  pithag: 3,
+  fearmonger: 3,
+  wizard: 3,
+  poisoner: 4,
+  assassin: 4,
+  psychopath: 4,
+  widow: 4,
+  mezepheles: 5, // a good player would still turn evil
+};
+export const ENGINEER_THREAT_DEFAULT = 3;
+
+
 // ── Timings and display ──────────────────────────────────────
 
 // Vote animation: how long (in ms) the clock hands point at the nominator

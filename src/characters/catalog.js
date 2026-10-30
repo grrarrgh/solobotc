@@ -433,6 +433,14 @@ export const CHARACTERS = {
     neverBluffed: true,
     neverHiddenAs: true,
   },
+  engineer: {
+    name: "Engineer",
+    team: "townsfolk",
+    ability: "Once per game, at night, choose which Minions or which Demon is in play.",
+    note: "Choosing Minions, you choose as many as the setup sheet has for the seats; any already in play stay, and the rest change (never the Marionette or the Evil Twin). Lil' Monsta, the Marionette and the Evil Twin can't be chosen, nor the Leviathan after Day 5. Changed players keep their seats and team; the Engineer isn't told if nothing changed. The Demon's [Outsider] changes only apply at setup. With nobody evil (the Atheist), nothing changes. An NPC Engineer uses it by Night 3, and says at dawn what they made.",
+    kill: "med",
+    neverHides: true, // says what they made, at dawn
+  },
   farmer: {
     name: "Farmer",
     team: "townsfolk",
@@ -923,4 +931,4 @@ export const TRAVELLERS = [
 
 // Characters the game doesn't run yet: a script's are left out (as
 // Travellers are) until they're added.
-export const NOT_YET = ["engineer", "alhadikhia"];
+export const NOT_YET = ["alhadikhia"];

@@ -36,6 +36,10 @@ export const FIRST_NIGHT = [
   ],
   ["sailor", "Chooses a living player: either the Sailor or they are drunk until dusk."],
   ["marionette", "The Demon learns which neighbour is the Marionette."],
+  [
+    "engineer",
+    "Once per game, may choose which Minions or which Demon is in play: those evil players become them, and learn it.",
+  ],
   ["poisoner", "Chooses a player: poisoned tonight and tomorrow."],
   ["alchemist", "With the Poisoner's or Fearmonger's ability, uses it."],
   ["lleech", "Chooses an alive player (never you): they're poisoned, and the Lleech dies if and only if they're dead."],
@@ -98,6 +102,10 @@ export const OTHER_NIGHTS = [
     "If the Poppy Grower died today or tonight, the Minions and Demon learn who each other are (and the Demon its bluffs).",
   ],
   ["sailor", "Chooses a living player: either the Sailor or they are drunk until dusk."],
+  [
+    "engineer",
+    "Once per game, may choose which Minions or which Demon is in play: those evil players become them, and learn it.",
+  ],
   ["poisoner", "Chooses a player: poisoned tonight and tomorrow."],
   ["alchemist", "With the Poisoner's or Fearmonger's ability, uses it."],
   ["courtier", "Once per game, may choose a character: drunk for 3 nights and 3 days."],

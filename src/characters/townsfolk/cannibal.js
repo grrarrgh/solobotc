@@ -29,6 +29,8 @@ export const ONCE_USED = {
   puzzlemaster: "puzzleUsed",
   virgin: "virginUsed",
   fool: "foolUsed",
+  engineer: "engineerUsed",
+  golem: "golemUsed",
 };
 
 // The Cannibal, mixed into Engine.prototype (see characters/index.js),

@@ -62,6 +62,7 @@ import {
 import { Engine, canPick } from "../src/engine.js";
 import { SelfPlay } from "../src/selfplay.js";
 import { STORYTELLER } from "../src/characters/townsfolk/atheist.js";
+import { engineerOptions } from "../src/characters/townsfolk/engineer.js";
 import {
   SimpleStrategy,
   speak,
@@ -15199,7 +15200,7 @@ function oasisNight(seed, night = 2) {
   return { s, p: s.players, strat, e: new Engine(s, strat) };
 }
 
-test("The Midnight Oasis loads from the script list: 21 characters (the Engineer and Al-Hadikhia left out for now), the Sentinel and the Spirit of Ivory kept apart", () => {
+test("The Midnight Oasis loads from the script list: 22 characters (the Al-Hadikhia left out for now), the Sentinel and the Spirit of Ivory kept apart", () => {
   const files = JSON.parse(fs.readFileSync(new URL("../scripts/index.json", import.meta.url)));
 
   assert.ok(files.includes("The Midnight Oasis_3_8_0.json"));
@@ -15207,15 +15208,20 @@ test("The Midnight Oasis loads from the script list: 21 characters (the Engineer
   const s = createState(mo, 12, "mo");
 
   assert.equal(s.script.meta.name, "The Midnight Oasis");
-  assert.equal(s.script.ids.length, 21);
+  assert.equal(s.script.ids.length, 22);
   assert.deepEqual(s.script.fabled, ["sentinel", "spiritofivory"]);
   assert.equal(team("farmer"), "townsfolk");
   assert.equal(team("golem"), "outsider");
   assert.equal(team("spiritofivory"), "fabled");
   assert.ok(NOTES.farmer && NOTES.golem && NOTES.spiritofivory);
   assert.ok(OTHER_NIGHTS.some(([id]) => id === "farmer"));
+  assert.equal(team("engineer"), "townsfolk");
+  assert.ok(NOTES.engineer);
+  assert.ok(s.script.ids.includes("engineer"));
+  assert.ok(FIRST_NIGHT.some(([id]) => id === "engineer"));
+  assert.ok(OTHER_NIGHTS.some(([id]) => id === "engineer"));
 
-  for (const id of ["engineer", "alhadikhia"]) {
+  for (const id of ["alhadikhia"]) {
     assert.ok(!s.script.ids.includes(id), id);
     assert.ok(!ROLES[id], id);
   }
@@ -15525,14 +15531,14 @@ test("with the Spirit of Ivory on the script, nobody turns evil once there's 1 e
   assert.equal(t.players[2].alignment, "evil");
 });
 
-test("whole games play out on The Midnight Oasis, with Farmers made, and never the Engineer or Al-Hadikhia", () => {
+test("whole games play out on The Midnight Oasis, with Farmers made, and never the Al-Hadikhia", () => {
   let farmers = 0;
 
   for (let g = 0; g < 40; g++) {
     const { s, e } = playOut(mo, 8 + (g % 8), `mo-${g}`);
 
     assert.ok([null, "good", "evil"].includes(s.winner));
-    assert.ok(!s.players.some((x) => ["engineer", "alhadikhia"].includes(x.role)));
+    assert.ok(!s.players.some((x) => x.role === "alhadikhia"));
     assert.ok(e.debugLog().length > 0);
     farmers += s.audit.filter((x) => x.type === "farmer").length;
   }
@@ -15742,4 +15748,280 @@ test("no Philosopher ever chooses the Farmer: not an NPC, not you, and nobody fa
     assert.notEqual(strat.philosopher(s, p[2]), "farmer");
     assert.notEqual(strat.philosopherBluff(s, p[3]), "farmer");
   }
+});
+
+// ── The Engineer ─────────────────────────────────────────────────
+
+// oasisNight() with an NPC Engineer (the Chef), a Poisoner (the Baron's
+// seat) and a Vigormortis (the Imp's), at night `night`.
+function engineerNight(seed, night = 2) {
+  const o = oasisNight(seed, night);
+  const [, chef, , baron, imp] = o.p;
+
+  role(chef, "engineer", "good");
+  role(baron, "poisoner", "evil");
+  role(imp, "vigormortis", "evil");
+
+  return { ...o, eng: chef, minion: baron, demon: imp };
+}
+
+test("the Engineer makes the Minions: one not chosen becomes a chosen one not in play, and learns it; the Engineer learns only what they chose", () => {
+  const { s, e, eng, minion } = engineerNight("eng-minions");
+
+  e.strat.engineer = () => ({ kind: "minions", roles: ["pithag"] });
+  e.engineers();
+
+  assert.equal(minion.role, "pithag");
+  assert.equal(minion.shown, "pithag");
+  assert.equal(minion.alignment, "evil");
+  assert.equal(minion.gainedNight, 2);
+  assert.equal(eng.engineerUsed, 2);
+  assert.match(
+    s.audit.findLast((x) => x.type === "engineer").text,
+    /made the Minions a Pit-Hag: .* \(Poisoner\) is now the Pit-Hag, and learns it\./,
+  );
+  assert.equal(eng.memories.at(-1).text, "Engineer: made the Minions a Pit-Hag.");
+
+  // Used: not again.
+  e.strat.engineer = () => ({ kind: "minions", roles: ["mezepheles"] });
+  e.engineers();
+  assert.equal(minion.role, "pithag");
+});
+
+test("the Engineer's choice already in play, or a drunk or poisoned Engineer's, or one in an Atheist game, changes nothing; the Engineer isn't told", () => {
+  for (const why of ["in play", "poisoned", "atheist"]) {
+    const { s, e, eng, minion } = engineerNight(`eng-nothing-${why}`);
+
+    e.strat.engineer = () => ({ kind: "minions", roles: [why === "in play" ? "poisoner" : "pithag"] });
+
+    if (why === "poisoned") {
+      eng.poisoned = true;
+    }
+
+    if (why === "atheist") {
+      s.atheist = { breaks: 0 };
+    }
+
+    e.engineers();
+
+    assert.equal(minion.role, "poisoner");
+    assert.ok(eng.engineerUsed);
+    assert.match(
+      s.audit.findLast((x) => x.type === "engineer").text,
+      { "in play": /already in play, so nothing changes/, poisoned: /drunk or poisoned: nothing changes/, atheist: /nobody is evil/ }[why],
+    );
+    assert.match(eng.memories.at(-1).text, /^Engineer: made the Minions a /);
+  }
+});
+
+test("the Engineer makes the Demon: the Demon player becomes it, keeping their seat and team; a Lleech's host is freed", () => {
+  const { s, e, eng, demon } = engineerNight("eng-demon");
+
+  role(demon, "lleech", "evil");
+  demon.lleechHost = s.players[2].id;
+  e.engineerUses(eng, { kind: "demon", roles: ["vigormortis"] });
+
+  assert.equal(demon.role, "vigormortis");
+  assert.equal(demon.alignment, "evil");
+  assert.equal(demon.lleechHost, null);
+  assert.equal(eng.memories.at(-1).text, "Engineer: made the Demon a Vigormortis.");
+});
+
+test("Legion and the Engineer: with Legion in play, the Engineer learns it and has no ability; making Legion makes every evil player Legion", () => {
+  const { s, e, eng, minion, demon } = engineerNight("eng-legion");
+
+  e.engineerUses(eng, { kind: "demon", roles: ["legion"] });
+  assert.equal(minion.role, "legion");
+  assert.equal(demon.role, "legion");
+  assert.equal(s.players.filter((x) => x.role === "legion").length, 2);
+
+  // Already in play.
+  const o = engineerNight("eng-legion-2");
+
+  role(o.demon, "legion", "evil");
+  o.e.strat.engineer = () => ({ kind: "minions", roles: ["pithag"] });
+  o.e.engineers();
+  assert.equal(o.minion.role, "poisoner");
+  assert.equal(o.eng.memories.at(-1).text, "Engineer: Legion is in play, so you have no ability.");
+  assert.ok(o.eng.engineerUsed);
+
+  // (Nor are you woken for it.)
+  role(o.p[0], "engineer", "good");
+  o.s.night = 3;
+  assert.equal(o.e.wakeHuman(), null);
+});
+
+test("what the Engineer can choose: the script's Demons, or as many of its Minions as the setup sheet has; never Lil' Monsta, the Marionette or the Evil Twin, nor (for an NPC) Legion or the Leviathan", () => {
+  const s = createState(mo, 12, "eng-options");
+  const o = engineerOptions(s);
+
+  assert.deepEqual(o.demons, ["vigormortis"]);
+  assert.deepEqual([...o.minions].sort(), ["mezepheles", "pithag", "poisoner", "psychopath"]);
+  assert.equal(o.count, 2);
+  assert.equal(engineerOptions(createState(mo, 14, "eng-options-14")).count, 3);
+
+  const mixed = createState(
+    ["imp", "legion", "lilmonsta", "leviathan", "marionette", "eviltwin", "poisoner", "engineer", "chef", "empath", "monk", "soldier", "saint", "recluse"],
+    10,
+    "eng-mixed",
+  );
+
+  mixed.night = 2;
+  assert.deepEqual(engineerOptions(mixed).demons.sort(), ["imp", "legion", "leviathan"]);
+  assert.deepEqual(engineerOptions(mixed, true).demons, ["imp"]);
+  assert.deepEqual(engineerOptions(mixed).minions, ["poisoner"]);
+  mixed.night = 6;
+  assert.ok(!engineerOptions(mixed).demons.includes("leviathan"));
+});
+
+test("an NPC Engineer acts by Night 3, on the least threatening choice for good, and says what they made at dawn", () => {
+  let first = 0;
+
+  for (let i = 0; i < 40; i++) {
+    const { s, strat, eng } = engineerNight(`eng-when-${i}`, 1);
+
+    first += strat.engineer(s, eng) ? 1 : 0;
+    s.night = 3;
+    assert.ok(strat.engineer(s, eng));
+  }
+
+  assert.ok(first > 0 && first < 40);
+
+  // On The Midnight Oasis (one Demon), the Minions: the Pit-Hag first.
+  const { s, e, eng } = engineerNight("eng-pick", 3);
+  const c = e.strat.engineerPick(s, eng);
+
+  assert.equal(c.kind, "minions");
+  assert.equal(c.roles[0], "pithag");
+
+  e.engineers();
+  s.phase = "day";
+  s.day = 3;
+  e.npcEngineers();
+  assert.ok(s.publicLog.some((x) => /: "I'm the Engineer: last night I made the Minions a Pit-Hag\."$/.test(x)));
+  assert.ok(eng.claimKnown);
+
+  // (Once.)
+  const n = s.publicLog.length;
+
+  e.npcEngineers();
+  assert.equal(s.publicLog.length, n);
+});
+
+test("anyone claiming the Engineer makes up a choice by Night 3 and says it at dawn: an evil one misleads, a good pretender's is what a real one would choose", () => {
+  // Evil, with one Demon on the script: Minions not in play.
+  const { s, e, p, minion } = engineerNight("eng-bluff", 3);
+
+  minion.claim = "engineer";
+
+  const m = infoOf("engineer").once(s, minion, e.strat, "lie");
+
+  assert.equal(m.engineer.kind, "minions");
+  assert.ok(!m.engineer.roles.includes("poisoner"));
+  assert.equal(m.functioning, false);
+  assert.equal(minion.engineerUsed, 3);
+  assert.equal(infoOf("engineer").once(s, minion, e.strat, "lie"), null);
+
+  // It's said at dawn.
+  e.rememberBluff(minion, m);
+  s.phase = "day";
+  s.day = 3;
+  e.npcEngineers();
+  assert.ok(s.publicLog.some((x) => x.startsWith(`Day 3 — ${minion.label}: "I'm the Engineer: last night I made the Minions a`)));
+
+  // Evil, with another Demon on the script: the Demon, not the real one.
+  const mixed = createState(["imp", "vortox", "poisoner", "engineer", "chef", "empath", "monk", "soldier", "saint"], 8, "eng-bluff-mixed");
+  const d = mixed.players.find((x) => x.role === "imp" || x.role === "vortox");
+
+  mixed.night = 3;
+  for (let i = 0; i < 10; i++) {
+    mixed.r = rng(`eng-bluff-${i}`);
+    d.engineerUsed = 0;
+    const b = infoOf("engineer").once(mixed, d, e.strat, "lie");
+
+    assert.equal(b.engineer.kind, "demon");
+    assert.notEqual(b.engineer.roles[0], d.role);
+  }
+
+  // A good pretender: as a real Engineer would.
+  const good = p[2];
+
+  role(good, "butler", "good");
+  assert.equal(infoOf("engineer").once(s, good, e.strat, "random").engineer.roles[0], "pithag");
+});
+
+test("as the Engineer, you're woken each night until you choose the Demon, or the setup sheet's number of Minions, or not tonight", () => {
+  const { s, e, p } = engineerNight("eng-you", 2);
+  const [you, chef] = p;
+
+  role(you, "engineer", "good");
+  // (The only Engineer.)
+  role(chef, "chef", "good");
+  s.pending = e.wakeHuman();
+
+  assert.equal(s.pending.role, "engineer");
+  assert.deepEqual(s.pending.engineer.demons, ["vigormortis"]);
+  assert.equal(s.pending.engineer.count, 1);
+  assert.match(s.pending.prompt, /which Demon is in play, or which 1 Minion, or not tonight/);
+  assert.throws(() => e.engineerChoose("minions", ["pithag", "poisoner"]), /Choose 1 different Minion/);
+  assert.throws(() => e.engineerChoose("demon", ["imp"]), /Choose a Demon on the script/);
+
+  // Not tonight: woken again.
+  e.choose([]);
+  assert.ok(!you.engineerUsed);
+  s.phase = "night";
+  s.night = 3;
+  s.pending = e.wakeHuman();
+  assert.equal(s.pending?.role, "engineer");
+
+  e.engineerChoose("minions", ["mezepheles"]);
+  assert.equal(you.engineerUsed, 3);
+  assert.equal(p[3].role, "mezepheles");
+  assert.ok(s.privateLog.some((x) => x === "Night 3: Engineer: made the Minions a Mezepheles."));
+
+  s.phase = "night";
+  s.night = 4;
+  assert.equal(e.wakeHuman(), null);
+});
+
+test("whole games play out with the Engineer on mixed scripts, Legion, Lil' Monsta, the Leviathan, the Lleech and all", () => {
+  const demons = ["legion", "lilmonsta", "leviathan", "lleech", "fanggu", "zombuul", "pukka", "po"];
+  let used = 0;
+
+  for (let g = 0; g < 48; g++) {
+    const raw = [
+      { id: "_meta", name: `Engineer ${g}` },
+      "engineer",
+      "chef",
+      "empath",
+      "monk",
+      "soldier",
+      "slayer",
+      "ravenkeeper",
+      "saint",
+      "recluse",
+      "butler",
+      "poisoner",
+      "spy",
+      "baron",
+      "scarletwoman",
+      "widow",
+      "godfather",
+      demons[g % demons.length],
+      demons[(g + 3) % demons.length],
+    ];
+    const s = createState(raw, 8 + (g % 8), `eng-mixed-${g}`);
+    const eng = g % 2 ? s.players[0] : s.players.find((x) => !x.human && x.alignment === "good");
+
+    role(eng, "engineer", "good");
+
+    const e = new Engine(s);
+
+    e.start();
+    new SelfPlay(e).play();
+    assert.ok([null, "good", "evil"].includes(s.winner));
+    used += s.audit.some((x) => x.type === "engineer" && / made the /.test(x.text)) ? 1 : 0;
+  }
+
+  assert.ok(used > 10);
 });

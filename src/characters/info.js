@@ -27,6 +27,7 @@ import { info as clockmaker } from "./townsfolk/clockmaker.js";
 import { info as courtier } from "./townsfolk/courtier.js";
 import { info as dreamer } from "./townsfolk/dreamer.js";
 import { info as empath } from "./townsfolk/empath.js";
+import { info as engineer } from "./townsfolk/engineer.js";
 import { info as exorcist } from "./townsfolk/exorcist.js";
 import { info as fisherman } from "./townsfolk/fisherman.js";
 import { info as flowergirl } from "./townsfolk/flowergirl.js";
@@ -81,6 +82,7 @@ export const infoOf = (role) =>
     courtier,
     dreamer,
     empath,
+    engineer,
     eviltwin,
     exorcist,
     fisherman,
