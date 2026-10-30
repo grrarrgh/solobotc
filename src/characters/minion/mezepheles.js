@@ -11,7 +11,8 @@ import { acts } from "../../abilities.js";
 // MEZEPHELES_NIGHTS), if the Mezepheles is alive, a random living good NPC
 // becomes evil (never you, nor a twin). They learn it, and play for the
 // evil team from then on, knowing who it is (see strategy teammate()).
-// A drunk or poisoned Mezepheles fails, and has used the ability.
+// A drunk or poisoned Mezepheles fails, and has used the ability. (So does
+// one whose player the Spirit of Ivory keeps good.)
 export const mezepheles = {
   mezepheles() {
     const s = this.s;
@@ -37,6 +38,12 @@ export const mezepheles = {
     }
 
     const effective = works(m);
+
+    // (With the Spirit of Ivory on the script, they might stay good: see
+    // characters/fabled/spiritofivory.js.)
+    if (effective && this.ivoryKeepsGood(t, `the Mezepheles, ${m.label}`)) {
+      return;
+    }
 
     if (effective) {
       t.alignment = "evil";

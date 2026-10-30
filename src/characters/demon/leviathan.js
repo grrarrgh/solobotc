@@ -4,6 +4,9 @@ import { living } from "../../abilities.js";
 import { ravenInfo } from "../townsfolk/ravenkeeper.js";
 import { sageInfo } from "../townsfolk/sage.js";
 
+// The characters the Leviathan's night choice is for (their jinxes).
+const JINXED = ["ravenkeeper", "sage", "farmer"];
+
 // 1st, 2nd, 3rd, 4th...
 const nth = (k) => ["1st", "2nd", "3rd"][k - 1] ?? `${k}th`;
 
@@ -22,10 +25,11 @@ const nth = (k) => ["1st", "2nd", "3rd"][k - 1] ?? `${k}th`;
 // Monk or Innkeeper protected last night, or the Exorcist chose, good wins;
 // if the Grandmother's grandchild dies by execution, evil wins; with the
 // Mayor alive and no execution, Day 5's end wins for good instead; with
-// the Ravenkeeper or Sage on the script, each night* it chooses an alive
-// player (never the same twice): a Ravenkeeper or Sage chosen uses their
-// ability without dying; and the Pit-Hag can't make one after Day 5
-// (strategy pithag()).
+// the Ravenkeeper, Sage or Farmer on the script, each night* it chooses an
+// alive player (never the same twice): a Ravenkeeper, Sage or Farmer chosen
+// uses their ability without dying (a Farmer makes another Farmer: see
+// farmer.js); and the Pit-Hag can't make one after Day 5 (strategy
+// pithag()).
 export const leviathan = {
   // The living Leviathan, or null.
   leviathanInPlay() {
@@ -57,17 +61,26 @@ export const leviathan = {
     );
   },
 
-  // The Leviathan's night: no kill. With the Ravenkeeper or Sage on the
-  // script, their jinx: it chooses an alive player (not one chosen before),
-  // and a Ravenkeeper or Sage chosen uses their ability but doesn't die.
+  // The Leviathan's night: no kill. With the Ravenkeeper, Sage or Farmer
+  // on the script, their jinx: it chooses an alive player (not one chosen
+  // before; a good one, with the Farmer: see strategy leviathan()), and a
+  // Ravenkeeper, Sage or Farmer chosen uses their ability but doesn't die.
   leviathanNight(d) {
     const s = this.s;
 
     this.audit("leviathan", `${d.label} (Leviathan) doesn't kill at night.`, { actorId: d.id });
 
-    if (!["ravenkeeper", "sage"].some((id) => s.script.ids.includes(id)) || this.demonSleeps(d)) {
+    if (!JINXED.some((id) => s.script.ids.includes(id)) || this.demonSleeps(d)) {
       return;
     }
+
+    // (How log.txt names the jinx: with the Farmer, those on the script.)
+    const on = JINXED.filter((id) => s.script.ids.includes(id)).map(name);
+    const jinx = !s.script.ids.includes("farmer")
+      ? "Ravenkeeper and Sage jinx"
+      : on.length > 1
+        ? `${on.slice(0, -1).join(", ")} and ${on.at(-1)} jinxes`
+        : "Farmer jinx";
 
     const L = (s.leviathan ??= { good: [], chosen: [], executions: 0 });
     const t = this.strat.leviathan(s, d);
@@ -75,7 +88,7 @@ export const leviathan = {
     if (!t) {
       this.audit(
         "leviathan",
-        `${d.label} (Leviathan) has nobody left to choose (Ravenkeeper and Sage jinx).`,
+        `${d.label} (Leviathan) has nobody left to choose (${jinx}).`,
         { actorId: d.id },
       );
       return;
@@ -86,11 +99,11 @@ export const leviathan = {
 
     const effective = works(d);
     const role = ability(t);
-    const uses = effective && t.alive && ["ravenkeeper", "sage"].includes(role);
+    const uses = effective && t.alive && JINXED.includes(role);
 
     this.audit(
       "leviathan",
-      `${d.label} (Leviathan) chose ${t.label} (${name(t.role)}) (Ravenkeeper and Sage jinx)${
+      `${d.label} (Leviathan) chose ${t.label} (${name(t.role)}) (${jinx})${
         !effective
           ? ", but it failed (the Leviathan is drunk or poisoned)"
           : uses
@@ -106,7 +119,9 @@ export const leviathan = {
 
     this.woke(t);
 
-    if (role === "ravenkeeper") {
+    if (role === "farmer") {
+      this.farmerUses(t, "was chosen by the Leviathan (their jinx), and doesn't die");
+    } else if (role === "ravenkeeper") {
       const pick = this.strat.raven(s, t);
 
       if (pick) {

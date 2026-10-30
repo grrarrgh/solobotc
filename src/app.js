@@ -2019,6 +2019,12 @@ function draw() {
       s.dayNominators.includes(h.id) ||
       wishBarred(s, h) ||
       (t?.human && minionAbility(h) === "goblin");
+  // (As the Golem, you nominate once per game: pressed after that, it says
+  // so. See golem.js.)
+  $("nominate").title =
+    ability(h) !== "golem"
+      ? ""
+      : e.golemBarred(h) ?? "As the Golem, you may only nominate once per game: if your nominee isn't the Demon, they die.";
   $("request-nomination").hidden = false;
   $("request-nomination").disabled = storyteller
     ? Boolean(e.storytellerRequestBarred()) || !!voteAnim || nominating
@@ -2740,7 +2746,11 @@ async function selfPlayStep() {
         e.openNominations();
       } else if (a?.kind === "nominate") {
         await runVote(
-          () => (e.human().alive ? e.nominate(a.id, null) : e.requestNomination(a.id, null)),
+          // (A Golem who has nominated asks instead: see golem.js.)
+          () =>
+            e.human().alive && !e.golemBarred(e.human())
+              ? e.nominate(a.id, null)
+              : e.requestNomination(a.id, null),
           true,
         );
       } else if (a?.kind === "npc") {

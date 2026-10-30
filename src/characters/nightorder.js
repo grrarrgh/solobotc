@@ -139,7 +139,7 @@ export const OTHER_NIGHTS = [
   ["vortox", "Chooses a player: they die."],
   [
     "leviathan",
-    "Doesn't kill. (With the Ravenkeeper or Sage on the script, chooses an alive player not chosen before: a Ravenkeeper or Sage uses their ability, but doesn't die.)",
+    "Doesn't kill. (With the Ravenkeeper, Sage or Farmer on the script, chooses an alive player not chosen before: a Ravenkeeper, Sage or Farmer uses their ability, but doesn't die.)",
   ],
   [
     "vigormortis",
@@ -159,6 +159,7 @@ export const OTHER_NIGHTS = [
   ],
   ["damsel", "A player who became a Minion learns a Damsel is in play."],
   ["amnesiac", "Learns what their secret ability tells them."],
+  ["farmer", "If a Farmer died tonight, a living good player becomes a Farmer, and learns it."],
   ["tinker", "Might die."],
   ["moonchild", "If she died today, the player she chose dies, if good."],
   ["grandmother", "If the Demon killed her grandchild, she dies too."],

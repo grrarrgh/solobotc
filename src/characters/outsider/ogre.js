@@ -35,7 +35,12 @@ export const ogre = {
       // Ogre learns it), and so does the Spy.
       const recluse = t.role === "recluse";
 
-      p.alignment = recluse || t.role === "spy" ? "evil" : t.alignment;
+      const side = recluse || t.role === "spy" ? "evil" : t.alignment;
+
+      // (With the Spirit of Ivory on the script, they might stay good: see
+      // characters/fabled/spiritofivory.js.)
+      p.alignment =
+        side === "evil" && this.ivoryKeepsGood(p, `the Ogre, choosing ${t.label}`) ? p.alignment : side;
 
       if (recluse) {
         p.toldEvil = true;

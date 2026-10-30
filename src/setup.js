@@ -9,6 +9,7 @@ import {
   MINION_BLUFF_CHANCE,
   OUTSIDER_MODIFIERS,
   TRAVELLERS,
+  NOT_YET,
   FABLED,
   HIDDEN_OUTSIDERS,
   FACE_DOWN_OUTSIDERS,
@@ -121,11 +122,11 @@ export function parseScript(raw) {
       name: "Unnamed",
     },
     // Scripts list roles either as "id" strings or as { "id": ... } objects.
-    // (Travellers are left out: see TRAVELLERS. Fabled are kept apart: see
-    // FABLED.)
+    // (Travellers are left out: see TRAVELLERS; so are characters the game
+    // doesn't run yet: see NOT_YET. Fabled are kept apart: see FABLED.)
     all = raw
       .map((x) => (typeof x === "string" ? x : x?.id))
-      .filter((id) => id && id !== "_meta" && !TRAVELLERS.includes(id)),
+      .filter((id) => id && id !== "_meta" && !TRAVELLERS.includes(id) && !NOT_YET.includes(id)),
     ids = all.filter((id) => !FABLED.includes(id)),
     fabled = all.filter((id) => FABLED.includes(id)),
     bad = ids.filter((x) => !ROLES[x]);
@@ -302,14 +303,14 @@ export function createState(
   const outsiderRoles = sample(pool("outsider"), o, r);
 
   // The Huntsman brings the Damsel: she takes an Outsider's place, or (with
-  // no Outsiders) a Townsfolk's.
+  // no Outsiders) a Townsfolk's (never the Atheist's, in an Atheist game).
   if (
     townsfolk.includes("huntsman") &&
     pool("outsider").includes("damsel") &&
     !outsiderRoles.includes("damsel")
   ) {
     const others = townsfolk
-      .map((x, i) => (x === "huntsman" ? -1 : i))
+      .map((x, i) => (["huntsman", "atheist"].includes(x) ? -1 : i))
       .filter((i) => i >= 0);
 
     if (outsiderRoles.length) {
@@ -830,7 +831,7 @@ export function createState(
     : null;
 
   const s = {
-    version: "2.16.0",
+    version: "2.17.0",
     script,
     seats,
     seed: String(seed),

@@ -2573,7 +2573,7 @@ function playOut(raw, seats, seed) {
   const s = createState(raw, seats, seed);
   const e = new Engine(s);
   const expected =
-    /No conversation slots|Already asked|Nobody is able|Already nominated|already nominated today|Savant unavailable|Amnesiac unavailable|Fisherman unavailable|Puzzlemaster unavailable|Nominations are open/;
+    /No conversation slots|Already asked|Nobody is able|Already nominated|already nominated today|Savant unavailable|Amnesiac unavailable|Fisherman unavailable|Puzzlemaster unavailable|Nominations are open|Golem may only nominate/;
   const attempt = (fn) => {
     try {
       fn();
@@ -15175,4 +15175,367 @@ test("a good Juggler never guesses the Demon's bluffs, nor their own character",
       assert.ok(!s.demonBluffs.includes(g.role) && g.role !== "juggler", g.role);
     }
   }
+});
+
+// ── The Midnight Oasis: the Farmer, the Golem, the Spirit of Ivory ───
+
+const mo = JSON.parse(
+  fs.readFileSync(new URL("../scripts/The Midnight Oasis_3_8_0.json", import.meta.url)),
+);
+
+// base() on The Midnight Oasis (the Farmer, the Golem, the Atheist, and
+// the Spirit of Ivory on the script): you (Mayor), Chef, Butler, Baron,
+// Imp, at night `night`.
+function oasisNight(seed, night = 2) {
+  const s = base(seed, mo);
+  const strat = new SimpleStrategy();
+
+  strat.demon = () => null;
+  s.phase = "night";
+  s.night = night;
+  s.day = night - 1;
+  s.players.forEach((x) => (x.dusk = { role: x.role, claim: x.claim }));
+
+  return { s, p: s.players, strat, e: new Engine(s, strat) };
+}
+
+test("The Midnight Oasis loads from the script list: 21 characters (the Engineer and Al-Hadikhia left out for now), the Sentinel and the Spirit of Ivory kept apart", () => {
+  const files = JSON.parse(fs.readFileSync(new URL("../scripts/index.json", import.meta.url)));
+
+  assert.ok(files.includes("The Midnight Oasis_3_8_0.json"));
+
+  const s = createState(mo, 12, "mo");
+
+  assert.equal(s.script.meta.name, "The Midnight Oasis");
+  assert.equal(s.script.ids.length, 21);
+  assert.deepEqual(s.script.fabled, ["sentinel", "spiritofivory"]);
+  assert.equal(team("farmer"), "townsfolk");
+  assert.equal(team("golem"), "outsider");
+  assert.equal(team("spiritofivory"), "fabled");
+  assert.ok(NOTES.farmer && NOTES.golem && NOTES.spiritofivory);
+  assert.ok(OTHER_NIGHTS.some(([id]) => id === "farmer"));
+
+  for (const id of ["engineer", "alhadikhia"]) {
+    assert.ok(!s.script.ids.includes(id), id);
+    assert.ok(!ROLES[id], id);
+  }
+
+  for (const pair of [
+    ["leviathan", "farmer"],
+    ["legion", "engineer"],
+    ["alhadikhia", "mastermind"],
+    ["alhadikhia", "scarletwoman"],
+  ]) {
+    assert.ok(
+      JINXES.some((j) => pair.every((id) => j.ids.includes(id))),
+      pair.join(" / "),
+    );
+  }
+});
+
+test("with the Huntsman and no Outsiders, the Damsel never takes the Atheist's place", () => {
+  let atheist = 0;
+
+  for (let seed = 0; seed < 400; seed++) {
+    const s = createState(mo, 8 + (seed % 8), `mo-atheist-${seed}`);
+
+    if (s.atheist) {
+      atheist++;
+      assert.ok(s.players.some((x) => x.role === "atheist"), `seed ${seed}`);
+    }
+  }
+
+  assert.ok(atheist > 0);
+});
+
+test("a Farmer who dies at night makes a living good player a Farmer, who learns it and loses their old ability", () => {
+  const seen = new Set();
+
+  for (let g = 0; g < 40; g++) {
+    const { s, e, p } = oasisNight(`farmer-${g}`);
+    const [you, chef, butler] = p;
+
+    role(chef, "farmer", "good");
+    e.kill(chef, "demon");
+
+    const made = p.filter((x) => x !== chef && x.role === "farmer");
+
+    assert.equal(made.length, 1);
+    assert.ok([you, butler].includes(made[0]), "a living good player");
+    assert.equal(made[0].shown, "farmer");
+    assert.ok(s.audit.some((x) => x.type === "farmer" && /becomes? a Farmer/.test(x.text)));
+    seen.add(made[0].human ? "you" : "npc");
+
+    if (made[0].human) {
+      assert.match(s.privateLog.at(-1), /You are now the Farmer \(you were the Mayor/);
+    } else {
+      // (An NPC says so at dawn.)
+      assert.equal(made[0].claim, "farmer");
+      s.phase = "day";
+      s.day = 2;
+      e.announceClaims();
+      assert.ok(s.publicLog.some((x) => /says they woke up as the Farmer; they were the Butler\./.test(x)));
+    }
+  }
+
+  assert.deepEqual([...seen].sort(), ["npc", "you"]);
+});
+
+test("a Farmer executed, or drunk or poisoned, makes no Farmer; an evil Farmer still makes a good one", () => {
+  // Executed: a death by day.
+  let { s, e, p } = oasisNight("farmer-executed");
+
+  role(p[1], "farmer", "good");
+  s.phase = "day";
+  e.kill(p[1], "execution");
+  assert.equal(p.filter((x) => x.role === "farmer").length, 1);
+
+  // Poisoned.
+  ({ s, e, p } = oasisNight("farmer-poisoned"));
+  role(p[1], "farmer", "good");
+  p[1].poisoned = true;
+  e.kill(p[1], "demon");
+  assert.equal(p.filter((x) => x.role === "farmer").length, 1);
+  assert.match(s.audit.findLast((x) => x.type === "farmer").text, /drunk or poisoned: nobody becomes a Farmer/);
+
+  // Evil (the Mezepheles turned them): a good player still becomes one.
+  ({ s, e, p } = oasisNight("farmer-evil"));
+  role(p[1], "farmer", "evil");
+  e.kill(p[1], "demon");
+
+  const made = p.find((x) => x !== p[1] && x.role === "farmer");
+
+  assert.equal(made?.alignment, "good");
+});
+
+test("with the Farmer on the script, the Leviathan chooses an alive good player each night: a chosen Farmer makes a Farmer, and lives", () => {
+  const { s, e, p } = oasisNight("leviathan-farmer", 1);
+  const [, chef, butler] = p;
+
+  s.phase = "day";
+  s.day = 1;
+  role(p[4], "leviathan", "evil");
+  role(butler, "farmer", "good");
+  s.leviathan = { good: [], chosen: [chef.id], executions: 0 };
+
+  e.endDay();
+  settle(e);
+
+  assert.ok(butler.alive);
+  assert.equal(butler.role, "farmer");
+  assert.equal(p.filter((x) => x.role === "farmer").length, 2);
+  assert.ok(
+    s.audit.some(
+      (x) =>
+        x.type === "leviathan" &&
+        /\(Farmer jinx\): as the Farmer, they use their ability, but don't die/.test(x.text),
+    ),
+  );
+  assert.ok(s.audit.some((x) => x.type === "farmer" && /was chosen by the Leviathan/.test(x.text)));
+});
+
+test("the Golem's one nomination: a nominee who isn't the Demon dies, and the vote goes on; the Golem can't nominate again", () => {
+  const s = base("golem-kill", mo);
+  const e = new Engine(s);
+  const [, chef, butler, , imp] = s.players;
+
+  role(butler, "golem", "good");
+
+  const result = e.runNomination(butler, chef, false, true);
+
+  assert.ok(!chef.alive);
+  assert.equal(chef.death, "golem");
+  assert.ok(s.publicLog.includes(`${chef.label} died.`));
+  assert.ok(s.voteHistory.some((v) => v.nomineeId === chef.id), "the vote went on");
+  assert.equal(result.nomineeId, chef.id);
+  assert.equal(butler.golemUsed, 1);
+  assert.equal(s.confirmed[butler.id].level, "certain");
+  assert.match(s.audit.findLast((x) => x.type === "golem").text, /not the Demon, so they die/);
+
+  // Never again.
+  s.day = 2;
+  assert.equal(e.strat.nomination(s, butler), null);
+  assert.notEqual(e.strat.nominator(s, imp), butler);
+});
+
+test("the Golem's nominee who is the Demon (or a drunk or poisoned Golem's) lives: nothing is said, and good NPCs vote only with your hand up", () => {
+  for (const hand of [true, false]) {
+    const s = base(`golem-demon-${hand}`, mo);
+    const e = new Engine(s);
+    const [, chef, butler, , imp] = s.players;
+
+    role(butler, "golem", "good");
+    e.runNomination(butler, imp, false, null);
+
+    assert.ok(imp.alive);
+    assert.ok(!s.publicLog.some((x) => /died/.test(x)));
+    assert.match(s.audit.findLast((x) => x.type === "golem").text, /the Demon, so nothing happens/);
+    assert.ok(s.audit.some((x) => x.type === "workings" && /lived through the Golem's nomination/.test(x.text)));
+
+    const records = e.openVote(hand);
+
+    for (const x of [chef, butler]) {
+      assert.equal(records.find((r) => r.playerId === x.id).attempted, hand, `${x.label}, hand ${hand}`);
+    }
+  }
+
+  // Poisoned: the Chef lives.
+  const s = base("golem-poisoned", mo);
+  const e = new Engine(s);
+  const [, chef, butler] = s.players;
+
+  role(butler, "golem", "good");
+  butler.poisoned = true;
+  e.runNomination(butler, chef, false, true);
+  assert.ok(chef.alive);
+  assert.ok(butler.golemUsed);
+  assert.match(s.audit.findLast((x) => x.type === "golem").text, /drunk or poisoned, so nothing happens/);
+});
+
+test("a nominee who lived through the nomination of a player claiming the Golem is evidence against them, not proof", () => {
+  const s = base("golem-evidence", mo);
+  const e = new Engine(s);
+  const [, chef, butler, , imp] = s.players;
+
+  role(butler, "golem", "good");
+  e.claimPublicly(butler);
+  e.runNomination(butler, imp, false, true);
+
+  const why = e.strat.evidence(s, chef, imp);
+
+  assert.ok(why.reasons.some((x) => /who claims the Golem, nominated them, and they didn't die/.test(x)));
+  assert.ok(why.score < EVIDENCE_WEIGHT.confirmedGood * -1);
+});
+
+test("an NPC Golem nominates once 5 are alive, with enough evidence, or at 4 whatever it is; never you, never before; a Golem bluffer never nominates", () => {
+  const s = base("golem-npc", mo);
+  const strat = new SimpleStrategy();
+  const [you, chef, butler, baron, imp] = s.players;
+  let score = 5;
+  let target = imp;
+
+  s.nominated = [];
+  s.dayNominators = [];
+  role(butler, "golem", "good");
+  strat.suspicion = (_, x) => {
+    x.suspicion = { targetId: target.id, day: s.day, score, reasons: ["they seem off"] };
+    return { targetId: target.id, score };
+  };
+
+  // 5 alive, strong evidence: they nominate, saying they're the Golem.
+  const n = strat.nomination(s, butler);
+
+  assert.equal(n?.target, imp);
+  assert.match(n.reasons[0], /I'm the Golem/);
+
+  // 5 alive, weak evidence: not yet. 4 alive: whatever it is.
+  score = 1;
+  assert.equal(strat.nomination(s, butler), null);
+  chef.alive = false;
+  assert.equal(strat.nomination(s, butler)?.target, imp);
+
+  // Never you. Not with 3 alive, nor once they've nominated.
+  target = you;
+  assert.equal(strat.nomination(s, butler), null);
+  target = imp;
+  baron.alive = false;
+  assert.equal(strat.nomination(s, butler), null);
+  baron.alive = true;
+  butler.golemUsed = 1;
+  assert.equal(strat.nomination(s, butler), null);
+
+  // More alive: not yet.
+  const big = createState(mo, 12, "golem-big");
+  const g = big.players.find((x) => !x.human && x.alignment === "good");
+
+  role(g, "golem", "good");
+  assert.equal(strat.nomination(big, g), null);
+
+  // An evil player bluffing the Golem never nominates; nor is a Golem (or a
+  // Golem bluffer) asked to nominate for you.
+  baron.claim = "golem";
+  target = chef;
+  chef.alive = true;
+  assert.equal(strat.nomination(s, baron), null);
+
+  for (let i = 0; i < 20; i++) {
+    s.r = rng(`golem-nominator-${i}`);
+    assert.ok(![butler, baron].includes(strat.nominator(s, imp)));
+  }
+});
+
+test("as the Golem, you nominate once per game; after that, nominating is blocked with a message", () => {
+  const s = base("golem-you", mo);
+  const e = new Engine(s);
+  const [you, chef, butler] = s.players;
+
+  role(you, "golem", "good");
+  e.nominate(chef.id, true);
+  assert.ok(!chef.alive);
+  assert.ok(s.audit.some((x) => x.type === "golem" && /You \(Golem\) used your one nomination/.test(x.text)));
+
+  s.day = 2;
+  s.dayNominators = [];
+  s.nominated = [];
+  assert.throws(() => e.nominate(butler.id, true), /the Golem may only nominate once per game/);
+  assert.match(e.storytellerBarred(you), /the Golem may only nominate once per game/);
+  // (You can still ask for one.)
+  assert.doesNotThrow(() => e.requestNomination(butler.id, true));
+});
+
+test("with the Spirit of Ivory on the script, nobody turns evil once there's 1 extra evil player", () => {
+  // The Mezepheles turns one (the 1st extra)...
+  let { s, e, p } = oasisNight("ivory-mez");
+
+  role(p[3], "mezepheles", "evil");
+  s.mezepheles = { night: 2, used: false };
+  e.mezepheles();
+  assert.equal(p.filter((x) => x.alignment === "evil").length, 3);
+
+  // ...but not a 2nd.
+  ({ s, e, p } = oasisNight("ivory-mez-2"));
+  role(p[3], "mezepheles", "evil");
+  role(p[1], "chef", "evil");
+  s.mezepheles = { night: 2, used: false };
+  e.mezepheles();
+  assert.equal(p.filter((x) => x.alignment === "evil").length, 3);
+  assert.ok(s.mezepheles.used);
+  assert.match(
+    s.audit.findLast((x) => x.type === "spiritofivory").text,
+    /stays good: there are already 3 evil players, 1 more than the 2/,
+  );
+
+  // The Goon an evil player chooses stays good too.
+  ({ s, e, p } = oasisNight("ivory-goon"));
+  role(p[1], "chef", "evil");
+  role(p[2], "goon", "good");
+  e.chose(p[4], p[2]);
+  assert.equal(p[2].alignment, "good");
+  assert.ok(p[4].drunkTonight);
+
+  // Without the Spirit of Ivory, they turn.
+  const t = base("no-ivory");
+  const te = new Engine(t);
+
+  t.phase = "night";
+  t.night = 2;
+  role(t.players[1], "chef", "evil");
+  role(t.players[2], "goon", "good");
+  te.chose(t.players[4], t.players[2]);
+  assert.equal(t.players[2].alignment, "evil");
+});
+
+test("whole games play out on The Midnight Oasis, with Farmers made, and never the Engineer or Al-Hadikhia", () => {
+  let farmers = 0;
+
+  for (let g = 0; g < 40; g++) {
+    const { s, e } = playOut(mo, 8 + (g % 8), `mo-${g}`);
+
+    assert.ok([null, "good", "evil"].includes(s.winner));
+    assert.ok(!s.players.some((x) => ["engineer", "alhadikhia"].includes(x.role)));
+    assert.ok(e.debugLog().length > 0);
+    farmers += s.audit.filter((x) => x.type === "farmer").length;
+  }
+
+  assert.ok(farmers > 0);
 });

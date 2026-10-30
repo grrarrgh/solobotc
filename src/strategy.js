@@ -52,6 +52,8 @@ import {
   COME_CLEAN_ALIVE,
   DISTORT_CHANCE,
   NPC_NOMINATE_EVIDENCE,
+  GOLEM_READY_ALIVE,
+  GOLEM_LATEST_ALIVE,
   PIXIE_DOUBLE_CLAIM_FACTOR,
   TRUST_EVIDENCE,
   HIDDEN_OUTSIDERS,
@@ -128,6 +130,7 @@ import { infoOf } from "./characters/info.js";
 import { PAIR_TEAM } from "./characters/pairinfo.js";
 import { bluffTonight, backStory, bluffState, gainedRole } from "./bluff.js";
 import { STORYTELLER } from "./characters/townsfolk/atheist.js";
+import { golemHinge } from "./characters/outsider/golem.js";
 
 export { claimTo, claimHeard, tick };
 
@@ -290,6 +293,7 @@ export function abilityUsed(p, role) {
     courtier: p.courtierUsed,
     professor: p.professorUsed,
     assassin: p.assassinUsed,
+    golem: p.golemUsed,
   };
 
   return role in used ? Boolean(used[role]) : null;
@@ -847,8 +851,9 @@ export class SimpleStrategy {
         ? PIXIE_DOUBLE_CLAIM_FACTOR
         : 1;
     const maybe = pixie < 1 ? " (a Pixie could explain it)" : "";
-    // (There can be up to 3 Village Idiots: claiming it twice is no clash.)
-    const many = claim === "villageidiot";
+    // (There can be up to 3 Village Idiots: claiming it twice is no clash.
+    // Nor is the Farmer: each one who dies at night makes another.)
+    const many = claim === "villageidiot" || claim === "farmer";
 
     if (claim && !many && !twins(p, t)) {
       if (claim === p.claim && !(p.pixieMad && !p.gained)) {
@@ -962,6 +967,19 @@ export class SimpleStrategy {
 
     if (outed) {
       add(W.outedEvil, outed.why);
+    }
+
+    // A player claiming the Golem nominated them, and they didn't die: the
+    // Golem's nominee dies unless they're the Demon (or the Golem is drunk
+    // or poisoned, or lying). See characters/outsider/golem.js.
+    for (const g of s.golem ?? []) {
+      const by = g.nomineeId === t.id && !g.died && g.alive && byId(s, g.byId);
+
+      if (by === p) {
+        add(W.golemSurvived, "I nominated them as the Golem, and they didn't die");
+      } else if (by && claimTo(by, p) === "golem") {
+        add(W.golemSurvived, `${who(by)}, who claims the Golem, nominated them, and they didn't die`);
+      }
     }
 
     // Their claimed ability visibly failed (see engine failed()).
@@ -2191,6 +2209,16 @@ export class SimpleStrategy {
       return null;
     }
 
+    // (The Golem nominates once: see golemNomination(). Anyone else claiming
+    // it never nominates: if their nominee lived, it would show.)
+    if (ability(p) === "golem") {
+      return this.golemNomination(s, p);
+    }
+
+    if (p.claim === "golem" || p.cover?.as === "golem") {
+      return null;
+    }
+
     // (With the Atheist on the script, the Storyteller: see
     // storytellerNomination().)
     const storyteller = this.storytellerNomination(s, p);
@@ -2287,6 +2315,47 @@ export class SimpleStrategy {
       sus.score >= NPC_NOMINATE_EVIDENCE
       ? { target: t, score: sus.score, reasons: p.suspicion.reasons }
       : null;
+  }
+
+  // An NPC Golem's one nomination (see characters/outsider/golem.js), once
+  // GOLEM_READY_ALIVE players are alive: their suspect, with enough evidence
+  // to nominate (NPC_NOMINATE_EVIDENCE); at GOLEM_LATEST_ALIVE, their
+  // suspect whatever the evidence. Never you, nor before or after then. (An
+  // evil Golem, turned by the Mezepheles, never nominates: their nominee's
+  // death would give them away no less than a good player's would.) A Golem
+  // who claims it says so.
+  golemNomination(s, p) {
+    const alive = s.players.filter((x) => x.alive).length;
+
+    if (p.golemUsed || sideOf(p) === "evil" || alive > GOLEM_READY_ALIVE || alive < GOLEM_LATEST_ALIVE) {
+      return null;
+    }
+
+    const sus = this.suspicion(s, p);
+    const t = sus && byId(s, sus.targetId);
+
+    if (
+      !t?.alive ||
+      t.human ||
+      spares(s, p, t) ||
+      (alive > GOLEM_LATEST_ALIVE && sus.score < NPC_NOMINATE_EVIDENCE)
+    ) {
+      return null;
+    }
+
+    const said = p.claim === "golem" && !p.cover;
+
+    return {
+      target: t,
+      score: Math.max(sus.score, NPC_NOMINATE_EVIDENCE),
+      reasons: [
+        ...(said ? ["I'm the Golem, and this is my one nomination"] : []),
+        ...(p.suspicion.reasons.length ? p.suspicion.reasons : ["I suspect them most"]),
+      ],
+      why: `the Golem's one nomination, with ${alive} alive${
+        alive > GOLEM_LATEST_ALIVE ? "" : " (the last chance to use it)"
+      }: their suspect`,
+    };
   }
 
   // Whether v votes to execute the Storyteller (see
@@ -2444,6 +2513,13 @@ export class SimpleStrategy {
     // (Never to execute their Lleech's host: see spares().)
     if (spares(s, v, n)) {
       return false;
+    }
+
+    // (A Golem's nominee who lived through it: good players vote only if
+    // your hand is up, so whether to execute them is your call. See
+    // characters/outsider/golem.js; engine runNomination() logs it.)
+    if (sideOf(v) !== "evil" && golemHinge(s, n)) {
+      return Boolean(tally?.hand);
     }
 
     if (tally?.humanChoice && atFinal(s) && sideOf(v) !== "evil") {
@@ -3654,16 +3730,17 @@ export class SimpleStrategy {
     return pick(good.length ? good : pool, s.r);
   }
 
-  // The Leviathan's choice each night*, with the Ravenkeeper or Sage on the
-  // script (their jinx: see leviathan.js): an alive player it hasn't chosen
-  // before, never you nor a teammate, and not one claiming the Ravenkeeper
-  // or Sage if it can help it (they'd use their ability).
+  // The Leviathan's choice each night*, with the Ravenkeeper, Sage or Farmer
+  // on the script (their jinx: see leviathan.js): an alive player it hasn't
+  // chosen before, never you nor a teammate, and not one claiming the
+  // Ravenkeeper, Sage or Farmer if it can help it (they'd use their
+  // ability).
   leviathan(s, p) {
     const chosen = s.leviathan?.chosen ?? [];
     const pool = this.pickable(s, p).filter(
       (x) => !x.human && !teammate(p, x) && !chosen.includes(x.id),
     );
-    const safe = pool.filter((x) => !["ravenkeeper", "sage"].includes(claimTo(x, p)));
+    const safe = pool.filter((x) => !["ravenkeeper", "sage", "farmer"].includes(claimTo(x, p)));
 
     return pick(safe.length ? safe : pool, s.r) ?? null;
   }
@@ -3779,7 +3856,11 @@ export class SimpleStrategy {
         !x.human &&
         x.id !== n.id &&
         !s.dayNominators.includes(x.id) &&
-        !wishBarred(s, x),
+        !wishBarred(s, x) &&
+        // (Nor the Golem, or anyone claiming it: see nomination().)
+        ability(x) !== "golem" &&
+        x.claim !== "golem" &&
+        x.cover?.as !== "golem",
     );
 
     if (n.claim !== "virgin") {

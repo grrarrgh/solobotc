@@ -246,7 +246,7 @@ export const atheist = {
                 ? "Your wish's price: you can't nominate in the second round."
                 : s.roshambo
                   ? "Throw first."
-                  : null;
+                  : this.golemBarred(p);
   },
 
   // Why you can't ask for a nomination of the Storyteller now, or null if
@@ -347,6 +347,9 @@ export const atheist = {
     if (s.winner) {
       return base;
     }
+
+    // (The Golem's one nomination, spent on nobody: see golem.js.)
+    this.golemNominates(p, this.storytellerNominee());
 
     this.openNominations();
 

@@ -1,10 +1,10 @@
-import { CHARACTERS, TRAVELLERS } from "./characters/catalog.js";
+import { CHARACTERS, TRAVELLERS, NOT_YET } from "./characters/catalog.js";
 
 // ── Characters ───────────────────────────────────────────────
 
-// Every character's record, and the Travellers left out, are in
-// src/characters/catalog.js (re-exported here).
-export { CHARACTERS, TRAVELLERS };
+// Every character's record, and the Travellers (and characters not in the
+// game yet) left out, are in src/characters/catalog.js (re-exported here).
+export { CHARACTERS, TRAVELLERS, NOT_YET };
 
 // The ids of the characters whose record passes `test`, and each one's
 // `key` (for those that have it).
@@ -296,6 +296,26 @@ export const JINXES = [
     ids: ["leviathan", "sage"],
     text: "Each night*, the Leviathan chooses an alive good player (different to previous nights): a chosen Sage uses their ability but does not die.",
   },
+  // characters/demon/leviathan.js leviathanNight(), and
+  // characters/townsfolk/farmer.js farmerMakes()
+  {
+    ids: ["leviathan", "farmer"],
+    text: "Each night*, the Leviathan chooses an alive good player (different to previous nights): a chosen Farmer uses their ability but does not die.",
+  },
+  // (The Engineer and the Al-Hadikhia aren't in the game yet: see NOT_YET in
+  // characters/catalog.js. Their jinxes are listed here for when they are.)
+  {
+    ids: ["legion", "engineer"],
+    text: "If Legion is created, all evil players become Legion. If Legion is in play, the Engineer starts knowing this but has no ability.",
+  },
+  {
+    ids: ["alhadikhia", "mastermind"],
+    text: "If the Al-Hadikhia dies by execution, and the Mastermind is alive, the Al-Hadikhia chooses 3 good players tonight: if all 3 choose to live, evil wins. Otherwise, good wins.",
+  },
+  {
+    ids: ["alhadikhia", "scarletwoman"],
+    text: "If there would be two Demons, one of which was the Scarlet Woman, the Scarlet Woman becomes the Scarlet Woman again.",
+  },
 ];
 
 // Characters never in play with `id`, by their jinx (`exclusive`).
@@ -557,6 +577,7 @@ export const EVIDENCE_WEIGHT = {
   confirmedLikely: -4, // near certain: a Professor whose choice came back to life
   confirmedMaybe: -2, // partly: a Fool, Sailor or Pacifist saving an execution, a Tea Lady's neighbour surviving one, a Moonchild's pick dying, a Gossip's statement followed by a death
   abilityFailed: 1.5, // their claimed ability visibly failed (a Virgin, a Monk's protection)
+  golemSurvived: 2, // a player claiming the Golem nominated them, and they didn't die (the Demon, or a drunk, poisoned or lying Golem)
   abilityUnused: 0.5, // late on, still hasn't used a public ability they claim (Slayer, Juggler)
   damselGuess: 6, // guessed the Damsel in public: only a Minion's guess counts
   failedExecution: 6, // voted for an execution that failed (Legion): only evil voted
@@ -587,6 +608,14 @@ export const SCAPEGOAT_CHANCE = 0.8;
 // saying why: strongest case first, each NPC once, at most half the living
 // players a day.
 export const NPC_NOMINATE_EVIDENCE = 3;
+
+// An NPC Golem uses their one nomination (see characters/outsider/golem.js)
+// once this few players are alive, on their suspect if the evidence is
+// enough to nominate (NPC_NOMINATE_EVIDENCE); and with GOLEM_LATEST_ALIVE
+// alive, on their suspect whatever the evidence. Never with fewer: a death
+// then could end the game without you doing anything.
+export const GOLEM_READY_ALIVE = 5;
+export const GOLEM_LATEST_ALIVE = 4;
 
 // How NPCs vote (see strategy vote()). A good NPC votes at GOOD_VOTE_CHANCE,
 // plus GOOD_VOTE_EVIDENCE_STEP a point of evidence against the nominee,

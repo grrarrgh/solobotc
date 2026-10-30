@@ -17,6 +17,13 @@ export const fanggu = {
       return false;
     }
 
+    // (With the Spirit of Ivory on the script, the Outsider might stay good:
+    // then there's no jump, and they just die. See
+    // characters/fabled/spiritofivory.js.)
+    if (this.ivoryKeepsGood(t, `the Fang Gu's jump, from ${d.label}`)) {
+      return false;
+    }
+
     s.fangGuJumped = true;
     t.role = "fanggu";
     t.shown = "fanggu";

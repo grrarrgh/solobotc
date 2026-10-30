@@ -62,6 +62,7 @@ import { formatLog, logNames, claimChain } from "./log.js";
 import { abilities, living } from "./abilities.js";
 import { characters } from "./characters/index.js";
 import { STORYTELLER } from "./characters/townsfolk/atheist.js";
+import { golemHinge } from "./characters/outsider/golem.js";
 import {
   backStory,
   keepStory,
@@ -123,6 +124,9 @@ const KEY_MOMENT_TYPES = new Set([
   "marionette",
   "mezepheles",
   "legion",
+  "farmer",
+  "golem",
+  "spiritofivory",
   "game_over",
 ]);
 
@@ -1131,8 +1135,8 @@ export class Engine {
     }
 
     // "If you die at night": any death at night wakes the Ravenkeeper (the
-    // Demon's kill, the Assassin, a Moonchild curse, a random death...). A
-    // Demon kill always counts as a night death.
+    // Demon's kill, the Assassin, a Moonchild curse, a random death...), and
+    // makes a new Farmer. A Demon kill always counts as a night death.
     const atNight = this.s.phase === "night" || cause === "demon";
 
     this.ravenkeeperDeath(p, atNight);
@@ -1143,6 +1147,7 @@ export class Engine {
     this.pixieGains(p);
     this.lleechHostDied(p, cause);
     this.poppyDeath(p);
+    this.farmerDeath(p, atNight);
 
     // "When you learn that you died" (Moonchild, Klutz): at night, that's in
     // the morning.
@@ -2043,6 +2048,8 @@ export class Engine {
       needed: n.storyteller ? this.storytellerNeeded() : this.votesNeeded(),
       nominator,
       humanChoice,
+      // (Whether your hand is up: see strategy vote(), on a Golem's nominee.)
+      hand: Boolean(hand),
     };
     // (On the Storyteller, each decides as the clock hand comes round to
     // them, clockwise from the Sun: you first, then seat by seat, counting
@@ -2187,6 +2194,13 @@ export class Engine {
       throw Error("Dead players cannot nominate. Request a nomination instead.");
     }
 
+    // (The Golem nominates once per game: see golem.js.)
+    const golem = this.golemBarred(h);
+
+    if (golem) {
+      throw Error(golem);
+    }
+
     // (With the Atheist on the script: see atheist.js.)
     if (id === STORYTELLER) {
       return this.nominateStoryteller(h, hand);
@@ -2326,10 +2340,31 @@ export class Engine {
     }
 
     this.openNominations();
+
+    // The Golem's one nomination: unless they're the Demon, the nominee dies
+    // now, and the vote goes on (see characters/outsider/golem.js).
+    if (ability(nominator) === "golem" && !nominator.golemUsed) {
+      if (!nominator.human && nominator.claim === "golem" && !nominator.cover) {
+        this.claimPublicly(nominator);
+      }
+
+      this.golemNominates(nominator, n);
+
+      if (s.winner) {
+        this.countNpcNominations();
+        return base;
+      }
+    }
+
     this.nominationReveals(n, intro);
 
     // (Why good NPCs hold back, or don't: see strategy vote().)
-    if (s.mastermindDay === s.day) {
+    if (golemHinge(s, n)) {
+      this.audit(
+        "workings",
+        `${n.label} lived through the Golem's nomination: good NPCs vote for them only if your hand is up (whether to execute them is your call).`,
+      );
+    } else if (s.mastermindDay === s.day) {
       this.audit(
         "workings",
         `Mastermind's extra day: the evil team votes for ${n.label} unless they're a teammate; good players only if they suspect them.`,

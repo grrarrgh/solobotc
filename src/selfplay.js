@@ -365,7 +365,8 @@ export class SelfPlay {
       } else if (a.kind === "open") {
         e.openNominations();
       } else if (a.kind === "nominate") {
-        if (e.human().alive) {
+        // (A Golem who has nominated asks instead: see golem.js.)
+        if (e.human().alive && !e.golemBarred(e.human())) {
           e.nominate(a.id, this.hand(a.id, true));
         } else {
           e.requestNomination(a.id, this.hand(a.id, true));

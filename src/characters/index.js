@@ -1,8 +1,8 @@
 // Each character's own mechanics, one module per character, so any
 // characters can share a game whatever script they come from. They're
-// filed by team (townsfolk/, outsider/, minion/, demon/). Each module is
-// mixed into Engine.prototype (see engine.js), which calls them in night
-// order. (Characters that only need the Storyteller's information or NPC
+// filed by team (townsfolk/, outsider/, minion/, demon/, and fabled/ for
+// the Storyteller's rules). Each module is mixed into Engine.prototype (see
+// engine.js), which calls them in night order. (Characters that only need the Storyteller's information or NPC
 // choices, in storyteller.js and strategy.js, have no module here.)
 //
 // A module may also export `info`: what that character learns, and what's
@@ -15,6 +15,7 @@ import { cannibal } from "./townsfolk/cannibal.js";
 import { chambermaid } from "./townsfolk/chambermaid.js";
 import { courtier } from "./townsfolk/courtier.js";
 import { exorcist } from "./townsfolk/exorcist.js";
+import { farmer } from "./townsfolk/farmer.js";
 import { fisherman } from "./townsfolk/fisherman.js";
 import { fool } from "./townsfolk/fool.js";
 import { gambler } from "./townsfolk/gambler.js";
@@ -43,6 +44,7 @@ import { virgin } from "./townsfolk/virgin.js";
 import { barber } from "./outsider/barber.js";
 import { butler } from "./outsider/butler.js";
 import { damsel } from "./outsider/damsel.js";
+import { golem } from "./outsider/golem.js";
 import { heretic } from "./outsider/heretic.js";
 import { klutz } from "./outsider/klutz.js";
 import { lunatic } from "./outsider/lunatic.js";
@@ -83,6 +85,8 @@ import { vigormortis } from "./demon/vigormortis.js";
 import { vortox } from "./demon/vortox.js";
 import { zombuul } from "./demon/zombuul.js";
 
+import { spiritofivory } from "./fabled/spiritofivory.js";
+
 export const characters = {
   alchemist,
   amnesiac,
@@ -92,6 +96,7 @@ export const characters = {
   chambermaid,
   courtier,
   exorcist,
+  farmer,
   fisherman,
   fool,
   gambler,
@@ -119,6 +124,7 @@ export const characters = {
   barber,
   butler,
   damsel,
+  golem,
   heretic,
   klutz,
   lunatic,
@@ -156,4 +162,5 @@ export const characters = {
   vigormortis,
   vortox,
   zombuul,
+  spiritofivory,
 };

@@ -79,10 +79,10 @@ gives everything away).
 
 `scripts/` holds the scripts listed in `scripts/index.json`: Trouble Brewing,
 Everyone Can Play, Sects & Violets, Bad Moon Rising, Onion Pies, Catfishing,
-Extension Cord, Trust Redux, Outed Evil, No Roles Barred, Harold Holt's Revenge and Chef's Deluxe, in the official script-tool JSON format. Travellers
+Extension Cord, Trust Redux, Outed Evil, No Roles Barred, Harold Holt's Revenge, Chef's Deluxe and The Midnight Oasis, in the official script-tool JSON format. Travellers
 aren't supported: a script's Travellers are left out (`TRAVELLERS` in
 `src/characters/catalog.js`). Fabled (such as the Sentinel) are Storyteller rules, never
-dealt (`FABLED`). Jinxes between a script's characters are listed on its
+dealt (`FABLED`); the Spirit of Ivory's rule is in `src/characters/fabled/`. Characters the game doesn't run yet are left out too (`NOT_YET`: for now the Engineer and the Al-Hadikhia). Jinxes between a script's characters are listed on its
 script sheet (`JINXES`).
 
 Characters don't belong to a script: a script is just a list of character
@@ -121,7 +121,7 @@ in its record in `CHARACTERS`. These include:
 | `src/data.js` | Role counts, jinxes and the tuning constants, in sections (re-exports the catalogue) |
 | `src/setup.js` | Deals a new game from a script, seat count and seed |
 | `src/engine.js` | Runs nights, days, NPC conversations, nominations, deaths and win checks |
-| `src/characters/` | Each character's own mechanics, one file per character, by team (`townsfolk/`, `outsider/`, `minion/`, `demon/`), mixed into the engine |
+| `src/characters/` | Each character's own mechanics, one file per character, by team (`townsfolk/`, `outsider/`, `minion/`, `demon/`, and `fabled/` for the Storyteller's rules), mixed into the engine |
 | `src/abilities.js` | Ability mechanics several characters share (waking, protection, coming back to life, madness, claims) |
 | `src/storyteller.js` | What each character learns: true, false or bluffed |
 | `src/strategy.js` | How NPCs choose, vote, nominate, claim and suspect |

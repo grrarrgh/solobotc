@@ -45,7 +45,9 @@ export const bountyhunter = {
       s.r,
     );
 
-    if (!t) {
+    // (With the Spirit of Ivory on the script, they might stay good: see
+    // characters/fabled/spiritofivory.js.)
+    if (!t || this.ivoryKeepsGood(t, "the Bounty Hunter's evil Townsfolk")) {
       return;
     }
 

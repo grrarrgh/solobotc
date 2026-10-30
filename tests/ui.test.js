@@ -483,3 +483,11 @@ test("with the Atheist on the script, the Sun can be nominated (or asked for) li
   assert.match(css, /\.phase-dial\.on-trial \{\s*animation: sun-trial/);
   assert.match(css, /\.phase-dial\.eclipse \.phase-window::before \{/);
 });
+
+test("as the Golem, the Nominate button says you nominate once; after that, pressing it says why not, and self-play asks for a nomination instead", () => {
+  assert.match(app, /\$\("nominate"\)\.title =\s*ability\(h\) !== "golem"/);
+  assert.match(app, /e\.golemBarred\(h\) \?\? "As the Golem, you may only nominate once per game/);
+  assert.match(app, /e\.human\(\)\.alive && !e\.golemBarred\(e\.human\(\)\)\s*\? e\.nominate\(a\.id, null\)\s*: e\.requestNomination\(a\.id, null\)/);
+  // (The engine's message shows where any refused nomination's does.)
+  assert.match(app, /result = fn\(\);\s*\} catch \(err\) \{\s*\$\("answer"\)\.textContent = err\.message;/);
+});

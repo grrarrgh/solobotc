@@ -433,6 +433,13 @@ export const CHARACTERS = {
     neverBluffed: true,
     neverHiddenAs: true,
   },
+  farmer: {
+    name: "Farmer",
+    team: "townsfolk",
+    ability: "When you die at night, an alive good player becomes a Farmer.",
+    note: "The Storyteller chooses the new Farmer at random from the living good players (you too; never the Atheist, nor the Lunatic, who thinks they're the Demon). They learn it that night, and lose their old ability.",
+    kill: "low", // killing them only makes another Farmer
+  },
   general: {
     name: "General",
     team: "townsfolk",
@@ -599,6 +606,15 @@ export const CHARACTERS = {
     kill: "avoid", // makes the Demon drunk (and joins its team)
     neverHiddenAs: true,
     notForHuman: true,
+  },
+  golem: {
+    name: "Golem",
+    team: "outsider",
+    ability:
+      "You may only nominate once per game. When you do, if the nominee is not the Demon, they die.",
+    note: "The nominee dies at once (the Storyteller says only that they died), and the vote goes on. NPC Golems nominate their suspect once only 5 or 4 players are alive (never you); a nominee who lives through it is evidence against them, not proof. Then good NPCs vote on them only if you raise your hand: whether to execute is your call.",
+    kill: "med",
+    neverHiddenAs: true, // a good player hiding as it couldn't nominate
   },
   lunatic: {
     name: "Lunatic",
@@ -874,6 +890,12 @@ export const CHARACTERS = {
     ability: "There might be 1 extra or 1 fewer Outsider in play.",
     outsiders: [-1, 0, 1],
   },
+  spiritofivory: {
+    name: "Spirit of Ivory",
+    team: "fabled",
+    ability: "There can't be more than 1 extra evil player.",
+    note: "Once there's 1 more evil player than the setup sheet's count for the seats, anyone else who would turn evil (by the Mezepheles, the Fang Gu, the Goon, the Ogre...) stays good.",
+  },
 };
 
 // Travellers aren't supported: a script's Travellers are left out (as in a
@@ -898,3 +920,7 @@ export const TRAVELLERS = [
   "gnome",
   "cacklejack",
 ];
+
+// Characters the game doesn't run yet: a script's are left out (as
+// Travellers are) until they're added.
+export const NOT_YET = ["engineer", "alhadikhia"];

@@ -357,7 +357,11 @@ export const abilities = {
         continue;
       }
 
-      const locked = t.goonStaysEvil && actor.alignment === "good";
+      // (With the Spirit of Ivory on the script, a Goon an evil player chose
+      // might stay good: see characters/fabled/spiritofivory.js.)
+      const locked =
+        (t.goonStaysEvil && actor.alignment === "good") ||
+        (actor.alignment === "evil" && this.ivoryKeepsGood(t, `the Goon, chosen by ${actor.label}`));
       const turned = !locked && t.alignment !== actor.alignment;
 
       t.goonNight = s.night;
