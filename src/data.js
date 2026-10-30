@@ -847,8 +847,20 @@ export const ATHEIST_CHANCE = 0.2;
 // (Each NPC who hears a double claim notices it at ATHEIST_DOUBLE_NOTICE.)
 // (With the Pixie on the script, a doubled Townsfolk may be a mad Pixie: at
 // ATHEIST_PIXIE_DOUBLE_FACTOR of that.)
-export const ATHEIST_DOUBLE_NOTICE = 0.3;
+export const ATHEIST_DOUBLE_NOTICE = 0.25;
 export const ATHEIST_PIXIE_DOUBLE_FACTOR = 0.25;
+// An NPC who hears another claim their own character knows one of them is
+// wrong, and it isn't them: they notice at this chance. And with the
+// Atheist on the script, the clash counts against the other less the more
+// they believe an Atheist claim, or the more doubts they have, at
+// ATHEIST_CLASH_DOUBT a doubt (see strategy evidence()): a broken rule
+// would explain it.
+export const ATHEIST_HOLDER_NOTICE = 0.6;
+export const ATHEIST_CLASH_DOUBT = 0.4;
+// (And with the Atheist on the script, a clash counts at most this much of
+// its usual weight: the town knows the Storyteller may be dealing
+// duplicates.)
+export const ATHEIST_CLASH_FACTOR = 0.5;
 // (One fewer for each character in play that already muddles the town's
 // information: ATHEIST_MUDDLERS, so scripts with them get as much doubt as
 // those without.)
@@ -859,7 +871,9 @@ export const ATHEIST_MUDDLERS = ["drunk", "pixie", "mutant", "lunatic"];
 // the ones the game runs as one of a kind, or that need setup of their own
 // (the Pixie, Philosopher, Cannibal, Poppy Grower, Huntsman, Damsel, Drunk,
 // Mutant, Puzzlemaster, Amnesiac's secret...), nor the Engineer (with
-// nobody evil, it changes nothing, and two announcements would be noise).
+// nobody evil, it changes nothing, and two announcements would be noise),
+// nor the Farmer (two Farmers are no clash: each one who dies at night
+// makes another).
 export const ATHEIST_DUPLICABLE = [
   "chef",
   "noble",
@@ -871,7 +885,6 @@ export const ATHEIST_DUPLICABLE = [
   "juggler",
   "snakecharmer",
   "professor",
-  "farmer",
   "golem",
   "recluse",
   "barber",

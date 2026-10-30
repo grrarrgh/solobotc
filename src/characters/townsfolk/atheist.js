@@ -4,6 +4,7 @@ import {
   ATHEIST_UNSAFE_SHARE,
   ATHEIST_VOTE_BELIEF,
   ATHEIST_DOUBLE_NOTICE,
+  ATHEIST_HOLDER_NOTICE,
   ATHEIST_PIXIE_DOUBLE_FACTOR,
 } from "../../data.js";
 import { works, wishBarred, atheistBreakChance } from "../../storyteller.js";
@@ -153,17 +154,15 @@ export const atheist = {
     );
   },
 
-  // With the Atheist on the script, as nominations open: how much each good
-  // NPC who could vote believes an Atheist claim, where it has changed
-  // since they were last logged (p.atheistLogged), and why (see strategy
-  // atheistBelief()); and how much each evil NPC says they believe it, as a
-  // good NPC would (see strategy atheistView()). Log only: no draw from s.r.
   // In an Atheist game, each morning: each NPC who has heard two players
   // claim the same character (a duplicate, see setup.js ATHEIST_DUPLICATES,
   // or anyone's), both claims standing, may notice it as a sign the rules
   // are broken: a doubt of their own, at ATHEIST_DOUBLE_NOTICE, as false
-  // information is at ATHEIST_DOUBT_NOTICE (see strategy atheistHeard()). Once each pair each.
-  // (Not the Village Idiot or Farmer, which can be many.) Logged.
+  // information is at ATHEIST_DOUBT_NOTICE (see strategy atheistHeard()).
+  // One who hears another claim their own character, at
+  // ATHEIST_HOLDER_NOTICE: they know they're telling the truth. Once each
+  // pair each; not the dead, nor the Atheist, who knows. (Not the Village
+  // Idiot or Farmer, which can be many.) Logged, a line a pair.
   atheistDoubles() {
     const s = this.s;
 
@@ -171,48 +170,66 @@ export const atheist = {
       return;
     }
 
-    for (const x of s.players.filter((y) => !y.human)) {
+    const heard = new Map();
+
+    for (const x of s.players.filter((y) => !y.human && y.alive && y.role !== "atheist")) {
       const others = s.players.filter((y) => y !== x);
+      const pairs = [
+        // (Their own character, claimed by another.)
+        ...others.map((a) => [x, a, x.claim]),
+        ...others.flatMap((a, i) => others.slice(i + 1).map((b) => [a, b, claimTo(a, x)])),
+      ];
 
-      for (const [i, a] of others.entries()) {
-        const claim = claimTo(a, x);
+      for (const [a, b, claim] of pairs) {
+        const key = `${claim}:${[a.id, b.id].sort().join(":")}`;
 
-        if (!claim || ["villageidiot", "farmer", "atheist"].includes(claim)) {
+        if (
+          !claim ||
+          ["villageidiot", "farmer", "atheist"].includes(claim) ||
+          (a !== x && claimTo(a, x) !== claim) ||
+          claimTo(b, x) !== claim ||
+          (x.doublesHeard ??= []).includes(key)
+        ) {
           continue;
         }
 
-        for (const b of others.slice(i + 1)) {
-          const key = `${claim}:${a.id}:${b.id}`;
+        x.doublesHeard.push(key);
 
-          if (claimTo(b, x) !== claim || (x.doublesHeard ??= []).includes(key)) {
-            continue;
-          }
+        // (A mad Pixie could explain a doubled Townsfolk.)
+        const pixie = s.script.ids.includes("pixie") && team(claim) === "townsfolk" ? ATHEIST_PIXIE_DOUBLE_FACTOR : 1;
+        const chance = (a === x ? ATHEIST_HOLDER_NOTICE : ATHEIST_DOUBLE_NOTICE) * pixie;
+        const seen = s.r() < chance;
 
-          x.doublesHeard.push(key);
-
-          // (A mad Pixie could explain a doubled Townsfolk.)
-          const chance =
-            ATHEIST_DOUBLE_NOTICE *
-            (s.script.ids.includes("pixie") && team(claim) === "townsfolk" ? ATHEIST_PIXIE_DOUBLE_FACTOR : 1);
-          const seen = s.r() < chance;
-
-          if (seen) {
-            (x.doubts ??= []).push({ byId: a.id, id: `double:${key}`, day: s.day, broken: true });
-          }
-
-          note(
-            s,
-            "workings",
-            `${x.label} has heard ${a.label} and ${b.label} both claim the ${name(claim)}: ${
-              seen ? `they notice it doesn't add up (doubts so far: ${x.doubts.length})` : "they don't think anything of it"
-            } (at ${Math.round(chance * 100)}%).`,
-            { playerId: x.id, noticedIds: seen ? [x.id] : [] },
-          );
+        if (seen) {
+          (x.doubts ??= []).push({ byId: b.id, id: `double:${key}`, day: s.day, broken: true });
         }
+
+        const h = heard.get(key) ?? { a, b, claim, seen: [], missed: [] };
+
+        (seen ? h.seen : h.missed).push(x);
+        heard.set(key, h);
       }
+    }
+
+    for (const { a, b, claim, seen, missed } of heard.values()) {
+      const list = (xs) => xs.map((x) => x.label).join(", ");
+
+      note(
+        s,
+        "workings",
+        `${a.label} and ${b.label} both claim the ${name(claim)}: ${
+          seen.length ? `${list(seen)} notice${seen.length === 1 ? "s" : ""} it doesn't add up (a doubt)` : "nobody thinks anything of it"
+        }${seen.length && missed.length ? `; ${list(missed)} ${missed.length === 1 ? "doesn't" : "don't"}` : ""}.`,
+        { noticedIds: seen.map((x) => x.id) },
+      );
     }
   },
 
+  // With the Atheist on the script, as nominations open: how much each good
+  // NPC who could vote believes an Atheist claim, where it has changed
+  // since they were last logged (p.atheistLogged), and why (see strategy
+  // atheistBelief()); and how much each evil NPC says they believe it, as a
+  // good NPC would (see strategy atheistView()). Log only: no draw from s.r.
   atheistBeliefs() {
     const s = this.s;
     const rows = [];

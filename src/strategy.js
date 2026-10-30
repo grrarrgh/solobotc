@@ -103,6 +103,8 @@ import {
   ATHEIST_DISBELIEF_FROM_DAY,
   ATHEIST_DISBELIEF_MAX,
   ATHEIST_DOUBT_NOTICE,
+  ATHEIST_CLASH_DOUBT,
+  ATHEIST_CLASH_FACTOR,
   STORYTELLER_NOMINATED_EVIDENCE,
   STORYTELLER_VOTED_EVIDENCE,
   EVIL_ATHEIST_TRAP_BELIEVERS,
@@ -877,9 +879,20 @@ export class SimpleStrategy {
         s.players.some((x) => !x.alive && x.diedAtNight && claimTo(x, p) === "farmer"));
 
     if (claim && !many && !twins(p, t)) {
+      // (With the Atheist on the script, a broken rule could explain it: the
+      // clash counts the less the more p believes an Atheist claim, or
+      // doubts the rules hold. See ATHEIST_HOLDER_NOTICE.)
+      const doubt = () =>
+        Math.max(
+          this.atheistBelief(s, p)?.belief ?? 0,
+          Math.min(1, ATHEIST_CLASH_DOUBT * (p.doubts ?? []).length),
+        );
+      const clash = (x) =>
+        x * (atheist && s.script.ids.includes("atheist") ? ATHEIST_CLASH_FACTOR * (1 - doubt()) : 1);
+
       if (claim === p.claim && !(p.pixieMad && !p.gained)) {
         add(
-          W.claimsMyCharacter * pixie,
+          clash(W.claimsMyCharacter * pixie),
           `they claim the ${name(claim)}, but I'm the ${name(claim)}${maybe}`,
         );
       }
@@ -887,7 +900,7 @@ export class SimpleStrategy {
       for (const x of s.players) {
         if (x !== t && x !== p && claimTo(x, p) === claim && !twins(x, t)) {
           add(
-            W.doubleClaim * pixie,
+            clash(W.doubleClaim * pixie),
             `they and ${who(x)} both claim the ${name(claim)}${maybe}`,
           );
         }
@@ -4229,7 +4242,8 @@ export class SimpleStrategy {
 
     // (`kind`: that option, if there is one. Else, with both, the one that
     // gains less at ENGINEER_OTHER_CHANCE.)
-    const other = !kind && demon && mins.length > 0 && s.r() < ENGINEER_OTHER_CHANCE;
+    // (Not an evil Engineer's own choice: always evil's best.)
+    const other = !kind && !evil && demon && mins.length > 0 && s.r() < ENGINEER_OTHER_CHANCE;
     const demonFirst = kind ? kind === "demon" : (gainDemon >= gainMinions) !== other;
 
     return demon && (demonFirst || !mins.length)

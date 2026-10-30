@@ -10,7 +10,7 @@ import { ability, works, isDemon } from "../../storyteller.js";
 // don't vote: see strategy vote()). The Demon (or the Recluse, who
 // registers as one) doesn't die, and nothing is said; nor does anyone, if
 // the Golem is drunk or poisoned. You can't nominate again once you've used
-// it (see golemBarred()); an NPC Golem nominates once only 5 or 4 players
+// it (see golemBarred()); an NPC Golem nominates once only 6, 5 or 4 players
 // are alive, never you, and anyone bluffing the Golem never nominates (see
 // strategy nomination(), nominator()).
 //

@@ -15412,7 +15412,7 @@ test("a nominee who lived through the nomination of a player claiming the Golem 
   assert.ok(why.score < EVIDENCE_WEIGHT.confirmedGood * -1);
 });
 
-test("an NPC Golem nominates once 5 are alive, with enough evidence, or at 4 whatever it is; never you, never before; a Golem bluffer never nominates", () => {
+test("an NPC Golem nominates once 6 or 5 are alive, with enough evidence, or at 4 whatever it is; never you, never before; a Golem bluffer never nominates", () => {
   const s = base("golem-npc", mo);
   const strat = new SimpleStrategy();
   const [you, chef, butler, baron, imp] = s.players;
@@ -16531,7 +16531,7 @@ test("in an Atheist game, the Storyteller deals duplicates: second copies of cha
   assert.ok(dup > 20, `${dup}`);
 });
 
-test("in an Atheist game, an NPC who hears two players claim the same character may count it as a rule break: a doubt", () => {
+test("in an Atheist game, an NPC who hears two players claim the same character (their own, too) may count it as a rule break: a doubt", () => {
   const s = base("dup-doubt", cd);
   const e = new Engine(s);
   const [, chef, butler, baron] = s.players;
@@ -16546,7 +16546,15 @@ test("in an Atheist game, an NPC who hears two players claim the same character 
   e.atheistDoubles();
 
   assert.equal(baron.doubts.length, 1);
-  assert.ok(s.audit.some((x) => x.type === "workings" && new RegExp(`${chef.label} and ${butler.label} both claim the Chef: they notice it doesn't add up`).test(x.text)));
+  // (The Chef and the Butler, each hearing the other claim their own
+  // character, too: one line for the pair.)
+  assert.equal(chef.doubts.length, 1);
+  assert.equal(butler.doubts.length, 1);
+
+  const lines = s.audit.filter((x) => x.type === "workings" && /both claim the Chef/.test(x.text));
+
+  assert.equal(lines.length, 1);
+  assert.ok(lines[0].text.includes(baron.label) && lines[0].text.endsWith("notice it doesn't add up (a doubt)."));
 
   // Once each pair.
   e.atheistDoubles();
@@ -16609,4 +16617,50 @@ test("a Drunk the Pit-Hag made who becomes a Farmer: log.txt says they knew they
 
   assert.equal(p[2].role, "farmer");
   assert.match(s.audit.findLast((x) => x.type === "farmer" && /becomes a Farmer/.test(x.text)).text, /the Drunk, who knew it: no ability to lose/);
+});
+
+test("a duplicate never takes the Huntsman's place, nor is the Farmer duplicated", () => {
+  assert.ok(!ATHEIST_DUPLICABLE.includes("farmer"));
+
+  for (let g = 0; g < 400; g++) {
+    const s = createState(mo, 8 + (g % 8), `dup-hunt-${g}`);
+
+    assert.ok(!s.audit.some((x) => /^A duplicate .* in the place of the Huntsman\./.test(x.text)), `${g}`);
+  }
+});
+
+test("with the Atheist on the script, a clash of claims counts for less, the less so the more the NPC doubts the rules hold; elsewhere, as ever", () => {
+  const clash = (raw, doubts) => {
+    const s = base("clash", raw);
+    const strat = new SimpleStrategy();
+    const [, chef, butler] = s.players;
+
+    role(butler, "chef", "good");
+    s.players.forEach((x) => {
+      x.claimKnown = true;
+      x.publicClaim = x.claim;
+    });
+    chef.doubts = Array.from({ length: doubts }, (_, i) => ({ id: i }));
+
+    return strat.evidence(s, chef, butler).score;
+  };
+
+  assert.ok(clash(cd, 0) < clash(script, 0));
+  assert.ok(clash(cd, 2) < clash(cd, 0));
+  assert.equal(clash(script, 2), clash(script, 0));
+});
+
+test("an evil Engineer always makes evil's most threatening choice: only good ones (and bluffers) sometimes choose the other", () => {
+  for (let i = 0; i < 30; i++) {
+    const { s, e, eng } = engineerNight(`eng-evil-fixed-${i}`, 3);
+
+    eng.alignment = "evil";
+    s.r = rng(`eng-evil-fixed-${i}`);
+
+    const c = e.strat.engineerPick(s, eng);
+
+    assert.ok(!/at random, the other one/.test(c.why), c.why);
+    assert.equal(c.kind, "demon");
+    assert.deepEqual(c.roles, ["alhadikhia"]);
+  }
 });
