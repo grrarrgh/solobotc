@@ -59,6 +59,7 @@ import {
   ENGINEER_MINION_SHARE,
   ENGINEER_THREAT,
   ENGINEER_THREAT_DEFAULT,
+  ENGINEER_THREAT_PITHAG_DEMONS,
   ALHADIKHIA_LIVE_CHANCE,
   ALHADIKHIA_DEAD_LIVE_CHANCE,
   ALHADIKHIA_EVIL_LIVE_CHANCE,
@@ -125,7 +126,6 @@ import {
   shownBefore,
   unknownMate,
   hasCannibal,
-  demonTo,
 } from "./storyteller.js";
 import { byId, pick, sample, shuffle, claimTo, claimHeard, tick } from "./util.js";
 import { logNames } from "./log.js";
@@ -4155,15 +4155,20 @@ export class SimpleStrategy {
     return this.engineerTonight(s) ? this.engineerPick(s, p) : null;
   }
 
-  // The Engineer's choice that helps p's side most ({ kind, roles, why }):
-  // not knowing what's in play, the Demon or Minions least threatening to
-  // good, whichever gains good more over the script's typical ones (see
-  // ENGINEER_THREAT); for evil, the most threatening. Null with nothing to
-  // choose. (Ties at random.)
-  engineerPick(s, p) {
+  // The Engineer's choice that helps `side` (p's, unless given) most ({
+  // kind, roles, why }): not knowing what's in play, the Demon or Minions
+  // least threatening to good, whichever gains good more over the script's
+  // typical ones (see ENGINEER_THREAT); for evil, the most threatening.
+  // Null with nothing to choose. (Ties at random.)
+  engineerPick(s, p, side = sideOf(p)) {
     const { demons, minions, count } = engineerOptions(s, true);
-    const evil = sideOf(p) === "evil";
-    const threat = (id) => ENGINEER_THREAT[id] ?? ENGINEER_THREAT_DEFAULT;
+    const evil = side === "evil";
+    // (The Pit-Hag, by whether the script has another Demon for her to
+    // make: see ENGINEER_THREAT_PITHAG_DEMONS.)
+    const threat = (id) =>
+      id === "pithag" && demons.length > 1
+        ? ENGINEER_THREAT_PITHAG_DEMONS
+        : (ENGINEER_THREAT[id] ?? ENGINEER_THREAT_DEFAULT);
     const rank = (ids) =>
       shuffle(ids, s.r).sort((a, b) => (evil ? threat(b) - threat(a) : threat(a) - threat(b)));
     const mean = (ids) => ids.reduce((n, id) => n + threat(id), 0) / ids.length;
@@ -4186,31 +4191,11 @@ export class SimpleStrategy {
       : { kind: "minions", roles: mins, why };
   }
 
-  // What an evil player claiming the Engineer says they made, to mislead:
-  // the Demon a Demon on the script that isn't the one in play (as far as
-  // they know), so the town reads the Demon's kills wrong; with no other,
-  // the Minions ones that aren't in play, so the town thinks the real ones
-  // are gone.
+  // What an evil player claiming the Engineer (or an evil Engineer) says
+  // they made: what a good Engineer would choose (see engineerPick()), as
+  // anything else would give them away.
   engineerBluff(s, p) {
-    const { demons, minions, count } = engineerOptions(s, true);
-    const real = demonTo(s, p)?.role;
-    const others = demons.filter((id) => id !== real);
-
-    if (others.length && real) {
-      return { kind: "demon", roles: [pick(others, s.r)] };
-    }
-
-    const absent = minions.filter((id) => !s.players.some((x) => x.role === id));
-    const roles = [
-      ...sample(absent, count, s.r),
-      ...sample(
-        minions.filter((id) => !absent.includes(id)),
-        Math.max(0, count - absent.length),
-        s.r,
-      ),
-    ];
-
-    return roles.length ? { kind: "minions", roles } : null;
+    return this.engineerPick(s, p, "good");
   }
 
   // The Juggler guesses up to 5 living players' characters, players whose

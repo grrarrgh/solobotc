@@ -1,7 +1,8 @@
 import { COUNTS, name, team } from "../../data.js";
-import { ability, works, jinxBarred } from "../../storyteller.js";
+import { ability, works, jinxBarred, who } from "../../storyteller.js";
 import { shuffle } from "../../util.js";
 import { madeUpMemories } from "../../bluff.js";
+import { sideOf } from "../../strategy.js";
 
 // The Engineer, mixed into Engine.prototype (see characters/index.js), so
 // `this` is the Engine.
@@ -64,6 +65,10 @@ export const engineer = {
 
       if (choice) {
         this.engineerUses(p, choice);
+      } else if (!p.human) {
+        this.audit("engineer", `${p.label} (${name(p.role)}) doesn't use the Engineer ability tonight.`, {
+          actorId: p.id,
+        });
       }
     }
   },
@@ -88,19 +93,25 @@ export const engineer = {
           changed.push(this.engineerChange(x, "legion"));
         }
       } else {
-        // (The living Demon: not Lil' Monsta, who isn't a player, nor a
-        // Zombuul that only registers as dead.)
-        for (const x of s.players.filter((y) => y.alive && team(y.role) === "demon")) {
-          if (x.role !== choice.roles[0]) {
+        // (The living Demon: not Lil' Monsta, who isn't a player. A Zombuul
+        // that only registers as dead stays the Zombuul: simplified.)
+        for (const x of s.players.filter((y) => (y.alive || y.undead) && team(y.role) === "demon")) {
+          if (x.undead) {
+            changed.push(`${x.label} (Zombuul), who registers as dead, stays the Zombuul`);
+          } else if (x.role !== choice.roles[0]) {
             changed.push(this.engineerChange(x, choice.roles[0]));
           }
         }
       }
     }
 
+    // (An evil Engineer, turned by the Mezepheles, says what a good one
+    // would have chosen: see strategy engineerBluff().)
+    const said = !p.human && sideOf(p) === "evil" ? this.strat.engineerBluff(this.s, p) : null;
+
     this.audit(
       "engineer",
-      `${p.label} (${name(p.role)}) made ${what}${
+      `${p.label} (${name(p.role)}) made ${what}${choice.why ? ` (why: ${choice.why})` : ""}${
         !effective
           ? ", but the Engineer is drunk or poisoned: nothing changes"
           : s.atheist
@@ -108,12 +119,12 @@ export const engineer = {
             : changed.length
               ? `: ${changed.join("; ")}`
               : ": already in play, so nothing changes"
-      }.`,
-      { actorId: p.id, ...choice, effective },
+      }${said ? `; they'll say they made ${engineerMade(said)}, as a good Engineer would` : ""}.`,
+      { actorId: p.id, kind: choice.kind, roles: choice.roles, effective },
     );
 
     // (Drunk or poisoned, it's misinformation in log.txt: see remember().)
-    this.remember(p, { ...engineerInfo(s, choice), functioning: effective });
+    this.remember(p, said ? { ...engineerInfo(s, said), functioning: false } : { ...engineerInfo(s, choice), functioning: effective });
 
     // (A new Godfather learns the Outsiders now: Night 1's step has passed.)
     if (s.night > 1) {
@@ -121,13 +132,13 @@ export const engineer = {
     }
   },
 
-  // The Engineer's Minions (`roles`): the living Minions whose character
-  // wasn't chosen (never the Marionette or Evil Twin) become the chosen
-  // ones not in play, in a random order, as many as can. Returns what
-  // changed, for the log.
+  // The Engineer's Minions (`roles`): the Minions in play (dead ones too)
+  // whose character wasn't chosen (never the Marionette or Evil Twin)
+  // become the chosen ones not in play, in a random order, as many as can,
+  // so no character is in play twice. Returns what changed, for the log.
   engineerMinions(roles) {
     const s = this.s;
-    const minions = s.players.filter((x) => x.alive && team(x.role) === "minion");
+    const minions = s.players.filter((x) => team(x.role) === "minion");
     const want = roles.filter((id) => !minions.some((x) => x.role === id));
     const free = shuffle(
       minions.filter((x) => !roles.includes(x.role) && !["marionette", "eviltwin"].includes(x.role)),
@@ -142,6 +153,9 @@ export const engineer = {
   engineerChange(x, role) {
     const s = this.s;
     const was = x.role;
+
+    // (What the old Demon's ability left behind ends.)
+    this.engineerEnds(x, was);
 
     x.role = role;
     x.shown = role;
@@ -160,6 +174,60 @@ export const engineer = {
     }
 
     return `${x.label} (${name(was)}) is now the ${name(role)}, and learns it`;
+  },
+
+  // What Demon x's old character (`was`) left behind, ended as they become
+  // another, logged: a Vigormortis's dead Minions lose their abilities and
+  // their neighbours' poison ends (as when it dies); a Pukka's victim isn't
+  // poisoned, and won't die; a Shabaloth's choices can't be regurgitated;
+  // a Po's charge is gone. (A Lleech's host is freed: see engineerChange().
+  // An Al-Hadikhia's choice tonight isn't made: see alhadikhia.js.)
+  engineerEnds(x, was) {
+    const s = this.s;
+
+    if (was === "vigormortis") {
+      const kept = s.players.filter((y) => !y.alive && y.vigor);
+
+      for (const y of kept) {
+        y.vigor = false;
+      }
+
+      for (const { id } of s.lastingPoison ?? []) {
+        const y = this.player(id);
+
+        y.poisoned = Boolean(y.lastingPoison) || s.poisoned === id;
+      }
+
+      s.lastingPoison = [];
+      this.audit(
+        "engineer",
+        `${x.label} is no longer the Vigormortis: ${
+          kept.length ? `${kept.map((y) => y.label).join(", ")} lose their abilities, and ` : ""
+        }its Minions' neighbours are no longer poisoned.`,
+        { playerId: x.id },
+      );
+    }
+
+    if (was === "pukka" && s.pukka) {
+      const v = this.player(s.pukka.targetId);
+
+      if (v?.poisonedBy === who(x)) {
+        v.poisoned = false;
+      }
+
+      s.pukka = null;
+      this.audit("engineer", `${x.label} is no longer the Pukka: ${v?.label ?? "nobody"} won't die of its poison.`, {
+        playerId: x.id,
+      });
+    }
+
+    if (was === "shabaloth") {
+      s.shabaloth = [];
+    }
+
+    if (was === "po") {
+      x.poCharged = false;
+    }
   },
 
   // At dawn, an NPC who used the Engineer last night (or claims to have:
@@ -183,7 +251,11 @@ export const engineer = {
         p.cover = null;
       }
 
-      const line = `Day ${s.day} — ${p.label}: "I'm the Engineer: last night I made ${engineerMade(m.engineer)}."`;
+      // (A Cannibal who ate the Engineer, or a Philosopher who gained it,
+      // says so as what they claim.)
+      const claim = p.cover?.as ?? p.claim;
+      const as = claim === "engineer" ? "the Engineer" : `the ${name(claim)}, with the Engineer's ability`;
+      const line = `Day ${s.day} — ${p.label}: "I'm ${as}: last night I made ${engineerMade(m.engineer)}."`;
 
       this.claimPublicly(p);
       s.publicLog.push(line);

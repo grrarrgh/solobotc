@@ -985,7 +985,7 @@ export const ENGINEER_THREAT = {
   devilsadvocate: 3,
   mastermind: 3,
   witch: 3,
-  pithag: 3,
+  pithag: 3, // but see ENGINEER_THREAT_PITHAG_DEMONS
   fearmonger: 3,
   wizard: 3,
   poisoner: 4,
@@ -995,6 +995,10 @@ export const ENGINEER_THREAT = {
   mezepheles: 5, // a good player would still turn evil
 };
 export const ENGINEER_THREAT_DEFAULT = 3;
+// The Pit-Hag, with another Demon on the script for her to make: one the
+// Engineer makes acts that night, and a Demon she makes kills at random
+// that night (see pithag.js), on top of what she does to good players.
+export const ENGINEER_THREAT_PITHAG_DEMONS = 4;
 
 // The Al-Hadikhia (characters/demon/alhadikhia.js): the chance a good NPC
 // it chose chooses to live, by the worth of the character they think they

@@ -96,6 +96,7 @@ import {
   atheistBreakChance,
   falseNoise,
   neigh,
+  who,
 } from "../src/storyteller.js";
 import { fishermanInfo } from "../src/characters/townsfolk/fisherman.js";
 import { alchemistAbility } from "../src/characters/townsfolk/alchemist.js";
@@ -15757,6 +15758,8 @@ function engineerNight(seed, night = 2) {
   role(chef, "engineer", "good");
   role(baron, "poisoner", "evil");
   role(imp, "vigormortis", "evil");
+  // (Never an Atheist game.)
+  o.s.atheist = null;
 
   return { ...o, eng: chef, minion: baron, demon: imp };
 }
@@ -15913,8 +15916,8 @@ test("an NPC Engineer acts by Night 3, on the least threatening choice for good,
   assert.equal(s.publicLog.length, n);
 });
 
-test("anyone claiming the Engineer makes up a choice by Night 3 and says it at dawn: an evil one misleads, a good pretender's is what a real one would choose", () => {
-  // Evil, with one Demon on the script: Minions not in play.
+test("anyone claiming the Engineer makes up a choice by Night 3 and says it at dawn: what a good Engineer would choose, evil or good", () => {
+  // Evil, with one Demon on the script: the Minions a good one would make.
   const { s, e, p, minion } = engineerNight("eng-bluff", 3);
 
   s.script.ids = s.script.ids.filter((id) => id !== "alhadikhia");
@@ -15923,7 +15926,7 @@ test("anyone claiming the Engineer makes up a choice by Night 3 and says it at d
   const m = infoOf("engineer").once(s, minion, e.strat, "lie");
 
   assert.equal(m.engineer.kind, "minions");
-  assert.ok(!m.engineer.roles.includes("poisoner"));
+  assert.deepEqual(m.engineer.roles, ["pithag"]);
   assert.equal(m.functioning, false);
   assert.equal(minion.engineerUsed, 3);
   assert.equal(infoOf("engineer").once(s, minion, e.strat, "lie"), null);
@@ -15933,9 +15936,10 @@ test("anyone claiming the Engineer makes up a choice by Night 3 and says it at d
   s.phase = "day";
   s.day = 3;
   e.npcEngineers();
-  assert.ok(s.publicLog.some((x) => x.startsWith(`Day 3 — ${minion.label}: "I'm the Engineer: last night I made the Minions a`)));
+  assert.ok(s.publicLog.some((x) => x === `Day 3 — ${minion.label}: "I'm the Engineer: last night I made the Minions a Pit-Hag."`));
 
-  // Evil, with another Demon on the script: the Demon, not the real one.
+  // Evil, with another Demon on the script: the least threatening Demon,
+  // as a good Engineer would choose, whichever is in play.
   const mixed = createState(["imp", "vortox", "poisoner", "engineer", "chef", "empath", "monk", "soldier", "saint"], 8, "eng-bluff-mixed");
   const d = mixed.players.find((x) => x.role === "imp" || x.role === "vortox");
 
@@ -15945,8 +15949,7 @@ test("anyone claiming the Engineer makes up a choice by Night 3 and says it at d
     d.engineerUsed = 0;
     const b = infoOf("engineer").once(mixed, d, e.strat, "lie");
 
-    assert.equal(b.engineer.kind, "demon");
-    assert.notEqual(b.engineer.roles[0], d.role);
+    assert.deepEqual(b.engineer, { kind: "demon", roles: ["imp"] });
   }
 
   // A good pretender: as a real Engineer would.
@@ -16260,4 +16263,99 @@ test("an Al-Hadikhia the Engineer changes tonight doesn't choose, and nothing is
   q.s.night = 3;
   q.e.alhadikhiaPlan();
   assert.equal(q.s.alhadikhia.ids.length, 3);
+});
+
+test("the Engineer counts dead Minions as in play, and as ones that can change: never two of a character", () => {
+  // A dead Pit-Hag: choosing the Pit-Hag changes nothing.
+  const { s, e, eng, minion, p } = engineerNight("eng-dead-minion");
+
+  role(minion, "pithag", "evil");
+  minion.alive = false;
+  minion.vigor = true;
+  role(p[2], "mezepheles", "evil");
+  e.engineerUses(eng, { kind: "minions", roles: ["pithag"] });
+  assert.equal(p.filter((x) => x.role === "pithag").length, 1);
+  assert.equal(p[2].role, "mezepheles");
+  assert.match(s.audit.findLast((x) => x.type === "engineer").text, /already in play, so nothing changes/);
+
+  // Choosing the Poisoner: one of them, dead or alive, becomes it.
+  const o = engineerNight("eng-dead-minion-2");
+
+  role(o.minion, "pithag", "evil");
+  o.minion.alive = false;
+  role(o.p[2], "mezepheles", "evil");
+  o.e.engineerUses(o.eng, { kind: "minions", roles: ["poisoner"] });
+  assert.equal(o.p.filter((x) => x.role === "poisoner").length, 1);
+  assert.equal(o.p.filter((x) => ["pithag", "mezepheles"].includes(x.role)).length, 1);
+});
+
+test("an evil Engineer (turned by the Mezepheles) makes evil's pick, but says what a good Engineer would; a Cannibal with the ability says so as the Cannibal", () => {
+  const { s, e, eng, minion } = engineerNight("eng-evil", 3);
+
+  eng.alignment = "evil";
+  e.strat.engineer = () => ({ kind: "minions", roles: ["mezepheles"] });
+  e.engineers();
+
+  assert.equal(minion.role, "mezepheles");
+  assert.match(s.audit.findLast((x) => x.type === "engineer").text, /they'll say they made the Demon a Vigormortis, as a good Engineer would/);
+  assert.equal(eng.memories.at(-1).text, "Engineer: made the Demon a Vigormortis.");
+
+  // A Cannibal who ate the Engineer.
+  const o = engineerNight("eng-cannibal", 3);
+
+  role(o.eng, "cannibal", "good");
+  o.eng.gained = "engineer";
+  o.e.strat.engineer = () => ({ kind: "minions", roles: ["pithag"] });
+  o.e.engineers();
+  o.s.phase = "day";
+  o.s.day = 3;
+  o.e.npcEngineers();
+  assert.ok(
+    o.s.publicLog.some((x) => x.endsWith(`${o.eng.label}: "I'm the Cannibal, with the Engineer's ability: last night I made the Minions a Pit-Hag."`)),
+  );
+});
+
+test("a Demon the Engineer changes leaves nothing behind: a Vigormortis's dead Minions lose their abilities, a Pukka's victim won't die; a Zombuul that registers as dead stays the Zombuul", () => {
+  const { s, e, eng, minion, demon } = engineerNight("eng-vig");
+
+  minion.alive = false;
+  minion.vigor = true;
+  e.engineerUses(eng, { kind: "demon", roles: ["alhadikhia"] });
+  assert.equal(demon.role, "alhadikhia");
+  assert.ok(!minion.vigor);
+  assert.match(s.audit.find((x) => x.type === "engineer").text, /is no longer the Vigormortis: .* lose their abilities/);
+
+  // The Pukka.
+  const o = engineerNight("eng-pukka");
+
+  role(o.demon, "pukka", "evil");
+  o.p[2].poisoned = true;
+  o.p[2].poisonedBy = who(o.demon);
+  o.s.pukka = { targetId: o.p[2].id };
+  o.e.engineerUses(o.eng, { kind: "demon", roles: ["vigormortis"] });
+  assert.equal(o.s.pukka, null);
+  assert.ok(!o.p[2].poisoned);
+
+  // The Zombuul, registering as dead.
+  const z = engineerNight("eng-zombuul");
+
+  role(z.demon, "zombuul", "evil");
+  z.demon.alive = false;
+  z.demon.undead = true;
+  z.e.engineerUses(z.eng, { kind: "demon", roles: ["vigormortis"] });
+  assert.equal(z.demon.role, "zombuul");
+  assert.match(z.s.audit.findLast((x) => x.type === "engineer").text, /who registers as dead, stays the Zombuul/);
+});
+
+test("an NPC Engineer's night without using it is in log.txt, as is why they chose; on The Midnight Oasis they make the Demon a Vigormortis", () => {
+  const { s, e, eng } = engineerNight("eng-why", 3);
+
+  e.strat.engineer = () => null;
+  e.engineers();
+  assert.match(s.audit.findLast((x) => x.type === "engineer").text, /doesn't use the Engineer ability tonight/);
+
+  delete e.strat.engineer;
+  e.engineers();
+  assert.match(s.audit.findLast((x) => x.type === "engineer").text, /made the Demon a Vigormortis \(why: for good: the Demon option gains/);
+  assert.ok(eng.engineerUsed);
 });

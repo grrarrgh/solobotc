@@ -2319,6 +2319,11 @@ function resetGame() {
   selectedPlayerId = null;
   marks = {};
   nightPicks = [];
+  // (A new game's Engineer choice starts afresh: see renderEngineerChoice().)
+  $("engineer-kind").value = "";
+  delete $("engineer-choice").dataset.key;
+  delete $("engineer-roles").dataset.key;
+  $("engineer-roles").innerHTML = "";
   sunOpen = false;
   sunPicks = [];
   dialShown = null;

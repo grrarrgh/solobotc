@@ -514,3 +514,7 @@ test("if the Al-Hadikhia chose you, you choose Live or Die with buttons in the n
   assert.match(app, /document\.querySelectorAll\("#live-or-die \[data-live\]"\)/);
   assert.match(app, /e\.choose\(\[\], b\.dataset\.live\);/);
 });
+
+test("a new game's Engineer choice starts afresh, not with the last game's selections", () => {
+  assert.match(app, /function resetGame\(\) \{[\s\S]*?\$\("engineer-kind"\)\.value = "";\s*delete \$\("engineer-choice"\)\.dataset\.key;\s*delete \$\("engineer-roles"\)\.dataset\.key;\s*\$\("engineer-roles"\)\.innerHTML = "";/);
+});
