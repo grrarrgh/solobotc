@@ -301,9 +301,6 @@ export class Engine {
       this.atheistSafe();
     }
 
-    // (The Al-Hadikhia chooses at dusk: you might choose to live or die.)
-    this.alhadikhiaPlan();
-
     if (this.wakeChoice()) {
       return;
     }
@@ -314,6 +311,8 @@ export class Engine {
   // After your night choice (or with none): if the Al-Hadikhia chose you,
   // you choose to live or die (see alhadikhia.js); then the night goes on.
   nightGoesOn() {
+    this.alhadikhiaPlan();
+
     if (this.alhadikhiaWake()) {
       return;
     }

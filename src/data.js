@@ -999,6 +999,11 @@ export const ENGINEER_THREAT_DEFAULT = 3;
 // Engineer makes acts that night, and a Demon she makes kills at random
 // that night (see pithag.js), on top of what she does to good players.
 export const ENGINEER_THREAT_PITHAG_DEMONS = 4;
+// Demons the town would know were in play (or not): the Al-Hadikhia's
+// choices are announced; everyone knows the Leviathan is; Legion is many.
+// An evil Engineer bluffer never claims to have made the Demon one of these,
+// or another while their own is one (see strategy engineerBluff()).
+export const ENGINEER_PUBLIC_DEMONS = ["alhadikhia", "leviathan", "legion"];
 
 // The Al-Hadikhia (characters/demon/alhadikhia.js): the chance a good NPC
 // it chose chooses to live, by the worth of the character they think they
@@ -1011,6 +1016,13 @@ export const ENGINEER_THREAT_PITHAG_DEMONS = 4;
 // who does wins for good.
 export const ALHADIKHIA_LIVE_CHANCE = { high: 0.75, med: 0.55, low: 0.3, avoid: 0.5 };
 export const ALHADIKHIA_DEAD_LIVE_CHANCE = 0.9;
+// The last of 3 good NPCs chosen dies at ALHADIKHIA_LAST_DIE_CHANCE, as a
+// town agrees, so that they don't all live (and all die); with
+// ALHADIKHIA_SMALL_TOWN or fewer alive, at ALHADIKHIA_SMALL_TOWN_DIE_CHANCE.
+// (Tuned so evil wins about half the games dealt the Al-Hadikhia.)
+export const ALHADIKHIA_LAST_DIE_CHANCE = 0.85;
+export const ALHADIKHIA_SMALL_TOWN = 7;
+export const ALHADIKHIA_SMALL_TOWN_DIE_CHANCE = 0.95;
 export const ALHADIKHIA_EVIL_LIVE_CHANCE = 0.75;
 
 

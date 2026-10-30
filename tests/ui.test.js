@@ -518,3 +518,9 @@ test("if the Al-Hadikhia chose you, you choose Live or Die with buttons in the n
 test("a new game's Engineer choice starts afresh, not with the last game's selections", () => {
   assert.match(app, /function resetGame\(\) \{[\s\S]*?\$\("engineer-kind"\)\.value = "";\s*delete \$\("engineer-choice"\)\.dataset\.key;\s*delete \$\("engineer-roles"\)\.dataset\.key;\s*\$\("engineer-roles"\)\.innerHTML = "";/);
 });
+
+test("self-play notes your Al-Hadikhia choice as to live or to die", () => {
+  const selfplay = read("../src/selfplay.js");
+
+  assert.match(selfplay, /c\.liveOrDie \? `chose to \$\{character\} \(Al-Hadikhia\)\.`/);
+});

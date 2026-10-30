@@ -60,9 +60,13 @@ import {
   ENGINEER_THREAT,
   ENGINEER_THREAT_DEFAULT,
   ENGINEER_THREAT_PITHAG_DEMONS,
+  ENGINEER_PUBLIC_DEMONS,
   ALHADIKHIA_LIVE_CHANCE,
   ALHADIKHIA_DEAD_LIVE_CHANCE,
   ALHADIKHIA_EVIL_LIVE_CHANCE,
+  ALHADIKHIA_LAST_DIE_CHANCE,
+  ALHADIKHIA_SMALL_TOWN,
+  ALHADIKHIA_SMALL_TOWN_DIE_CHANCE,
   PIXIE_DOUBLE_CLAIM_FACTOR,
   TRUST_EVIDENCE,
   HIDDEN_OUTSIDERS,
@@ -126,6 +130,7 @@ import {
   shownBefore,
   unknownMate,
   hasCannibal,
+  demonTo,
 } from "./storyteller.js";
 import { byId, pick, sample, shuffle, claimTo, claimHeard, tick } from "./util.js";
 import { logNames } from "./log.js";
@@ -3592,24 +3597,26 @@ export class SimpleStrategy {
         : null;
   }
 
-  // Everyone the Demon attacks tonight: the Shabaloth 2 players; the Po
-  // nobody (at PO_CHARGE_CHANCE), or 3 players after a night of nobody;
-  // every other Demon 1.
   // The Al-Hadikhia p's choice tonight: up to 3 players, each as the Demon
   // would choose a player to kill (see demon()), never itself, nor a
   // teammate it knows while anyone else is left. You only when it has
   // nobody else to choose, alone: with fewer than 3 good NPCs left, it
-  // chooses fewer. (With only its team left, its teammates, so the game
+  // chooses fewer, and while you live, never more than would leave you a
+  // final 3 if all died. (With only its team left, its teammates, so the game
   // reaches its end.) (See characters/demon/alhadikhia.js.)
   alhadikhia(s, p) {
     const picks = [];
     const skip = [p];
+    // (While you live, never so many that, if all died, fewer than 3 would
+    // be left: you always get a final 3. With 3 alive, 1, as any Demon.)
+    const alive = s.players.filter((x) => x.alive).length;
+    const most = s.players.some((x) => x.human && x.alive) ? (alive <= 3 ? 1 : Math.min(3, alive - 3)) : 3;
     const others = () =>
       s.players.some(
         (x) => x.alive && x !== p && !teammate(p, x) && !picks.includes(x) && !skip.includes(x),
       );
 
-    for (let i = 0; i < 9 && picks.length < 3; i++) {
+    for (let i = 0; i < 9 && picks.length < most; i++) {
       const t = this.demon(s, p, [...picks, ...skip]);
 
       if (!t || picks.includes(t) || skip.includes(t)) {
@@ -3635,24 +3642,56 @@ export class SimpleStrategy {
     return picks;
   }
 
-  // Whether NPC x, chosen by the Al-Hadikhia, chooses to live: a good one
-  // by their character's worth, as they think it is (ALHADIKHIA_LIVE_CHANCE);
-  // a dead one, or an evil one, mostly; on the night of its jinx with the
-  // Mastermind (`final`), a good one never (one death wins for good).
-  alhadikhiaLive(s, x, final = false) {
+  // Whether NPC x, chosen by the Al-Hadikhia, chooses to live (`ctx`: the
+  // players `chosen`, in order, and x's `index` among them). A good one, by
+  // what the town would agree:
+  // - on the night of its jinx with the Mastermind (`final`), never (one
+  //   death wins for good);
+  // - when all of the chosen dying would leave 2 or fewer alive, or no good
+  //   player but you, the last good NPC chosen dies and the others live, so
+  //   just one dies (never "all live, all die");
+  // - the last of 3 chosen, mostly dies (ALHADIKHIA_LAST_DIE_CHANCE), so
+  //   they don't all live; more so with few alive (ALHADIKHIA_SMALL_TOWN);
+  // - else by their character's worth, as they think it is
+  //   (ALHADIKHIA_LIVE_CHANCE).
+  // A dead one, or an evil one, mostly lives.
+  alhadikhiaLive(s, x, final = false, ctx = null) {
     if (final && sideOf(x) === "good") {
       return false;
     }
 
-    const chance = !x.alive
-      ? ALHADIKHIA_DEAD_LIVE_CHANCE
-      : sideOf(x) === "evil"
-        ? ALHADIKHIA_EVIL_LIVE_CHANCE
-        : ALHADIKHIA_LIVE_CHANCE[DEMON_KILL_PRIORITY[ability(x)] ?? "low"] ?? ALHADIKHIA_LIVE_CHANCE.low;
+    if (!x.alive) {
+      return s.r() < ALHADIKHIA_DEAD_LIVE_CHANCE;
+    }
+
+    if (sideOf(x) === "evil") {
+      return s.r() < ALHADIKHIA_EVIL_LIVE_CHANCE;
+    }
+
+    const chosen = ctx?.chosen ?? [x];
+    const left = s.players.filter((y) => y.alive && !chosen.includes(y));
+    const danger = left.length <= 2 || !left.some((y) => !y.human && sideOf(y) === "good");
+    const good = chosen.filter((y) => !y.human && y.alive && sideOf(y) === "good");
+    const last = good.at(-1) === x;
+
+    if (danger) {
+      return !last;
+    }
+
+    const alive = s.players.filter((y) => y.alive).length;
+
+    if (chosen.length === 3 && (ctx?.index ?? 0) === 2) {
+      return s.r() >= (alive <= ALHADIKHIA_SMALL_TOWN ? ALHADIKHIA_SMALL_TOWN_DIE_CHANCE : ALHADIKHIA_LAST_DIE_CHANCE);
+    }
+
+    const chance = ALHADIKHIA_LIVE_CHANCE[DEMON_KILL_PRIORITY[ability(x)] ?? "low"] ?? ALHADIKHIA_LIVE_CHANCE.low;
 
     return s.r() < chance;
   }
 
+  // Everyone the Demon attacks tonight: the Shabaloth 2 players; the Po
+  // nobody (at PO_CHARGE_CHANCE), or 3 players after a night of nobody;
+  // every other Demon 1.
   demonTargets(s, p) {
     const more = (n) => {
       const picks = [];
@@ -4160,7 +4199,7 @@ export class SimpleStrategy {
   // least threatening to good, whichever gains good more over the script's
   // typical ones (see ENGINEER_THREAT); for evil, the most threatening.
   // Null with nothing to choose. (Ties at random.)
-  engineerPick(s, p, side = sideOf(p)) {
+  engineerPick(s, p, side = sideOf(p), kind = null) {
     const { demons, minions, count } = engineerOptions(s, true);
     const evil = side === "evil";
     // (The Pit-Hag, by whether the script has another Demon for her to
@@ -4186,16 +4225,32 @@ export class SimpleStrategy {
     const round = (x) => Math.round(x * 100) / 100;
     const why = `${evil ? "for evil" : "for good"}: the Demon option gains ${round(gainDemon)}, the Minions ${round(gainMinions)}`;
 
-    return demon && gainDemon >= gainMinions
+    // (`kind`: that option, if there is one.)
+    const demonFirst = kind ? kind === "demon" : gainDemon >= gainMinions;
+
+    return demon && (demonFirst || !mins.length)
       ? { kind: "demon", roles: [demon], why }
-      : { kind: "minions", roles: mins, why };
+      : mins.length
+        ? { kind: "minions", roles: mins, why }
+        : null;
   }
 
   // What an evil player claiming the Engineer (or an evil Engineer) says
   // they made: what a good Engineer would choose (see engineerPick()), as
-  // anything else would give them away.
+  // anything else would give them away; but not a Demon that their own
+  // Demon, as far as they know it, would show up as false in public (the
+  // Al-Hadikhia's choices are announced; everyone knows the Leviathan is in
+  // play; Legion is many): then the Minions a good Engineer would make.
   engineerBluff(s, p) {
-    return this.engineerPick(s, p, "good");
+    const c = this.engineerPick(s, p, "good");
+    const real = isDemon(p) ? p.role : demonTo(s, p)?.role;
+    const shows = (id) => ENGINEER_PUBLIC_DEMONS.includes(id);
+
+    if (c?.kind === "demon" && real && real !== c.roles[0] && (shows(real) || shows(c.roles[0]))) {
+      return this.engineerPick(s, p, "good", "minions") ?? c;
+    }
+
+    return c;
   }
 
   // The Juggler guesses up to 5 living players' characters, players whose

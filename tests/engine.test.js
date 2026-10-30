@@ -16259,7 +16259,7 @@ test("an Al-Hadikhia the Engineer changes tonight doesn't choose, and nothing is
   q.e.alhadikhiaPlan();
   q.e.engineerChange(q.d, "alhadikhia");
   q.e.alhadikhiaNight(q.d);
-  assert.match(q.s.audit.findLast((x) => x.type === "alhadikhia").text, /made tonight, chooses nobody/);
+  assert.match(q.s.audit.findLast((x) => x.type === "alhadikhia").text, /chooses nobody tonight: it chose nothing at dusk/);
   q.s.night = 3;
   q.e.alhadikhiaPlan();
   assert.equal(q.s.alhadikhia.ids.length, 3);
@@ -16358,4 +16358,134 @@ test("an NPC Engineer's night without using it is in log.txt, as is why they cho
   e.engineers();
   assert.match(s.audit.findLast((x) => x.type === "engineer").text, /made the Demon a Vigormortis \(why: for good: the Demon option gains/);
   assert.ok(eng.engineerUsed);
+});
+
+test("the Al-Hadikhia's kill goes through an attack's bookkeeping: the Fool's save is used up, and who foiled it (or protected them) is remembered", () => {
+  const o = ahNight("ah-fool");
+  const [, a, b, c] = o.p;
+
+  role(a, "fool", "good");
+  role(b, "soldier", "good");
+  c.protected = true;
+  c.protectedBy = o.p[4].id;
+  ahChoose(o, [a.id, b.id, c.id], { [a.id]: false, [b.id]: false, [c.id]: false });
+  o.e.alhadikhiaNight(o.d);
+
+  // (Then all three count as alive, so all die: the Fool, their save used,
+  // too.)
+  assert.ok(a.foolUsed && !a.alive);
+  assert.ok(b.alive && c.alive);
+  assert.ok(o.d.foiled.includes(b.id));
+  assert.ok(o.d.protectors.includes(o.p[4].id));
+  assert.match(o.s.audit.findLast((x) => x.type === "alhadikhia").text, /survived as the Fool/);
+});
+
+test("good NPCs the Al-Hadikhia chose never let all of them die when that would leave 2 or fewer alive: the last good one dies, the rest live; and while you live, it never chooses so many", () => {
+  const o = ahNight("ah-danger");
+  const strat = new SimpleStrategy();
+  const [you, a, b, c] = o.p;
+
+  // 5 alive (you, 2 good NPCs, the Poisoner, the Al-Hadikhia): it chooses
+  // at most 2.
+  [o.p[3], o.p[4], o.p[5]].forEach((x) => (x.alive = false));
+  role(o.p[3], "noble", "good");
+  o.p[3].alive = false;
+  assert.ok(strat.alhadikhia(o.s, o.d).length <= 2);
+
+  // Chosen 2 of 4 alive (all dying would leave 2): the first lives, the last
+  // dies.
+  you.alive = false;
+  for (let i = 0; i < 20; i++) {
+    o.s.r = rng(`ah-danger-${i}`);
+    assert.equal(strat.alhadikhiaLive(o.s, a, false, { chosen: [a, b], index: 0 }), true);
+    assert.equal(strat.alhadikhiaLive(o.s, b, false, { chosen: [a, b], index: 1 }), false);
+  }
+
+  void c;
+});
+
+test("the last of 3 good NPCs the Al-Hadikhia chose mostly chooses to die, so they don't all live", () => {
+  const o = ahNight("ah-third");
+  const strat = new SimpleStrategy();
+  const [, a, b, c] = o.p;
+
+  role(c, "snakecharmer", "good");
+
+  let died = 0;
+
+  for (let i = 0; i < 200; i++) {
+    o.s.r = rng(`ah-third-${i}`);
+    died += strat.alhadikhiaLive(o.s, c, false, { chosen: [a, b, c], index: 2 }) ? 0 : 1;
+  }
+
+  assert.ok(died > 150, `${died}`);
+});
+
+test("the Al-Hadikhia's choice is planned after yours, and logged: not if your Engineer choice changes the Demon tonight", () => {
+  const o = ahNight("ah-plan");
+  const [you] = o.p;
+
+  o.e.alhadikhiaPlan();
+  assert.equal(o.s.alhadikhia.ids.length, 3);
+  assert.match(o.s.audit.findLast((x) => x.type === "alhadikhia").text, /^At dusk, .* \(Al-Hadikhia\) chooses .* for tonight\.$/);
+
+  const q = ahNight("ah-plan-engineer");
+
+  role(q.p[0], "engineer", "good");
+  q.s.humanChoice = { role: "engineer", night: 2, players: [], engineer: { kind: "demon", roles: ["vigormortis"] } };
+  q.e.alhadikhiaPlan();
+  assert.equal(q.s.alhadikhia, null);
+  void you;
+});
+
+test("alone, you're told you die either way", () => {
+  const o = ahNight("ah-alone");
+
+  o.s.alhadikhia = { night: 2, demonId: o.d.id, ids: [o.p[0].id], human: null };
+  assert.ok(o.e.alhadikhiaWake());
+  assert.match(o.s.pending.prompt, /It chose only you: .* You die either way\./);
+  assert.ok(o.s.audit.some((x) => x.text === "The Storyteller woke you: the Al-Hadikhia chose you, to choose to live or die."));
+});
+
+test("an evil Engineer bluffer never claims a Demon their own Demon would publicly contradict: with the Al-Hadikhia in play, the Minions", () => {
+  const { s, e, minion, demon } = engineerNight("eng-bluff-ah", 3);
+
+  role(demon, "alhadikhia", "evil");
+  minion.claim = "engineer";
+
+  const c = e.strat.engineerBluff(s, minion);
+
+  assert.equal(c.kind, "minions");
+
+  // With the Vigormortis, the good choice stands.
+  role(demon, "vigormortis", "evil");
+  assert.deepEqual(e.strat.engineerBluff(s, minion).roles, ["vigormortis"]);
+});
+
+test("the Vigormortis the Engineer changes: a dead Mastermind keeps their ability (their jinx), and last night's Poisoner's poison isn't kept", () => {
+  const { s, e, eng, minion, p } = engineerNight("eng-vig-mm");
+
+  role(minion, "mastermind", "evil");
+  minion.alive = false;
+  minion.vigor = true;
+  p[2].poisoned = true;
+  p[2].poisonedBy = "Player 9";
+  s.poisoned = p[2].id;
+  s.lastingPoison = [{ id: p[2].id }];
+  e.engineerUses(eng, { kind: "demon", roles: ["alhadikhia"] });
+  assert.ok(minion.vigor);
+  assert.ok(!p[2].poisoned);
+  assert.equal(p[2].poisonedBy, null);
+});
+
+test("the Pit-Hag making a second Demon beside an Al-Hadikhia who was the Scarlet Woman makes her the Scarlet Woman again", () => {
+  const o = ahNight("ah-sw-pithag");
+  const [, a] = o.p;
+
+  o.d.wasScarletWoman = true;
+  role(o.p[6], "pithag", "evil");
+  o.e.strat.pithag = () => ({ target: a, role: "vigormortis" });
+  o.e.pitHag();
+  assert.equal(a.role, "vigormortis");
+  assert.equal(o.d.role, "scarletwoman");
 });

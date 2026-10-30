@@ -100,6 +100,11 @@ export const pithag = {
         this.damselKnown();
       }
 
+      // (With the Al-Hadikhia: the Scarlet Woman's jinx, see alhadikhia.js.)
+      if (demon) {
+        this.alhadikhiaTwoDemons();
+      }
+
       // Deaths tonight are arbitrary (see arbitraryDeath()).
       if (demon) {
         s.arbitraryNight = s.night;

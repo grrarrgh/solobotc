@@ -157,7 +157,10 @@ export class SelfPlay {
     if (c.characters) {
       const character = pick(c.characters, this.r);
 
-      this.note(`chose the ${name(character)} (${name(c.role)}).`);
+      // (The Al-Hadikhia chose you: to live or die.)
+      this.note(
+        c.liveOrDie ? `chose to ${character} (Al-Hadikhia).` : `chose the ${name(character)} (${name(c.role)}).`,
+      );
       return { ids: [], character };
     }
 

@@ -186,16 +186,20 @@ export const engineer = {
     const s = this.s;
 
     if (was === "vigormortis") {
-      const kept = s.players.filter((y) => !y.alive && y.vigor);
+      // (Not the Mastermind, as when it dies: see vigormortisDeath().)
+      const kept = s.players.filter((y) => !y.alive && y.vigor && y.role !== "mastermind");
 
       for (const y of kept) {
         y.vigor = false;
       }
 
+      // (Tonight's Poisoner hasn't chosen yet: only a Snake Charmer swap's
+      // poison stays.)
       for (const { id } of s.lastingPoison ?? []) {
         const y = this.player(id);
 
-        y.poisoned = Boolean(y.lastingPoison) || s.poisoned === id;
+        y.poisoned = Boolean(y.lastingPoison);
+        y.poisonedBy = y.poisoned ? y.poisonedBy : null;
       }
 
       s.lastingPoison = [];

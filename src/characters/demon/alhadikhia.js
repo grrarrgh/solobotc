@@ -26,12 +26,21 @@ import { untwinned } from "../../strategy.js";
 // there would be two Demons, one of which was the Scarlet Woman, she's the
 // Scarlet Woman again (alhadikhiaTwoDemons()).
 export const alhadikhia = {
-  // At dusk: whom the living Al-Hadikhia chooses tonight (s.alhadikhia: {
-  // night, demonId, ids, human }: `human`, your choice once made), or, on
-  // the night after its execution with the Mastermind alive (their jinx),
-  // the 3 good players: you, if alive, and good NPCs at random.
+  // Once your own night choice is made (see engine nightGoesOn()), as late
+  // as it can be while you're still to be woken: whom the living
+  // Al-Hadikhia chooses tonight (s.alhadikhia: { night, demonId, ids, human
+  // }: `human`, your choice once made), or, on the night after its execution
+  // with the Mastermind alive (their jinx), the 3 good players: you, if
+  // alive, and good NPCs at random. Not if your choice tonight stops it: as
+  // the Engineer, making the Demon another; as the Exorcist, choosing it.
+  // (An NPC's might still: then it chooses nobody, and you heard only that
+  // it chose you, alone; see alhadikhiaWake().) Logged.
   alhadikhiaPlan() {
     const s = this.s;
+
+    if (s.alhadikhia?.night === s.night) {
+      return;
+    }
 
     s.alhadikhia = null;
 
@@ -47,21 +56,32 @@ export const alhadikhia = {
       ].map((x) => x.id);
 
       s.alhadikhia = { night: s.night, final: true, ids, human: null };
+      this.audit(
+        "alhadikhia",
+        `At dusk, the executed Al-Hadikhia chooses ${ids.map((id) => this.player(id).label).join(", ")} (its jinx with the Mastermind).`,
+        { targetIds: ids },
+      );
       return;
     }
 
     const d = s.players.find((x) => x.alive && x.role === "alhadikhia");
+    const c = s.humanChoice?.night === s.night ? s.humanChoice : null;
+    const stopped =
+      (c?.engineer && works(this.human()) && (c.engineer.kind === "minions" ? false : c.engineer.roles[0] !== "alhadikhia")) ||
+      (c?.role === "exorcist" && works(this.human()) && c.players?.includes(d));
 
-    if (s.night < 2 || !d || s.atheist) {
+    if (s.night < 2 || !d || s.atheist || stopped) {
       return;
     }
 
-    s.alhadikhia = {
-      night: s.night,
-      demonId: d.id,
-      ids: this.strat.alhadikhia(s, d).map((x) => x.id),
-      human: null,
-    };
+    const picks = this.strat.alhadikhia(s, d);
+
+    s.alhadikhia = { night: s.night, demonId: d.id, ids: picks.map((x) => x.id), human: null };
+    this.audit(
+      "alhadikhia",
+      `At dusk, ${d.label} (Al-Hadikhia) chooses ${picks.map((x) => x.label).join(", ") || "nobody"} for tonight.`,
+      { actorId: d.id, targetIds: s.alhadikhia.ids },
+    );
   },
 
   // If the Al-Hadikhia chose you tonight and you haven't chosen yet, wakes
@@ -89,10 +109,12 @@ export const alhadikhia = {
       }. Do you choose to live or to die? ${
         a.final
           ? "If all of you choose to live, evil wins; otherwise, good wins."
-          : `If all ${a.ids.length === 1 ? "of you (just you)" : "of you"} choose to live, all of you die.`
+          : a.ids.length === 1
+            ? "It chose only you: if you choose to live, all chosen live, so all die. You die either way."
+            : "If all of you choose to live, all of you die."
       }`,
     };
-    this.audit("wake", `The Storyteller woke ${h.label}: the Al-Hadikhia chose them, to choose to live or die.`);
+    this.audit("wake", "The Storyteller woke you: the Al-Hadikhia chose you, to choose to live or die.");
 
     return true;
   },
@@ -112,11 +134,12 @@ export const alhadikhia = {
     const s = this.s;
     const a = s.alhadikhia;
 
-    return a.ids.map((id) => {
-      const t = this.player(id);
+    const chosen = a.ids.map((id) => this.player(id));
 
-      return { t, live: t.human ? a.human !== false : this.strat.alhadikhiaLive(s, t, final) };
-    });
+    return chosen.map((t, index) => ({
+      t,
+      live: t.human ? a.human !== false : this.strat.alhadikhiaLive(s, t, final, { chosen, index }),
+    }));
   },
 
   // In the Al-Hadikhia d's place in the night: its choice, resolved.
@@ -125,7 +148,9 @@ export const alhadikhia = {
     const a = s.alhadikhia;
 
     if (!a || a.night !== s.night || a.final || a.demonId !== d.id) {
-      this.audit("alhadikhia", `${d.label} (Al-Hadikhia), made tonight, chooses nobody.`, { actorId: d.id });
+      this.audit("alhadikhia", `${d.label} (Al-Hadikhia) chooses nobody tonight: it chose nothing at dusk.`, {
+        actorId: d.id,
+      });
       return;
     }
 
@@ -203,31 +228,44 @@ export const alhadikhia = {
 
   // The Al-Hadikhia's death for t: unless the Demon can't kill them (the
   // Soldier, the Monk's protection, the Innkeeper's, the Tea Lady's, the
-  // Sailor, the Fool). Returns what saved them, or null if they died.
+  // Sailor, the Fool: see engine kill()). As for any attack (see engine
+  // attack()), a Sailor's choice is settled, and the Demon remembers who
+  // foiled it and who protected them, to choose others from then on.
+  // Returns what saved them, or null if they died.
   alhadikhiaKill(d, t) {
     if (!t.alive) {
       return null;
     }
 
+    this.sailorResolve({ demon: d, victim: t });
+
     const guard = this.guard(t, "demon");
-    const blocked =
-      t.role === "soldier" && works(t)
-        ? "the Soldier is safe from the Demon"
-        : t.protected
-          ? "the Monk protected them"
-          : guard
-            ? guard.text
-            : this.foolSaves(t, "demon")
-              ? "they survived as the Fool"
-              : null;
+    const soldier = t.role === "soldier" && works(t);
+    const blocked = soldier
+      ? "the Soldier is safe from the Demon"
+      : t.protected
+        ? "the Monk protected them"
+        : guard?.text ?? null;
+
+    if (soldier || guard) {
+      d.foiled = [...new Set([...(d.foiled ?? []), t.id])];
+    }
+
+    const protector = t.protected ? t.protectedBy : guard?.by;
+
+    if (protector) {
+      d.protectors = [...new Set([...(d.protectors ?? []), protector])];
+    }
 
     if (blocked) {
       return blocked;
     }
 
+    const fool = !t.foolUsed;
+
     this.kill(t, "demon");
 
-    return t.alive ? "they can't die" : null;
+    return !t.alive ? null : fool && t.foolUsed ? "they survived as the Fool" : "they can't die";
   },
 
   // The night after the Al-Hadikhia's execution with the Mastermind alive
@@ -252,6 +290,16 @@ export const alhadikhia = {
         ? "The executed Al-Hadikhia's 3 good players all chose to live (its jinx with the Mastermind)."
         : "Not all of the executed Al-Hadikhia's 3 good players chose to live (its jinx with the Mastermind).",
     );
+
+    // (Good's win can be held off, while both twins live: the game goes on
+    // without a Demon, as after the Mastermind's extra day. See
+    // mastermind.js mastermindEnd().)
+    if (!s.winner) {
+      s.mastermindDay = null;
+      s.mastermindDone = true;
+      s.alhadikhiaFinal = null;
+      this.audit("mastermind", "The Al-Hadikhia's jinx with the Mastermind is over, but the game goes on.");
+    }
   },
 
   // At dawn: who the Al-Hadikhia chose last night, and who of them is alive
@@ -280,11 +328,15 @@ export const alhadikhia = {
   },
 
   // If there would be two Demons, one of which was the Scarlet Woman (one
-  // the Al-Hadikhia brought back to life), she becomes the Scarlet Woman
-  // again (their jinx).
+  // the Al-Hadikhia brought back to life, or the Pit-Hag made), with the
+  // Al-Hadikhia among them, she becomes the Scarlet Woman again (their
+  // jinx).
   alhadikhiaTwoDemons() {
     const demons = this.s.players.filter((x) => x.alive && isDemon(x) && team(x.role) === "demon");
-    const sw = demons.length > 1 && demons.find((x) => x.wasScarletWoman);
+    const sw =
+      demons.length > 1 &&
+      demons.some((x) => x.role === "alhadikhia") &&
+      demons.find((x) => x.wasScarletWoman);
 
     if (sw) {
       sw.role = "scarletwoman";
