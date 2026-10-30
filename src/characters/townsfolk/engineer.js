@@ -221,7 +221,7 @@ export const engineer = {
       roles: picked,
     });
 
-    this.resolveNight();
+    this.nightGoesOn();
   },
 };
 

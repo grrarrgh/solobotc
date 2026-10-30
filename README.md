@@ -82,7 +82,7 @@ Everyone Can Play, Sects & Violets, Bad Moon Rising, Onion Pies, Catfishing,
 Extension Cord, Trust Redux, Outed Evil, No Roles Barred, Harold Holt's Revenge, Chef's Deluxe and The Midnight Oasis, in the official script-tool JSON format. Travellers
 aren't supported: a script's Travellers are left out (`TRAVELLERS` in
 `src/characters/catalog.js`). Fabled (such as the Sentinel) are Storyteller rules, never
-dealt (`FABLED`); the Spirit of Ivory's rule is in `src/characters/fabled/`. Characters the game doesn't run yet are left out too (`NOT_YET`: for now the Al-Hadikhia). Jinxes between a script's characters are listed on its
+dealt (`FABLED`); the Spirit of Ivory's rule is in `src/characters/fabled/`. Characters the game doesn't run yet are left out too (`NOT_YET`, empty for now). Jinxes between a script's characters are listed on its
 script sheet (`JINXES`).
 
 Characters don't belong to a script: a script is just a list of character

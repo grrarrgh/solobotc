@@ -506,3 +506,11 @@ test("as the Engineer, you choose the Demon or the Minions, then which, from sel
   assert.match(app, /e\.engineerChoose\(pick\.kind, pick\.roles\);/);
   assert.match(app, /e\.engineerChoose\(engineer\.kind, engineer\.roles\);/);
 });
+
+test("if the Al-Hadikhia chose you, you choose Live or Die with buttons in the night panel", () => {
+  assert.match(html, /<span id="live-or-die" hidden>\s*<button type="button" data-live="live">Live<\/button>\s*<button type="button" data-live="die">Die<\/button>/);
+  assert.match(app, /\$\("live-or-die"\)\.hidden = !p\.liveOrDie;/);
+  assert.match(app, /\$\("night-select"\)\.hidden = Boolean\(p\.liveOrDie\);/);
+  assert.match(app, /document\.querySelectorAll\("#live-or-die \[data-live\]"\)/);
+  assert.match(app, /e\.choose\(\[\], b\.dataset\.live\);/);
+});

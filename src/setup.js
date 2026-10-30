@@ -213,7 +213,7 @@ export function createState(
   const pretend = atheistGame
     ? [
         pick(
-          pool("demon").filter((x) => !["legion", "lilmonsta", "leviathan"].includes(x)),
+          pool("demon").filter((x) => !["legion", "lilmonsta", "leviathan", "alhadikhia"].includes(x)),
           r,
         ) ?? "imp",
         ...sample(
@@ -405,7 +405,7 @@ export function createState(
       ? "leviathan"
       : (pick(
           pool("demon").filter(
-            (x) => x !== demons[0] && !["legion", "lilmonsta", "leviathan"].includes(x),
+            (x) => x !== demons[0] && !["legion", "lilmonsta", "leviathan", "alhadikhia"].includes(x),
           ),
           r,
         ) ??

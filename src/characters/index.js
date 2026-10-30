@@ -75,6 +75,7 @@ import { widow } from "./minion/widow.js";
 import { witch } from "./minion/witch.js";
 import { wizard } from "./minion/wizard.js";
 
+import { alhadikhia } from "./demon/alhadikhia.js";
 import { fanggu } from "./demon/fanggu.js";
 import { legion } from "./demon/legion.js";
 import { leviathan } from "./demon/leviathan.js";
@@ -154,6 +155,7 @@ export const characters = {
   widow,
   witch,
   wizard,
+  alhadikhia,
   fanggu,
   legion,
   leviathan,

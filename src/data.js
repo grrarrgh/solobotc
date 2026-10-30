@@ -580,6 +580,7 @@ export const EVIDENCE_WEIGHT = {
   confirmedLikely: -4, // near certain: a Professor whose choice came back to life
   confirmedMaybe: -2, // partly: a Fool, Sailor or Pacifist saving an execution, a Tea Lady's neighbour surviving one, a Moonchild's pick dying, a Gossip's statement followed by a death
   abilityFailed: 1.5, // their claimed ability visibly failed (a Virgin, a Monk's protection)
+  alhadikhiaChose: -0.5, // the Al-Hadikhia chose them: it chooses good players
   golemSurvived: 2, // a player claiming the Golem nominated them, and they didn't die (the Demon, or a drunk, poisoned or lying Golem)
   abilityUnused: 0.5, // late on, still hasn't used a public ability they claim (Slayer, Juggler)
   damselGuess: 6, // guessed the Damsel in public: only a Minion's guess counts
@@ -963,6 +964,7 @@ export const ENGINEER_MINION_SHARE = 0.5;
 // Baron's Outsiders, from setup, count for nothing). Any not listed:
 // ENGINEER_THREAT_DEFAULT.
 export const ENGINEER_THREAT = {
+  alhadikhia: 5, // up to 3 deaths a night
   imp: 3,
   zombuul: 3,
   pukka: 3,
@@ -993,6 +995,19 @@ export const ENGINEER_THREAT = {
   mezepheles: 5, // a good player would still turn evil
 };
 export const ENGINEER_THREAT_DEFAULT = 3;
+
+// The Al-Hadikhia (characters/demon/alhadikhia.js): the chance a good NPC
+// it chose chooses to live, by the worth of the character they think they
+// are (its `kill` priority: see DEMON_KILL_PRIORITY; unlisted, "low"): a
+// valuable one wants to keep it, a lesser one gives itself up so the others
+// needn't all die. A dead one chosen (rarely) chooses to live at
+// ALHADIKHIA_DEAD_LIVE_CHANCE, coming back; an evil one (when the Poppy
+// Grower keeps the team apart) at ALHADIKHIA_EVIL_LIVE_CHANCE. On the night
+// of its jinx with the Mastermind, good NPCs always choose to die: any one
+// who does wins for good.
+export const ALHADIKHIA_LIVE_CHANCE = { high: 0.75, med: 0.55, low: 0.3, avoid: 0.5 };
+export const ALHADIKHIA_DEAD_LIVE_CHANCE = 0.9;
+export const ALHADIKHIA_EVIL_LIVE_CHANCE = 0.75;
 
 
 // ── Timings and display ──────────────────────────────────────

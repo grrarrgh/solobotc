@@ -188,7 +188,7 @@ export const cannibal = {
           (id) =>
             team(id) === "demon" &&
             // (Nor the Leviathan, which everyone would know isn't in play.)
-            !["lilmonsta", "leviathan"].includes(id) &&
+            !["lilmonsta", "leviathan", "alhadikhia"].includes(id) &&
             !s.players.some((x) => x.role === id),
         ),
         s.r,

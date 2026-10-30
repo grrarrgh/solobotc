@@ -59,6 +59,9 @@ import {
   ENGINEER_MINION_SHARE,
   ENGINEER_THREAT,
   ENGINEER_THREAT_DEFAULT,
+  ALHADIKHIA_LIVE_CHANCE,
+  ALHADIKHIA_DEAD_LIVE_CHANCE,
+  ALHADIKHIA_EVIL_LIVE_CHANCE,
   PIXIE_DOUBLE_CLAIM_FACTOR,
   TRUST_EVIDENCE,
   HIDDEN_OUTSIDERS,
@@ -992,6 +995,11 @@ export class SimpleStrategy {
       } else if (by && claimTo(by, p) === "golem") {
         add(W.golemSurvived, `${who(by)}, who claims the Golem, nominated them, and they didn't die`);
       }
+    }
+
+    // The Al-Hadikhia chose them, and it chooses good players.
+    if ((s.alhadikhiaChosen ?? []).some((c) => c.ids.includes(t.id))) {
+      add(W.alhadikhiaChose, "the Al-Hadikhia chose them");
     }
 
     // Their claimed ability visibly failed (see engine failed()).
@@ -3587,6 +3595,64 @@ export class SimpleStrategy {
   // Everyone the Demon attacks tonight: the Shabaloth 2 players; the Po
   // nobody (at PO_CHARGE_CHANCE), or 3 players after a night of nobody;
   // every other Demon 1.
+  // The Al-Hadikhia p's choice tonight: up to 3 players, each as the Demon
+  // would choose a player to kill (see demon()), never itself, nor a
+  // teammate it knows while anyone else is left. You only when it has
+  // nobody else to choose, alone: with fewer than 3 good NPCs left, it
+  // chooses fewer. (With only its team left, its teammates, so the game
+  // reaches its end.) (See characters/demon/alhadikhia.js.)
+  alhadikhia(s, p) {
+    const picks = [];
+    const skip = [p];
+    const others = () =>
+      s.players.some(
+        (x) => x.alive && x !== p && !teammate(p, x) && !picks.includes(x) && !skip.includes(x),
+      );
+
+    for (let i = 0; i < 9 && picks.length < 3; i++) {
+      const t = this.demon(s, p, [...picks, ...skip]);
+
+      if (!t || picks.includes(t) || skip.includes(t)) {
+        break;
+      }
+
+      if (t.human) {
+        if (!picks.length) {
+          picks.push(t);
+        }
+
+        break;
+      }
+
+      if (teammate(p, t) && others()) {
+        skip.push(t);
+        continue;
+      }
+
+      picks.push(t);
+    }
+
+    return picks;
+  }
+
+  // Whether NPC x, chosen by the Al-Hadikhia, chooses to live: a good one
+  // by their character's worth, as they think it is (ALHADIKHIA_LIVE_CHANCE);
+  // a dead one, or an evil one, mostly; on the night of its jinx with the
+  // Mastermind (`final`), a good one never (one death wins for good).
+  alhadikhiaLive(s, x, final = false) {
+    if (final && sideOf(x) === "good") {
+      return false;
+    }
+
+    const chance = !x.alive
+      ? ALHADIKHIA_DEAD_LIVE_CHANCE
+      : sideOf(x) === "evil"
+        ? ALHADIKHIA_EVIL_LIVE_CHANCE
+        : ALHADIKHIA_LIVE_CHANCE[DEMON_KILL_PRIORITY[ability(x)] ?? "low"] ?? ALHADIKHIA_LIVE_CHANCE.low;
+
+    return s.r() < chance;
+  }
+
   demonTargets(s, p) {
     const more = (n) => {
       const picks = [];

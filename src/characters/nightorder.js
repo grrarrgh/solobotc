@@ -153,6 +153,10 @@ export const OTHER_NIGHTS = [
     "vigormortis",
     "Chooses a player: they die. A Minion killed keeps their ability, and poisons a Townsfolk neighbour.",
   ],
+  [
+    "alhadikhia",
+    "May choose 3 players (everyone learns who): each in turn chooses to live or die; if all live, all die.",
+  ],
   ["wizard", "If a wish to kill was granted today, its player dies."],
   ["assassin", "Once per game, may choose a player: they die, even if they'd be safe."],
   ["godfather", "If an Outsider died today, chooses a player: they die."],

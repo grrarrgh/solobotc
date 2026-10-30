@@ -885,6 +885,13 @@ export const CHARACTERS = {
       "Each night, Minions choose who babysits Lil' Monsta & \"is the Demon\". Each night*, a player might die. [+1 Minion]",
     note: "Lil' Monsta isn't a player: an extra Minion is dealt instead. Each night the Minions choose which of them babysits it (the babysitter registers as the Demon, and keeps their own Minion ability); if the babysitter dies, so does Lil' Monsta. Each night* the Storyteller chooses who might die (never the babysitter, steering for a close finish): drunkenness and poison can't stop it, though protection like the Monk's still can.",
   },
+  alhadikhia: {
+    name: "Al-Hadikhia",
+    team: "demon",
+    ability:
+      "Each night*, you may choose 3 players (all players learn who): each silently chooses to live or die, but if all live, all die.",
+    note: "It chooses good players (you only when no good NPC is left; fewer than 3 when fewer are left), at dusk, so you're woken to choose if it chose you. A dead player who chooses to live comes back to life; one who chooses to die but is protected from the Demon counts as alive. At dawn the Storyteller says who was chosen, and who is alive and who dead. NPCs choose by their character's worth: to live, mostly, if it's valuable. A Demon made tonight chooses nobody tonight. Never a pretend Demon for the Atheist, nor a Lunatic's.",
+  },
   leviathan: {
     name: "Leviathan",
     team: "demon",
@@ -931,4 +938,4 @@ export const TRAVELLERS = [
 
 // Characters the game doesn't run yet: a script's are left out (as
 // Travellers are) until they're added.
-export const NOT_YET = ["alhadikhia"];
+export const NOT_YET = [];

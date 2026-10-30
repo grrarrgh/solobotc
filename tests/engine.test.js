@@ -15200,7 +15200,7 @@ function oasisNight(seed, night = 2) {
   return { s, p: s.players, strat, e: new Engine(s, strat) };
 }
 
-test("The Midnight Oasis loads from the script list: 22 characters (the Al-Hadikhia left out for now), the Sentinel and the Spirit of Ivory kept apart", () => {
+test("The Midnight Oasis loads from the script list: 23 characters, the Sentinel and the Spirit of Ivory kept apart", () => {
   const files = JSON.parse(fs.readFileSync(new URL("../scripts/index.json", import.meta.url)));
 
   assert.ok(files.includes("The Midnight Oasis_3_8_0.json"));
@@ -15208,7 +15208,7 @@ test("The Midnight Oasis loads from the script list: 22 characters (the Al-Hadik
   const s = createState(mo, 12, "mo");
 
   assert.equal(s.script.meta.name, "The Midnight Oasis");
-  assert.equal(s.script.ids.length, 22);
+  assert.equal(s.script.ids.length, 23);
   assert.deepEqual(s.script.fabled, ["sentinel", "spiritofivory"]);
   assert.equal(team("farmer"), "townsfolk");
   assert.equal(team("golem"), "outsider");
@@ -15221,10 +15221,7 @@ test("The Midnight Oasis loads from the script list: 22 characters (the Al-Hadik
   assert.ok(FIRST_NIGHT.some(([id]) => id === "engineer"));
   assert.ok(OTHER_NIGHTS.some(([id]) => id === "engineer"));
 
-  for (const id of ["alhadikhia"]) {
-    assert.ok(!s.script.ids.includes(id), id);
-    assert.ok(!ROLES[id], id);
-  }
+  assert.ok(s.script.ids.includes("alhadikhia"));
 
   for (const pair of [
     ["leviathan", "farmer"],
@@ -15531,14 +15528,13 @@ test("with the Spirit of Ivory on the script, nobody turns evil once there's 1 e
   assert.equal(t.players[2].alignment, "evil");
 });
 
-test("whole games play out on The Midnight Oasis, with Farmers made, and never the Al-Hadikhia", () => {
+test("whole games play out on The Midnight Oasis, with Farmers made", () => {
   let farmers = 0;
 
   for (let g = 0; g < 40; g++) {
     const { s, e } = playOut(mo, 8 + (g % 8), `mo-${g}`);
 
     assert.ok([null, "good", "evil"].includes(s.winner));
-    assert.ok(!s.players.some((x) => x.role === "alhadikhia"));
     assert.ok(e.debugLog().length > 0);
     farmers += s.audit.filter((x) => x.type === "farmer").length;
   }
@@ -15855,7 +15851,7 @@ test("what the Engineer can choose: the script's Demons, or as many of its Minio
   const s = createState(mo, 12, "eng-options");
   const o = engineerOptions(s);
 
-  assert.deepEqual(o.demons, ["vigormortis"]);
+  assert.deepEqual([...o.demons].sort(), ["alhadikhia", "vigormortis"]);
   assert.deepEqual([...o.minions].sort(), ["mezepheles", "pithag", "poisoner", "psychopath"]);
   assert.equal(o.count, 2);
   assert.equal(engineerOptions(createState(mo, 14, "eng-options-14")).count, 3);
@@ -15887,8 +15883,17 @@ test("an NPC Engineer acts by Night 3, on the least threatening choice for good,
 
   assert.ok(first > 0 && first < 40);
 
-  // On The Midnight Oasis (one Demon), the Minions: the Pit-Hag first.
+  // With both its Demons, the Demon option is the Vigormortis.
+  const both = engineerNight("eng-pick-both", 3);
+  const d = both.e.strat.engineerPick(both.s, both.eng);
+
+  assert.ok(d.kind === "minions" || d.roles[0] === "vigormortis");
+
+  // With one Demon on the script, the Minions: the Pit-Hag first.
   const { s, e, eng } = engineerNight("eng-pick", 3);
+
+  s.script.ids = s.script.ids.filter((id) => id !== "alhadikhia");
+
   const c = e.strat.engineerPick(s, eng);
 
   assert.equal(c.kind, "minions");
@@ -15912,6 +15917,7 @@ test("anyone claiming the Engineer makes up a choice by Night 3 and says it at d
   // Evil, with one Demon on the script: Minions not in play.
   const { s, e, p, minion } = engineerNight("eng-bluff", 3);
 
+  s.script.ids = s.script.ids.filter((id) => id !== "alhadikhia");
   minion.claim = "engineer";
 
   const m = infoOf("engineer").once(s, minion, e.strat, "lie");
@@ -15960,7 +15966,7 @@ test("as the Engineer, you're woken each night until you choose the Demon, or th
   s.pending = e.wakeHuman();
 
   assert.equal(s.pending.role, "engineer");
-  assert.deepEqual(s.pending.engineer.demons, ["vigormortis"]);
+  assert.deepEqual([...s.pending.engineer.demons].sort(), ["alhadikhia", "vigormortis"]);
   assert.equal(s.pending.engineer.count, 1);
   assert.match(s.pending.prompt, /which Demon is in play, or which 1 Minion, or not tonight/);
   assert.throws(() => e.engineerChoose("minions", ["pithag", "poisoner"]), /Choose 1 different Minion/);
@@ -16024,4 +16030,234 @@ test("whole games play out with the Engineer on mixed scripts, Legion, Lil' Mons
   }
 
   assert.ok(used > 10);
+});
+
+// ── The Al-Hadikhia ──────────────────────────────────────────────
+
+// oasisNight() with the Al-Hadikhia (the Imp's seat) at night `night`: you
+// (Mayor), Chef, Butler, Baron, Al-Hadikhia, plus 3 more good NPCs, so it
+// has 3 to choose.
+function ahNight(seed, night = 2) {
+  const s = base(seed, mo);
+
+  s.players = createState(mo, 8, seed).players;
+  s.seats = 8;
+  s.twins = null;
+  // (Never an Atheist game.)
+  s.atheist = null;
+  role(s.players[0], "mayor", "good");
+  ["chef", "butler", "noble", "savant", "fisherman"].forEach((id, i) => role(s.players[i + 1], id, "good"));
+  role(s.players[6], "poisoner", "evil");
+  role(s.players[7], "alhadikhia", "evil");
+  s.phase = "night";
+  s.night = night;
+  s.day = night - 1;
+
+  return { s, p: s.players, e: new Engine(s), d: s.players[7] };
+}
+
+// Sets tonight's choice and each chosen NPC's answer (`live`, by id).
+function ahChoose(o, ids, live) {
+  o.s.alhadikhia = { night: o.s.night, demonId: o.d.id, ids, human: null };
+  o.e.strat.alhadikhiaLive = (_, x) => live[x.id];
+}
+
+test("the Al-Hadikhia: a chosen player who chooses to die dies, one who chooses to live lives; at dawn the town hears who was chosen, and who is alive and dead", () => {
+  const o = ahNight("ah-mixed");
+  const [, a, b, c] = o.p;
+
+  ahChoose(o, [a.id, b.id, c.id], { [a.id]: true, [b.id]: false, [c.id]: true });
+  o.e.alhadikhiaNight(o.d);
+
+  assert.ok(a.alive && !b.alive && c.alive);
+  assert.equal(b.death, "demon");
+  assert.match(o.s.audit.findLast((x) => x.type === "alhadikhia").text, /chose to die, died/);
+
+  o.s.phase = "day";
+  o.s.day = 2;
+  o.e.alhadikhiaDawn();
+  assert.equal(
+    o.s.publicLog.at(-1),
+    `Day 2 — The Storyteller: the Al-Hadikhia chose ${a.label}, ${b.label}, ${c.label}. Alive: ${a.label}, ${c.label}. Dead: ${b.label}.`,
+  );
+});
+
+test("if all the Al-Hadikhia's chosen live, all die; one who chose to die but was protected counts as alive", () => {
+  const o = ahNight("ah-all");
+  const [, a, b, c] = o.p;
+
+  ahChoose(o, [a.id, b.id, c.id], { [a.id]: true, [b.id]: true, [c.id]: true });
+  o.e.alhadikhiaNight(o.d);
+  assert.ok(!a.alive && !b.alive && !c.alive);
+  assert.match(o.s.audit.findLast((x) => x.type === "alhadikhia").text, /all alive, so all die/);
+
+  // Protected by the Monk: chose to die, but lives, so all are alive.
+  const p = ahNight("ah-monk");
+  const [, x, y, z] = p.p;
+
+  y.protected = true;
+  ahChoose(p, [x.id, y.id, z.id], { [x.id]: true, [y.id]: false, [z.id]: true });
+  p.e.alhadikhiaNight(p.d);
+  assert.ok(!x.alive && y.alive && !z.alive);
+});
+
+test("a dead player the Al-Hadikhia chose who chooses to live comes back to life; a drunk or poisoned Al-Hadikhia changes nothing", () => {
+  const o = ahNight("ah-revive");
+  const [, a, b, c] = o.p;
+
+  a.alive = false;
+  a.death = "execution";
+  ahChoose(o, [a.id, b.id, c.id], { [a.id]: true, [b.id]: false, [c.id]: true });
+  o.e.alhadikhiaNight(o.d);
+  assert.ok(a.alive && !b.alive && c.alive);
+  assert.match(o.s.audit.findLast((x) => x.type === "alhadikhia").text, /came back to life/);
+
+  const p = ahNight("ah-poisoned");
+  const [, x, y, z] = p.p;
+
+  p.d.poisoned = true;
+  ahChoose(p, [x.id, y.id, z.id], { [x.id]: true, [y.id]: false, [z.id]: true });
+  p.e.alhadikhiaNight(p.d);
+  assert.ok(x.alive && y.alive && z.alive);
+});
+
+test("the Al-Hadikhia chooses up to 3 good NPCs, never a teammate it knows; you only when no good NPC is left, alone", () => {
+  const o = ahNight("ah-pick");
+  const strat = new SimpleStrategy();
+
+  for (let i = 0; i < 20; i++) {
+    o.s.r = rng(`ah-pick-${i}`);
+    const picks = strat.alhadikhia(o.s, o.d);
+
+    assert.equal(picks.length, 3);
+    assert.ok(picks.every((x) => !x.human && x.alignment === "good"));
+  }
+
+  // Two good NPCs left: just those two.
+  o.p.slice(3, 6).forEach((x) => (x.alive = false));
+  assert.equal(strat.alhadikhia(o.s, o.d).length, 2);
+
+  // None: you.
+  o.p.slice(1, 3).forEach((x) => (x.alive = false));
+  assert.deepEqual(strat.alhadikhia(o.s, o.d), [o.p[0]]);
+});
+
+test("good NPCs the Al-Hadikhia chose live by their character's worth: the valuable mostly live, the lesser mostly die", () => {
+  const o = ahNight("ah-live");
+  const strat = new SimpleStrategy();
+  const [, high, low] = o.p;
+
+  role(high, "snakecharmer", "good");
+  role(low, "farmer", "good");
+
+  let h = 0;
+  let l = 0;
+
+  for (let i = 0; i < 400; i++) {
+    o.s.r = rng(`ah-live-${i}`);
+    h += strat.alhadikhiaLive(o.s, high) ? 1 : 0;
+    l += strat.alhadikhiaLive(o.s, low) ? 1 : 0;
+  }
+
+  assert.ok(h > 240 && l < 160, `${h} ${l}`);
+  // (Their jinx with the Mastermind: a good one always dies.)
+  assert.equal(strat.alhadikhiaLive(o.s, high, true), false);
+});
+
+test("if the Al-Hadikhia chose you, you're woken to choose to live or die", () => {
+  const o = ahNight("ah-you", 1);
+  const [you] = o.p;
+
+  // (Not the Mayor, who'd win with 3 alive and no execution.)
+  role(you, "noble", "good");
+
+  // (Nobody good left but you.)
+  o.p.slice(1, 6).forEach((x) => (x.alive = false));
+  o.s.phase = "day";
+  o.s.day = 1;
+  o.e.endDay();
+
+  assert.equal(o.s.pending?.role, "alhadikhia");
+  assert.deepEqual(o.s.pending.characters, ["live", "die"]);
+  assert.match(o.s.pending.prompt, /The Al-Hadikhia chose you\. Do you choose to live or to die\?/);
+  assert.throws(() => o.e.choose([], "maybe"), /Choose to live or to die/);
+
+  o.e.choose([], "die");
+  assert.ok(!you.alive);
+  assert.ok(o.s.audit.some((x) => x.type === "choice" && /chose to die \(Al-Hadikhia\)/.test(x.text)));
+});
+
+test("the Al-Hadikhia's jinx with the Mastermind: executed with the Mastermind alive, it chooses 3 good players (you too) that night: all live, evil wins; else good", () => {
+  for (const live of [true, false]) {
+    const o = ahNight(`ah-mastermind-${live}`, 1);
+
+    role(o.p[6], "mastermind", "evil");
+    o.s.phase = "day";
+    o.s.day = 1;
+    o.e.strat.alhadikhiaLive = () => true;
+    o.e.kill(o.d, "execution");
+    o.e.successor(o.d, 8, false, true);
+    assert.ok(!o.s.winner);
+    o.e.endDay();
+
+    assert.equal(o.s.pending?.role, "alhadikhia");
+    assert.match(o.s.pending.prompt, /If all of you choose to live, evil wins; otherwise, good wins\./);
+    assert.equal(o.s.alhadikhia.ids.length, 3);
+    o.e.choose([], live ? "live" : "die");
+    assert.equal(o.s.winner, live ? "evil" : "good");
+  }
+});
+
+test("the Al-Hadikhia's jinx with the Scarlet Woman: with two Demons, the one who was the Scarlet Woman is the Scarlet Woman again", () => {
+  const o = ahNight("ah-sw");
+  const [, a] = o.p;
+
+  role(a, "alhadikhia", "evil");
+  a.wasScarletWoman = true;
+  o.e.alhadikhiaTwoDemons();
+  assert.equal(a.role, "scarletwoman");
+  assert.ok(o.s.audit.some((x) => x.type === "alhadikhia" && /is the Scarlet Woman again/.test(x.text)));
+});
+
+test("the Al-Hadikhia is on The Midnight Oasis, in the night order, the Engineer's and Pit-Hag's options; never a pretend Demon for the Atheist", () => {
+  assert.equal(team("alhadikhia"), "demon");
+  assert.ok(NOTES.alhadikhia);
+  assert.ok(OTHER_NIGHTS.some(([id]) => id === "alhadikhia"));
+  assert.ok(engineerOptions(createState(mo, 12, "ah-eng")).demons.includes("alhadikhia"));
+
+  for (let seed = 0; seed < 300; seed++) {
+    const s = createState(mo, 8 + (seed % 8), `ah-atheist-${seed}`);
+
+    assert.ok(!s.players.some((x) => x.pretend === "alhadikhia"), `seed ${seed}`);
+  }
+});
+
+test("an Al-Hadikhia the Engineer changes tonight doesn't choose, and nothing is said at dawn; one the Engineer makes tonight chooses from the next night", () => {
+  const o = ahNight("ah-engineer");
+  const [, a, b, c, , , , d] = o.p;
+
+  ahChoose(o, [a.id, b.id, c.id], { [a.id]: false, [b.id]: false, [c.id]: false });
+  o.e.engineerChange(d, "vigormortis");
+  o.e.strat.demon = () => null;
+  o.e.demon();
+  assert.ok(a.alive && b.alive && c.alive);
+
+  o.s.phase = "day";
+  o.s.day = 2;
+  const n = o.s.publicLog.length;
+
+  o.e.alhadikhiaDawn();
+  assert.equal(o.s.publicLog.length, n);
+
+  // Made tonight: nobody chosen tonight.
+  const q = ahNight("ah-engineer-made");
+
+  role(q.d, "vigormortis", "evil");
+  q.e.alhadikhiaPlan();
+  q.e.engineerChange(q.d, "alhadikhia");
+  q.e.alhadikhiaNight(q.d);
+  assert.match(q.s.audit.findLast((x) => x.type === "alhadikhia").text, /made tonight, chooses nobody/);
+  q.s.night = 3;
+  q.e.alhadikhiaPlan();
+  assert.equal(q.s.alhadikhia.ids.length, 3);
 });

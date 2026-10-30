@@ -731,7 +731,10 @@ function renderNightChoice() {
   const characters = $("night-character");
   const key = `${p.night}:${p.role}`;
 
-  characters.hidden = !p.characters;
+  // (The Al-Hadikhia chose you: Live or Die buttons instead.)
+  characters.hidden = !p.characters || Boolean(p.liveOrDie);
+  $("live-or-die").hidden = !p.liveOrDie;
+  $("night-select").hidden = Boolean(p.liveOrDie);
 
   if (p.characters && characters.dataset.key !== key) {
     characters.dataset.key = key;
@@ -2628,6 +2631,19 @@ $("gossip-say").onclick = () => {
 
 $("night-character").onchange = () => render();
 $("engineer-kind").onchange = () => render();
+
+// The Al-Hadikhia chose you: to live or to die.
+document.querySelectorAll("#live-or-die [data-live]").forEach((b) => {
+  b.onclick = () => {
+    try {
+      e.choose([], b.dataset.live);
+      nightPicks = [];
+      render();
+    } catch (err) {
+      $("night-error").textContent = err.message;
+    }
+  };
+});
 $("engineer-roles").onchange = () => render();
 
 $("night-select").onclick = () => {

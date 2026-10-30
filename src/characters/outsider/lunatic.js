@@ -98,7 +98,7 @@ export const lunatic = {
           s.script.ids.filter(
             (id) =>
               team(id) === "demon" &&
-              !["lilmonsta", "leviathan"].includes(id) &&
+              !["lilmonsta", "leviathan", "alhadikhia"].includes(id) &&
               !s.players.some((x) => x.role === id),
           ),
           s.r,

@@ -128,6 +128,7 @@ const KEY_MOMENT_TYPES = new Set([
   "farmer",
   "engineer",
   "golem",
+  "alhadikhia",
   "spiritofivory",
   "game_over",
 ]);
@@ -300,7 +301,20 @@ export class Engine {
       this.atheistSafe();
     }
 
+    // (The Al-Hadikhia chooses at dusk: you might choose to live or die.)
+    this.alhadikhiaPlan();
+
     if (this.wakeChoice()) {
+      return;
+    }
+
+    this.nightGoesOn();
+  }
+
+  // After your night choice (or with none): if the Al-Hadikhia chose you,
+  // you choose to live or die (see alhadikhia.js); then the night goes on.
+  nightGoesOn() {
+    if (this.alhadikhiaWake()) {
       return;
     }
 
@@ -490,6 +504,17 @@ export class Engine {
       throw Error("Nothing to choose.");
     }
 
+    // (The Al-Hadikhia chose you: to live or die. See alhadikhia.js.)
+    if (p.liveOrDie) {
+      if (!["live", "die"].includes(character)) {
+        throw Error("Choose to live or to die.");
+      }
+
+      this.alhadikhiaAnswer(character === "live");
+      this.resolveNight();
+      return;
+    }
+
     if (p.characters && character) {
       if (!p.characters.includes(character)) {
         throw Error("Choose a character on the script.");
@@ -513,7 +538,7 @@ export class Engine {
         }
       }
 
-      this.resolveNight();
+      this.nightGoesOn();
       return;
     }
 
@@ -526,7 +551,7 @@ export class Engine {
         `${this.human().label} chose not to use their ability tonight.`,
       );
 
-      this.resolveNight();
+      this.nightGoesOn();
       return;
     }
 
@@ -555,7 +580,7 @@ export class Engine {
       { targetIds: picked.map((x) => x.id) },
     );
 
-    this.resolveNight();
+    this.nightGoesOn();
   }
 
   // The human's choice for tonight, if they made one.
@@ -702,6 +727,7 @@ export class Engine {
     this.audit("day", `Day ${s.day} began.`);
 
     this.dawnDeaths();
+    this.alhadikhiaDawn();
     this.leviathanDawn();
 
     if (!s.winner) {
@@ -850,6 +876,13 @@ export class Engine {
       return;
     }
 
+    // (The executed Al-Hadikhia's jinx with the Mastermind: see
+    // alhadikhia.js.)
+    if (s.alhadikhia?.final && s.alhadikhia.night === s.night) {
+      this.alhadikhiaFinal();
+      return;
+    }
+
     // (On the Mastermind's extra day, the game goes on without a Demon.)
     if (!d) {
       if (!s.mastermindDay) {
@@ -890,6 +923,12 @@ export class Engine {
 
     this.woke(d);
     this.marionetteReveal(d);
+
+    // (Up to 3 players choose to live or die: see alhadikhia.js.)
+    if (d.role === "alhadikhia") {
+      this.alhadikhiaNight(d);
+      return;
+    }
 
     if (d.role === "pukka") {
       this.pukka(d);
@@ -2819,6 +2858,11 @@ export class Engine {
     }
 
     if (next) {
+      // (For the Al-Hadikhia's jinx with her: see alhadikhia.js.)
+      if (next.role === "scarletwoman") {
+        next.wasScarletWoman = true;
+      }
+
       next.role = dead.role;
       next.alignment = "evil";
 
@@ -2826,7 +2870,7 @@ export class Engine {
         playerId: next.id,
         previousDemonId: dead.id,
       });
-    } else if (!(executed && this.mastermindContinues())) {
+    } else if (!(executed && this.mastermindContinues(dead))) {
       this.finish("good", "Demon died.");
     }
   }
