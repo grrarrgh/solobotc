@@ -638,6 +638,8 @@ function storyGained(s, p, role, night) {
       goodRoles(s).filter(
         (id) =>
           id !== "philosopher" &&
+          // (Never the Farmer: see PHILOSOPHER_AVOID.)
+          id !== "farmer" &&
           !NEVER_BLUFFED.includes(id) &&
           INFO_ROLES.includes(id),
       ),

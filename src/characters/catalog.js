@@ -260,7 +260,7 @@ export const CHARACTERS = {
     ability:
       "Once per game, at night, choose a good character: gain that ability. If this character is in play, they are drunk.",
     kill: "med",
-    note: "Can't choose the Atheist, whose ability is about setup (no evil characters), so would give nothing.",
+    note: "Can't choose the Atheist, whose ability is about setup (no evil characters), so would give nothing; nor the Farmer.",
     oncePerGame: { AFTER_DAY: 1, START_CHANCE: 1, STEP_CHANCE: 0 }, // night
     vsLegion: true,
   },
@@ -612,7 +612,7 @@ export const CHARACTERS = {
     team: "outsider",
     ability:
       "You may only nominate once per game. When you do, if the nominee is not the Demon, they die.",
-    note: "The nominee dies at once (the Storyteller says only that they died), and the vote goes on. NPC Golems nominate their suspect once only 5 or 4 players are alive (never you); a nominee who lives through it is evidence against them, not proof. Then good NPCs vote on them only if you raise your hand: whether to execute is your call.",
+    note: "The nominee dies at once (the Storyteller says only that they died), and the vote goes on. Simplified: the Recluse always registers as the Demon to it. NPC Golems nominate their suspect once only 5 or 4 players are alive (never you); a nominee who lives through it is evidence against them, not proof. Then good NPCs vote on them only if you raise your hand: whether to execute is your call.",
     kill: "med",
     neverHiddenAs: true, // a good player hiding as it couldn't nominate
   },

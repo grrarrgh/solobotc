@@ -73,6 +73,8 @@ export const philosopher = {
     } else if (holder) {
       holder.drunkFrom = "philosopher";
       holder.drunkFromBy = who(p);
+      // (Whose choice: it ends if they become a Farmer, see farmer.js.)
+      holder.drunkFromId = p.id;
     }
 
     const minion =

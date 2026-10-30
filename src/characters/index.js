@@ -1,9 +1,10 @@
 // Each character's own mechanics, one module per character, so any
 // characters can share a game whatever script they come from. They're
 // filed by team (townsfolk/, outsider/, minion/, demon/, and fabled/ for
-// the Storyteller's rules). Each module is mixed into Engine.prototype (see
-// engine.js), which calls them in night order. (Characters that only need the Storyteller's information or NPC
-// choices, in storyteller.js and strategy.js, have no module here.)
+// the Storyteller's rules). Each module is mixed into Engine.prototype
+// (see engine.js), which calls them in night order. (Characters that only
+// need the Storyteller's information or NPC choices, in storyteller.js and
+// strategy.js, have no module here.)
 //
 // A module may also export `info`: what that character learns, and what's
 // said in its name (see characters/info.js).

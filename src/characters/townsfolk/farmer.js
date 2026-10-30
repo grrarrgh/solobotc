@@ -36,6 +36,39 @@ export const farmer = {
     this.farmerMakes(p, how);
   },
 
+  // What new Farmer t's old ability (`was`; `gained`: a Philosopher's) did
+  // that ends with it, logged: a Poppy Grower's keeping the evil team apart
+  // (see poppygrower.js poppyLost()); a Philosopher's drunkenness, on the
+  // player whose character they gained, or on themself for a choice that
+  // failed. (Drunk by another Philosopher's choice of their old character,
+  // they're no longer that character: that ends too.)
+  farmerEnds(t, was, gained) {
+    const s = this.s;
+
+    if (was === "poppygrower") {
+      this.poppyLost(t, `${t.human ? "you" : "they"} became a Farmer`);
+    }
+
+    const sober = s.players.filter(
+      (x) =>
+        x.drunkFrom === "philosopher" &&
+        (x === t || (was === "philosopher" && gained && x.drunkFromId === t.id)),
+    );
+
+    for (const x of sober) {
+      x.drunkFrom = null;
+      x.drunkFromBy = null;
+      x.drunkFromId = null;
+      this.audit(
+        "farmer",
+        `${x.label} ${x.human ? "are" : "is"} no longer drunk from ${
+          x === t ? "a Philosopher's choice" : `${t.label}'s Philosopher choice`
+        }: ${t.label} became a Farmer.`,
+        { playerId: x.id },
+      );
+    }
+  },
+
   // Farmer p's ability (`how`: why it's used now, for the log): a living
   // good player who isn't a Farmer becomes one. Never the Atheist (the
   // Storyteller's rule-breaking hangs on them), nor the Lunatic (who thinks
@@ -62,6 +95,7 @@ export const farmer = {
 
     const was = t.role;
     const shown = t.shown;
+    const gained = t.gained;
 
     // They lose their old ability, and anything it gave them.
     t.role = "farmer";
@@ -88,6 +122,8 @@ export const farmer = {
       } it (${lost}).`,
       { actorId: p.id, playerId: t.id, was },
     );
+
+    this.farmerEnds(t, was, gained);
 
     // (You learn it as your night's information: see engine remember().)
     if (t.human) {

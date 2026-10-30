@@ -415,7 +415,8 @@ export class Engine {
       // (Not a character whose ability needs what you never face: see
       // FORBIDDEN_HUMAN. Nor one jinxed with a character in play: see
       // jinxBarred(). Nor the Atheist, whose ability is about setup, so a
-      // Philosopher would gain nothing: see PHILOSOPHER_AVOID.) (A Cannibal
+      // Philosopher would gain nothing, nor the Farmer: see
+      // PHILOSOPHER_AVOID.) (A Cannibal
       // who ate a Philosopher has it too: see philosophers().)
       philosopher: (!h.gained || hasCannibal(h)) && {
         count: 0,
@@ -424,6 +425,7 @@ export class Engine {
             alignment(id) === "good" &&
             id !== "philosopher" &&
             id !== "atheist" &&
+            id !== "farmer" &&
             !FORBIDDEN_HUMAN.has(id) &&
             !jinxBarred(s).has(id),
         ),
@@ -2048,8 +2050,10 @@ export class Engine {
       needed: n.storyteller ? this.storytellerNeeded() : this.votesNeeded(),
       nominator,
       humanChoice,
-      // (Whether your hand is up: see strategy vote(), on a Golem's nominee.)
+      // (Whether your hand is up, and whether you can vote at all: see
+      // strategy vote(), on a Golem's nominee.)
       hand: Boolean(hand),
+      youVote: this.canVote(),
     };
     // (On the Storyteller, each decides as the clock hand comes round to
     // them, clockwise from the Sun: you first, then seat by seat, counting
@@ -2359,7 +2363,7 @@ export class Engine {
     this.nominationReveals(n, intro);
 
     // (Why good NPCs hold back, or don't: see strategy vote().)
-    if (golemHinge(s, n)) {
+    if (golemHinge(s, n) && this.canVote()) {
       this.audit(
         "workings",
         `${n.label} lived through the Golem's nomination: good NPCs vote for them only if your hand is up (whether to execute them is your call).`,

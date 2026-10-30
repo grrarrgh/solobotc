@@ -852,8 +852,12 @@ export class SimpleStrategy {
         : 1;
     const maybe = pixie < 1 ? " (a Pixie could explain it)" : "";
     // (There can be up to 3 Village Idiots: claiming it twice is no clash.
-    // Nor is the Farmer: each one who dies at night makes another.)
-    const many = claim === "villageidiot" || claim === "farmer";
+    // Nor is the Farmer, once a player claiming it has died at night: each
+    // one who does makes another.)
+    const many =
+      claim === "villageidiot" ||
+      (claim === "farmer" &&
+        s.players.some((x) => !x.alive && x.diedAtNight && claimTo(x, p) === "farmer"));
 
     if (claim && !many && !twins(p, t)) {
       if (claim === p.claim && !(p.pixieMad && !p.gained)) {
@@ -2334,10 +2338,14 @@ export class SimpleStrategy {
     const sus = this.suspicion(s, p);
     const t = sus && byId(s, sus.targetId);
 
+    // (As nomination(): never a player who claimed the Goblin, nor one they
+    // suspect is a Lleech's host, whose death would end the game.)
     if (
       !t?.alive ||
       t.human ||
       spares(s, p, t) ||
+      (s.goblinClaims ?? []).some((x) => x.id === t.id) ||
+      (s.lleechSuspects ?? []).includes(t.id) ||
       (alive > GOLEM_LATEST_ALIVE && sus.score < NPC_NOMINATE_EVIDENCE)
     ) {
       return null;
@@ -2517,8 +2525,9 @@ export class SimpleStrategy {
 
     // (A Golem's nominee who lived through it: good players vote only if
     // your hand is up, so whether to execute them is your call. See
-    // characters/outsider/golem.js; engine runNomination() logs it.)
-    if (sideOf(v) !== "evil" && golemHinge(s, n)) {
+    // characters/outsider/golem.js; engine runNomination() logs it. Not if
+    // you can't vote: then they vote as usual.)
+    if (sideOf(v) !== "evil" && tally?.youVote && golemHinge(s, n)) {
       return Boolean(tally?.hand);
     }
 
@@ -3732,15 +3741,28 @@ export class SimpleStrategy {
 
   // The Leviathan's choice each night*, with the Ravenkeeper, Sage or Farmer
   // on the script (their jinx: see leviathan.js): an alive player it hasn't
-  // chosen before, never you nor a teammate, and not one claiming the
-  // Ravenkeeper, Sage or Farmer if it can help it (they'd use their
-  // ability).
+  // chosen before, never you nor a teammate (with the Sage or Farmer on the
+  // script, a good one, as their jinxes say), and not one claiming the
+  // Ravenkeeper or Sage if it can help it (they'd use their ability). A
+  // player claiming the Farmer it chooses first: then another good player
+  // becomes a Farmer, losing their own ability.
   leviathan(s, p) {
     const chosen = s.leviathan?.chosen ?? [];
+    const good = ["sage", "farmer"].some((id) => s.script.ids.includes(id));
     const pool = this.pickable(s, p).filter(
-      (x) => !x.human && !teammate(p, x) && !chosen.includes(x.id),
+      (x) =>
+        !x.human &&
+        !teammate(p, x) &&
+        !chosen.includes(x.id) &&
+        (!good || x.alignment === "good"),
     );
-    const safe = pool.filter((x) => !["ravenkeeper", "sage", "farmer"].includes(claimTo(x, p)));
+    const farmers = pool.filter((x) => claimTo(x, p) === "farmer");
+
+    if (farmers.length) {
+      return pick(farmers, s.r);
+    }
+
+    const safe = pool.filter((x) => !["ravenkeeper", "sage"].includes(claimTo(x, p)));
 
     return pick(safe.length ? safe : pool, s.r) ?? null;
   }
@@ -4037,7 +4059,9 @@ export class SimpleStrategy {
     const inPlay = s.players
       .filter((x) => x !== p && team(x.role) === "townsfolk")
       .map((x) => x.role)
-      .filter((id) => id !== "philosopher");
+      // (Never the Farmer, as no Philosopher may choose it: see
+      // PHILOSOPHER_AVOID.)
+      .filter((id) => id !== "philosopher" && id !== "farmer");
     const info = inPlay.filter(
       (id) => FIRST_NIGHT_INFO.includes(id) || ONGOING_INFO.includes(id),
     );

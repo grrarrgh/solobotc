@@ -63,8 +63,9 @@ export const leviathan = {
 
   // The Leviathan's night: no kill. With the Ravenkeeper, Sage or Farmer
   // on the script, their jinx: it chooses an alive player (not one chosen
-  // before; a good one, with the Farmer: see strategy leviathan()), and a
-  // Ravenkeeper, Sage or Farmer chosen uses their ability but doesn't die.
+  // before; a good one, with the Sage or Farmer: see strategy leviathan()),
+  // and a Ravenkeeper, Sage or Farmer chosen uses their ability but doesn't
+  // die.
   leviathanNight(d) {
     const s = this.s;
 

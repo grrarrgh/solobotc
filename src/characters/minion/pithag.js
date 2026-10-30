@@ -67,8 +67,15 @@ export const pithag = {
         target.politicianStaysEvil = true;
       }
 
+      const was = target.role;
+
       target.role = role;
       target.shown = role;
+
+      // (A Poppy Grower made something else: see poppygrower.js.)
+      if (was === "poppygrower") {
+        this.poppyLost(target, `the Pit-Hag made them the ${name(role)}`);
+      }
       // (A "first night" ability is used tonight: see startsTonight().)
       target.gainedNight = s.night;
 

@@ -28,6 +28,30 @@ export const poppygrower = {
     });
   },
 
+  // p was the Poppy Grower and is now another character (`how`: the Farmer,
+  // the Pit-Hag; for the log): the ability is gone, so its effect ends, as
+  // if they'd died. With the evil team still kept apart (and no other
+  // Poppy Grower in play), they learn who each other are tonight (see
+  // poppyWakes()). (Whether or not the Poppy Grower was drunk or poisoned
+  // just then: the character has left play for good.)
+  poppyLost(p, how) {
+    const s = this.s;
+
+    if (
+      !s.players.some((x) => x.poppyBlind) ||
+      s.players.some((x) => x.alive && x.role === "poppygrower")
+    ) {
+      return;
+    }
+
+    s.poppyWake = true;
+    this.audit(
+      "poppygrower",
+      `${p.label} ${p.human ? "are" : "is"} no longer the Poppy Grower (${how}): tonight the Minions and Demon learn who each other are.`,
+      { playerId: p.id },
+    );
+  },
+
   // At night, after the Poppy Grower died: the Minions and Demon learn who
   // each other are, and the Demon learns its bluffs.
   poppyWakes() {

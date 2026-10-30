@@ -15539,3 +15539,207 @@ test("whole games play out on The Midnight Oasis, with Farmers made, and never t
 
   assert.ok(farmers > 0);
 });
+
+test("a Poppy Grower who becomes a Farmer (or is made another character by the Pit-Hag) wakes the evil team that night", () => {
+  for (const how of ["farmer", "pithag"]) {
+    const { s, e, p } = oasisNight(`poppy-${how}`);
+    const [, chef, butler, baron, imp] = p;
+
+    role(butler, "poppygrower", "good");
+    baron.poppyBlind = true;
+    imp.poppyBlind = true;
+
+    if (how === "farmer") {
+      role(chef, "farmer", "good");
+      p[0].alive = false;
+      e.kill(chef, "demon");
+      assert.equal(butler.role, "farmer");
+    } else {
+      role(baron, "pithag", "evil");
+      e.strat.pithag = () => ({ target: butler, role: "damsel" });
+      // (A Damsel made by the Pit-Hag goes to a player the Storyteller
+      // picks: here, the only living good NPC.)
+      chef.alive = false;
+      e.pitHag();
+      assert.equal(butler.role, "damsel");
+    }
+
+    assert.ok(s.poppyWake);
+    assert.match(
+      s.audit.findLast((x) => x.type === "poppygrower").text,
+      /is no longer the Poppy Grower .*: tonight the Minions and Demon learn who each other are\./,
+    );
+    e.poppyWakes();
+    assert.ok(!baron.poppyBlind && !imp.poppyBlind);
+  }
+});
+
+test("a Philosopher who becomes a Farmer no longer makes the character they gained drunk; nor is a failed choice's drunkenness kept", () => {
+  const { s, e, p } = oasisNight("farmer-philosopher");
+  const [you, chef, butler] = p;
+
+  role(butler, "philosopher", "good");
+  role(chef, "farmer", "good");
+  role(you, "noble", "good");
+  e.philosopherGain(butler, "noble");
+  assert.equal(you.drunkFrom, "philosopher");
+  assert.equal(you.drunkFromId, butler.id);
+
+  // (The new Farmer: the last of you and the Butler.)
+  s.r = () => 0.99;
+  e.farmerMakes(chef, "died at night");
+  assert.equal(butler.role, "farmer");
+  assert.equal(you.drunkFrom, null);
+  assert.ok(s.audit.some((x) => x.type === "farmer" && /^You are no longer drunk from Player 3's Philosopher choice/.test(x.text)));
+
+  // A failed choice: the new Farmer isn't drunk.
+  butler.role = "philosopher";
+  butler.drunkFrom = "philosopher";
+  e.farmerMakes(chef, "died at night");
+  assert.equal(butler.drunkFrom, null);
+});
+
+test("when you can't vote, a Golem's surviving nominee is voted on as usual", () => {
+  const s = base("golem-no-vote", mo);
+  const e = new Engine(s);
+  const [you, , butler, , imp] = s.players;
+
+  role(butler, "golem", "good");
+  you.alive = false;
+  you.ghost = false;
+  e.runNomination(butler, imp, false, null);
+
+  assert.ok(!s.audit.some((x) => x.type === "workings" && /lived through the Golem's nomination/.test(x.text)));
+
+  // (Good NPCs decide by their own suspicion, not your hand.)
+  let tried = 0;
+
+  for (let i = 0; i < 30; i++) {
+    s.r = rng(`golem-no-vote-${i}`);
+    tried += e.strat.vote(s, butler, imp, { yes: 0, needed: 3, hand: false, youVote: false }) ? 1 : 0;
+  }
+
+  assert.ok(tried > 0);
+});
+
+test("an NPC Golem never nominates a player they suspect is a Lleech's host, nor one who claimed the Goblin", () => {
+  const s = base("golem-host", mo);
+  const strat = new SimpleStrategy();
+  const [, chef, butler, , imp] = s.players;
+
+  role(butler, "golem", "good");
+  strat.suspicion = (_, x) => {
+    x.suspicion = { targetId: chef.id, day: s.day, score: 5, reasons: ["they seem off"] };
+    return { targetId: chef.id, score: 5 };
+  };
+
+  assert.equal(strat.nomination(s, butler)?.target, chef);
+  s.lleechSuspects = [chef.id];
+  assert.equal(strat.nomination(s, butler), null);
+  s.lleechSuspects = [];
+  s.goblinClaims = [{ id: chef.id, day: s.day }];
+  assert.equal(strat.nomination(s, butler), null);
+  void imp;
+});
+
+test("with the Farmer on the script, the Leviathan only chooses good players, a Farmer claimer first", () => {
+  const { s, p, strat } = oasisNight("leviathan-good");
+  const [, chef, butler, baron, d] = p;
+
+  role(d, "leviathan", "evil");
+  // (Kept apart by the Poppy Grower, the Leviathan doesn't know the Baron.)
+  d.poppyBlind = true;
+  baron.poppyBlind = true;
+
+  for (let i = 0; i < 20; i++) {
+    s.r = rng(`leviathan-good-${i}`);
+    assert.notEqual(strat.leviathan(s, d), baron);
+  }
+
+  butler.claim = "farmer";
+  butler.claimKnown = true;
+  s.players.forEach((x) => (x.publicClaim = x.claim));
+
+  for (let i = 0; i < 20; i++) {
+    s.r = rng(`leviathan-farmer-${i}`);
+    assert.equal(strat.leviathan(s, d), butler);
+  }
+
+  void chef;
+});
+
+test("two Farmer claims clash, until a player claiming the Farmer has died at night", () => {
+  const s = base("farmer-claims", mo);
+  const strat = new SimpleStrategy();
+  const [, chef, butler, baron] = s.players;
+
+  role(chef, "farmer", "good");
+  role(baron, "farmer", "evil");
+  s.players.forEach((x) => {
+    x.claimKnown = true;
+    x.publicClaim = x.claim;
+  });
+
+  const clash = () => strat.evidence(s, chef, baron).reasons.some((x) => /I'm the Farmer|both claim the Farmer/.test(x));
+
+  assert.ok(clash());
+
+  role(butler, "farmer", "good");
+  butler.claimKnown = true;
+  butler.publicClaim = "farmer";
+  butler.alive = false;
+  butler.diedAtNight = 1;
+  assert.ok(!clash());
+});
+
+test("the Ogre the Spirit of Ivory keeps good isn't told they're evil", () => {
+  const { s, e, p } = oasisNight("ivory-ogre", 1);
+  const [, chef, butler] = p;
+
+  role(chef, "chef", "evil");
+  role(butler, "ogre", "good");
+  e.strat.ogre = () => p[3];
+  e.ogres();
+  assert.equal(butler.alignment, "good");
+  assert.ok(!butler.toldEvil);
+  assert.match(s.audit.findLast((x) => x.type === "ogre").text, /they stay good: Spirit of Ivory/);
+});
+
+test("log.txt's Setup says when the Spirit of Ivory is on the script", () => {
+  const s = createState(mo, 12, "ivory-setup");
+
+  assert.ok(
+    s.audit.some(
+      (x) => x.group === "Setup" && x.type === "spiritofivory" && /at most 4 can ever be evil/.test(x.text),
+    ),
+  );
+  assert.ok(!createState(script, 12, "no-ivory-setup").audit.some((x) => x.type === "spiritofivory"));
+});
+
+test("no Philosopher ever chooses the Farmer: not an NPC, not you, and nobody faking the Philosopher says they did", () => {
+  assert.ok(PHILOSOPHER_AVOID.includes("farmer"));
+  assert.match(NOTES.philosopher, /nor the Farmer/);
+
+  // You: the Farmer isn't offered.
+  const { s, e, p } = oasisNight("phil-farmer", 2);
+
+  role(p[0], "philosopher", "good");
+  role(p[1], "farmer", "good");
+  s.pending = e.wakeHuman();
+  assert.ok(s.pending.characters.length > 0);
+  assert.ok(!s.pending.characters.includes("farmer"));
+
+  // An NPC, or an evil player faking it: never the Farmer, though it's in
+  // play.
+  const strat = new SimpleStrategy();
+
+  role(p[2], "philosopher", "good");
+  role(p[3], "baron", "evil");
+  p[3].claim = "philosopher";
+
+  for (let i = 0; i < 40; i++) {
+    s.r = rng(`phil-farmer-${i}`);
+    assert.notEqual(strat.philosopher(s, p[2]), "farmer");
+    assert.notEqual(strat.philosopherBluff(s, p[3]), "farmer");
+  }
+});

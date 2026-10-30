@@ -36,13 +36,14 @@ export const ogre = {
       const recluse = t.role === "recluse";
 
       const side = recluse || t.role === "spy" ? "evil" : t.alignment;
-
       // (With the Spirit of Ivory on the script, they might stay good: see
-      // characters/fabled/spiritofivory.js.)
-      p.alignment =
-        side === "evil" && this.ivoryKeepsGood(p, `the Ogre, choosing ${t.label}`) ? p.alignment : side;
+      // characters/fabled/spiritofivory.js. Then the Recluse's "evil" isn't
+      // what they learn either.)
+      const kept = side === "evil" && this.ivoryKeepsGood(p, `the Ogre, choosing ${t.label}`);
 
-      if (recluse) {
+      p.alignment = kept ? p.alignment : side;
+
+      if (recluse && !kept) {
         p.toldEvil = true;
       }
 
@@ -50,7 +51,13 @@ export const ogre = {
         "ogre",
         `${p.label} (Ogre) chose ${t.label}; they are ${p.alignment}${
           p.alignment === before ? "" : " now"
-        } (${recluse ? "the Recluse registers as evil, and they learn it" : "and don't know it"}).`,
+        } (${
+          kept
+            ? "they stay good: Spirit of Ivory"
+            : recluse
+              ? "the Recluse registers as evil, and they learn it"
+              : "and don't know it"
+        }).`,
         { actorId: p.id, targetId: t.id, alignment: p.alignment },
       );
 

@@ -963,6 +963,17 @@ export function createState(
     );
   }
 
+  // (The Sentinel's choice shows in the Outsiders dealt; the Spirit of
+  // Ivory's rule is said here: see characters/fabled/spiritofivory.js.)
+  if (script.fabled.includes("spiritofivory")) {
+    const normal = base[2] + 1;
+
+    setupLog(
+      "spiritofivory",
+      `The Spirit of Ivory is on the script: there can't be more than 1 extra evil player (the setup sheet has ${normal} for ${seats} seats, so at most ${normal + 1} can ever be evil; anyone else who would turn evil stays good).`,
+    );
+  }
+
   if (evilTownsfolk) {
     setupLog(
       "bountyhunter",

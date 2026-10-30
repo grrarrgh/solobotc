@@ -78,7 +78,6 @@ export const golem = {
 
     return died;
   },
-
 };
 
 // Whether the vote on n hangs on your hand: n is today's nominee of a Golem

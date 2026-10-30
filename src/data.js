@@ -470,8 +470,10 @@ export const FEARMONGER_CAUTION = 0.5;
 // them (you may still take it: see cannibals()), the Huntsman's only with a Damsel in
 // play (which the Philosopher can't know), and the Gambler's mostly kills
 // them. The Bounty Hunter's might turn a Townsfolk evil (their jinx). The
-// Atheist's is about setup (no evil characters), so it gains nothing. Add
-// any other wasted pick here.
+// Atheist's is about setup (no evil characters), so it gains nothing. The
+// Farmer's is never chosen either, by this game's rule. Add any other
+// wasted pick here. (The Atheist and the Farmer you can't choose either:
+// see engine wakeHuman().)
 export const PHILOSOPHER_AVOID = [
   "poppygrower",
   "pixie",
@@ -485,6 +487,7 @@ export const PHILOSOPHER_AVOID = [
   "general",
   "steward",
   "atheist",
+  "farmer",
 ];
 
 // The Psychopath (characters/minion/psychopath.js): the chance an NPC
