@@ -40,6 +40,7 @@ import {
   ATHEIST_DISBELIEF_FROM_DAY,
   ATHEIST_TRY_SHARE,
   EVIDENCE_TO_SUSPECT,
+  ATHEIST_DUPLICABLE,
   name,
   team,
   alignment,
@@ -15886,8 +15887,11 @@ test("an NPC Engineer acts by Night 3, on the least threatening choice for good,
 
   assert.ok(first > 0 && first < 40);
 
-  // With both its Demons, the Demon option is the Vigormortis.
+  // With both its Demons, the Demon option is the Vigormortis. (No draw
+  // for the other option: see ENGINEER_OTHER_CHANCE.)
   const both = engineerNight("eng-pick-both", 3);
+
+  both.s.r = () => 0.99;
   const d = both.e.strat.engineerPick(both.s, both.eng);
 
   assert.ok(d.kind === "minions" || d.roles[0] === "vigormortis");
@@ -15896,6 +15900,7 @@ test("an NPC Engineer acts by Night 3, on the least threatening choice for good,
   const { s, e, eng } = engineerNight("eng-pick", 3);
 
   s.script.ids = s.script.ids.filter((id) => id !== "alhadikhia");
+  s.r = () => 0.99;
 
   const c = e.strat.engineerPick(s, eng);
 
@@ -15921,6 +15926,7 @@ test("anyone claiming the Engineer makes up a choice by Night 3 and says it at d
   const { s, e, p, minion } = engineerNight("eng-bluff", 3);
 
   s.script.ids = s.script.ids.filter((id) => id !== "alhadikhia");
+  s.r = () => 0.99;
   minion.claim = "engineer";
 
   const m = infoOf("engineer").once(s, minion, e.strat, "lie");
@@ -15945,7 +15951,8 @@ test("anyone claiming the Engineer makes up a choice by Night 3 and says it at d
 
   mixed.night = 3;
   for (let i = 0; i < 10; i++) {
-    mixed.r = rng(`eng-bluff-${i}`);
+    // (Never the other option: see ENGINEER_OTHER_CHANCE.)
+    mixed.r = () => 0.99 - i / 100;
     d.engineerUsed = 0;
     const b = infoOf("engineer").once(mixed, d, e.strat, "lie");
 
@@ -16293,6 +16300,7 @@ test("an evil Engineer (turned by the Mezepheles) makes evil's pick, but says wh
   const { s, e, eng, minion } = engineerNight("eng-evil", 3);
 
   eng.alignment = "evil";
+  s.r = () => 0.99;
   e.strat.engineer = () => ({ kind: "minions", roles: ["mezepheles"] });
   e.engineers();
 
@@ -16452,6 +16460,7 @@ test("an evil Engineer bluffer never claims a Demon their own Demon would public
 
   role(demon, "alhadikhia", "evil");
   minion.claim = "engineer";
+  s.r = () => 0.99;
 
   const c = e.strat.engineerBluff(s, minion);
 
@@ -16488,4 +16497,116 @@ test("the Pit-Hag making a second Demon beside an Al-Hadikhia who was the Scarle
   o.e.pitHag();
   assert.equal(a.role, "vigormortis");
   assert.equal(o.d.role, "scarletwoman");
+});
+
+test("in an Atheist game, the Storyteller deals duplicates: second copies of characters in play, logged; never a second Atheist, never anyone evil, and never in other games", () => {
+  let dup = 0;
+
+  for (const raw of [mo, cd]) {
+    for (let g = 0; g < 300; g++) {
+      const seats = 8 + (g % 8);
+      const s = createState(raw, seats, `dup-${g}`);
+      const roles = s.players.map((x) => x.role);
+      // (Not Legion, which is many.)
+      const twice = [...new Set(roles)].filter(
+        (id) => roles.filter((x) => x === id).length > 1 && !["villageidiot", "legion"].includes(id),
+      );
+      const logged = s.audit.filter((x) => x.group === "Setup" && /^A duplicate \(the Atheist is in play\)/.test(x.text));
+
+      if (!s.atheist) {
+        assert.equal(logged.length, 0, `${g}`);
+        assert.deepEqual(twice, [], `${g}`);
+        continue;
+      }
+
+      assert.equal(roles.filter((x) => x === "atheist").length, 1, `${g}`);
+      assert.ok(s.players.every((x) => x.alignment === "good"), `${g}`);
+      assert.ok(twice.every((id) => ATHEIST_DUPLICABLE.includes(id)), `${g}: ${twice}`);
+      assert.equal(logged.length, twice.length, `${g}`);
+      assert.ok(!FORBIDDEN_HUMAN.has(s.players[0].role));
+      dup += twice.length;
+    }
+  }
+
+  assert.ok(dup > 20, `${dup}`);
+});
+
+test("in an Atheist game, an NPC who hears two players claim the same character may count it as a rule break: a doubt", () => {
+  const s = base("dup-doubt", cd);
+  const e = new Engine(s);
+  const [, chef, butler, baron] = s.players;
+
+  s.atheist = { breaks: 0 };
+  role(butler, "chef", "good");
+  s.players.forEach((x) => {
+    x.claimKnown = true;
+    x.publicClaim = x.claim;
+  });
+  s.r = () => 0;
+  e.atheistDoubles();
+
+  assert.equal(baron.doubts.length, 1);
+  assert.ok(s.audit.some((x) => x.type === "workings" && new RegExp(`${chef.label} and ${butler.label} both claim the Chef: they notice it doesn't add up`).test(x.text)));
+
+  // Once each pair.
+  e.atheistDoubles();
+  assert.equal(baron.doubts.length, 1);
+
+  // Not in other games.
+  const t = base("dup-doubt-no", cd);
+  const te = new Engine(t);
+
+  role(t.players[2], "chef", "good");
+  t.r = () => 0;
+  te.atheistDoubles();
+  assert.ok(!t.players[3].doubts?.length);
+});
+
+test("an NPC Golem may nominate a strong suspect from 6 alive", () => {
+  const s = createState(mo, 8, "golem-six");
+  const strat = new SimpleStrategy();
+  const g = s.players.find((x) => !x.human && x.alignment === "good");
+  const t = s.players.find((x) => !x.human && x !== g);
+
+  role(g, "golem", "good");
+  s.day = 3;
+  s.players.filter((x) => x !== g && x !== t && !x.human).slice(0, 2).forEach((x) => (x.alive = false));
+  assert.equal(s.players.filter((x) => x.alive).length, 6);
+  strat.suspicion = (_, x) => {
+    x.suspicion = { targetId: t.id, day: s.day, score: 5, reasons: ["they seem off"] };
+    return { targetId: t.id, score: 5 };
+  };
+  assert.equal(strat.nomination(s, g)?.target, t);
+});
+
+test("a good NPC Engineer sometimes makes the option that gains less, and says why", () => {
+  const kinds = new Set();
+  let other = false;
+
+  for (let i = 0; i < 40; i++) {
+    const { s, e, eng } = engineerNight(`eng-mix-${i}`, 3);
+
+    s.r = rng(`eng-mix-${i}`);
+
+    const c = e.strat.engineerPick(s, eng);
+
+    kinds.add(c.kind);
+    other ||= /at random, the other one/.test(c.why);
+  }
+
+  assert.deepEqual([...kinds].sort(), ["demon", "minions"]);
+  assert.ok(other);
+});
+
+test("a Drunk the Pit-Hag made who becomes a Farmer: log.txt says they knew they were the Drunk", () => {
+  const { s, e, p } = oasisNight("farmer-known-drunk");
+
+  role(p[1], "farmer", "good");
+  role(p[2], "drunk", "good");
+  p[2].shown = "drunk";
+  p[0].alive = false;
+  e.kill(p[1], "demon");
+
+  assert.equal(p[2].role, "farmer");
+  assert.match(s.audit.findLast((x) => x.type === "farmer" && /becomes a Farmer/.test(x.text)).text, /the Drunk, who knew it: no ability to lose/);
 });

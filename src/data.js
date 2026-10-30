@@ -618,7 +618,7 @@ export const NPC_NOMINATE_EVIDENCE = 3;
 // enough to nominate (NPC_NOMINATE_EVIDENCE); and with GOLEM_LATEST_ALIVE
 // alive, on their suspect whatever the evidence. Never with fewer: a death
 // then could end the game without you doing anything.
-export const GOLEM_READY_ALIVE = 5;
+export const GOLEM_READY_ALIVE = 6;
 export const GOLEM_LATEST_ALIVE = 4;
 
 // How NPCs vote (see strategy vote()). A good NPC votes at GOOD_VOTE_CHANCE,
@@ -837,6 +837,45 @@ export const LEGION_MINSTREL_CHANCE = 0.5;
 // Storyteller chooses to put it in; dealt like any Townsfolk, it would be
 // in most games.)
 export const ATHEIST_CHANCE = 0.2;
+// In an Atheist game, the Storyteller also deals this many duplicates (by
+// seats): a Townsfolk's (or Outsider's) place goes to a second copy of a
+// Townsfolk (or Outsider) already in play, from ATHEIST_DUPLICABLE (never the Atheist: only 1 is ever in
+// play). Both holders claim it honestly, and their information may
+// disagree: a double claim that stands is a sign the rules are broken (see
+// characters/townsfolk/atheist.js atheistDoubles()). Decided at setup, and
+// in setup's log.txt.
+// (Each NPC who hears a double claim notices it at ATHEIST_DOUBLE_NOTICE.)
+// (With the Pixie on the script, a doubled Townsfolk may be a mad Pixie: at
+// ATHEIST_PIXIE_DOUBLE_FACTOR of that.)
+export const ATHEIST_DOUBLE_NOTICE = 0.3;
+export const ATHEIST_PIXIE_DOUBLE_FACTOR = 0.25;
+// (One fewer for each character in play that already muddles the town's
+// information: ATHEIST_MUDDLERS, so scripts with them get as much doubt as
+// those without.)
+export const ATHEIST_DUPLICATES = { 8: 1, 9: 1, 10: 1, 11: 1, 12: 2, 13: 2, 14: 2, 15: 2 };
+export const ATHEIST_MUDDLERS = ["drunk", "pixie", "mutant", "lunatic"];
+// The characters that can be duplicated: each holder's ability works on its
+// own (information, choices, once-per-game flags are each player's). Not
+// the ones the game runs as one of a kind, or that need setup of their own
+// (the Pixie, Philosopher, Cannibal, Poppy Grower, Huntsman, Damsel, Drunk,
+// Mutant, Puzzlemaster, Amnesiac's secret...), nor the Engineer (with
+// nobody evil, it changes nothing, and two announcements would be noise).
+export const ATHEIST_DUPLICABLE = [
+  "chef",
+  "noble",
+  "balloonist",
+  "savant",
+  "fisherman",
+  "mathematician",
+  "towncrier",
+  "juggler",
+  "snakecharmer",
+  "professor",
+  "farmer",
+  "golem",
+  "recluse",
+  "barber",
+];
 // In an Atheist game, the Storyteller pretends a Demon and Minions are in
 // play, and good players' information is true to that pretence; but it
 // breaks the rules now and then, giving a piece of information that's
@@ -960,6 +999,9 @@ export const STORYTELLER_VOTED_EVIDENCE = 0.25;
 export const ENGINEER_NIGHT_CHANCE = 0.4;
 export const ENGINEER_LAST_NIGHT = 3;
 export const ENGINEER_MINION_SHARE = 0.5;
+// But not always the same: at this chance, the option that gains less (if
+// there are both), so the town hears different Engineers.
+export const ENGINEER_OTHER_CHANCE = 1 / 3;
 // The threat to good of each Demon and Minion, made mid-game (so the
 // Baron's Outsiders, from setup, count for nothing). Any not listed:
 // ENGINEER_THREAT_DEFAULT.

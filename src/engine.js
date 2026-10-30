@@ -758,6 +758,8 @@ export class Engine {
       this.psychopathKills();
       this.npcWishes();
       this.npcTalks();
+      // (An Atheist game: double claims heard. See atheist.js.)
+      this.atheistDoubles();
     }
 
     this.phaseCard("dawn", s.nightLog ?? 0);

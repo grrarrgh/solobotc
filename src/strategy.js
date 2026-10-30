@@ -57,6 +57,7 @@ import {
   ENGINEER_NIGHT_CHANCE,
   ENGINEER_LAST_NIGHT,
   ENGINEER_MINION_SHARE,
+  ENGINEER_OTHER_CHANCE,
   ENGINEER_THREAT,
   ENGINEER_THREAT_DEFAULT,
   ENGINEER_THREAT_PITHAG_DEMONS,
@@ -198,7 +199,7 @@ export const fooledBy = (p, x) =>
 const blind = (p, x) => unknownMate(p, x);
 
 // A line in log.txt about an NPC's choice (as bluff.js madeUp() adds them).
-const note = (s, type, text, data = {}) =>
+export const note = (s, type, text, data = {}) =>
   s.audit.push({
     id: s.auditId++,
     group: s.phase === "night" ? `Night ${s.night}` : `Day ${s.day}`,
@@ -4224,14 +4225,17 @@ export class SimpleStrategy {
 
     const round = (x) => Math.round(x * 100) / 100;
     const why = `${evil ? "for evil" : "for good"}: the Demon option gains ${round(gainDemon)}, the Minions ${round(gainMinions)}`;
+    const said = (c) => ({ ...c, why: `${why}${other ? "; at random, the other one" : ""}` });
 
-    // (`kind`: that option, if there is one.)
-    const demonFirst = kind ? kind === "demon" : gainDemon >= gainMinions;
+    // (`kind`: that option, if there is one. Else, with both, the one that
+    // gains less at ENGINEER_OTHER_CHANCE.)
+    const other = !kind && demon && mins.length > 0 && s.r() < ENGINEER_OTHER_CHANCE;
+    const demonFirst = kind ? kind === "demon" : (gainDemon >= gainMinions) !== other;
 
     return demon && (demonFirst || !mins.length)
-      ? { kind: "demon", roles: [demon], why }
+      ? said({ kind: "demon", roles: [demon] })
       : mins.length
-        ? { kind: "minions", roles: mins, why }
+        ? said({ kind: "minions", roles: mins })
         : null;
   }
 

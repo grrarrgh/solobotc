@@ -1,7 +1,14 @@
-import { name, team, ATHEIST_UNSAFE_SHARE, ATHEIST_VOTE_BELIEF } from "../../data.js";
+import {
+  name,
+  team,
+  ATHEIST_UNSAFE_SHARE,
+  ATHEIST_VOTE_BELIEF,
+  ATHEIST_DOUBLE_NOTICE,
+  ATHEIST_PIXIE_DOUBLE_FACTOR,
+} from "../../data.js";
 import { works, wishBarred, atheistBreakChance } from "../../storyteller.js";
-import { untwinned, sideOf } from "../../strategy.js";
-import { pick } from "../../util.js";
+import { untwinned, sideOf, note } from "../../strategy.js";
+import { pick, claimTo } from "../../util.js";
 
 // The Storyteller's id as a nominee: by day, with the Atheist on the script,
 // any living player may nominate the Storyteller (once a day), pressing the
@@ -151,6 +158,61 @@ export const atheist = {
   // since they were last logged (p.atheistLogged), and why (see strategy
   // atheistBelief()); and how much each evil NPC says they believe it, as a
   // good NPC would (see strategy atheistView()). Log only: no draw from s.r.
+  // In an Atheist game, each morning: each NPC who has heard two players
+  // claim the same character (a duplicate, see setup.js ATHEIST_DUPLICATES,
+  // or anyone's), both claims standing, may notice it as a sign the rules
+  // are broken: a doubt of their own, at ATHEIST_DOUBLE_NOTICE, as false
+  // information is at ATHEIST_DOUBT_NOTICE (see strategy atheistHeard()). Once each pair each.
+  // (Not the Village Idiot or Farmer, which can be many.) Logged.
+  atheistDoubles() {
+    const s = this.s;
+
+    if (!s.atheist) {
+      return;
+    }
+
+    for (const x of s.players.filter((y) => !y.human)) {
+      const others = s.players.filter((y) => y !== x);
+
+      for (const [i, a] of others.entries()) {
+        const claim = claimTo(a, x);
+
+        if (!claim || ["villageidiot", "farmer", "atheist"].includes(claim)) {
+          continue;
+        }
+
+        for (const b of others.slice(i + 1)) {
+          const key = `${claim}:${a.id}:${b.id}`;
+
+          if (claimTo(b, x) !== claim || (x.doublesHeard ??= []).includes(key)) {
+            continue;
+          }
+
+          x.doublesHeard.push(key);
+
+          // (A mad Pixie could explain a doubled Townsfolk.)
+          const chance =
+            ATHEIST_DOUBLE_NOTICE *
+            (s.script.ids.includes("pixie") && team(claim) === "townsfolk" ? ATHEIST_PIXIE_DOUBLE_FACTOR : 1);
+          const seen = s.r() < chance;
+
+          if (seen) {
+            (x.doubts ??= []).push({ byId: a.id, id: `double:${key}`, day: s.day, broken: true });
+          }
+
+          note(
+            s,
+            "workings",
+            `${x.label} has heard ${a.label} and ${b.label} both claim the ${name(claim)}: ${
+              seen ? `they notice it doesn't add up (doubts so far: ${x.doubts.length})` : "they don't think anything of it"
+            } (at ${Math.round(chance * 100)}%).`,
+            { playerId: x.id, noticedIds: seen ? [x.id] : [] },
+          );
+        }
+      }
+    }
+  },
+
   atheistBeliefs() {
     const s = this.s;
     const rows = [];

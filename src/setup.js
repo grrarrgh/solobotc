@@ -22,6 +22,9 @@ import {
   LEGION_STRONG,
   LEGION_STRONG_SHARE,
   ATHEIST_CHANCE,
+  ATHEIST_DUPLICATES,
+  ATHEIST_DUPLICABLE,
+  ATHEIST_MUDDLERS,
   EVIL_ATHEIST_BLUFF_CHANCE,
   exclusiveWith,
   ALCHEMIST_ABILITIES,
@@ -344,6 +347,43 @@ export function createState(
   const strongSafe = legionGame ? safe.filter((i) => LEGION_STRONG.includes(roles[i])) : [];
   const hi = pick(strongSafe.length ? strongSafe : safe, r);
   [roles[0], roles[hi]] = [roles[hi], roles[0]];
+
+  // In an Atheist game, a few duplicates (see ATHEIST_DUPLICATES; fewer with
+  // ATHEIST_MUDDLERS in play): each takes the place of a character of the
+  // same kind (a Townsfolk's or an Outsider's, so the counts hold; not the
+  // Atheist's, the Damsel's or a muddler's, nor one already a duplicate's
+  // or copied) with a second copy of a character in play (yours only if you
+  // can be dealt it). Logged below.
+  const duplicates = [];
+  const muddled = roles.filter((x) => ATHEIST_MUDDLERS.includes(x)).length;
+
+  for (let k = 0; atheistGame && k < (ATHEIST_DUPLICATES[seats] ?? 1) - muddled; k++) {
+    const copied = duplicates.map((d) => d.role);
+    const role = pick(
+      [...new Set(roles)].filter((x) => ATHEIST_DUPLICABLE.includes(x) && !copied.includes(x)),
+      r,
+    );
+    const slots = roles
+      .map((x, i) =>
+        team(x) === team(role) &&
+        !["atheist", "damsel", ...ATHEIST_MUDDLERS].includes(x) &&
+        x !== role &&
+        !copied.includes(x) &&
+        !duplicates.some((d) => d.i === i) &&
+        (i > 0 || !FORBIDDEN_HUMAN.has(role))
+          ? i
+          : -1,
+      )
+      .filter((i) => i >= 0);
+    const i = role ? pick(slots, r) : null;
+
+    if (i === null || i === undefined) {
+      break;
+    }
+
+    duplicates.push({ i, role, was: roles[i] });
+    roles[i] = role;
+  }
 
   const used = new Set(roles),
     unusedTF = pool("townsfolk").filter((x) => !used.has(x));
@@ -1012,6 +1052,13 @@ export function createState(
         more.length ? `; the Outsiders are as many as the pretend ${more.map(name).join(" and ")} would make them` : ""
       }.`,
     );
+
+    for (const d of duplicates) {
+      setupLog(
+        "atheist",
+        `A duplicate (the Atheist is in play): ${players[d.i].label} is a second ${name(d.role)}, in the place of the ${name(d.was)}.`,
+      );
+    }
   }
 
   if (atheistLiar) {

@@ -112,7 +112,9 @@ export const farmer = {
     // (The Drunk had no ability to lose: only the one they thought they had.)
     const lost =
       was === "drunk"
-        ? `the Drunk, who thought they were the ${name(shown)}`
+        ? shown === "drunk"
+          ? "the Drunk, who knew it: no ability to lose"
+          : `the Drunk, who thought they were the ${name(shown)}`
         : `${t.human ? "you lose" : "they lose"} the ${name(was)} ability`;
 
     this.audit(

@@ -425,7 +425,7 @@ export const CHARACTERS = {
     team: "townsfolk",
     ability:
       "The Storyteller can break the game rules, and if executed, good wins, even if you are dead. [No evil characters]",
-    note: "The Storyteller pretends some players are the Demon and Minions, kills at night as that Demon, and gives information as if they were the Demon. Abilities that act, not inform (the Slayer, Snake Charmer...), see the truth. The Atheist can't be made mad (by a Cerenovus, real or pretend). Any living player may nominate the Storyteller (press the Sun), once a day: executing it needs votes from half the living players (rounded up), whatever anyone else got today, and ends the game at once. In other games, an evil player may claim to be the Atheist.",
+    note: "The Storyteller pretends some players are the Demon and Minions, kills at night as that Demon, and gives information as if they were the Demon. Abilities that act, not inform (the Slayer, Snake Charmer...), see the truth. The Atheist can't be made mad (by a Cerenovus, real or pretend). The Storyteller also deals a duplicate or two: a second copy of a character in play (each works on its own), so two players honestly claim it, which the town may take as a sign. Any living player may nominate the Storyteller (press the Sun), once a day: executing it needs votes from half the living players (rounded up), whatever anyone else got today, and ends the game at once. In other games, an evil player may claim to be the Atheist.",
     kill: "med",
     // (No good player pretends to be one, nor hides as one: claiming it is a
     // call to execute the Storyteller. An evil Minion may claim it: see
@@ -620,7 +620,7 @@ export const CHARACTERS = {
     team: "outsider",
     ability:
       "You may only nominate once per game. When you do, if the nominee is not the Demon, they die.",
-    note: "The nominee dies at once (the Storyteller says only that they died), and the vote goes on. Simplified: the Recluse always registers as the Demon to it. NPC Golems nominate their suspect once only 5 or 4 players are alive (never you); a nominee who lives through it is evidence against them, not proof. Then good NPCs vote on them only if you raise your hand: whether to execute is your call.",
+    note: "The nominee dies at once (the Storyteller says only that they died), and the vote goes on. Simplified: the Recluse always registers as the Demon to it. NPC Golems nominate their suspect once only 6, 5 or 4 players are alive (never you); a nominee who lives through it is evidence against them, not proof. Then good NPCs vote on them only if you raise your hand: whether to execute is your call.",
     kill: "med",
     neverHiddenAs: true, // a good player hiding as it couldn't nominate
   },
