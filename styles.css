@@ -893,6 +893,12 @@ button:disabled {
   color: #b69455;
 }
 
+/* On the script sheet the notes are collapsed under "Solo BoTC Notes". */
+details.ability-note > summary {
+  cursor: pointer;
+  font-style: normal;
+}
+
 .phase-nomination {
   border-color: #f0cf83;
 }

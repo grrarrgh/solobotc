@@ -353,9 +353,12 @@ test("under the setup card: How to play (collapsed), About, hidden with it; a fo
   assert.match(app, /\$\("setup"\)\.hidden = false;\s*\$\("setup-info"\)\.hidden = false;/);
 });
 
-test("the script sheet lists each team's characters alphabetically, with any note on how the game simplifies them", () => {
+test("the script sheet lists each team's characters alphabetically, with any note on how the game simplifies them collapsed", () => {
   assert.match(app, /\.sort\(\(x, y\) => name\(x\)\.localeCompare\(name\(y\)\)\)/);
-  assert.match(app, /NOTES\[id\] \? `<span class="ability-note">/);
+  assert.match(
+    app,
+    /\? `<details class="ability-note"><summary>Solo BoTC Notes<\/summary>\$\{esc\(NOTES\[id\]\)\}<\/details>`/,
+  );
   assert.match(css, /\.ability-note \{/);
 });
 

@@ -1175,7 +1175,9 @@ function scriptSheet(script) {
             .map(
               (id) =>
                 `<dt class="role-${t === "fabled" ? "fabled" : alignment(id)}">${esc(name(id))}</dt><dd>${esc(ABILITIES[id] ?? "")}${
-                  NOTES[id] ? `<span class="ability-note">${esc(NOTES[id])}</span>` : ""
+                  NOTES[id]
+                    ? `<details class="ability-note"><summary>Solo BoTC Notes</summary>${esc(NOTES[id])}</details>`
+                    : ""
                 }</dd>`,
             )
             .join("")}
