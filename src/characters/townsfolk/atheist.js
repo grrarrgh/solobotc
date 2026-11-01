@@ -7,7 +7,7 @@ import {
   ATHEIST_HOLDER_NOTICE,
   ATHEIST_PIXIE_DOUBLE_FACTOR,
 } from "../../data.js";
-import { works, wishBarred, atheistBreakChance } from "../../storyteller.js";
+import { works, wishBarred, atheistBreakChance, atheistEndgame } from "../../storyteller.js";
 import { untwinned, sideOf, note } from "../../strategy.js";
 import { pick, claimTo } from "../../util.js";
 
@@ -127,7 +127,8 @@ export const atheist = {
   // its rule breaks grow more frequent each night (see storyteller.js
   // atheistBreakChance()); once the living NPCs who believe the Atheist
   // make up ATHEIST_UNSAFE_SHARE of the votes executing it needs, the ramp
-  // holds tonight (s.atheist.held). Logged.
+  // holds tonight (s.atheist.held), and it's suspected (s.atheist.suspected:
+  // no endgame surge; see storyteller.js atheistEndgame()). Logged.
   atheistSafe() {
     const s = this.s;
     const needed = this.storytellerNeeded();
@@ -138,7 +139,21 @@ export const atheist = {
         (this.strat.atheistBelief(s, x)?.belief ?? 0) >= ATHEIST_VOTE_BELIEF,
     );
 
-    if (believers.length < needed * ATHEIST_UNSAFE_SHARE) {
+    s.atheist.suspected = believers.length >= needed * ATHEIST_UNSAFE_SHARE;
+
+    if (!s.atheist.suspected) {
+      if (atheistEndgame(s)) {
+        this.audit(
+          "atheist",
+          `The town doesn't suspect the Storyteller (${believers.length} living NPC${
+            believers.length === 1 ? "" : "s"
+          } would vote to execute it, of ${needed} votes needed), and the game is near its end: it would rather be found out, and breaks the rules at ${Math.round(
+            atheistBreakChance(s) * 100,
+          )}% tonight (yours always).`,
+          { playerIds: believers.map((x) => x.id) },
+        );
+      }
+
       return;
     }
 

@@ -8,6 +8,8 @@ import {
   ATHEIST_BREAK_START,
   ATHEIST_BREAK_RAMP,
   ATHEIST_BREAK_MAX,
+  ATHEIST_HUMAN_BREAK_FACTOR,
+  ATHEIST_ENDGAME_BREAK,
   ATHEIST_DOUBT_NOTICE,
   exclusiveWith,
   name,
@@ -210,7 +212,9 @@ export const vortoxActive = (s) =>
   s.players.some((x) => x.alive && x.role === "vortox" && !x.poisoned);
 
 // The team the Storyteller's choices help right now ("good" or "evil"), or
-// null. It steers for a close finish:
+// null. In an Atheist game, always good: there's nobody evil to help, and
+// the Storyteller would rather be found out. Otherwise it steers for a
+// close finish:
 // - a final 3 of the human, 1 good NPC and 1 evil player;
 // - once the human is dead (they still have a vote), a final 3 with at
 //   least 1 good player: 1 or 2 evil;
@@ -251,6 +255,11 @@ export function leanState(s) {
   ).length;
   const human = s.players.find((x) => x.human);
   const end = finalCount(s);
+
+  // (An Atheist game: see above.)
+  if (s.atheist) {
+    return { side: "good", n, e, end, atheist: true };
+  }
 
   if (n <= end || n0 <= end) {
     return { side: null, n, e, end };
@@ -308,9 +317,10 @@ export function adviceWhy(s, level = adviceLevel(s)) {
 // How x registers to the Storyteller's day advice (the Fisherman, Savant
 // and Artist): a Recluse "might" register as evil and a Spy "might"
 // register as good, and the Storyteller decides: as they are when it leans
-// good, as they'd mislead otherwise (see registersEvil()).
+// good, as they'd mislead otherwise (see registersEvil()). (In an Atheist
+// game, the pretend team registers as what it pretends to be.)
 export const leanRegistersEvil = (s, x) =>
-  lean(s) === "good" ? x.alignment === "evil" : registersEvil(x);
+  lean(s) === "good" && !x.pretend ? x.alignment === "evil" : registersEvil(x);
 
 // How many living NPCs suspect x (their suspicion.targetId).
 export const suspectedBy = (s, x) =>
@@ -326,7 +336,9 @@ export function leanText(s) {
           l.high > l.low ? ` to ${l.high.toFixed(1)}` : ""
         }`;
 
-  return `${l.side ? `is helping ${l.side}` : "isn't leaning"}: ${l.e} evil of ${
+  return `${l.side ? `is helping ${l.side}` : "isn't leaning"}${
+    l.atheist ? " (an Atheist game: it would rather be found out)" : ""
+  }: ${l.e} evil of ${
     l.n
   } shown alive${band}.`;
 }
@@ -513,13 +525,24 @@ export function infoMode(s, p, deadOk = false) {
 // How often, in an Atheist game, the Storyteller breaks the rules with a
 // piece of information (see ATHEIST_BREAK_START): more each night, except
 // on nights it held the ramp as the town came to believe the Atheist
-// (s.atheist.held; see characters/townsfolk/atheist.js atheistSafe()).
+// (s.atheist.held; see characters/townsfolk/atheist.js atheistSafe()); and
+// from the final 4 on, ATHEIST_ENDGAME_BREAK at least while the town doesn't
+// suspect it (s.atheist.suspected, decided at nightfall).
 export const atheistBreakChance = (s) =>
-  Math.min(
-    ATHEIST_BREAK_MAX,
-    ATHEIST_BREAK_START +
-      ATHEIST_BREAK_RAMP * Math.max(0, Math.max(s.night, s.day) - 1 - (s.atheist?.held ?? 0)),
+  Math.max(
+    atheistEndgame(s) ? ATHEIST_ENDGAME_BREAK : 0,
+    Math.min(
+      ATHEIST_BREAK_MAX,
+      ATHEIST_BREAK_START +
+        ATHEIST_BREAK_RAMP * Math.max(0, Math.max(s.night, s.day) - 1 - (s.atheist?.held ?? 0)),
+    ),
   );
+
+// Whether, in an Atheist game, the Storyteller is in its endgame and
+// unsuspected: the final 4 or fewer alive, and too few NPCs believing the
+// Atheist to worry it (see atheistBreakChance()).
+export const atheistEndgame = (s) =>
+  Boolean(s.atheist && !s.atheist.suspected && (nearFinal(s) || atFinal(s)));
 
 // With the Atheist on the script, living good player p's information is
 // coming out false (a rule break, or a drunk or poisoned player's lie; not
@@ -590,9 +613,10 @@ function markFalse(s, p, broken) {
 
 // Whether, in an Atheist game, the Storyteller breaks the rules with good
 // player p's information: false even to its pretence (see
-// characters/townsfolk/atheist.js). Counted, and logged.
+// characters/townsfolk/atheist.js); yours more often (see
+// ATHEIST_HUMAN_BREAK_FACTOR). Counted, and logged.
 function atheistBreaks(s, p) {
-  const chance = atheistBreakChance(s);
+  const chance = Math.min(1, atheistBreakChance(s) * (p.human ? ATHEIST_HUMAN_BREAK_FACTOR : 1));
 
   if (!s.atheist || p.alignment !== "good" || s.r() >= chance) {
     return false;
@@ -603,7 +627,9 @@ function atheistBreaks(s, p) {
     id: s.auditId++,
     group: s.phase === "night" ? `Night ${s.night}` : `Day ${s.day}`,
     type: "atheist",
-    text: `The Storyteller breaks the rules (the Atheist is in play): ${Whose(p)} information is false, even to its pretence (at ${Math.round(chance * 100)}%).`,
+    text: `The Storyteller breaks the rules (the Atheist is in play): ${Whose(p)} information is false, even to its pretence (at ${Math.round(chance * 100)}%${
+      atheistEndgame(s) ? ": near the end, and unsuspected, it would rather be found out" : ""
+    }).`,
     data: { playerId: p.id },
     names: logNames(s),
   });

@@ -32,6 +32,9 @@ import {
   ATHEIST_BREAK_START,
   ATHEIST_BREAK_RAMP,
   ATHEIST_BREAK_MAX,
+  ATHEIST_HUMAN_BREAK_FACTOR,
+  ATHEIST_ENDGAME_BREAK,
+  ATHEIST_MUDDLERS,
   ATHEIST_VOTE_BELIEF,
   ATHEIST_UNSAFE_SHARE,
   EVIL_ATHEIST_BLUFF_CHANCE,
@@ -95,6 +98,8 @@ import {
   registersMinion,
   registeredRole,
   atheistBreakChance,
+  atheistEndgame,
+  leanRegistersEvil,
   falseNoise,
   neigh,
   who,
@@ -14949,6 +14954,68 @@ test("an evil Minion claiming the Atheist sets a trap: once believers and the ev
   assert.equal(s.winner, "evil");
 });
 
+test("in an Atheist game, your own information breaks the rules more often than an NPC's", () => {
+  const { s, p } = atheistBase();
+  const chance = atheistBreakChance(s);
+
+  s.phase = "night";
+  s.night = 2;
+  assert.ok(ATHEIST_HUMAN_BREAK_FACTOR > 1);
+  // (A roll between the NPC's chance and yours.)
+  s.r = () => atheistBreakChance(s) * 1.5;
+  assert.equal(infoMode(s, p[1]), "truth");
+  assert.equal(infoMode(s, p[0]), "lie");
+  assert.equal(s.atheist.breaks, 1);
+  assert.match(s.audit.at(-1).text, /^The Storyteller breaks the rules \(the Atheist is in play\): Your information is false/i);
+  assert.ok(chance > 0);
+});
+
+test("in an Atheist game, the Storyteller leans good, and the pretend team still registers as what it pretends to be", () => {
+  const { s, p } = atheistBase();
+
+  assert.equal(lean(s), "good");
+  assert.ok(leanRegistersEvil(s, p[3]));
+  assert.ok(!leanRegistersEvil(s, p[1]));
+
+  // (A Recluse registers as good, as in any game the Storyteller helps good.)
+  role(p[1], "recluse", "good");
+  assert.ok(!leanRegistersEvil(s, p[1]));
+});
+
+test("in an Atheist game, from the final 4 on, the Storyteller breaks the rules far more while the town doesn't suspect it", () => {
+  const { s, e, p } = atheistBase();
+
+  s.phase = "night";
+  s.night = 2;
+  assert.ok(!atheistEndgame(s));
+  assert.ok(atheistBreakChance(s) < ATHEIST_ENDGAME_BREAK);
+
+  // (The final 4: one execution from the final 3.)
+  p[1].alive = false;
+  assert.ok(atheistEndgame(s));
+  assert.equal(atheistBreakChance(s), ATHEIST_ENDGAME_BREAK);
+  // (Yours always.)
+  s.r = () => 0.99;
+  assert.equal(infoMode(s, p[0]), "lie");
+  assert.match(s.audit.at(-1).text, /\(at 100%: near the end, and unsuspected, it would rather be found out\)\.$/);
+
+  // (Logged at nightfall.)
+  e.atheistSafe();
+  assert.equal(s.atheist.suspected, false);
+  assert.match(s.audit.at(-1).text, /^The town doesn't suspect the Storyteller .* near its end: it would rather be found out/);
+
+  // (Once it's suspected, no surge.)
+  s.atheist.suspected = true;
+  assert.ok(!atheistEndgame(s));
+  assert.ok(atheistBreakChance(s) < ATHEIST_ENDGAME_BREAK);
+
+  // (Not in any other game.)
+  const t = base("no-atheist-end");
+
+  t.players[1].alive = false;
+  assert.ok(!atheistEndgame(t));
+});
+
 test("in an Atheist game, the rule-break ramp holds once the town comes to believe the Atheist", () => {
   const { s, e } = cdDay(10, "st-ramp", npcAtheist);
   const atheist = s.players.find((x) => x.role === "atheist");
@@ -16617,6 +16684,26 @@ test("a Drunk the Pit-Hag made who becomes a Farmer: log.txt says they knew they
 
   assert.equal(p[2].role, "farmer");
   assert.match(s.audit.findLast((x) => x.type === "farmer" && /becomes a Farmer/.test(x.text)).text, /the Drunk, who knew it: no ability to lose/);
+});
+
+test("in an Atheist game, a character that muddles information (the Drunk...) never cancels every duplicate", () => {
+  let muddled = 0;
+
+  for (let g = 0; g < 400; g++) {
+    const s = createState(cd, 8 + (g % 4), `muddle-${g}`);
+
+    if (!s.atheist || !s.players.some((x) => ATHEIST_MUDDLERS.includes(x.role))) {
+      continue;
+    }
+
+    muddled++;
+    assert.ok(
+      s.audit.some((x) => x.group === "Setup" && /^A duplicate \(the Atheist is in play\)/.test(x.text)),
+      `${g}`,
+    );
+  }
+
+  assert.ok(muddled > 5, `${muddled}`);
 });
 
 test("a duplicate never takes the Huntsman's place, nor is the Farmer duplicated", () => {

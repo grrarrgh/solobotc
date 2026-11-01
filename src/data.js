@@ -863,7 +863,8 @@ export const ATHEIST_CLASH_DOUBT = 0.4;
 export const ATHEIST_CLASH_FACTOR = 0.5;
 // (One fewer for each character in play that already muddles the town's
 // information: ATHEIST_MUDDLERS, so scripts with them get as much doubt as
-// those without.)
+// those without; but never fewer than 1, as a muddler's false information
+// may well pass unnoticed.)
 export const ATHEIST_DUPLICATES = { 8: 1, 9: 1, 10: 1, 11: 1, 12: 2, 13: 2, 14: 2, 15: 2 };
 export const ATHEIST_MUDDLERS = ["drunk", "pixie", "mutant", "lunatic"];
 // The characters that can be duplicated: each holder's ability works on its
@@ -894,10 +895,20 @@ export const ATHEIST_DUPLICABLE = [
 // breaks the rules now and then, giving a piece of information that's
 // false even to it: at ATHEIST_BREAK_START on Night 1, ATHEIST_BREAK_RAMP
 // more each night after, up to ATHEIST_BREAK_MAX, so an attentive town can
-// catch it out as the game goes on (see atheistBreakChance()).
-export const ATHEIST_BREAK_START = 0.05;
-export const ATHEIST_BREAK_RAMP = 0.05;
-export const ATHEIST_BREAK_MAX = 0.35;
+// catch it out as the game goes on (see atheistBreakChance()). Your own
+// information breaks at ATHEIST_HUMAN_BREAK_FACTOR times that: you can't
+// hear an NPC notice theirs doesn't add up, so you need some of your own.
+export const ATHEIST_BREAK_START = 0.1;
+export const ATHEIST_BREAK_RAMP = 0.08;
+export const ATHEIST_BREAK_MAX = 0.4;
+export const ATHEIST_HUMAN_BREAK_FACTOR = 2;
+// From the final 4 (one execution from the final 3) on, the Storyteller
+// wants to be found out: while the town doesn't suspect it (fewer living
+// NPCs believe the Atheist than ATHEIST_UNSAFE_SHARE of the votes needed),
+// it breaks the rules at ATHEIST_ENDGAME_BREAK at least (yours, times
+// ATHEIST_HUMAN_BREAK_FACTOR: always). See storyteller.js
+// atheistBreakChance().
+export const ATHEIST_ENDGAME_BREAK = 0.75;
 // The ramp goes on only while the Storyteller is still safe: on a night when
 // the living NPCs who believe the Atheist (see ATHEIST_BELIEF) make up at
 // least this share of the votes executing the Storyteller needs, it holds
@@ -949,11 +960,11 @@ export const EVIL_ATHEIST_TRAP_BELIEVERS = 1;
 // Nothing, once anyone has shown they're evil (a failed Legion execution,
 // an outed Psychopath or Goblin, a Damsel guess). An evil NPC says what
 // they'd believe by the same sum (see strategy atheistView()). (At these
-// values, in 1,000 seeded games on Chef's Deluxe, good won 49.6% of the
-// 127 Atheist games, and the Atheist was alive at the start of Day 3 in
-// 75.6% of them; an evil Atheist claim got the Storyteller executed in
-// 11.3% of the 71 games with one, where good won 35.2%, against 43.4% of
-// the other 801 games.)
+// values, in 1,000 seeded games on Chef's Deluxe, good won 64.7% of the
+// 204 Atheist games, and the Atheist was alive at the start of Day 3 in
+// 87.7% of them; an evil Atheist claim got the Storyteller executed in
+// 8.8% of the 171 games with one, where good won 48.5%, against 43.4% of
+// the other 625 games.)
 export const ATHEIST_BELIEF = {
   base: 0.2,
   doubt: 0.12,

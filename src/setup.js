@@ -349,7 +349,7 @@ export function createState(
   [roles[0], roles[hi]] = [roles[hi], roles[0]];
 
   // In an Atheist game, a few duplicates (see ATHEIST_DUPLICATES; fewer with
-  // ATHEIST_MUDDLERS in play): each takes the place of a character of the
+  // ATHEIST_MUDDLERS in play, but at least 1): each takes the place of a character of the
   // same kind (a Townsfolk's or an Outsider's, so the counts hold; not the
   // Atheist's, the Damsel's, the Huntsman's or a muddler's, nor one already a duplicate's
   // or copied) with a second copy of a character in play (yours only if you
@@ -357,7 +357,7 @@ export function createState(
   const duplicates = [];
   const muddled = roles.filter((x) => ATHEIST_MUDDLERS.includes(x)).length;
 
-  for (let k = 0; atheistGame && k < (ATHEIST_DUPLICATES[seats] ?? 1) - muddled; k++) {
+  for (let k = 0; atheistGame && k < Math.max(1, (ATHEIST_DUPLICATES[seats] ?? 1) - muddled); k++) {
     const copied = duplicates.map((d) => d.role);
     // (A role with no place for its copy: another.)
     const options = [...new Set(roles)].filter((x) => ATHEIST_DUPLICABLE.includes(x) && !copied.includes(x));
@@ -879,7 +879,7 @@ export function createState(
     : null;
 
   const s = {
-    version: "2.17.0",
+    version: "2.18.0",
     script,
     seats,
     seed: String(seed),

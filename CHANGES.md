@@ -2,6 +2,16 @@
 
 Newest first. Each release is headed with its version, the one log.txt's `Version:` line shows (from `version` in `src/setup.js` and `package.json`): a release with new features or improvements raises the middle number (2.5.0), one with only bug fixes or superficial changes the last (2.5.1). An entry without one shipped as the version below it; versions before 2.4.0 weren't recorded here.
 
+## v2.18.0 — Improvements: Atheist games show more signs of the Atheist
+
+- An Atheist game could look perfect: in 162 seeded self-play Atheist games on Chef's Deluxe, 43% had at most one rule break and no duplicate claim, so nothing pointed to the Atheist. Now:
+- The Storyteller breaks the rules sooner and more: 10% on Night 1, 8% more each night, up to 40% (`ATHEIST_BREAK_START`/`RAMP`/`MAX`; were 5%, 5%, 35%). The ramp still holds while the town comes to believe the Atheist.
+- Your own information breaks at twice that (`ATHEIST_HUMAN_BREAK_FACTOR`): you can't see an NPC notice their information doesn't add up, so you need some contradictions of your own.
+- Every Atheist game deals at least 1 duplicate: a Drunk, Pixie, Mutant or Lunatic in play (`ATHEIST_MUDDLERS`) still means one fewer, but no longer none.
+- The Storyteller leans good in an Atheist game (there's nobody evil to help, and it would rather be found out), where it used to lean "evil" with no evil player in play: a drunk player's information is random rather than framing, and day advice is more pointed. The pretend team still registers as what it pretends to be (`leanRegistersEvil()`). log.txt says "Storyteller is helping good (an Atheist game: it would rather be found out)".
+- From the final 4 on, while the town doesn't suspect the Storyteller (fewer living NPCs believe the Atheist than half the votes executing it needs: `ATHEIST_UNSAFE_SHARE`), it breaks the rules at 75% at least (`ATHEIST_ENDGAME_BREAK`; yours always: `atheistEndgame()`). log.txt says so on each break, and at nightfall.
+- Balance (1,000 seeded games on Chef's Deluxe): good wins 64.7% of Atheist games (was 52.5%); games with an evil Atheist claim and the rest are unchanged. On The Midnight Oasis, good wins 50% of Atheist games (was 40%). Games on every other script play exactly as before.
+
 ## v2.17.0 — New Script: The Midnight Oasis, with the Engineer, the Farmer, the Golem, the Al-Hadikhia and the Spirit of Ivory
 
 - New script: **The Midnight Oasis** is in the Script menu (`scripts/The Midnight Oasis_3_8_0.json`, formatted like the others, with its name in a `_meta` entry). All 23 of its characters (and both Fabled) are in the game; 18 were already. In 800 seeded self-play games (8–15 seats), good won 413 and evil 387: in games dealt the Vigormortis, good 172 and evil 142; dealt the Al-Hadikhia, good 156 and evil 163; Atheist games, good 85 and evil 82.
