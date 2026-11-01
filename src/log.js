@@ -1,6 +1,11 @@
 import { name, ROLES } from "./data.js";
 import { byId } from "./util.js";
 
+// The side shown as winning: in an Atheist game nobody is evil, so when
+// good fails to execute the Storyteller (s.winner "evil"), the Storyteller
+// wins. Otherwise s.winner ("good" or "evil").
+export const winnerName = (s) => (s.atheist && s.winner === "evil" ? "storyteller" : s.winner);
+
 const CHARACTER_NAMES = new Set(Object.keys(ROLES).map(name));
 
 // What player p claims, and what that claim says they have since (each
@@ -310,7 +315,7 @@ export function formatLog(s) {
         : ""
     }`,
     `Result:  ${
-      s.winner ? `${s.winner.toUpperCase()} wins — ${s.reason}` : "in progress"
+      s.winner ? `${winnerName(s).toUpperCase()} wins — ${s.reason}` : "in progress"
     }`,
   ];
 

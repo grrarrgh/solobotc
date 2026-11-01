@@ -14954,6 +14954,26 @@ test("an evil Minion claiming the Atheist sets a trap: once believers and the ev
   assert.equal(s.winner, "evil");
 });
 
+test("in an Atheist game, if good never executes the Storyteller, the Storyteller wins: in the Final reveal and log.txt", () => {
+  const { s, e, p } = atheistBase("st-wins");
+
+  p.slice(2).forEach((x) => (x.alive = false));
+  e.check();
+  assert.equal(s.winner, "evil");
+  assert.equal(s.reason, "Two alive remain, and nobody executed the Storyteller.");
+  assert.equal(e.reveal().winner, "storyteller");
+  assert.match(e.debugLog(), /^Result: {2}STORYTELLER wins — Two alive remain, and nobody executed the Storyteller\.$/m);
+  assert.match(s.audit.find((x) => x.type === "game_over").text, /^STORYTELLER: /);
+
+  // (Not in any other game.)
+  const t = base("evil-wins");
+  const f = new Engine(t);
+
+  t.players.slice(2).forEach((x) => (x.alive = false));
+  f.finish("evil", "Two alive remain.");
+  assert.equal(f.reveal().winner, "evil");
+});
+
 test("in an Atheist game, your own information breaks the rules more often than an NPC's", () => {
   const { s, p } = atheistBase();
   const chance = atheistBreakChance(s);

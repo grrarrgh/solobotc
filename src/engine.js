@@ -58,7 +58,7 @@ import {
   leviathanRisk,
 } from "./strategy.js";
 import { byId, bySeat, pick, shuffle } from "./util.js";
-import { formatLog, logNames, claimChain } from "./log.js";
+import { formatLog, logNames, claimChain, winnerName } from "./log.js";
 import { abilities, living } from "./abilities.js";
 import { characters } from "./characters/index.js";
 import { STORYTELLER } from "./characters/townsfolk/atheist.js";
@@ -2889,7 +2889,12 @@ export class Engine {
     if (!alive.some(isDemon) && !this.s.atheist) {
       this.finish("good", this.s.lilMonsta ? "Lil' Monsta's babysitter died." : "No Demon remains.");
     } else if (alive.length <= 2) {
-      this.finish("evil", "Two alive remain.");
+      // (In an Atheist game, that's the Storyteller's win: see log.js
+      // winnerName().)
+      this.finish(
+        "evil",
+        this.s.atheist ? "Two alive remain, and nobody executed the Storyteller." : "Two alive remain.",
+      );
     }
   }
 
@@ -2917,7 +2922,7 @@ export class Engine {
 
     this.audit(
       "game_over",
-      `${winner.toUpperCase()}: ${reason}`,
+      `${winnerName(this.s).toUpperCase()}: ${reason}`,
       {},
       "Game Over",
     );
@@ -3093,7 +3098,8 @@ export class Engine {
     );
 
     return {
-      winner: this.s.winner,
+      // ("storyteller" in an Atheist game good lost: see log.js winnerName().)
+      winner: winnerName(this.s),
       reason: this.s.reason,
       script: this.s.script.meta.name,
       seats: this.s.seats,

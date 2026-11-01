@@ -2,6 +2,10 @@
 
 Newest first. Each release is headed with its version, the one log.txt's `Version:` line shows (from `version` in `src/setup.js` and `package.json`): a release with new features or improvements raises the middle number (2.5.0), one with only bug fixes or superficial changes the last (2.5.1). An entry without one shipped as the version below it; versions before 2.4.0 weren't recorded here.
 
+## v2.18.1 — Bug Fixes: the Storyteller wins an Atheist game good loses
+
+- In an Atheist game, nobody is evil, but when good failed to execute the Storyteller and two players were left, the Final reveal and log.txt said "EVIL WINS". They now say "STORYTELLER WINS — Two alive remain, and nobody executed the Storyteller." (`winnerName()` in `src/log.js`; the engine still records it as evil's win, so nothing else changes.)
+
 ## v2.18.0 — Improvements: Atheist games show more signs of the Atheist
 
 - An Atheist game could look perfect: in 162 seeded self-play Atheist games on Chef's Deluxe, 43% had at most one rule break and no duplicate claim, so nothing pointed to the Atheist. Now:
