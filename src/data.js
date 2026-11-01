@@ -1012,59 +1012,66 @@ export const STORYTELLER_VOTED_EVIDENCE = 0.25;
 
 // The Engineer (characters/townsfolk/engineer.js). An NPC Engineer uses it
 // at ENGINEER_NIGHT_CHANCE each night, and on Night ENGINEER_LAST_NIGHT at
-// the latest. They don't know which Demon or Minions are in play, so they
-// count on a typical one: the Demon option makes the Demon the least
-// threatening Demon on the script (ENGINEER_THREAT, from 1, mild, to 5),
-// gaining the script's average threat less its own; the Minion option makes
-// the Minions the least threatening ones, gaining their average shortfall
-// times how many, weighed at ENGINEER_MINION_SHARE (each Minion matters
-// less than the Demon). Whichever gains more (the Demon on a tie). (An
-// evil Engineer, turned by the Mezepheles, does the opposite.)
+// the latest. They don't know which Demon or Minions are in play, so they go
+// by ENGINEER_DEMONS and ENGINEER_MINIONS, strict lists from most to least
+// harmful to good: the Demon option makes the script's last-listed Demon,
+// the Minion option its last-listed Minions (as many as the setup sheet
+// has). Each gains how far down its list that moves from the script's
+// average place, as a share of the list; the Minions' times how many,
+// weighed at ENGINEER_MINION_SHARE (each Minion matters less than the
+// Demon). Whichever gains more (the Demon on a tie). (An evil Engineer,
+// turned by the Mezepheles, makes the first-listed instead.)
 export const ENGINEER_NIGHT_CHANCE = 0.4;
 export const ENGINEER_LAST_NIGHT = 3;
 export const ENGINEER_MINION_SHARE = 0.5;
 // But not always the same: at this chance, the option that gains less (if
-// there are both), so the town hears different Engineers.
+// there are both), so the town hears different Engineers, and a bluffer or
+// an evil Engineer saying what a good one would choose is harder to tell.
+// (Which Demon or Minions is never left to chance: see the lists.)
 export const ENGINEER_OTHER_CHANCE = 1 / 3;
-// The threat to good of each Demon and Minion, made mid-game (so the
-// Baron's Outsiders, from setup, count for nothing). Any not listed:
-// ENGINEER_THREAT_DEFAULT.
-export const ENGINEER_THREAT = {
-  alhadikhia: 5, // up to 3 deaths a night
-  imp: 3,
-  zombuul: 3,
-  pukka: 3,
-  fanggu: 4,
-  vigormortis: 4,
-  nodashii: 4,
-  shabaloth: 4,
-  po: 4,
-  lleech: 4,
-  vortox: 5,
-  baron: 1,
-  cerenovus: 2,
-  goblin: 2,
-  boomdandy: 2,
-  spy: 3,
-  scarletwoman: 3,
-  godfather: 3,
-  devilsadvocate: 3,
-  mastermind: 3,
-  witch: 3,
-  pithag: 3, // but see ENGINEER_THREAT_PITHAG_DEMONS
-  fearmonger: 3,
-  wizard: 3,
-  poisoner: 4,
-  assassin: 4,
-  psychopath: 4,
-  widow: 4,
-  mezepheles: 5, // a good player would still turn evil
-};
-export const ENGINEER_THREAT_DEFAULT = 3;
-// The Pit-Hag, with another Demon on the script for her to make: one the
-// Engineer makes acts that night, and a Demon she makes kills at random
-// that night (see pithag.js), on top of what she does to good players.
-export const ENGINEER_THREAT_PITHAG_DEMONS = 4;
+// The lists, most harmful first, from self-play (v2.19.0): 600 seeded games
+// a script on every script, each seed played once for each of the script's
+// Demons (or Minions) made on Night 2, the living Demon (or the first
+// Minion) becoming it, and once with nothing changed. The change in good's
+// wins against no change, in points, pooled over the scripts with more
+// than one to choose from, is in each comment. (Made mid-game, so setup
+// effects, like the Baron's Outsiders, count for nothing; a mid-game Pukka
+// loses a night's kill, a Zombuul survives its first death.) Never on the
+// lists, as an NPC Engineer never makes them: Legion, the Leviathan, Lil'
+// Monsta, the Marionette, the Evil Twin (see engineerOptions()).
+export const ENGINEER_DEMONS = [
+  "zombuul", // −19.2
+  "alhadikhia", // −9.3
+  "imp", // −4.0
+  "shabaloth", // −3.7
+  "vortox", // −3.0
+  "fanggu", // +0.4
+  "nodashii", // +1.3
+  "vigormortis", // +4.1
+  "po", // +5.3
+  "lleech", // +6.1
+  "pukka", // +19.8
+];
+export const ENGINEER_MINIONS = [
+  "mezepheles", // −5.6
+  "scarletwoman", // −4.4
+  "goblin", // −3.5
+  "devilsadvocate", // −2.8
+  "psychopath", // −1.7
+  "boomdandy", // −1.2
+  "pithag", // −1.0
+  "mastermind", // −0.7
+  "fearmonger", // −0.1
+  "cerenovus", // −0.1
+  "wizard", // +0.5
+  "witch", // +0.6
+  "spy", // +0.7
+  "poisoner", // +0.8
+  "assassin", // +1.4
+  "baron", // +2.0
+  "godfather", // +2.1
+  "widow", // +2.8
+];
 // Demons the town would know were in play (or not): the Al-Hadikhia's
 // choices are announced; everyone knows the Leviathan is; Legion is many.
 // An evil Engineer bluffer never claims to have made the Demon one of these,

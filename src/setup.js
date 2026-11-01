@@ -879,7 +879,7 @@ export function createState(
     : null;
 
   const s = {
-    version: "2.18.2",
+    version: "2.19.0",
     script,
     seats,
     seed: String(seed),

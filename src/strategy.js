@@ -58,9 +58,8 @@ import {
   ENGINEER_LAST_NIGHT,
   ENGINEER_MINION_SHARE,
   ENGINEER_OTHER_CHANCE,
-  ENGINEER_THREAT,
-  ENGINEER_THREAT_DEFAULT,
-  ENGINEER_THREAT_PITHAG_DEMONS,
+  ENGINEER_DEMONS,
+  ENGINEER_MINIONS,
   ENGINEER_PUBLIC_DEMONS,
   ALHADIKHIA_LIVE_CHANCE,
   ALHADIKHIA_DEAD_LIVE_CHANCE,
@@ -4209,27 +4208,24 @@ export class SimpleStrategy {
   }
 
   // The Engineer's choice that helps `side` (p's, unless given) most ({
-  // kind, roles, why }): not knowing what's in play, the Demon or Minions
-  // least threatening to good, whichever gains good more over the script's
-  // typical ones (see ENGINEER_THREAT); for evil, the most threatening.
-  // Null with nothing to choose. (Ties at random.)
+  // kind, roles, why }): not knowing what's in play, the script's Demon or
+  // Minions last on ENGINEER_DEMONS / ENGINEER_MINIONS (least harmful to
+  // good), whichever moves further down its list from the script's average
+  // place; for evil, the first-listed. Null with nothing to choose.
   engineerPick(s, p, side = sideOf(p), kind = null) {
     const { demons, minions, count } = engineerOptions(s, true);
     const evil = side === "evil";
-    // (The Pit-Hag, by whether the script has another Demon for her to
-    // make: see ENGINEER_THREAT_PITHAG_DEMONS.)
-    const threat = (id) =>
-      id === "pithag" && demons.length > 1
-        ? ENGINEER_THREAT_PITHAG_DEMONS
-        : (ENGINEER_THREAT[id] ?? ENGINEER_THREAT_DEFAULT);
-    const rank = (ids) =>
-      shuffle(ids, s.r).sort((a, b) => (evil ? threat(b) - threat(a) : threat(a) - threat(b)));
-    const mean = (ids) => ids.reduce((n, id) => n + threat(id), 0) / ids.length;
-    const demon = rank(demons)[0];
-    const mins = rank(minions).slice(0, count);
-    const gainDemon = demon ? Math.abs(mean(demons) - threat(demon)) : -1;
+    // (A place on a list, as a share of it: 0 most harmful, 1 least.)
+    const place = (list) => (id) => list.indexOf(id) / (list.length - 1);
+    const demonAt = place(ENGINEER_DEMONS);
+    const minionAt = place(ENGINEER_MINIONS);
+    const rank = (ids, at) => [...ids].sort((x, y) => (evil ? at(x) - at(y) : at(y) - at(x)));
+    const mean = (ids, at) => ids.reduce((n, id) => n + at(id), 0) / ids.length;
+    const demon = rank(demons, demonAt)[0];
+    const mins = rank(minions, minionAt).slice(0, count);
+    const gainDemon = demon ? Math.abs(mean(demons, demonAt) - demonAt(demon)) : -1;
     const gainMinions = mins.length
-      ? Math.abs(mean(minions) - mean(mins)) * mins.length * ENGINEER_MINION_SHARE
+      ? Math.abs(mean(minions, minionAt) - mean(mins, minionAt)) * mins.length * ENGINEER_MINION_SHARE
       : -1;
 
     if (!demon && !mins.length) {

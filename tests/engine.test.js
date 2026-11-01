@@ -47,6 +47,9 @@ import {
   name,
   team,
   alignment,
+  CHARACTERS,
+  ENGINEER_DEMONS,
+  ENGINEER_MINIONS,
 } from "../src/data.js";
 import { createState, infoTarget } from "../src/setup.js";
 import {
@@ -15983,7 +15986,8 @@ test("an NPC Engineer acts by Night 3, on the least threatening choice for good,
 
   assert.ok(d.kind === "minions" || d.roles[0] === "vigormortis");
 
-  // With one Demon on the script, the Minions: the Pit-Hag first.
+  // With one Demon on the script, the Minions: the Poisoner, last on
+  // ENGINEER_MINIONS of the script's (never the Psychopath).
   const { s, e, eng } = engineerNight("eng-pick", 3);
 
   s.script.ids = s.script.ids.filter((id) => id !== "alhadikhia");
@@ -15992,13 +15996,13 @@ test("an NPC Engineer acts by Night 3, on the least threatening choice for good,
   const c = e.strat.engineerPick(s, eng);
 
   assert.equal(c.kind, "minions");
-  assert.equal(c.roles[0], "pithag");
+  assert.equal(c.roles[0], "poisoner");
 
   e.engineers();
   s.phase = "day";
   s.day = 3;
   e.npcEngineers();
-  assert.ok(s.publicLog.some((x) => /: "I'm the Engineer: last night I made the Minions a Pit-Hag\."$/.test(x)));
+  assert.ok(s.publicLog.some((x) => /: "I'm the Engineer: last night I made the Minions a Poisoner\."$/.test(x)));
   assert.ok(eng.claimKnown);
 
   // (Once.)
@@ -16019,7 +16023,7 @@ test("anyone claiming the Engineer makes up a choice by Night 3 and says it at d
   const m = infoOf("engineer").once(s, minion, e.strat, "lie");
 
   assert.equal(m.engineer.kind, "minions");
-  assert.deepEqual(m.engineer.roles, ["pithag"]);
+  assert.deepEqual(m.engineer.roles, ["poisoner"]);
   assert.equal(m.functioning, false);
   assert.equal(minion.engineerUsed, 3);
   assert.equal(infoOf("engineer").once(s, minion, e.strat, "lie"), null);
@@ -16029,7 +16033,7 @@ test("anyone claiming the Engineer makes up a choice by Night 3 and says it at d
   s.phase = "day";
   s.day = 3;
   e.npcEngineers();
-  assert.ok(s.publicLog.some((x) => x === `Day 3 — ${minion.label}: "I'm the Engineer: last night I made the Minions a Pit-Hag."`));
+  assert.ok(s.publicLog.some((x) => x === `Day 3 — ${minion.label}: "I'm the Engineer: last night I made the Minions a Poisoner."`));
 
   // Evil, with another Demon on the script: the least threatening Demon,
   // as a good Engineer would choose, whichever is in play.
@@ -16043,14 +16047,14 @@ test("anyone claiming the Engineer makes up a choice by Night 3 and says it at d
     d.engineerUsed = 0;
     const b = infoOf("engineer").once(mixed, d, e.strat, "lie");
 
-    assert.deepEqual(b.engineer, { kind: "demon", roles: ["imp"] });
+    assert.deepEqual(b.engineer, { kind: "demon", roles: ["vortox"] });
   }
 
   // A good pretender: as a real Engineer would.
   const good = p[2];
 
   role(good, "butler", "good");
-  assert.equal(infoOf("engineer").once(s, good, e.strat, "random").engineer.roles[0], "pithag");
+  assert.equal(infoOf("engineer").once(s, good, e.strat, "random").engineer.roles[0], "poisoner");
 });
 
 test("as the Engineer, you're woken each night until you choose the Demon, or the setup sheet's number of Minions, or not tonight", () => {
@@ -16672,6 +16676,35 @@ test("an NPC Golem may nominate a strong suspect from 6 alive", () => {
     return { targetId: t.id, score: 5 };
   };
   assert.equal(strat.nomination(s, g)?.target, t);
+});
+
+test("the Engineer's lists rank every Demon and Minion an NPC Engineer could make, once each", () => {
+  const never = ["legion", "leviathan", "lilmonsta", "marionette", "eviltwin"];
+
+  for (const [t, list] of [
+    ["demon", ENGINEER_DEMONS],
+    ["minion", ENGINEER_MINIONS],
+  ]) {
+    const ids = Object.keys(CHARACTERS).filter((id) => CHARACTERS[id].team === t && !never.includes(id));
+
+    assert.deepEqual([...list].sort(), ids.sort());
+  }
+});
+
+test("a good NPC Engineer always makes the same Demon or Minions for a script: only Demon or Minions is left to chance", () => {
+  const made = new Set();
+
+  for (let i = 0; i < 40; i++) {
+    const { s, e, eng } = engineerNight(`eng-list-${i}`, 3);
+
+    s.r = rng(`eng-list-${i}`);
+    made.add(e.strat.engineerPick(s, eng).roles.join());
+  }
+
+  // (The Midnight Oasis: the Vigormortis, or the Poisoner and whichever
+  // Minions come next up the list.)
+  assert.ok([...made].every((x) => x === "vigormortis" || x.startsWith("poisoner")), [...made].join("; "));
+  assert.ok(made.has("vigormortis"));
 });
 
 test("a good NPC Engineer sometimes makes the option that gains less, and says why", () => {
