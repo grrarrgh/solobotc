@@ -268,7 +268,7 @@ function seen(e) {
       return you;
     // (The Minions giving up on the Damsel is the Storyteller's note.)
     case "damsel":
-      return !/^The Minions stop guessing/.test(e.text);
+      return !/^The (Minions stop guessing|Storyteller notes nobody can guess)/.test(e.text);
     default:
       return PUBLIC.has(e.type);
   }

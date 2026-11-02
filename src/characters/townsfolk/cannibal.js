@@ -99,6 +99,14 @@ export const cannibal = {
       });
     }
 
+    // A good player executed ends the poison of anyone who ate an evil one
+    // and has since lost the Cannibal ability (a Cannibal's ends below).
+    if (dead.alignment !== "evil") {
+      for (const x of s.players.filter((y) => y.cannibalPoison && !hasCannibal(y))) {
+        this.endCannibalPoison(x, `${dead.label}, a good player, died by execution`);
+      }
+    }
+
     for (const c of s.players.filter(
       (x) => x.alive && x !== dead && hasCannibal(x),
     )) {
@@ -255,11 +263,35 @@ export const cannibal = {
   },
 
   // At dusk: a Cannibal who ate an evil player is poisoned until a good
-  // player dies by execution.
+  // player dies by execution. The poison is the Cannibal ability's: a
+  // player who has lost it (made a Farmer, or changed by the Pit-Hag) is
+  // healthy again (see endCannibalPoison()).
   cannibalLasting() {
     for (const p of this.s.players.filter((x) => x.cannibalPoison)) {
+      if (!hasCannibal(p)) {
+        this.endCannibalPoison(p, "they no longer have the Cannibal ability");
+        continue;
+      }
+
       p.poisoned = true;
       p.poisonedBy = p.cannibalPoison;
     }
+  },
+
+  // Ends the poison p had from eating an evil player (`why`, for the log),
+  // unless something else poisons them.
+  endCannibalPoison(p, why) {
+    const was = p.cannibalPoison;
+
+    p.cannibalPoison = null;
+
+    if (p.poisonedBy === was) {
+      p.poisoned = false;
+      p.poisonedBy = null;
+    }
+
+    this.audit("cannibal", `${p.label} (${name(p.role)}) is no longer poisoned from ${was}: ${why}.`, {
+      playerId: p.id,
+    });
   },
 };

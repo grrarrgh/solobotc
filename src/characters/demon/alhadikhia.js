@@ -130,16 +130,25 @@ export const alhadikhia = {
 
   // The players chosen tonight, each with their choice (you: as you chose;
   // an NPC: see strategy alhadikhiaLive()), in order.
+  // (`why`: what decided it, for the log: see strategy alhadikhiaLive().)
   alhadikhiaChoices(final = false) {
     const s = this.s;
     const a = s.alhadikhia;
 
     const chosen = a.ids.map((id) => this.player(id));
 
-    return chosen.map((t, index) => ({
-      t,
-      live: t.human ? a.human !== false : this.strat.alhadikhiaLive(s, t, final, { chosen, index }),
-    }));
+    return chosen.map((t, index) => {
+      if (t.human) {
+        return { t, live: a.human !== false, why: "your choice" };
+      }
+
+      const live = this.strat.alhadikhiaLive(s, t, final, { chosen, index });
+      const why = t.liveWhy;
+
+      delete t.liveWhy;
+
+      return { t, live, why };
+    });
   },
 
   // In the Al-Hadikhia d's place in the night: its choice, resolved.
@@ -209,7 +218,10 @@ export const alhadikhia = {
       `${d.label} (Al-Hadikhia) chose ${choices.map((c) => c.t.label).join(", ")}${
         effective ? "" : " (drunk or poisoned: nothing happens)"
       }: ${choices
-        .map(({ t, live }) => `${t.label} (${name(t.role)}) chose to ${live ? "live" : "die"}, ${results.get(t)}`)
+        .map(
+          ({ t, live, why: whyLive }) =>
+            `${t.label} (${name(t.role)}) chose to ${live ? "live" : "die"}${whyLive ? ` (${whyLive})` : ""}, ${results.get(t)}`,
+        )
         .join("; ")}${why.length ? ` (why: ${why.join("; ")})` : ""}.`,
       { actorId: d.id, targetIds: a.ids, effective },
     );
@@ -275,7 +287,7 @@ export const alhadikhia = {
     const a = s.alhadikhia;
     const choices = this.alhadikhiaChoices(true);
     const all = choices.length > 0 && choices.every((c) => c.live);
-    const said = choices.map((c) => `${c.t.label} chose to ${c.live ? "live" : "die"}`).join(", ");
+    const said = choices.map((c) => `${c.t.label} chose to ${c.live ? "live" : "die"}${c.why ? ` (${c.why})` : ""}`).join(", ");
 
     this.audit(
       "alhadikhia",

@@ -16,7 +16,14 @@ export const damsel = {
 
   damselKnown() {
     this.s.damselKnown = true;
-    this.audit("damsel", "The Minions learn that a Damsel is in play.");
+    // (With the Atheist in play there are no Minions: the Storyteller only
+    // pretends to tell them, as it pretends the rest.)
+    this.audit(
+      "damsel",
+      this.s.atheist
+        ? "The Storyteller pretends the Minions learn that a Damsel is in play (the Atheist is in play: there are none)."
+        : "The Minions learn that a Damsel is in play.",
+    );
   },
 
   // At dusk, by the jinxes (see JINXES): while the Spy or the Widow is, or
@@ -56,7 +63,9 @@ export const damsel = {
       s.damselRevealed = dead.id;
       this.audit(
         "damsel",
-        `The Minions stop guessing the Damsel: ${dead.label} died and revealed they were her.`,
+        s.atheist
+          ? `The Storyteller notes nobody can guess the Damsel now: ${dead.label} died and revealed they were her (the Atheist is in play: there are no Minions to guess anyway).`
+          : `The Minions stop guessing the Damsel: ${dead.label} died and revealed they were her.`,
         { playerId: dead.id },
       );
     }

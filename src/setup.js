@@ -504,6 +504,7 @@ export function createState(
       savantDay: 0,
       fishermanUsed: false,
       huntsmanUsed: false,
+      huntsmanIdle: false, // no Damsel left to find (logged once: see huntsmen())
       puzzleUsed: false,
       damselGuessed: false, // a Minion's one Damsel guess
       mad: null, // { role, day, previous } from the Cerenovus
@@ -879,7 +880,7 @@ export function createState(
     : null;
 
   const s = {
-    version: "2.19.0",
+    version: "2.19.1",
     script,
     seats,
     seed: String(seed),

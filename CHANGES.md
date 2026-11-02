@@ -2,6 +2,15 @@
 
 Newest first. Each release is headed with its version, the one log.txt's `Version:` line shows (from `version` in `src/setup.js` and `package.json`): a release with new features or improvements raises the middle number (2.5.0), one with only bug fixes or superficial changes the last (2.5.1). An entry without one shipped as the version below it; versions before 2.4.0 weren't recorded here.
 
+## v2.19.1 — Bug Fixes: Cannibal poison, a dead Farmer's suspicion, the Huntsman after the Damsel's reveal; clearer Al-Hadikhia and Atheist logs
+
+- A Cannibal who ate an evil player and then lost the Cannibal ability (made a Farmer, or changed by the Pit-Hag) stayed poisoned for the rest of the game: the poison only ended for players who still had the ability, and `cannibalLasting()` put it back every dusk. It now ends at the next dusk, or when a good player is executed, whichever comes first, and log.txt says so (`endCannibalPoison()` in `src/characters/townsfolk/cannibal.js`).
+- A Farmer who died at night suspected the player their own death had made a Farmer ("they claim the Farmer, but I'm the Farmer"). The rule that a night death explains a second Farmer claim didn't count the dead Farmer themselves (`evidence()` in `src/strategy.js`).
+- An NPC Huntsman (or a Huntsman bluffer) still spent their once-per-game choice after a dead Damsel had revealed herself, though there was nobody left to find. They now keep it, and log.txt says why, once (`huntsmen()`, `huntsmanIdle`).
+- In an Atheist game, log.txt said "The Minions learn that a Damsel is in play" and "The Minions stop guessing the Damsel", but there are no Minions. These lines now say the Storyteller only pretends to tell the Minions, and that nobody is left to guess.
+- log.txt now says why each NPC the Al-Hadikhia chose decided to live or die: how much their character is worth to the town and the chance it gave; being the last of 3 chosen; avoiding a death that would leave 2 alive; being dead; or being evil. `alhadikhiaLive()` gives the reason in `liveWhy`.
+- Found in three played logs (Harold Holt's Revenge, and two on The Midnight Oasis). In 390 seeded self-play games (30 per script), only games with these characters changed: 20 Midnight Oasis, 2 Outed Evil and 2 Extension Cord games. In each, the cause was the Huntsman keeping their ability or the new log lines. The other 10 scripts play byte-identically. All 725 tests pass, including 5 new ones.
+
 ## v2.19.0 — Improvements: the Engineer chooses from strict lists of Demons and Minions
 
 - A good NPC Engineer on The Midnight Oasis turned the Poisoner into a Psychopath: its threat ratings (`ENGINEER_THREAT`, 1 to 5, set by hand) had the Poisoner, Pit-Hag and Psychopath all at 4, so it picked among them at random. The ratings are gone: the Engineer now goes by two strict lists, from most to least harmful to good, `ENGINEER_DEMONS` and `ENGINEER_MINIONS` in `src/data.js` (`ENGINEER_THREAT_DEFAULT` and `ENGINEER_THREAT_PITHAG_DEMONS` go too). A good Engineer always makes the script's last-listed Demon, or Minions; an evil one the first-listed. Which Demon or Minions is never left to chance.

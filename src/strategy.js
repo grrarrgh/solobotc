@@ -871,11 +871,15 @@ export class SimpleStrategy {
     const maybe = pixie < 1 ? " (a Pixie could explain it)" : "";
     // (There can be up to 3 Village Idiots: claiming it twice is no clash.
     // Nor is the Farmer, once a player claiming it has died at night: each
-    // one who does makes another.)
+    // one who does makes another. A Farmer who died at night knows their
+    // own death made one.)
     const many =
       claim === "villageidiot" ||
       (claim === "farmer" &&
-        s.players.some((x) => !x.alive && x.diedAtNight && claimTo(x, p) === "farmer"));
+        s.players.some(
+          (x) =>
+            !x.alive && x.diedAtNight && (x === p ? p.claim : claimTo(x, p)) === "farmer",
+        ));
 
     if (claim && !many && !twins(p, t)) {
       // (With the Atheist on the script, a broken rule could explain it: the
@@ -3668,17 +3672,31 @@ export class SimpleStrategy {
   // - else by their character's worth, as they think it is
   //   (ALHADIKHIA_LIVE_CHANCE).
   // A dead one, or an evil one, mostly lives.
+  // Why goes in x.liveWhy, for the log (see alhadikhia.js alhadikhiaNight()).
   alhadikhiaLive(s, x, final = false, ctx = null) {
+    const because = (live, why) => {
+      x.liveWhy = why;
+
+      return live;
+    };
+    const at = (c) => `at ${Math.round(c * 100)}%`;
+
     if (final && sideOf(x) === "good") {
-      return false;
+      return because(false, "one death wins for good (the jinx with the Mastermind)");
     }
 
     if (!x.alive) {
-      return s.r() < ALHADIKHIA_DEAD_LIVE_CHANCE;
+      return because(
+        s.r() < ALHADIKHIA_DEAD_LIVE_CHANCE,
+        `dead: living brings them back (${at(ALHADIKHIA_DEAD_LIVE_CHANCE)} to live)`,
+      );
     }
 
     if (sideOf(x) === "evil") {
-      return s.r() < ALHADIKHIA_EVIL_LIVE_CHANCE;
+      return because(
+        s.r() < ALHADIKHIA_EVIL_LIVE_CHANCE,
+        `evil (${at(ALHADIKHIA_EVIL_LIVE_CHANCE)} to live)`,
+      );
     }
 
     const chosen = ctx?.chosen ?? [x];
@@ -3688,18 +3706,36 @@ export class SimpleStrategy {
     const last = good.at(-1) === x;
 
     if (danger) {
-      return !last;
+      return because(
+        !last,
+        `all dying would leave ${left.length} alive${
+          left.length <= 2 ? "" : " and no good NPC"
+        }: ${last ? "the last good NPC chosen dies" : "the last good NPC chosen dies, so they live"}`,
+      );
     }
 
     const alive = s.players.filter((y) => y.alive).length;
 
     if (chosen.length === 3 && (ctx?.index ?? 0) === 2) {
-      return s.r() >= (alive <= ALHADIKHIA_SMALL_TOWN ? ALHADIKHIA_SMALL_TOWN_DIE_CHANCE : ALHADIKHIA_LAST_DIE_CHANCE);
+      const small = alive <= ALHADIKHIA_SMALL_TOWN;
+      const die = small ? ALHADIKHIA_SMALL_TOWN_DIE_CHANCE : ALHADIKHIA_LAST_DIE_CHANCE;
+
+      return because(
+        s.r() >= die,
+        `the last of 3 chosen, so they don't all live (${at(die)} to die${
+          small ? `, ${alive} alive: ${ALHADIKHIA_SMALL_TOWN} or fewer` : ""
+        })`,
+      );
     }
 
-    const chance = ALHADIKHIA_LIVE_CHANCE[DEMON_KILL_PRIORITY[ability(x)] ?? "low"] ?? ALHADIKHIA_LIVE_CHANCE.low;
+    const priority = DEMON_KILL_PRIORITY[ability(x)];
+    const level = priority in ALHADIKHIA_LIVE_CHANCE ? priority : "low";
+    const chance = ALHADIKHIA_LIVE_CHANCE[level];
 
-    return s.r() < chance;
+    return because(
+      s.r() < chance,
+      `their character's worth to the town, "${level}" (${at(chance)} to live)`,
+    );
   }
 
   // Everyone the Demon attacks tonight: the Shabaloth 2 players; the Po

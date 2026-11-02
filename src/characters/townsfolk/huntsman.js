@@ -24,6 +24,22 @@ export const huntsman = {
         !x.huntsmanUsed &&
         (ability(x) === "huntsman" || bluffing(x, "huntsman")),
     )) {
+      // (A dead player who revealed they were the Damsel leaves an NPC
+      // nobody to find: they keep the ability. See damsel.js
+      // npcDamselGuesses().)
+      if (!p.human && s.damselRevealed) {
+        if (!p.huntsmanIdle) {
+          p.huntsmanIdle = true;
+          this.audit(
+            "huntsman",
+            `${p.label} (${name(p.role)}) doesn't choose: ${byId(s, s.damselRevealed).label} died and revealed they were the Damsel.`,
+            { playerId: p.id },
+          );
+        }
+
+        continue;
+      }
+
       const t = p.human ? this.humanPicks(p)?.[0] : this.strat.huntsman(s, p);
 
       if (!t) {

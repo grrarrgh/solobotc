@@ -6504,6 +6504,42 @@ test("a Cannibal's poison from an evil executee ends when a good player is execu
   assert.equal(c.cannibalPoison, null);
 });
 
+test("a Cannibal poisoned by an evil executee who loses the Cannibal ability is healthy: when a good player is executed, or at dusk", () => {
+  const one = opNight("cannibal-lost-1", [null, "cannibal"]);
+  const [, c, butler, baron] = one.p;
+
+  one.s.phase = "day";
+  one.s.day = 1;
+  one.e.execute(baron);
+  assert.equal(c.poisoned, true);
+
+  // (Made a Farmer, say: their character changed in the night.)
+  c.role = "farmer";
+  one.e.execute(butler);
+  assert.equal(c.poisoned, false);
+  assert.equal(c.cannibalPoison, null);
+  assert.match(
+    one.s.audit.findLast((x) => x.type === "cannibal").text,
+    /is no longer poisoned from eating .*: .* a good player, died by execution\./,
+  );
+
+  const two = opNight("cannibal-lost-2", [null, "cannibal"]);
+  const c2 = two.p[1];
+
+  two.s.phase = "day";
+  two.s.day = 1;
+  two.e.execute(two.p[3]);
+  c2.role = "farmer";
+  c2.poisoned = false;
+  two.e.cannibalLasting();
+  assert.equal(c2.poisoned, false);
+  assert.equal(c2.cannibalPoison, null);
+  assert.match(
+    two.s.audit.findLast((x) => x.type === "cannibal").text,
+    /no longer have the Cannibal ability/,
+  );
+});
+
 test("a Cannibal who gains a first-night ability uses it that night", () => {
   const { s, p, e } = opNight("cannibal-chef", [null, "cannibal", "chef"]);
   const [, c, chef] = p;
@@ -8230,6 +8266,23 @@ test("the Huntsman turns the Damsel into a Townsfolk that isn't in play", () => 
   assert.equal(g.strat.huntsman(g.s, g.p[1]), null);
   (g.p[1].toldMe ??= {})[g.p[2].id] = { claim: "damsel", day: 1, at: 1 };
   assert.equal(g.strat.huntsman(g.s, g.p[1]), g.p[2]);
+});
+
+test("once a dead Damsel has revealed herself, an NPC Huntsman keeps their ability (logged once)", () => {
+  const { s, p, e, strat } = cfNight("huntsman-revealed", [null, "huntsman", "damsel"], 3);
+
+  p[2].alive = false;
+  s.damselRevealed = p[2].id;
+  strat.huntsman = () => p[3];
+  e.huntsmen();
+  e.huntsmen();
+
+  assert.ok(!p[1].huntsmanUsed);
+  assert.equal(p[1].memories.length, 0);
+  assert.equal(
+    s.audit.filter((x) => x.type === "huntsman" && /doesn't choose: .* revealed they were the Damsel/.test(x.text)).length,
+    1,
+  );
 });
 
 test("the human Huntsman wakes once, and can skip", () => {
@@ -10944,6 +10997,26 @@ test("once the dead Damsel has revealed herself, the Minions stop guessing", () 
   assert.ok(!minion.damselGuessed);
   assert.equal(s.damselRevealed, damsel.id);
   assert.ok(s.audit.some((x) => /The Minions stop guessing the Damsel: .* died and revealed they were her\./.test(x.text)));
+});
+
+test("with the Atheist in play, log.txt doesn't say there are Minions who learn of, or guess, the Damsel", () => {
+  const s = base("damsel-atheist", outedEvil);
+  const e = new Engine(s);
+  const damsel = s.players[2];
+
+  role(damsel, "damsel", "good");
+  s.atheist = { breaks: 0 };
+  e.damselKnown();
+  s.day = 4;
+  e.execute(damsel);
+  e.npcDamselGuesses();
+
+  const texts = s.audit.filter((x) => x.type === "damsel").map((x) => x.text);
+
+  assert.ok(texts.some((x) => /^The Storyteller pretends the Minions learn .* there are none\)\.$/.test(x)));
+  assert.ok(texts.some((x) => /^The Storyteller notes nobody can guess the Damsel now: .* no Minions to guess anyway\)\.$/.test(x)));
+  assert.ok(!texts.some((x) => /^The Minions/.test(x)));
+  assert.equal(s.damselRevealed, damsel.id);
 });
 
 // ── Outed Evil, phase 2: the Goblin, Fearmonger and Psychopath ───
@@ -15786,6 +15859,21 @@ test("two Farmer claims clash, until a player claiming the Farmer has died at ni
   assert.ok(!clash());
 });
 
+test("a Farmer who died at night doesn't hold the new Farmer's claim against them: their death made one", () => {
+  const s = base("farmer-dead-self", mo);
+  const strat = new SimpleStrategy();
+  const [, chef, butler] = s.players;
+
+  role(chef, "farmer", "good");
+  role(butler, "farmer", "good");
+  butler.claimKnown = true;
+  butler.publicClaim = "farmer";
+  chef.alive = false;
+  chef.diedAtNight = 1;
+
+  assert.ok(!strat.evidence(s, chef, butler).reasons.some((x) => /I'm the Farmer/.test(x)));
+});
+
 test("the Ogre the Spirit of Ivory keeps good isn't told they're evil", () => {
   const { s, e, p } = oasisNight("ivory-ogre", 1);
   const [, chef, butler] = p;
@@ -16200,6 +16288,20 @@ test("if all the Al-Hadikhia's chosen live, all die; one who chose to die but wa
   ahChoose(p, [x.id, y.id, z.id], { [x.id]: true, [y.id]: false, [z.id]: true });
   p.e.alhadikhiaNight(p.d);
   assert.ok(!x.alive && y.alive && !z.alive);
+});
+
+test("log.txt says why each NPC the Al-Hadikhia chose chose to live or die", () => {
+  const o = ahNight("ah-why");
+  const [, a, b, c] = o.p;
+
+  o.s.alhadikhia = { night: o.s.night, demonId: o.d.id, ids: [a.id, b.id, c.id], human: null };
+  o.e.alhadikhiaNight(o.d);
+
+  const text = o.s.audit.findLast((x) => x.type === "alhadikhia").text;
+
+  assert.match(text, new RegExp(`${a.label} \\(\\w+\\) chose to (live|die) \\(their character's worth to the town, "\\w+" \\(at \\d+% to live\\)\\)`));
+  assert.match(text, new RegExp(`${c.label} \\(\\w+\\) chose to (live|die) \\(the last of 3 chosen, so they don't all live \\(at \\d+% to die`));
+  assert.ok(![a, b, c].some((x) => "liveWhy" in x));
 });
 
 test("a dead player the Al-Hadikhia chose who chooses to live comes back to life; a drunk or poisoned Al-Hadikhia changes nothing", () => {
