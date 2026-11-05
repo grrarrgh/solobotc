@@ -3,24 +3,32 @@ import { byId, pick, claimHeard } from "../../util.js";
 
 const executed = (s) => byId(s, s.lastExecution);
 
-// The Undertaker: the character of the player executed today.
+// What the Undertaker learns on a day nobody died by execution: no
+// execution, or one the executed player survived (the Fool, the Devil's
+// Advocate's pick...; see engine executionEnds()).
+const NOBODY = "Nobody died by execution.";
+
+// The Undertaker: the character of the player who died by execution today.
 export const info = {
   nights: "later",
+  // (Everyone saw whether anyone died by execution: see storyteller.js.)
+  known: (s) => !executed(s),
   truth(s) {
     const x = executed(s);
 
     return {
       targets: [],
-      text: x ? `Executed player was ${name(x.role)}.` : "Nobody was executed.",
+      text: x ? `Executed player was ${name(x.role)}.` : NOBODY,
     };
   },
 
   lie(s) {
     const x = executed(s);
 
-    // Everyone saw whether there was an execution, so only the role is a lie.
+    // Everyone saw whether anyone died by execution, so only the role is a
+    // lie (see `known`).
     if (!x) {
-      return { targets: [], text: "Nobody was executed." };
+      return { targets: [], text: NOBODY };
     }
 
     // A good player "was" evil (the town thinks it got one); an evil player
@@ -41,6 +49,10 @@ export const info = {
   },
 
   random(s) {
+    if (!executed(s)) {
+      return { targets: [], text: NOBODY };
+    }
+
     const shown = pick(s.script.ids, s.r);
 
     return {
@@ -56,7 +68,7 @@ export const info = {
     const x = executed(s);
 
     if (!x) {
-      return { targets: [], text: "Nobody was executed." };
+      return { targets: [], text: NOBODY };
     }
 
     const believable = (id) => alignment(id) === "good" && !NEVER_BLUFFED.includes(id);

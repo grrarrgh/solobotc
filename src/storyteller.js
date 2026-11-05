@@ -858,7 +858,13 @@ export function nightInfo(s, p, strat) {
     p.poisoned &&
     s.poisoned === p.id &&
     FIRST_NIGHT.includes(role);
-  const mode = poisonerPick ? "lie" : infoMode(s, p);
+  // (What everyone already knows can't be wrong: see each character's
+  // `known`, as the Undertaker's on a day nobody died by execution.)
+  const mode = poisonerPick
+    ? "lie"
+    : infoOf(role)?.known?.(s, p)
+      ? "truth"
+      : infoMode(s, p);
   // (Random information may happen to be true: see falseNoise().)
   let right = true;
 

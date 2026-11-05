@@ -50,6 +50,7 @@ import {
   BAIT_ROLES,
   COVER_TELL_HUMAN_CHANCE,
   COME_CLEAN_ALIVE,
+  EMPATH_NEIGHBOUR_VOTE_CHANCE,
   DISTORT_CHANCE,
   NPC_NOMINATE_EVIDENCE,
   GOLEM_READY_ALIVE,
@@ -133,6 +134,7 @@ import {
   unknownMate,
   hasCannibal,
   demonTo,
+  neigh,
 } from "./storyteller.js";
 import { byId, pick, sample, shuffle, claimTo, claimHeard, tick } from "./util.js";
 import { logNames } from "./log.js";
@@ -198,6 +200,21 @@ export const fooledBy = (p, x) =>
 // Poppy Grower kept the team apart (see setup.js, poppygrower.js), or
 // either is the Bounty Hunter's evil Townsfolk (see bountyhunter.js).
 const blind = (p, x) => unknownMate(p, x);
+
+// Whether p is a living good Empath (or one who thinks so) hiding behind a
+// cover story while more than COME_CLEAN_ALIVE are alive: they keep it
+// until they're nominated (see engine dawnComeClean(), nominationReveals()),
+// and want a neighbour executed (see empathWantsDead()).
+export const empathHides = (s, p) =>
+  p.alive &&
+  p.claim === "empath" &&
+  p.cover?.kind === "hide" &&
+  s.players.filter((x) => x.alive).length > COME_CLEAN_ALIVE;
+
+// Whether hiding Empath v would like n executed: a living neighbour (not
+// you), whose death gives them a new one. See EMPATH_NEIGHBOUR_VOTE_CHANCE.
+const empathWantsDead = (s, v, n) =>
+  empathHides(s, v) && n.alive && !n.human && neigh(s, v).includes(n);
 
 // A line in log.txt about an NPC's choice (as bluff.js madeUp() adds them).
 export const note = (s, type, text, data = {}) =>
@@ -2728,6 +2745,23 @@ export class SimpleStrategy {
       return s.r() < (heretic ? GOOD_VOTE_MIN : GOOD_VOTE_MAX) * wary;
     }
 
+    // (A hiding Empath wants a new neighbour, so votes for this one, even
+    // one their 0 vouches for. See EMPATH_NEIGHBOUR_VOTE_CHANCE.)
+    if (empathWantsDead(s, v, n)) {
+      const yes = s.r() < EMPATH_NEIGHBOUR_VOTE_CHANCE;
+
+      note(
+        s,
+        "cover",
+        `${v.label} (Empath, hiding as the ${name(v.cover.as)}) ${
+          yes ? "votes for" : "holds back from voting for"
+        } their neighbour ${n.label}: a new neighbour would give them new information (at ${Math.round(EMPATH_NEIGHBOUR_VOTE_CHANCE * 100)}%).`,
+        { playerId: v.id, targetId: n.id, vote: yes },
+      );
+
+      return yes;
+    }
+
     if (about === "trust" || this.trusted(s, v).has(n.id)) {
       return s.r() < (heretic ? GOOD_VOTE_MAX : GOOD_VOTE_MIN);
     }
@@ -3931,7 +3965,21 @@ export class SimpleStrategy {
 
   // Two players, avoiding last night's pair where possible.
   ft(s, p) {
-    const pool = this.pickable(s, p);
+    // (Any 2 players will do: short of 2 others, as an evil bluffer in a
+    // final 3 is (they never name you), themself, then the dead.)
+    let pool = this.pickable(s, p);
+
+    if (pool.length < 2) {
+      pool = [...pool, p];
+    }
+
+    if (pool.length < 2) {
+      pool = [
+        ...pool,
+        ...s.players.filter((x) => !x.alive && !(p.alignment === "evil" && x.human)),
+      ];
+    }
+
     const fresh = this.fresh(p, "ft", pool);
     const pair =
       fresh.length >= 2

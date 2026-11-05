@@ -56,6 +56,7 @@ import {
   spoken,
   vortoxRisk,
   leviathanRisk,
+  empathHides,
 } from "./strategy.js";
 import { byId, bySeat, pick, shuffle } from "./util.js";
 import { formatLog, logNames, claimChain, winnerName } from "./log.js";
@@ -1774,7 +1775,8 @@ export class Engine {
   // At dawn, players with a cover story come clean (see comeClean()): once
   // they're dead, or late in the game (COME_CLEAN_ALIVE), or (a hider)
   // when last night's information points at a living player, at
-  // COME_CLEAN_URGENT_CHANCE.
+  // COME_CLEAN_URGENT_CHANCE. (Not a hiding Empath: they'd rather that
+  // neighbour died. See strategy empathHides().)
   dawnComeClean() {
     const s = this.s;
     const late = this.alive().length <= COME_CLEAN_ALIVE;
@@ -1798,6 +1800,15 @@ export class Engine {
       // (A hiding Poppy Grower only comes clean once dead: alive, saying so
       // would get them killed.)
       const poppy = p.claim === "poppygrower" && p.cover.kind === "hide";
+
+      if (urgent && !late && empathHides(s, p)) {
+        this.audit(
+          "cover",
+          `${p.label} (Empath) keeps hiding as the ${name(p.cover.as)}, though last night's number points at a neighbour: a new neighbour would give them new information.`,
+          { playerId: p.id },
+        );
+        continue;
+      }
 
       if (!p.alive || (!poppy && (late || (urgent && s.r() < COME_CLEAN_URGENT_CHANCE)))) {
         this.comeClean(p);
@@ -2062,10 +2073,22 @@ export class Engine {
     }
 
     for (const p of s.players.filter((x) => x.cover && x !== n)) {
-      if (
-        this.strat.ownStance(s, p, n) &&
-        s.r() < COME_CLEAN_NOMINATION_CHANCE
-      ) {
+      if (!this.strat.ownStance(s, p, n)) {
+        continue;
+      }
+
+      // (A hiding Empath stays hidden for anyone's nomination but their
+      // own: they'd rather have a new neighbour. See strategy empathHides().)
+      if (empathHides(s, p)) {
+        this.audit(
+          "cover",
+          `${p.label} (Empath) keeps hiding as the ${name(p.cover.as)}, though their number is about ${n.label}: only their own nomination makes them come clean.`,
+          { playerId: p.id, targetId: n.id },
+        );
+        continue;
+      }
+
+      if (s.r() < COME_CLEAN_NOMINATION_CHANCE) {
         lines.push(this.comeClean(p));
       }
     }
@@ -2660,6 +2683,9 @@ export class Engine {
       s.publicLog[line] += " And nothing happens because they are already dead.";
     } else if (!died) {
       s.publicLog[line] += " But does not die.";
+      // (Nobody died by execution, so the Undertaker learns nothing: see
+      // undertaker.js.)
+      s.lastExecution = null;
 
       // (A Psychopath's roshambo explains it.)
       if (!survives) {

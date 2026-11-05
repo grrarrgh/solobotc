@@ -5374,14 +5374,63 @@ test("the Undertaker learns nothing from a dead player's execution, or a day wit
 
   e.nominate(s.players[2].id);
   e.endDay();
-  assert.equal(u.memories.at(-1).text, "Nobody was executed.");
+  assert.equal(u.memories.at(-1).text, "Nobody died by execution.");
 
   e.nominate(s.players[3].id); // Baron
   e.endDay();
   assert.equal(u.memories.at(-1).text, "Executed player was Baron.");
 
   e.endDay();
-  assert.equal(u.memories.at(-1).text, "Nobody was executed.");
+  assert.equal(u.memories.at(-1).text, "Nobody died by execution.");
+});
+
+test("the Undertaker learns nothing from a Fool's execution they survive, poisoned or not", () => {
+  for (const poisoned of [false, true]) {
+    const s = base(`fool-undertaker-${poisoned}`);
+    const strat = new SimpleStrategy();
+    const e = new Engine(s, strat);
+    const u = s.players[1];
+    const fool = s.players[2];
+
+    role(s.players[0], "chef", "good");
+    role(u, "undertaker", "good");
+    role(fool, "fool", "good");
+    role(s.players[3], "poisoner", "evil");
+    strat.vote = () => true;
+    strat.demon = () => null;
+    strat.poison = () => (poisoned ? u : fool);
+
+    e.nominate(fool.id);
+    e.endDay();
+
+    assert.equal(u.poisoned, poisoned);
+    assert.equal(fool.alive, true);
+    assert.equal(fool.foolUsed, true);
+    assert.equal(u.memories.at(-1).text, "Nobody died by execution.");
+    assert.equal(u.memories.at(-1).functioning, true);
+    assert.ok(
+      !s.audit.some((x) => x.type === "information" && /misinformation/.test(x.text)),
+    );
+  }
+});
+
+test("a Fortune Teller always names 2 players, even an evil bluffer in a final 3", () => {
+  const s = base("ft-final-3");
+  const strat = new SimpleStrategy();
+  const [you, , , baron, imp] = s.players;
+
+  s.players[1].alive = false;
+  s.players[2].alive = false;
+
+  const ts = strat.ft(s, baron);
+
+  assert.equal(ts.length, 2);
+  assert.ok(!ts.includes(you));
+  assert.ok(ts.includes(imp));
+
+  // (Naming themself, a bluffer never says YES.)
+  strat.ft = () => [baron, you];
+  assert.match(infoOf("fortuneteller").lie(s, baron, strat).text, /: NO for/);
 });
 
 test("nothing harmful ever targets either twin", () => {
@@ -7218,6 +7267,57 @@ test("a nominated hider comes clean before the vote, on a card", () => {
   assert.equal(empath.cover, null);
   assert.equal(claimTo(empath), "empath");
   assert.ok(s.pendingVote); // the vote still waits for your hand
+});
+
+test("a hiding Empath stays hidden for a neighbour's nomination, and votes to execute them, until 5 are alive", () => {
+  const s = coverGame("cover-empath-neighbour");
+  const [human, empath, soldier, chef, butler] = s.players;
+  const strat = new SimpleStrategy();
+  const e = new Engine(s, strat);
+
+  empath.cover = { kind: "hide", as: "recluse", night: 1 };
+  empath.memories = [
+    { night: 1, role: "empath", text: "Empath number: 0.", targets: [human.id, soldier.id] },
+  ];
+  s.r = () => 0;
+
+  e.nominate(soldier.id, null);
+
+  assert.deepEqual(empath.cover, { kind: "hide", as: "recluse", night: 1 });
+  assert.ok(s.audit.some((x) => x.type === "cover" && /keeps hiding as the Recluse/.test(x.text)));
+
+  // (Their 0 vouches for the Soldier: a trusted nominee gets GOOD_VOTE_MIN.)
+  s.r = () => 0.5;
+  assert.equal(strat.vote(s, empath, soldier, { yes: 0, needed: 4 }), true);
+  assert.ok(s.audit.some((x) => x.type === "cover" && /votes for their neighbour/.test(x.text)));
+  assert.equal(strat.vote(s, empath, chef, { yes: 0, needed: 4 }), false);
+  // (Never you.)
+  assert.equal(strat.vote(s, empath, human, { yes: 0, needed: 4 }), false);
+
+  chef.alive = false;
+  butler.alive = false;
+  assert.equal(strat.vote(s, empath, soldier, { yes: 0, needed: 3 }), false);
+});
+
+test("a hiding Empath doesn't come clean at dawn when their number points at a neighbour", () => {
+  const s = coverGame("cover-empath-dawn");
+  const [, empath, soldier] = s.players;
+  const e = new Engine(s);
+
+  s.night = 2;
+  empath.cover = { kind: "hide", as: "recluse", night: 1 };
+  empath.memories = [
+    { night: 2, role: "empath", text: "Empath number: 1.", targets: [soldier.id] },
+  ];
+  s.r = () => 0;
+  e.dawnComeClean();
+
+  assert.ok(empath.cover);
+  assert.ok(s.audit.some((x) => x.type === "cover" && /number points at a neighbour/.test(x.text)));
+
+  // (Still, once nominated themself.)
+  e.nominate(empath.id, null);
+  assert.equal(empath.cover, null);
 });
 
 test("a nominated evil NPC may fake coming clean, once", () => {

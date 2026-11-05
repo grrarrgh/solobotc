@@ -52,10 +52,11 @@ export const info = {
     }
 
     const ts = strat.ft(s, p);
-    // (An evil bluffer never says YES with a teammate among them.)
+    // (An evil bluffer never says YES with a teammate among them, nor
+    // themself: short of others, see strategy ft().)
     const yes =
       p.alignment === "evil"
-        ? !ts.some((x) => x !== p && x.alignment === "evil")
+        ? !ts.some((x) => x.alignment === "evil")
         : !fortuneYes(s, ts);
 
     return {

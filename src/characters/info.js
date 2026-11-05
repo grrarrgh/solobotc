@@ -4,7 +4,8 @@
 // "first", "each" or "later"; see storyteller.js actsTonight()), what it
 // leaves behind (`keep`), and whether a `random` answer happens to be true
 // where more than one answer would be (`holds`; see storyteller.js
-// falseNoise()); how a piece of their information reads (`stance`:
+// falseNoise()), and whether it's something everyone already knows, so
+// never false (`known`); how a piece of their information reads (`stance`:
 // does it trust or suspect the players it names? `named`: the characters it
 // says they are, and `claimStance`: how that reads against their claims;
 // see strategy stanceOn()); and what's said in their name by

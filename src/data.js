@@ -544,6 +544,13 @@ export const COME_CLEAN_ALIVE = 5; // at dawn, with this few alive
 export const COME_CLEAN_URGENT_CHANCE = 0.5; // at dawn, a hider whose information last night points at someone
 export const COME_CLEAN_NOMINATED_CHANCE = 0.9; // before the vote, when they're nominated...
 export const COME_CLEAN_NOMINATION_CHANCE = 0.5; // ...or someone their information vouches for or points at is
+// A hiding Empath (see strategy empathHides()) keeps hiding, for their own
+// information or anyone else's nomination, until they're nominated, dead,
+// or COME_CLEAN_ALIVE or fewer are alive. Until then they want a neighbour
+// executed, even one their 0 vouches for: new neighbours mean new
+// information. They vote for one at EMPATH_NEIGHBOUR_VOTE_CHANCE (a
+// neighbour they suspect, at GOOD_VOTE_MAX as usual). Never you.
+export const EMPATH_NEIGHBOUR_VOTE_CHANCE = 0.6;
 export const FAKE_CLEAN_CHANCE = 0.3; // a nominated evil NPC fakes it (once), as a "high" character
 
 
