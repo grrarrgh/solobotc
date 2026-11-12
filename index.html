@@ -3,10 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
-    <title>Solo Clocktower</title>
+    <!-- The title and description are what a search result shows, so they
+         use the words people search for: "single-player", "Blood on the
+         Clocktower", "solo", the script names. -->
+    <title>Solo Clocktower – Single-Player Blood on the Clocktower</title>
     <meta
       name="description"
-      content="A free, fan-made way to play Blood on the Clocktower on your own, against computer players."
+      content="A free, fan-made way to play Blood on the Clocktower solo in your browser, on the good team against computer players. Trouble Brewing, Sects &amp; Violets and more."
     />
     <link rel="canonical" href="https://www.solobotc.com/" />
     <meta name="theme-color" content="#11141a" />
@@ -20,10 +23,10 @@
     <!-- How a shared link looks (Open Graph, and Twitter / X). -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Solo Clocktower" />
-    <meta property="og:title" content="Solo Clocktower" />
+    <meta property="og:title" content="Solo Clocktower – Single-Player Blood on the Clocktower" />
     <meta
       property="og:description"
-      content="A free, fan-made way to play Blood on the Clocktower on your own, against computer players."
+      content="A free, fan-made way to play Blood on the Clocktower solo in your browser, on the good team against computer players. Trouble Brewing, Sects &amp; Violets and more."
     />
     <meta property="og:url" content="https://www.solobotc.com/" />
     <meta property="og:image" content="https://www.solobotc.com/images/social.png" />
@@ -34,6 +37,43 @@
       content="The Solo Clocktower clock tower icon, with the title."
     />
     <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- For search engines (schema.org): the site's name in results, and
+         what it is, a free single-player browser game based on Blood on the
+         Clocktower. No ratings: there are no real reviews to give. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "name": "Solo Clocktower",
+            "alternateName": ["Solo BotC", "solobotc"],
+            "url": "https://www.solobotc.com/"
+          },
+          {
+            "@type": "VideoGame",
+            "name": "Solo Clocktower",
+            "url": "https://www.solobotc.com/",
+            "image": "https://www.solobotc.com/images/social.png",
+            "description": "A free, fan-made, single-player version of Blood on the Clocktower in the browser: you're on the good team, and the computer plays everyone else and the Storyteller.",
+            "genre": ["Social deduction", "Puzzle"],
+            "playMode": "SinglePlayer",
+            "gamePlatform": "Web browser",
+            "applicationCategory": "GameApplication",
+            "operatingSystem": "Any",
+            "inLanguage": "en",
+            "isAccessibleForFree": true,
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "isBasedOn": {
+              "@type": "Game",
+              "name": "Blood on the Clocktower",
+              "url": "https://bloodontheclocktower.com/"
+            }
+          }
+        ]
+      }
+    </script>
 
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -82,6 +122,12 @@
       <!-- The setup page: a page of its own until the game starts. The i next
            to the script opens its script sheet. -->
       <section id="setup" class="setup-page">
+        <!-- What this is, in the words people search for. -->
+        <p class="tagline">
+          A free, fan-made way to play Blood on the Clocktower (BotC)
+          single-player in your browser: you're on the good team, and the
+          computer plays everyone else, Storyteller included.
+        </p>
         <h2>New game</h2>
         <div class="setup-row">
           <label for="script">Script</label>
@@ -235,6 +281,27 @@
             A free, fan-made way to enjoy Blood on the Clocktower's puzzle aspect on your own against computer players. 
             It's not a replacement for the real, social game, and not for commercial use.
           </p>
+          <!-- The script menu is filled in by app.js, so the scripts are named
+               here too, for search engines that don't run it. Add a new
+               script's name (its _meta name) as an <li>, in alphabetical
+               order: a test checks every script in scripts/index.json is
+               here. -->
+          <p>Scripts, for 8 to 15 players:</p>
+          <ul class="script-list">
+            <li>Bad Moon Rising</li>
+            <li>Catfishing</li>
+            <li>Chef's Deluxe</li>
+            <li>Everyone Can Play</li>
+            <li>Extension Cord</li>
+            <li>Harold Holt's Revenge</li>
+            <li>No Roles Barred</li>
+            <li>Onion Pies</li>
+            <li>Outed Evil</li>
+            <li>Sects &amp; Violets</li>
+            <li>The Midnight Oasis</li>
+            <li>Trouble Brewing</li>
+            <li>Trust Redux</li>
+          </ul>
           <p>
             <a href="https://ko-fi.com/D5I829HXU0" target="_blank" rel="noopener"
               ><img

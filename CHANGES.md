@@ -2,6 +2,15 @@
 
 Newest first. Each release is headed with its version, the one log.txt's `Version:` line shows (from `version` in `src/setup.js` and `package.json`): a release with new features or improvements raises the middle number (2.5.0), one with only bug fixes or superficial changes the last (2.5.1). An entry without one shipped as the version below it; versions before 2.4.0 weren't recorded here.
 
+## v2.20.1 — Superficial Changes: easier to find in search engines
+
+- The page's title was just "Solo Clocktower", which nobody searches for yet. It is now "Solo Clocktower – Single-Player Blood on the Clocktower". The search description and link preview now read "A free, fan-made way to play Blood on the Clocktower solo in your browser, on the good team against computer players. Trouble Brewing, Sects & Violets and more." They keep saying it's a free, fan-made project, as do the About section and the footer.
+- The setup page has a line above New game that says the same thing in words people search for: "A free, fan-made way to play Blood on the Clocktower (BotC) single-player in your browser…" (`.tagline` in `styles.css`).
+- About now lists every script, one bullet each in alphabetical order (two columns, one on a phone), under the seat range (8 to 15 players). The script menu is filled in by `src/app.js`, so search engines that don't run JavaScript never saw the script names. A test checks the list against `scripts/index.json` and `COUNTS`, so a new script needs an `<li>` there too.
+- Structured data (schema.org JSON-LD in `index.html`): a `WebSite` with the site's name ("Solo BotC" and "solobotc" as alternatives), and a free, single-player `VideoGame` based on Blood on the Clocktower. It has no star ratings because there are no real reviews to rate it.
+- New `robots.txt` (crawl everything, and where the sitemap is) and `sitemap.xml` (the one page). Both returned 404 before. Search Console needs the sitemap.
+- The game plays the same: only the page's text, metadata and these two files changed. All 730 tests pass, including 1 new one.
+
 ## v2.20.0 — Improvements: a hiding Empath stays hidden and wants new neighbours; Bug Fixes: the Undertaker after a Fool survives execution; the Fortune Teller in a final 3
 
 - A good Empath hiding behind a cover story now keeps hiding until they're nominated themselves. They no longer come clean at dawn when their number points at a neighbour, or when someone their number is about is nominated. As before, they come clean once dead, or with 5 or fewer alive (`COME_CLEAN_ALIVE`). In the log that prompted this, the Empath came clean on Day 1 to vouch for the Fool, a neighbour you had nominated. (`empathHides()` in `src/strategy.js`; `dawnComeClean()` and `nominationReveals()` in `src/engine.js`.)

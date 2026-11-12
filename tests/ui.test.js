@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-import { ROLES, ABILITIES } from "../src/data.js";
+import { ROLES, ABILITIES, COUNTS } from "../src/data.js";
 
 const read = (path) => fs.readFileSync(new URL(path, import.meta.url), "utf8");
 
@@ -386,6 +386,37 @@ test("ready for GitHub Pages at www.solobotc.com: the domain, icons, manifest an
   }
 
   assert.ok(manifest.icons.some((x) => x.purpose === "maskable"));
+});
+
+test("findable by search engines: the title, structured data, robots.txt, sitemap.xml, and every script named in the page", () => {
+  const text = (x) => x.replace(/&amp;/g, "&").replace(/\s+/g, " ");
+
+  assert.match(html, /<title>Solo Clocktower – Single-Player Blood on the Clocktower<\/title>/);
+  // Search results and link previews say it's a free, fan-made project.
+  assert.match(html, /<meta\s+name="description"\s+content="A free, fan-made way to play Blood on the Clocktower solo/);
+  assert.match(html, /<meta\s+property="og:description"\s+content="A free, fan-made way to play Blood on the Clocktower solo/);
+  assert.match(html, /<p class="tagline">\s*A free, fan-made way to play Blood on the Clocktower \(BotC\)\s+single-player/);
+
+  const ld = JSON.parse(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(html)[1]);
+  const types = ld["@graph"].map((x) => x["@type"]);
+
+  assert.deepEqual(types, ["WebSite", "VideoGame"]);
+  assert.ok(ld["@graph"].every((x) => x.url === "https://www.solobotc.com/"));
+
+  assert.match(read("../robots.txt"), /^Sitemap: https:\/\/www\.solobotc\.com\/sitemap\.xml$/m);
+  assert.match(read("../sitemap.xml"), /<loc>https:\/\/www\.solobotc\.com\/<\/loc>/);
+
+  // The script menu is filled in by app.js, so About lists them all too, one
+  // <li> each, in alphabetical order.
+  const seats = Object.keys(COUNTS).map(Number);
+  const list = /<ul class="script-list">([\s\S]*?)<\/ul>/.exec(html)[1];
+  const listed = [...list.matchAll(/<li>([\s\S]*?)<\/li>/g)].map(([, x]) => text(x).trim());
+  const scripts = JSON.parse(read("../scripts/index.json")).map(
+    (file) => JSON.parse(read(`../scripts/${file}`)).find((x) => x.id === "_meta").name,
+  );
+
+  assert.match(html, new RegExp(`<p>Scripts, for ${Math.min(...seats)} to ${Math.max(...seats)} players:</p>\\s*<ul class="script-list">`));
+  assert.deepEqual(listed, scripts.sort((x, y) => x.localeCompare(y)));
 });
 
 test("the version agrees: src/setup.js, package.json and the newest numbered release in CHANGES.md", () => {

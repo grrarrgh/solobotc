@@ -132,6 +132,7 @@ in its record in `CHARACTERS`. These include:
 | `images/icons/`, `favicon.ico`, `site.webmanifest` | The clock tower icon: browser tabs, bookmarks, home screens |
 | `images/social.png` | The picture a shared link shows |
 | `CNAME`, `.nojekyll` | GitHub Pages: the custom domain (www.solobotc.com), and serving the files as they are |
+| `robots.txt`, `sitemap.xml` | For search engines: crawl everything, and the one page there is |
 
 ## Tests
 

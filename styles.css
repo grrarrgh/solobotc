@@ -30,6 +30,15 @@ section {
   padding: 22px 26px;
 }
 
+/* What this is, above New game (and the words search engines look for). */
+.setup-page .tagline {
+  margin: 0 0 18px;
+  color: #bbb;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
 .setup-page h2 {
   margin: 0 0 16px;
   color: #f0cf83;
@@ -93,6 +102,18 @@ section {
 
 .setup-info .about h2 {
   margin-bottom: 8px;
+}
+
+/* About's scripts: two columns, one on a phone (below). */
+.setup-info .script-list {
+  columns: 2;
+  column-gap: 24px;
+}
+
+@media (max-width: 650px) {
+  .setup-info .script-list {
+    columns: 1;
+  }
 }
 
 .site-footer {
